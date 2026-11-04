@@ -46,7 +46,7 @@ func consentForm(ctx context.Context, slug string, form url.Values) *http.Reques
 }
 
 type attemptGateway struct {
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // immutable authenticated request fixture shared by this test
 	ti     *testInstance
 	rec    *mcpconnectionattemptstest.Recording
 	slug   string
@@ -221,12 +221,12 @@ func TestConnectionOutcome_AgentAdmissionAtToken(t *testing.T) {
 	}{
 		"grant revoked": {func(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, agent urn.Principal) {
 			t.Helper()
-			_, err := ti.conn.Exec(ctx, "DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2", fx.orgID, agent.String())
+			_, err := ti.conn.Exec(ctx, "DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2", fx.orgID, agent.String()) //nolint:glint // notestingrawsql: deliberate fixture mutation or database fault to exercise outcome classification
 			require.NoError(t, err)
 		}, mcpconnectionattempts.CodeNoServerAccess},
 		"database outage": {func(t *testing.T, ctx context.Context, ti *testInstance, _ agentConsentFixture, _ urn.Principal) {
 			t.Helper()
-			_, err := ti.conn.Exec(ctx, "ALTER TABLE principal_grants RENAME TO principal_grants_gone")
+			_, err := ti.conn.Exec(ctx, "ALTER TABLE principal_grants RENAME TO principal_grants_gone") //nolint:glint // notestingrawsql: deliberate fixture mutation or database fault to exercise outcome classification
 			require.NoError(t, err)
 		}, mcpconnectionattempts.CodeInternalError},
 	} {
@@ -271,7 +271,7 @@ func (c *claimFailureCache) GetAndDelete(ctx context.Context, key string, value 
 	if err := c.fail.Load(); err != nil {
 		return *err
 	}
-	return c.Cache.GetAndDelete(ctx, key, value)
+	return c.Cache.GetAndDelete(ctx, key, value) //nolint:wrapcheck // test decorator preserves the underlying cache error
 }
 
 // Only a spent link is expired. A store that can't answer says nothing about the link.
@@ -362,7 +362,7 @@ func TestConnectionOutcome_BrokenFederationAtAuthorize(t *testing.T) {
 
 	ctx, f := newFederationLoginFixture(t, true)
 	rec := recordConnections(t, f.ti)
-	_, err := f.ti.conn.Exec(ctx, "UPDATE remote_session_clients SET deleted_at = now() WHERE id = $1", f.clientID)
+	_, err := f.ti.conn.Exec(ctx, "UPDATE remote_session_clients SET deleted_at = now() WHERE id = $1", f.clientID) //nolint:glint // notestingrawsql: deliberate fixture mutation or database fault to exercise outcome classification
 	require.NoError(t, err)
 
 	query := url.Values{"response_type": {"code"}, "client_id": {f.downstreamClientID}, "redirect_uri": {"http://127.0.0.1/callback"}, "state": {"s"}, "code_challenge": {"c"}, "code_challenge_method": {"S256"}}
@@ -528,7 +528,7 @@ func TestConnectionOutcome_RecoveryCallbackRefusal(t *testing.T) {
 		t.Parallel()
 		f, rec := newFixture(t)
 		state, cookies := login(t, f)
-		_, err := f.ti.conn.Exec(f.ctx, "ALTER TABLE organization_user_relationships RENAME TO organization_user_relationships_gone")
+		_, err := f.ti.conn.Exec(f.ctx, "ALTER TABLE organization_user_relationships RENAME TO organization_user_relationships_gone") //nolint:glint // notestingrawsql: deliberate fixture mutation or database fault to exercise outcome classification
 		require.NoError(t, err)
 		require.Error(t, f.ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), callback(f, state, cookies)))
 		rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError)

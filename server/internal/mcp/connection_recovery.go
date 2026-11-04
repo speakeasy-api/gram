@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -182,7 +183,11 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	// Used once, and only by the person it names.
 	recovery, err = s.connectionRecoveryCache.GetAndDelete(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() {
-		t.Continue()
+		if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		} else {
+			t.Continue()
+		}
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
 
@@ -374,7 +379,10 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	// Used up only once it has passed, so a stray callback cannot spend it.
 	// A late second callback finds the login gone; this one still ends the attempt.
 	if _, err := s.connectionRecoveryCache.GetAndDeleteMarking(ctx, key, attemptEndMarker(remote.Attempt), connectionAttemptEndTTL); err != nil {
-		return true, errRecoveryLoginExpired
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("consume recovery login: %w", err)
 	}
 	return true, nil
 }

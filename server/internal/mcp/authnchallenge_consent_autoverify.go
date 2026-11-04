@@ -90,7 +90,9 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
-	if err := s.attemptEndings.drain(ctx); err != nil {
+	endingCtx, cancelEndings := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
+	defer cancelEndings()
+	if err := s.attemptEndings.drain(endingCtx); err != nil {
 		errs = append(errs, fmt.Errorf("drain connection attempt endings: %w", err))
 	}
 	// Last, since the drains above can start refreshes, and on its own budget,

@@ -266,6 +266,7 @@ func TestRemoteLoginRefusalHappened(t *testing.T) {
 
 func TestFederatedHappened(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(errors.New("database unavailable")))
 
 	require.Equal(t, mcpconnectionattempts.CodeConfigurationRequired, federatedHappened(remotesessions.ErrFederatedConfiguration))
 	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, federatedHappened(remotesessions.ErrFederatedUnavailable))

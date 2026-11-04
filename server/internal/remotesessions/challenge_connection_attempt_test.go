@@ -414,7 +414,7 @@ func TestCompleteRemoteLogin_LocalSetupAndProviderRefusals(t *testing.T) {
 	}
 	exec := func(t *testing.T, ctx context.Context, fx resourceDanceFixture, sql string, args ...any) {
 		t.Helper()
-		_, err := fx.ti.conn.Exec(ctx, sql, args...)
+		_, err := fx.ti.conn.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: deliberate fixture corruption to distinguish local configuration failures
 		require.NoError(t, err)
 	}
 

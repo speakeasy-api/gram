@@ -413,8 +413,10 @@ func (s *Service) buildRemoteConnectURL(
 	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
 	if err != nil {
 		if errors.Is(err, errTypedLoginDenied) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeNoServerAccess)
 			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
 	}
 	if typedAuthorization != nil {
