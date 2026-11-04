@@ -313,3 +313,126 @@ func TestOpenclawUserRequest(t *testing.T) {
 		})
 	}
 }
+
+// toolCompletions returns the tool.completed and tool.failed requests the
+// server received, keyed by tool call id.
+func (fs *fakeServer) toolCompletions() map[string]components.IngestRequestBody {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	completions := map[string]components.IngestRequestBody{}
+	for _, req := range fs.requests {
+		if req.Event.Type != components.TypeToolCompleted && req.Event.Type != components.TypeToolFailed {
+			continue
+		}
+		if req.Data == nil || req.Data.ToolCall == nil || req.Data.ToolCall.ID == nil {
+			continue
+		}
+		completions[*req.Data.ToolCall.ID] = req
+	}
+	return completions
+}
+
+func afterToolCallFrame(t *testing.T, seq int, runID, callID, toolName string, result map[string]any) string {
+	t.Helper()
+	return openclawFrame(t, seq, "after_tool_call", runID, map[string]any{
+		"toolName":   toolName,
+		"params":     map[string]any{"query": "status"},
+		"runId":      runID,
+		"toolCallId": callID,
+		"result":     result,
+		"durationMs": 12,
+	})
+}
+
+// OpenClaw names MCP tools <server>__<tool>, which the agenthooks name
+// decoder does not recognize, so the server name comes from the
+// details.mcpServer marker OpenClaw puts on MCP tool results.
+func TestOpenClawMCPToolResultAttributesServer(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	serveOpenClaw(t, authedConfig(t, fs.URL),
+		afterToolCallFrame(t, 1, "run-mcp", "call-mcp", "speakeasy__execute_tool", map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": "tool failed"}},
+			"details": map[string]any{"mcpServer": "speakeasy", "mcpTool": "execute_tool", "status": "error"},
+		}),
+		afterToolCallFrame(t, 2, "run-mcp", "call-native", "exec", map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": "ok"}},
+			"details": map[string]any{"exitCode": 0, "status": "completed"},
+		}),
+		openclawFrame(t, 3, "agent_end", "run-mcp", map[string]any{"runId": "run-mcp", "success": true}),
+	)
+
+	completions := fs.toolCompletions()
+	require.Len(t, completions, 2)
+
+	mcpCall := completions["call-mcp"]
+	require.Equal(t, components.TypeToolCompleted, mcpCall.Event.Type)
+	require.NotNil(t, mcpCall.Data.ToolCall.Name)
+	require.Equal(t, "speakeasy__execute_tool", *mcpCall.Data.ToolCall.Name, "the native tool name is kept verbatim")
+	require.NotNil(t, mcpCall.Data.Mcp)
+	require.NotNil(t, mcpCall.Data.Mcp.ServerName)
+	require.Equal(t, "speakeasy", *mcpCall.Data.Mcp.ServerName)
+	require.NotNil(t, mcpCall.Data.Mcp.ServerIdentity)
+	require.Equal(t, "speakeasy", *mcpCall.Data.Mcp.ServerIdentity)
+	require.Nil(t, mcpCall.Data.Mcp.URL)
+	require.Nil(t, mcpCall.Data.Mcp.Command)
+	require.NotNil(t, mcpCall.Data.Mcp.ResultJSON)
+	require.Contains(t, *mcpCall.Data.Mcp.ResultJSON, `"mcpServer":"speakeasy"`)
+
+	native := completions["call-native"]
+	require.Equal(t, components.TypeToolCompleted, native.Event.Type)
+	require.Nil(t, native.Data.Mcp, "a native tool result carries no MCP marker")
+}
+
+func TestOpenClawMCPCallReadsDetailsMarker(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		results []json.RawMessage
+		server  string
+		tool    string
+	}{
+		{
+			name:    "it reads the server and tool from details",
+			results: []json.RawMessage{json.RawMessage(`{"content":[],"details":{"mcpServer":"speakeasy","mcpTool":"execute_tool"}}`)},
+			server:  "speakeasy",
+			tool:    "execute_tool",
+		},
+		{
+			name:    "it falls back to the error payload when there is no output",
+			results: []json.RawMessage{nil, json.RawMessage(`{"details":{"mcpServer":" github ","mcpTool":"search"}}`)},
+			server:  "github",
+			tool:    "search",
+		},
+		{
+			name:    "it ignores native tool details",
+			results: []json.RawMessage{json.RawMessage(`{"content":[],"details":{"exitCode":0,"status":"completed"}}`)},
+		},
+		{
+			name:    "it ignores an empty server name",
+			results: []json.RawMessage{json.RawMessage(`{"details":{"mcpServer":"","mcpTool":"execute_tool"}}`)},
+		},
+		{
+			name:    "it ignores a string error payload",
+			results: []json.RawMessage{json.RawMessage(`"blocked: denied by policy"`)},
+		},
+		{
+			name:    "it ignores non-object details",
+			results: []json.RawMessage{json.RawMessage(`{"details":"speakeasy"}`)},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := openClawMCPCall(tc.results...)
+			if tc.server == "" {
+				require.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			require.Equal(t, tc.server, got.Server)
+			require.Equal(t, tc.tool, got.Tool)
+		})
+	}
+}

@@ -259,18 +259,22 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 	}
 	data.ToolCall = tc
 
-	if tool.MCP != nil {
+	mcp := tool.MCP
+	if mcp == nil && base.Provider == agenthooks.ProviderOpenClaw {
+		mcp = openClawMCPCall(output, errOut)
+	}
+	if mcp != nil {
 		m := &components.HookMCPData{
-			ServerName:     optStr(tool.MCP.Server),
+			ServerName:     optStr(mcp.Server),
 			ServerIdentity: nil,
-			URL:            optStr(redactURL(tool.MCP.URL)),
-			Command:        optStr(redactCommand(tool.MCP.Command)),
+			URL:            optStr(redactURL(mcp.URL)),
+			Command:        optStr(redactCommand(mcp.Command)),
 			ResultJSON:     nil,
 		}
 		if m.URL == nil && m.Command != nil {
 			m.ServerIdentity = m.Command
 		} else {
-			m.ServerIdentity = optStr(tool.MCP.Server)
+			m.ServerIdentity = optStr(mcp.Server)
 		}
 		if len(output) > 0 {
 			m.ResultJSON = new(string(output))
@@ -279,6 +283,40 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 	}
 
 	return eventType
+}
+
+// openClawMCPCall recovers the MCP identity of an OpenClaw tool call from its
+// after_tool_call result. OpenClaw names MCP tools <server>__<tool> rather
+// than mcp__<server>__<tool>, so the tool name cannot be decoded without
+// guessing, but OpenClaw's MCP bridge stamps details.mcpServer and
+// details.mcpTool on every MCP tool result and native tools never carry them.
+// The pre-call event has only the tool name and params, so it stays
+// unattributed. Results are tried in order and the first one naming a server
+// wins; nil means the call is not an MCP call.
+func openClawMCPCall(results ...json.RawMessage) *agenthooks.MCPCall {
+	for _, raw := range results {
+		var result struct {
+			Details struct {
+				MCPServer string `json:"mcpServer"`
+				MCPTool   string `json:"mcpTool"`
+			} `json:"details"`
+		}
+		if json.Unmarshal(raw, &result) != nil {
+			continue
+		}
+		server := strings.TrimSpace(result.Details.MCPServer)
+		if server == "" {
+			continue
+		}
+		return &agenthooks.MCPCall{
+			Server:     server,
+			Tool:       strings.TrimSpace(result.Details.MCPTool),
+			URL:        "",
+			Command:    "",
+			FromConfig: false,
+		}
+	}
+	return nil
 }
 
 // applyModelResponse lifts the assistant message text and token usage a
