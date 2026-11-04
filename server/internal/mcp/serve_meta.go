@@ -573,9 +573,12 @@ func (s *Service) callMetaServerTool(
 	// revoked grant lands between requests the same way.
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
-		if params.Name != metamcp.ToolExecuteTool {
-			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		// A tool call that never reached a member still failed as one.
+		if gate.execute {
+			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
+			return nil, err
 		}
+		s.logMetaDiscovery(ctx, gate, params.Name, start, err)
 		return nil, err
 	}
 
@@ -596,8 +599,9 @@ func (s *Service) callMetaServerTool(
 	case metamcp.ToolConnectionStatus:
 		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
-		// execute_tool is deliberately not logged here: the member dispatch
-		// writes the single tool_call row, stamped with this gateway's id.
+		// execute_tool is deliberately not logged here: it writes a single
+		// tool_call row stamped with this gateway's id, the member dispatch's
+		// or, when it fails before one, its own.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
 	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
