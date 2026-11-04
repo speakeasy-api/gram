@@ -824,6 +824,15 @@ func newStreamsCommand() *cli.Command {
 				telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, sessionLogPub))
 			shutdownFuncs = append(shutdownFuncs, stopSessionLogger)
 
+			// Role-distribution setup only evaluates loaded role grants and never
+			// authorizes a request, so its engine needs no membership lookup and
+			// records no challenges.
+			roleDistributionEngine := authz.NewEngine(logger, db, func(context.Context, string) (bool, error) { return false, nil }, nil)
+			roleDistributionAuthz, err := newAuthzClient(logger, meterProvider, roleDistributionEngine, newFeatureFlags(ctx, c, logger, posthogClient))
+			if err != nil {
+				return fmt.Errorf("create role distribution authorization client: %w", err)
+			}
+
 			// Start subscription receivers in this block
 			{
 				// newLakeStorage returns no store when the lake is disabled.
@@ -837,7 +846,7 @@ func newStreamsCommand() *cli.Command {
 				roleDistributionGuard := admission.NewGuard()
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
 					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
-						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)
+						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleDistributionAuthz, roleURN, organizationID)
 					},
 					GlobalFanout: func(ctx context.Context, roleID uuid.UUID, cursor string) error {
 						return roledistribution.ProcessGlobalFanout(ctx, db, roleID, cursor)

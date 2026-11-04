@@ -489,7 +489,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
-		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget, config.AuthzClient).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
@@ -513,7 +513,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission).WithPluginPublisher(config.PluginPublishSignaler))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission, config.AuthzClient).WithPluginPublisher(config.PluginPublishSignaler))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
@@ -887,7 +887,7 @@ func platformMCPPluginMetadataBudget(config platformMCPConfig, limitStore rateli
 
 func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.MCPToolExposureService {
 	service, err := platformmcp.NewMCPToolExposureService(
-		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.JWTSigningKey,
+		config.Logger, config.DB, config.AuditLogger, config.Authz, config.AuthzClient, authorizer, config.JWTSigningKey,
 		config.PublicationRequests, config.PluginPublishSignaler,
 		// The catalogue read is metered well above the write: an administrator
 		// narrowing down one tool legitimately pages through it, while each
@@ -1290,7 +1290,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
-		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget, config.AuthzClient).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
@@ -1314,7 +1314,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission).WithPluginPublisher(config.PluginPublishSignaler))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission, config.AuthzClient).WithPluginPublisher(config.PluginPublishSignaler))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}

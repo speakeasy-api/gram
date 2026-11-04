@@ -30,7 +30,7 @@ func TestProcessRoleDistributionSetup_CreatesRoleOnlyPlugin(t *testing.T) {
 	ctx, ti := newTestPluginsService(t)
 	role := createTestRolePrincipal(t, ctx, ti, "Sales Team")
 
-	err := processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
+	err := processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestProcessRoleDistributionSetup_CreatesRoleOnlyPlugin(t *testing.T) {
 	require.True(t, updated.AutoCreated)
 	// A distinct role reuses the existing auto-created plugin.
 	secondRole := roleSetupFixture(t, ctx, ti, "sALES---TEAM")
-	require.NoError(t, processDirectRoleSetup(ctx, ti, secondRole, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, secondRole, plugins.PublicationRequests{Enabled: true}))
 	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: pluginID})
 	require.NoError(t, err)
 	require.True(t, got.AutoCreated)
@@ -89,7 +89,7 @@ func TestProcessRoleDistributionSetup_MatchesSlugPreservesEdits(t *testing.T) {
 	require.NoError(t, err)
 	before, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: first.ID})
 	require.NoError(t, err)
-	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: first.ID})
 	require.NoError(t, err)
 	require.False(t, first.AutoCreated)
@@ -123,7 +123,7 @@ func TestProcessRoleDistributionSetup_SameNameDifferentSlugCreatesPlugin(t *test
 	require.NoError(t, err)
 	before, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: existing.ID})
 	require.NoError(t, err)
-	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	after, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: existing.ID})
 	require.NoError(t, err)
 	require.Equal(t, before, after)
@@ -160,7 +160,7 @@ func TestProcessRoleDistributionSetup_InvalidNormalizedSlugDoesNotFallback(t *te
 			before, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 			require.NoError(t, err)
 
-			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
+			err = processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{})
 			require.Error(t, err)
 
 			after, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
@@ -198,7 +198,7 @@ func TestProcessRoleDistributionSetup_InactiveRolesAndOrganizations(t *testing.T
 				err = pluginsrepo.New(ti.conn).DeleteRoleSetupProjectFixture(ctx, *ac.ProjectID)
 			}
 			require.NoError(t, err)
-			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true})
+			err = processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true})
 			require.NoError(t, err)
 
 			if mode == "no-project" {
@@ -226,7 +226,7 @@ func TestProcessRoleDistributionSetup_ConcurrentWorkers(t *testing.T) {
 	for range workers {
 		wg.Go(func() {
 			<-start
-			err := processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
+			err := processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{})
 			errs <- err
 		})
 	}
@@ -272,7 +272,7 @@ func TestProcessRoleDistributionSetup_OldestActiveProject(t *testing.T) {
 					expected = *ac.ProjectID
 				}
 			}
-			require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+			require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 			for _, projectID := range []uuid.UUID{*ac.ProjectID, second.ID} {
 				scoped := *ac
 				scoped.ProjectID = &projectID
@@ -312,7 +312,7 @@ func TestProcessRoleDistributionSetup_PublicationFailureRollsBack(t *testing.T) 
 	err = pluginsrepo.New(ti.conn).CreateRoleSetupPublicationFailureTriggerFixture(ctx)
 	require.NoError(t, err)
 
-	err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true})
+	err = processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true})
 	require.Error(t, err)
 
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
@@ -323,7 +323,7 @@ func TestProcessRoleDistributionSetup_PublicationFailureRollsBack(t *testing.T) 
 	err = pluginsrepo.New(ti.conn).DropRoleSetupPublicationFailureTriggerFixture(ctx)
 	require.NoError(t, err)
 	before := roleSetupPublicationCount(t, ctx, ti)
-	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	after := roleSetupPublicationCount(t, ctx, ti)
 	require.Equal(t, before+1, after)
 }
@@ -335,7 +335,7 @@ func TestProcessRoleDistributionSetup_GlobalRole(t *testing.T) {
 	role := "role:global:" + id.String()
 	err := pluginsrepo.New(ti.conn).CreateRoleSetupGlobalRoleFixture(ctx, id)
 	require.NoError(t, err)
-	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 	require.NoError(t, err)
 	var pluginID string
@@ -365,7 +365,7 @@ func TestProcessRoleDistributionSetup_DisableOrganizationWhileInFlight(t *testin
 	finished := make(chan error, 1)
 
 	go func() {
-		err := processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
+		err := processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{})
 		finished <- err
 	}()
 	waitRoleSetupBlocked(t, ctx, ti, int32(tx.Conn().PgConn().PID()))
@@ -410,7 +410,7 @@ func TestProcessRoleDistributionSetup_DirectRemoteFailsClosed(t *testing.T) {
 	// resolvable rollout, audience expansion must fail closed (not complete).
 	err = pluginsrepo.New(ti.conn).CreateRoleSetupCatalogRegistrationFixture(ctx, pluginsrepo.CreateRoleSetupCatalogRegistrationFixtureParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: server.id, Valid: true}})
 	require.NoError(t, err)
-	err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true})
+	err = processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true})
 	require.Error(t, err)
 
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
@@ -420,7 +420,7 @@ func TestProcessRoleDistributionSetup_DirectRemoteFailsClosed(t *testing.T) {
 	// Returning to a legacy target demonstrates the intent remains retryable.
 	err = pluginsrepo.New(ti.conn).DeleteRoleSetupCatalogRegistrationFixture(ctx, pluginsrepo.DeleteRoleSetupCatalogRegistrationFixtureParams{McpServerID: uuid.NullUUID{UUID: server.id, Valid: true}, ProjectID: *ac.ProjectID})
 	require.NoError(t, err)
-	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
+	require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Len(t, got.Assignments, 1)
@@ -470,7 +470,7 @@ func TestProcessRoleDistributionSetup_ConcurrentOrganizationAndGlobalRole(t *tes
 				scopedCtx = withauthzGrants(t, scopedCtx, ti.conn, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, organizationID)}, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)})
 				require.NoError(t, roledistribution.ProcessGlobalFanout(ctx, ti.conn, globalRole.ID, ""))
 				require.NoError(t, roledistribution.ProcessOrganizationBootstrap(ctx, ti.conn, organizationID, ""))
-				require.NoError(t, processDirectRoleSetup(scopedCtx, ti, "role:global:"+globalRole.ID.String(), plugins.PublicationRequests{Enabled: true}))
+				require.NoError(t, processDirectRoleSetup(t, scopedCtx, ti, "role:global:"+globalRole.ID.String(), plugins.PublicationRequests{Enabled: true}))
 				list, err := ti.service.ListPlugins(scopedCtx, &gen.ListPluginsPayload{})
 				require.NoError(t, err)
 				var pluginID string
@@ -492,12 +492,13 @@ func TestProcessRoleDistributionSetup_ConcurrentOrganizationAndGlobalRole(t *tes
 
 }
 
-func processDirectRoleSetup(ctx context.Context, ti *testInstance, role string, publication plugins.PublicationRequests) error {
+func processDirectRoleSetup(t *testing.T, ctx context.Context, ti *testInstance, role string, publication plugins.PublicationRequests) error {
+	t.Helper()
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok {
 		return fmt.Errorf("missing fixture auth context")
 	}
-	_, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, role, ac.ActiveOrganizationID)
+	_, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, newDeliveryAuthz(t), role, ac.ActiveOrganizationID)
 	if err != nil {
 		return fmt.Errorf("process fixture role distribution: %w", err)
 	}

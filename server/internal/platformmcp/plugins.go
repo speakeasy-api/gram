@@ -488,12 +488,14 @@ type PluginsService struct {
 	// read without breaking the database.
 	recordedPublish func(context.Context, uuid.UUID) (pluginsrepo.PluginGithubConnection, error)
 
-	mutationFlags             feature.Provider
-	organizations             OrganizationSlugResolver
-	audit                     *audit.Logger
-	mutationBudget            OperationBudget
-	mutationReceipts          *PluginAssignmentMutationReceiptStore
-	distributionAdmission     *admission.Guard
+	mutationFlags         feature.Provider
+	organizations         OrganizationSlugResolver
+	audit                 *audit.Logger
+	mutationBudget        OperationBudget
+	mutationReceipts      *PluginAssignmentMutationReceiptStore
+	distributionAdmission *admission.Guard
+	// deliveryAuthz decides which servers an assigned role audience delivers.
+	deliveryAuthz             *authz.Client
 	distributionAdmissionRead distributionAdmissionReader
 
 	// publication and publisher request a plugin publish. republish_plugin

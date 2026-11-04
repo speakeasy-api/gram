@@ -67,7 +67,7 @@ func startRoleSetupRun(ctx context.Context, t *testing.T, ti *testInstance, role
 	result := make(chan roleSetupRunResult, 1)
 	setup := roleSetupIdentity(t, ctx, ti, role)
 	go func() {
-		n, err := processRoleSetup(ctx, ti, setup, plugins.PublicationRequests{})
+		n, err := processRoleSetup(t, ctx, ti, setup, plugins.PublicationRequests{})
 		result <- roleSetupRunResult{n, err}
 	}()
 	return result

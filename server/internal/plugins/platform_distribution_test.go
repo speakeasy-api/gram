@@ -111,15 +111,15 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 					case "audience":
 						assign()
 					case "setup":
-						require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
+						require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{}))
 					case "role_grant", "eligible":
 						tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Exercise transactional distribution hooks.
 						require.NoError(t, err)
 						defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 						if entrypoint == "role_grant" {
-							_, err = roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, nil, nil)
+							_, err = roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, nil, nil, newDeliveryAuthz(t))
 						} else {
-							_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, params, nil)
+							_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, params, nil, newDeliveryAuthz(t))
 						}
 						require.NoError(t, err)
 						require.NoError(t, tx.Commit(ctx))

@@ -132,7 +132,7 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	// membership and the org:admin grant against the database, so the test
 	// only passes when the seeded caller really is a live administrator.
 	admin := NewLiveOrgAdminAuthorizer(conn, engine)
-	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
+	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, newDeliveryAuthz(t), admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
 	require.NoError(t, err)
 
 	// Stands in for toolsets.TriggerToolsetIndexForVersion, which needs a

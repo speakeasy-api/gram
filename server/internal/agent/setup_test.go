@@ -139,7 +139,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
 
 	return ctx, &testInstance{
 		service:           svc,

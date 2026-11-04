@@ -1040,7 +1040,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    ServerDisplayName(server),
-	}, s.distributionAdmission)
+	}, s.distributionAdmission, s.authz)
 	if err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
 			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")

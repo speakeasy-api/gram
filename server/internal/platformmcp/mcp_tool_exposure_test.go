@@ -212,7 +212,7 @@ func TestToolExposureServiceRequiresBothOperationBudgets(t *testing.T) {
 
 	compose := func(reads, changes OperationBudget) error {
 		_, err := NewMCPToolExposureService(
-			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), &authz.Engine{},
+			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), &authz.Engine{}, newDeliveryAuthz(t),
 			allowExternalCallAuthorizer{}, "key", plugins.PublicationRequests{}, nil, reads, changes,
 		)
 		return err

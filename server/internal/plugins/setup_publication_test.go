@@ -49,7 +49,7 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	for _, row := range before {
 		beforeIDs[row.ID] = true
 	}
-	processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, plugins.PublicationRequests{Enabled: true}, nil, role, ac.ActiveOrganizationID)
+	processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, plugins.PublicationRequests{Enabled: true}, nil, newDeliveryAuthz(t), role, ac.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.True(t, processed)
 	events, err := fixtures.ListPublishOutboxRows(ctx)

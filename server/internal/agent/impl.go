@@ -70,6 +70,7 @@ type Service struct {
 	repo            *repo.Queries
 	auth            *auth.Auth
 	authz           *authz.Engine
+	authzClient     *authz.Client
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
@@ -123,6 +124,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
@@ -140,6 +142,7 @@ func NewService(
 		repo:                  repo.New(db),
 		auth:                  auth.New(logger, db, sessions, authzEngine),
 		authz:                 authzEngine,
+		authzClient:           authzClient,
 		audit:                 auditLogger,
 		productFeatures:       productFeatures,
 		serverURL:             serverURL,

@@ -133,7 +133,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	roleManager := NewRoleManager(logger, conn, roles, auditLogger, plugins.PublicationRequests{}, nil)
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger, plugins.PublicationRequests{}, nil, newDeliveryAuthz(t))
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil, failSend: false}
 	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
 		"access_request": "access-request-test-id",

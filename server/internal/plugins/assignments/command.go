@@ -123,6 +123,8 @@ type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current,
 
 type Dependencies struct {
 	DeliveryGuard *admission.Guard
+	// DeliveryAuthz decides which servers a role audience delivers.
+	DeliveryAuthz *authz.Client
 	Guard         Guard
 	BeforeReplace BeforeReplace
 }
@@ -250,7 +252,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
-	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
+	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard, dependencies.DeliveryAuthz)
 	if err != nil {
 		return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
 	}

@@ -1512,10 +1512,10 @@ func newStartCommand() *cli.Command {
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			distributionAdmission := admission.NewGuard()
 			publicationEmit := c.Bool(pluginPublicationEmitFlagName)
-			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger, plugins.PublicationRequests{Enabled: publicationEmit}, distributionAdmission)
+			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger, plugins.PublicationRequests{Enabled: publicationEmit}, distributionAdmission, authzClient)
 			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, telemSvc)
 			access.Attach(mux, accessService)
-			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
+			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
@@ -1717,7 +1717,7 @@ func newStartCommand() *cli.Command {
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, authzClient, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))

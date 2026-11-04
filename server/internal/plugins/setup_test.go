@@ -151,7 +151,8 @@ func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, f
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
+	pluginsEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), pluginsEngine, authztest.NewParityClient(t, pluginsEngine), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -229,13 +230,14 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 
 	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
 
+	pluginsEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := plugins.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
 		cache.NewRedisCacheAdapter(redisClient),
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		pluginsEngine, authztest.NewParityClient(t, pluginsEngine),
 		auditLogger,
 		ghConfig,
 		"local",

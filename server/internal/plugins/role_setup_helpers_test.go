@@ -26,8 +26,9 @@ func roleSetupIdentity(t *testing.T, ctx context.Context, ti *testInstance, role
 	return target
 }
 
-func processRoleSetup(ctx context.Context, ti *testInstance, target roleSetupTarget, publication plugins.PublicationRequests) (int, error) {
-	changed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, target.roleURN, target.organizationID)
+func processRoleSetup(t *testing.T, ctx context.Context, ti *testInstance, target roleSetupTarget, publication plugins.PublicationRequests) (int, error) {
+	t.Helper()
+	changed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, newDeliveryAuthz(t), target.roleURN, target.organizationID)
 	if err != nil {
 		return 0, fmt.Errorf("process fixture role distribution: %w", err)
 	}
@@ -39,7 +40,7 @@ func processRoleSetup(ctx context.Context, ti *testInstance, target roleSetupTar
 
 func runRoleSetup(t *testing.T, ctx context.Context, ti *testInstance, role string) int {
 	t.Helper()
-	n, err := processRoleSetup(ctx, ti, roleSetupIdentity(t, ctx, ti, role), plugins.PublicationRequests{Enabled: true})
+	n, err := processRoleSetup(t, ctx, ti, roleSetupIdentity(t, ctx, ti, role), plugins.PublicationRequests{Enabled: true})
 	require.NoError(t, err)
 	return n
 }

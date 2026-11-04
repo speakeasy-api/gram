@@ -70,7 +70,7 @@ func TestPlatformCleanupPreservesConcurrentManualUpdate(t *testing.T) {
 			}
 			cleaned := make(chan cleanupResult, 1)
 			go func() {
-				removed, err := roledelivery.ContentChanged(ctx, cleanupTx, org, projectID, toolsetID, nil)
+				removed, err := roledelivery.ContentChanged(ctx, cleanupTx, org, projectID, toolsetID, nil, newDeliveryAuthz(t))
 				cleaned <- cleanupResult{removed: removed, err: err}
 			}()
 			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(blocker), 2)

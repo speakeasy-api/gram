@@ -170,7 +170,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	if payload.Origin != nil {
 		originRegistrySpecifier = new(payload.Origin.RegistrySpecifier)
 	}
-	created, err := CreateToolsetInTransaction(ctx, dbtx, logger, s.audit, ToolsetCreateInput{
+	created, err := CreateToolsetInTransaction(ctx, dbtx, logger, s.audit, s.authz, ToolsetCreateInput{
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		OrganizationSlug:        authCtx.OrganizationSlug,
 		ProjectID:               *authCtx.ProjectID,
@@ -206,7 +206,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 }
 
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName)
+	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, s.authz, authCtx, toolsetID, displayName)
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
@@ -522,7 +522,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	var pluginContentsChanged bool
 	if payload.ToolUrns != nil {
-		removed, err := roledelivery.ContentChanged(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updatedToolset.ID, nil)
+		removed, err := roledelivery.ContentChanged(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updatedToolset.ID, nil, s.authz)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
 		}

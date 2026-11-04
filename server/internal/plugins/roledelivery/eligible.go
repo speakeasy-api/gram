@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
@@ -12,7 +13,7 @@ import (
 // Eligible delivers only the backend whose eligibility just changed. Existing
 // role audiences supply access; replay never restores removed membership.
 // Callers hold project admission before any plugin locks and enqueue publication.
-func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID uuid.UUID, guard *admission.Guard) (bool, error) {
+func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID uuid.UUID, guard *admission.Guard, client *authz.Client) (bool, error) {
 	candidates, err := servers(ctx, tx, org, projectID)
 	if err != nil {
 		return false, err
@@ -45,7 +46,7 @@ func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID
 		if err != nil {
 			return false, err
 		}
-		yes, err := supplied(grants, *selected)
+		yes, err := supplied(ctx, client, grants, *selected)
 		if err != nil {
 			return false, err
 		}

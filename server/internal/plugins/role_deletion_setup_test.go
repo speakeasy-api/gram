@@ -42,7 +42,7 @@ func startRoleSetupDeletion(t *testing.T, ctx context.Context, ti *testInstance,
 	const workosOrgID = "org_role_setup_deletion"
 	_, err := provider.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{Name: "Engineering", Slug: "Engineering", Description: ""})
 	require.NoError(t, err)
-	manager := access.NewRoleManager(testenv.NewLogger(t), ti.conn, provider, audit.NewLogger(), plugins.PublicationRequests{}, nil)
+	manager := access.NewRoleManager(testenv.NewLogger(t), ti.conn, provider, audit.NewLogger(), plugins.PublicationRequests{}, nil, newDeliveryAuthz(t))
 	result := make(chan error, 1)
 	go func() {
 		_, err := manager.DeleteRole(ctx, setup.organizationID, workosOrgID, strings.TrimPrefix(role, "role:organization:"), access.RoleAuditActor{
@@ -122,7 +122,7 @@ func TestProcessRoleDistributionSetup_DeleteWaitsForSetup(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	assertRoleSetupDeletionState(t, ctx, ti, setup, assignmentID, true)
-	n, err := processRoleSetup(ctx, ti, setup, plugins.PublicationRequests{})
+	n, err := processRoleSetup(t, ctx, ti, setup, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	require.Zero(t, n, "replaying successful setup must not restore the deleted audience")
 	count, err := fixtures.PipelineCountPluginAssignments(ctx, pluginID)
@@ -164,7 +164,7 @@ func TestProcessRoleDistributionSetup_DeleteFirstSkipsSetup(t *testing.T) {
 	}
 	assertRoleSetupDeletionState(t, ctx, ti, setup, assignmentID, true)
 	require.Zero(t, readRoleSetupRun(t, ctx, worker))
-	n, err := processRoleSetup(ctx, ti, setup, plugins.PublicationRequests{})
+	n, err := processRoleSetup(t, ctx, ti, setup, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	require.Zero(t, n)
 	after, err := fixtures.RoleDeletionContentSnapshot(ctx)

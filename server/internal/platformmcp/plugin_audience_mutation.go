@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"maps"
 	"slices"
 	"strings"
@@ -102,7 +103,7 @@ type normalizedSetPluginAssignments struct {
 
 // WithAssignmentMutations enables the separately gated write half of the plugin
 // service. Inventory reads remain available when any write dependency is absent.
-func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organizations OrganizationSlugResolver, logger *audit.Logger, budget OperationBudget) *PluginsService {
+func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organizations OrganizationSlugResolver, logger *audit.Logger, budget OperationBudget, deliveryAuthz *authz.Client) *PluginsService {
 	if s == nil {
 		return nil
 	}
@@ -111,6 +112,7 @@ func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organiz
 	s.audit = logger
 	s.mutationBudget = budget
 	s.mutationReceipts = NewPluginAssignmentMutationReceiptStore(s.db)
+	s.deliveryAuthz = deliveryAuthz
 	return s
 }
 
@@ -122,7 +124,7 @@ func (s *PluginsService) WithDistributionAdmission(guard *admission.Guard) *Plug
 }
 
 func (s *PluginsService) mutationValid() bool {
-	return s.valid() && s.mutationFlags != nil && s.organizations != nil && s.audit != nil && s.mutationBudget.valid() && s.mutationReceipts != nil && s.distributionAdmission != nil
+	return s.valid() && s.mutationFlags != nil && s.organizations != nil && s.audit != nil && s.mutationBudget.valid() && s.mutationReceipts != nil && s.distributionAdmission != nil && s.deliveryAuthz != nil
 }
 
 func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Principal, input SetPluginAssignmentsInput) (SetPluginAssignmentsOutput, error) {
@@ -218,6 +220,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			ActorSlug:        nil,
 		}, pluginassignments.Dependencies{
 			DeliveryGuard: s.distributionAdmission,
+			DeliveryAuthz: s.deliveryAuthz,
 			Guard: func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error {
 				if pluginassignments.IsSubset(desired, current) {
 					return nil
