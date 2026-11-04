@@ -19,7 +19,7 @@ import (
 )
 
 // callFunctionToolWithEnv runs one function tool call that declares
-// JAMF_TENANT_URL, JAMF_USERNAME and JAMF_PASSWORD against a runner answering
+// ACME_TENANT_URL, ACME_USERNAME and ACME_PASSWORD against a runner answering
 // runnerStatus, with userConfig as the caller's environment.
 func callFunctionToolWithEnv(t *testing.T, runnerStatus int, userConfig map[string]string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
@@ -29,7 +29,7 @@ func callFunctionToolWithEnv(t *testing.T, runnerStatus int, userConfig map[stri
 		w.Header().Set("Gram-Invoke-ID", invocationID.String())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(runnerStatus)
-		_, _ = w.Write([]byte(`{"name":"ZodError","message":"[{\"path\":[\"JAMF_TENANT_URL\"]}]"}`))
+		_, _ = w.Write([]byte(`{"name":"ZodError","message":"[{\"path\":[\"ACME_TENANT_URL\"]}]"}`))
 	}))
 	t.Cleanup(mockServer.Close)
 
@@ -43,9 +43,9 @@ func callFunctionToolWithEnv(t *testing.T, runnerStatus int, userConfig map[stri
 		Runtime:           "nodejs",
 		InputSchema:       []byte{},
 		Variables: map[string]*functions.ManifestVariableAttributeV0{
-			"JAMF_USERNAME":   {Description: nil},
-			"JAMF_TENANT_URL": {Description: nil},
-			"JAMF_PASSWORD":   {Description: nil},
+			"ACME_USERNAME":   {Description: nil},
+			"ACME_TENANT_URL": {Description: nil},
+			"ACME_PASSWORD":   {Description: nil},
 		},
 		AuthInput: nil,
 	})
@@ -88,13 +88,13 @@ func callFunctionToolWithEnv(t *testing.T, runnerStatus int, userConfig map[stri
 func TestToolProxy_Do_FunctionTool_FailureNamesMissingVariables(t *testing.T) {
 	t.Parallel()
 
-	_, err := callFunctionToolWithEnv(t, http.StatusInternalServerError, map[string]string{"JAMF_PASSWORD": "secret"})
+	_, err := callFunctionToolWithEnv(t, http.StatusInternalServerError, map[string]string{"ACME_PASSWORD": "secret"})
 
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
-	require.Equal(t, "server not configured: missing environment variables JAMF_TENANT_URL, JAMF_USERNAME", shareable.Error())
+	require.Equal(t, "server not configured: missing environment variables ACME_TENANT_URL, ACME_USERNAME", shareable.Error())
 }
 
 // Declared variables may be optional, so a function that succeeds without
@@ -114,9 +114,9 @@ func TestToolProxy_Do_FunctionTool_FailureWithAllVariablesPassesThrough(t *testi
 	t.Parallel()
 
 	recorder, err := callFunctionToolWithEnv(t, http.StatusInternalServerError, map[string]string{
-		"JAMF_TENANT_URL": "https://tenant.example.com",
-		"JAMF_USERNAME":   "admin",
-		"JAMF_PASSWORD":   "secret",
+		"ACME_TENANT_URL": "https://tenant.example.com",
+		"ACME_USERNAME":   "admin",
+		"ACME_PASSWORD":   "secret",
 	})
 
 	require.NoError(t, err)
