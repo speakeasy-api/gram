@@ -679,6 +679,7 @@ func buildTestMCPService(
 		}),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
 		remotesessions.WithProtectedResourceProber(protectedResources),
+		remotesessions.WithAuthorization(authztest.NewParityClient(t, authzEngine)),
 	)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
