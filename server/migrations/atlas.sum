@@ -1,4 +1,4 @@
-h1:ckDrt5wKmjHixS78wo30o5o/NdF78+j0hzrHR3vblZA=
+h1:tGe7uOvjoG8OppzuuHc8V/HKQvD63N9+pdM4fK2rRA8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -518,3 +518,4 @@ h1:ckDrt5wKmjHixS78wo30o5o/NdF78+j0hzrHR3vblZA=
 20261103180051_user-sessions-spent-refresh-token-hash-idx.sql h1:8hG3cFvzOyVbzph1dsGaQvT44gflUH0XzEp4367nzzk=
 20261103231000_team-memory.sql h1:Ec+QE4d7PQm9maADGqWz63Q+Y6N2lwsFG4/25JNIlbU=
 20261103231100_chats-memory-summary-idx.sql h1:X73E5Imgh7RVd9Ma/cLmdH2zxhqh65JQYeauu/3MuHc=
+20261103231200_memory-eval-runs.sql h1:VpEyogX8da0FmihggSiJhK9kvEhjEgdqn0CXlijqQtA=

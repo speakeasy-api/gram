@@ -32,6 +32,8 @@ import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
+import { adminGetMemoryEvalOptions } from "../funcs/adminGetMemoryEvalOptions.js";
+import { adminGetMemoryEvalRun } from "../funcs/adminGetMemoryEvalRun.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -57,6 +59,7 @@ import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListExternalMcpMigrationCandidates } from "../funcs/adminListExternalMcpMigrationCandidates.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
+import { adminListMemoryEvalRuns } from "../funcs/adminListMemoryEvalRuns.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
 import { adminListOnboardingSteps } from "../funcs/adminListOnboardingSteps.js";
 import { adminListOnboardingUseCases } from "../funcs/adminListOnboardingUseCases.js";
@@ -94,6 +97,7 @@ import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizati
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
+import { adminStartMemoryEvalRun } from "../funcs/adminStartMemoryEvalRun.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
@@ -123,6 +127,8 @@ import { AdminListUserOrganizationsResult } from "../models/components/adminlist
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
+import { AdminMemoryEvalOptions } from "../models/components/adminmemoryevaloptions.js";
+import { AdminMemoryEvalRun } from "../models/components/adminmemoryevalrun.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -203,6 +209,7 @@ import { SetOrganizationOnboardingStackRequestBody } from "../models/components/
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
+import { StartMemoryEvalRunRequestBody } from "../models/components/startmemoryevalrunrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
@@ -222,6 +229,7 @@ import { AdminGetHookClientsRequest } from "../models/operations/admingethookcli
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
+import { AdminGetMemoryEvalRunRequest } from "../models/operations/admingetmemoryevalrun.js";
 import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
@@ -247,6 +255,10 @@ import {
   AdminListGlobalIssuersRequest,
   AdminListGlobalIssuersResponse,
 } from "../models/operations/adminlistglobalissuers.js";
+import {
+  AdminListMemoryEvalRunsRequest,
+  AdminListMemoryEvalRunsResponse,
+} from "../models/operations/adminlistmemoryevalruns.js";
 import { AdminListOnboardingPlaybooksRequest } from "../models/operations/adminlistonboardingplaybooks.js";
 import {
   AdminListOrganizationActivityRequest,
@@ -394,6 +406,74 @@ export class Admin extends ClientSDK {
   ): Promise<AdminBackfillMCPAuthGrantsResult> {
     return unwrapAsync(adminBackfillMcpAuthGrants(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * getMemoryEvalOptions admin
+   *
+   * @remarks
+   * Default Organizational Memory eval config, the models a run may pick from, and the daily run budget.
+   */
+  async getMemoryEvalOptions(
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalOptions> {
+    return unwrapAsync(adminGetMemoryEvalOptions(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * getMemoryEvalRun admin
+   *
+   * @remarks
+   * One Organizational Memory eval run with its report.
+   */
+  async getMemoryEvalRun(
+    request: AdminGetMemoryEvalRunRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalRun> {
+    return unwrapAsync(adminGetMemoryEvalRun(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listMemoryEvalRuns admin
+   *
+   * @remarks
+   * Organizational Memory eval runs, newest first, without their reports.
+   */
+  async listMemoryEvalRuns(
+    request?: AdminListMemoryEvalRunsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<AdminListMemoryEvalRunsResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(adminListMemoryEvalRuns(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startMemoryEvalRun admin
+   *
+   * @remarks
+   * Queue an Organizational Memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.
+   */
+  async startMemoryEvalRun(
+    request: StartMemoryEvalRunRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMemoryEvalRun> {
+    return unwrapAsync(adminStartMemoryEvalRun(
+      this,
+      request,
       options,
     ));
   }
