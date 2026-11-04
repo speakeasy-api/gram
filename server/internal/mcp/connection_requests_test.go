@@ -380,9 +380,9 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 		want   mcpconnectionattempts.Code
 		text   string
 	}{
-		{name: "rate limited", status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeProviderRateLimited, text: "is limiting requests right now"},
-		{name: "server error", status: http.StatusInternalServerError, want: mcpconnectionattempts.CodeProviderServerError, text: "had an error"},
-		{name: "unavailable", status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeProviderServerError, text: "had an error"},
+		{name: "rate limited", status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeProviderRateLimited, text: "rejected the call: rejected by transport"},
+		{name: "server error", status: http.StatusInternalServerError, want: mcpconnectionattempts.CodeProviderServerError, text: "rejected the call: rejected by transport"},
+		{name: "unavailable", status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeProviderServerError, text: "rejected the call: rejected by transport"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -408,8 +408,7 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 			require.True(t, isError)
-			require.Contains(t, text, tc.text)
-			require.NotContains(t, text, "transport")
+			require.Equal(t, `server "member" `+tc.text, text)
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
@@ -460,6 +459,7 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 	before := len(rec.Rows())
 	_, err = servePublicHTTP(t, context.Background(), ti, metaSlug, call, bearer, map[string]string{"User-Agent": userAgent, "Mcp-Session-Id": resp.Header().Get("Mcp-Session-Id")})
 	require.NoError(t, err)
+	require.Greater(t, len(rec.Rows()), before, "the fallback call must record a refusal")
 	for _, late := range rec.Rows()[before:] {
 		require.Equal(t, mcpconnectionattempts.FamilyScript, late.ClientFamily)
 		require.Equal(t, "0.28.1", late.ClientVersion)

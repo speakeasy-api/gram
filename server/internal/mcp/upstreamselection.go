@@ -837,7 +837,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage(member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -866,9 +866,7 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
-func connectionNotCheckedMessage(slug string) string {
-	return fmt.Sprintf("Server %q's connection could not be checked. Try again in a few minutes.", slug)
-}
+const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 // Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
@@ -887,7 +885,7 @@ func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, g
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return "This server's connection could not be checked. Try again in a few minutes.", false
+		return connectionNotCheckedMessage, false
 	case fixable:
 		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
 	}

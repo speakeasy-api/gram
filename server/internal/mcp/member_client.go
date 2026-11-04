@@ -376,25 +376,6 @@ func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
 
-// memberOutageMessage is what a call reads when the member's side is busy or down.
-func memberOutageMessage(slug string, code mcpconnectionattempts.Code, said string) string {
-	var message string
-	switch code {
-	case mcpconnectionattempts.CodeTunnelUnavailable, mcpconnectionattempts.CodeInternalError:
-		return fmt.Sprintf("server %q is not reachable right now", slug)
-	case mcpconnectionattempts.CodeProviderUnavailable:
-		return fmt.Sprintf("server %q is busy right now. Try again in a few minutes.", slug)
-	case mcpconnectionattempts.CodeProviderRateLimited:
-		message = fmt.Sprintf("server %q is limiting requests right now. Try again in a few minutes.", slug)
-	default:
-		message = fmt.Sprintf("server %q had an error. Try again in a few minutes.", slug)
-	}
-	if said != "" {
-		return message + " It said: " + said
-	}
-	return message
-}
-
 // memberClientFailure keeps transport failures scoped to a member and preserves
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
@@ -464,23 +445,23 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "")
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
 	}
-	said := ""
 	rpcErr, isRPC := errors.AsType[*jsonrpc.Error](err)
-	if isRPC && rpcErr.Message != sdkTransportRejected {
-		said = rpcErr.Message
+	message := fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)
+	if isRPC {
+		message = fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)
 	}
 	switch {
 	case retryableStatus:
 		code, _ := remotemcp.UpstreamFailureHappened(status, dial.upstreamCredential(), dial.tunneled, rt.tunnelError())
-		return memberConnectionError{upstreamFailure(memberOutageMessage(member.slug, code, said), true), code}
-	case said != "":
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, said), false), mcpconnectionattempts.CodeProviderRejected}
-	case isRPC && status == 0:
+		return memberConnectionError{upstreamFailure(message, true), code}
+	case isRPC && rpcErr.Message == sdkTransportRejected && status == 0:
 		// The SDK could not send the call, so the member never saw it.
 		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "")
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
+		return memberConnectionError{upstreamFailure(message, false), code}
+	case isRPC:
+		return memberConnectionError{upstreamFailure(message, false), mcpconnectionattempts.CodeProviderRejected}
 	case status != 0:
-		return upstreamFailure(fmt.Sprintf("server %q answered with an error (HTTP status %d)", member.slug, status), false)
+		return upstreamFailure(message, false)
 	}
 	logger.WarnContext(ctx, "unclassified meta MCP member failure", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
 	return upstreamFailure(fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug), false)

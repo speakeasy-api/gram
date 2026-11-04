@@ -151,6 +151,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, handled)
 		rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Len(t, rec.Rows(), 1)
 	})
 
 	t.Run("a removed grant refuses the owner's attached connection", func(t *testing.T) {
