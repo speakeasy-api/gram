@@ -149,7 +149,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			if !isDeadGateway(err) {
 				// The request may have reached the provider, so an earlier cleanup failure must not mark it as never sent.
 				if unpublishErr != nil {
-					return nil, fmt.Errorf("forward request via tunnel: %w (earlier route cleanup failed: %v)", err, unpublishErr)
+					return nil, fmt.Errorf("forward request via tunnel: %w (earlier route cleanup failed: %s)", err, unpublishErr.Error())
 				}
 				return nil, fmt.Errorf("forward request via tunnel: %w", err)
 			}
