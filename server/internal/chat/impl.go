@@ -1033,8 +1033,9 @@ const (
 )
 
 // chatOperation names the check for one access to a chat, together with the
-// chat's owner so the ownership rule can decide. Only reading consults the
-// agent that ran the session, so only a read loads it.
+// chat's owner so the ownership rule can decide. Only reading an agent-only
+// session (no author and no external user) consults the agent that ran it,
+// so only such a read loads the agent.
 func (s *Service) chatOperation(ctx context.Context, chat repo.GetChatRow, access chatAccess) (authz.Operation, error) {
 	owner := authz.ChatOwner{
 		UserID:         conv.FromPGText[string](chat.UserID),
@@ -1045,7 +1046,8 @@ func (s *Service) chatOperation(ctx context.Context, chat repo.GetChatRow, acces
 	if access == chatAccessWrite {
 		return ref.WithOwner(owner).Write(), nil
 	}
-	if chat.AgentID.Valid {
+	agentOnly := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
+	if agentOnly {
 		agent, err := s.repo.GetAgentOwnership(ctx, repo.GetAgentOwnershipParams{
 			AgentID:        chat.AgentID.UUID,
 			OrganizationID: chat.OrganizationID,
