@@ -160,6 +160,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 6. **`EvaluateLoaded` honours blocks while the engine decides.** Its old path uses `GrantsAuthorize`, the effective decision with exclusions, rather than `GrantsSatisfy`, which ignores blocks. That is what the registry evaluator answers, so shadow compares like with like. No current caller relied on block-blind answers for a blockable scope.
 7. **Agent selection moves to AG1.** `assistantidentity.(*Service).selectAgent` asks for `agent:authorize`, which the open owner-scoped agent PR (AIS-785) rewrites. The owner map now assigns it to AG1, which per the baseline waits for that PR.
 8. **Parity is proven by the service's own tests in shadow.** The assistants, assistant identity and Platform MCP assistant identity suites run with `authztest.NewParityClient`.
+9. **Loaded grants without a user decide with a system actor.** The registry evaluator refuses a policy set without an actor, so an empty `LoadedPolicies.User` would have failed in new mode for grant-only permissions while the engine allowed them. It now uses the same `loaded_grants` system principal as `EvaluateGrants`, which no ownership fact names. _If reversed:_ require a user on every loaded call and reject an empty one in all modes.
 
 ## C1 (AIS-869): chat point reads, writes and the turn stream
 
