@@ -224,8 +224,39 @@ func TestKitGKEReapRetiredRuntimeAfterSpecChange(t *testing.T) {
 	require.Equal(t, 1, *fences)
 	_, err = client.Resource(kitClaimGVR).Namespace(m.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.True(t, apierrors.IsNotFound(err))
-	_, err = client.Resource(kitWarmPoolGVR).Namespace(m.Namespace).Get(t.Context(), m.WarmPoolName, metav1.GetOptions{})
-	require.True(t, apierrors.IsNotFound(err))
-	_, err = client.Resource(kitServiceAccountGVR).Namespace(m.Namespace).Get(t.Context(), m.Workload.ServiceAccount, metav1.GetOptions{})
-	require.True(t, apierrors.IsNotFound(err))
+	for _, object := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+	}{
+		{gkePodGVR, m.PodName},
+		{kitWarmPoolGVR, m.WarmPoolName},
+		{kitTemplateGVR, m.TemplateName},
+		{kitSecretGVR, m.SecretName},
+		{kitServiceAccountGVR, m.Workload.ServiceAccount},
+	} {
+		_, err = client.Resource(object.gvr).Namespace(m.Namespace).Get(t.Context(), object.name, metav1.GetOptions{})
+		require.True(t, apierrors.IsNotFound(err), object.gvr.Resource)
+	}
+}
+
+func TestKitGKEReapRetiredRuntimeRejectsMissingSpec(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	var m kitGKEBackendMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &m))
+	m.Fingerprint = ""
+	raw, err := json.Marshal(m)
+	require.NoError(t, err)
+	require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, result.BackendMetadataJSON, raw))
+	r.BackendMetadataJSON = raw
+	r.Retired = true
+	client.ClearActions()
+
+	require.ErrorContains(t, k.Reap(t.Context(), r), "compatibility mismatch")
+	require.Zero(t, *fences)
+	for _, action := range client.Actions() {
+		require.NotEqual(t, "delete", action.GetVerb())
+	}
 }

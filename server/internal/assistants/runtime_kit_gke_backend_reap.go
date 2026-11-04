@@ -55,10 +55,12 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 			}
 			// A retired row's objects carry the spec it was provisioned with,
 			// which later deploys move on from. Its exact identities still
-			// authorize deletion.
-			recorded := *k
-			recorded.fingerprint = prior.Fingerprint
-			k = &recorded
+			// authorize deletion. A row that recorded no spec stays rejected.
+			if prior.Fingerprint != "" {
+				recorded := *k
+				recorded.fingerprint = prior.Fingerprint
+				k = &recorded
+			}
 		}
 	}
 	state, authority, err := k.loadAuthority(ctx, r)

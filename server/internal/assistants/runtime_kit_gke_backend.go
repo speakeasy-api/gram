@@ -889,7 +889,6 @@ func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructur
 // Verify every recorded UID before fencing and deleting; never discover or adopt
 // resources by name alone. The authority CAS makes a completed reset retryable.
 // Only failed pre-pool projected-token admissions can be automatically replaced.
-// Retired rows that never published checkpoint authority are collected here too.
 // Never use this path to resume an old snapshot or delete a live workload.
 func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRecord, namespace string) bool {
 	return m.RuntimeID == r.ID && m.AssistantID == r.AssistantID && m.ProjectID == r.ProjectID &&
@@ -900,6 +899,8 @@ func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRe
 		m.Workload.Subject == "system:serviceaccount:"+namespace+":"+m.Workload.ServiceAccount
 }
 
+// invalidateLegacy resets a row's recorded objects by exact identity. It also
+// collects retired rows that never published checkpoint authority.
 func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
 	if m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
 		return ErrKitRuntimeBinding
