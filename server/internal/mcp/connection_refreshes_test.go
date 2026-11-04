@@ -63,6 +63,68 @@ func TestInboundRefresh_WriteFailureLeavesNoVerdict(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshReplayed)
 }
 
+func TestInboundRefresh_ErrorWriteFailureLeavesNoVerdict(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		replay bool
+		want   mcpconnectionattempts.Code
+	}{
+		{name: "expired", replay: false, want: mcpconnectionattempts.CodeRefreshTokenExpired},
+		{name: "unknown", replay: false, want: mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed},
+		{name: "upstream", replay: false, want: mcpconnectionattempts.CodeUpstreamReconnectRequired},
+		{name: "expired", replay: true, want: mcpconnectionattempts.CodeRefreshTokenExpired},
+		{name: "unknown", replay: true, want: mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed},
+	} {
+		name := tc.name
+		if tc.replay {
+			name += "_replay"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			expiresAt := time.Now().Add(time.Hour)
+			if tc.name == "expired" {
+				expiresAt = time.Now().Add(-time.Hour)
+			}
+			toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, expiresAt)
+			switch tc.name {
+			case "unknown":
+				refreshToken = "refresh-" + uuid.NewString()
+			case "upstream":
+				attachTestRemoteSessionClient(t, ctx, ti, requireProjectAuthContext(t, ctx), issuer.ID)
+			}
+			if tc.replay {
+				refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+				require.NoError(t, refused.err)
+				require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+
+			form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "client_id": {client.ClientID}}
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			routeCtx := chi.NewRouteContext()
+			routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+			req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+			writeErr := errors.New("client disconnected during error response")
+			w := &refreshFailingResponseWriter{ResponseRecorder: httptest.NewRecorder(), err: writeErr}
+
+			require.ErrorIs(t, ti.service.HandleToken(w, req), writeErr)
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			rec.RequireNothing()
+
+			// A delivered retry records the refusal, including cached rotation failures.
+			refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+			require.NoError(t, refused.err)
+			require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+			rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.want)
+		})
+	}
+}
+
 type refreshFailingResponseWriter struct {
 	*httptest.ResponseRecorder
 	err error

@@ -60,14 +60,19 @@ func (c upstreamRefreshCheck) reconnect() bool {
 	return c == upstreamRefreshReconnect || c == upstreamRefreshEMARefused
 }
 
-// refuseInboundRefresh gives a refused refresh its verdict from the reason its log line carries.
-func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tracker, r *http.Request, reason string, opts ...mcpconnectionattempts.Option) {
+// refuseInboundRefresh records a refusal only after its response was delivered.
+func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tracker, r *http.Request, writeErr error, reason string, opts ...mcpconnectionattempts.Option) error {
+	if writeErr != nil {
+		tracker.Continue()
+		return writeErr
+	}
 	code, ok := inboundRefreshHappened(reason)
 	if !ok {
 		tracker.Continue()
-		return
+		return nil
 	}
 	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r))...)
+	return nil
 }
 
 // inboundRefreshHappened leaves out a request with no token to judge; an unknown reason is ours.
