@@ -779,7 +779,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			// Decided before the token path, so members the key has a choice
 			// for resolve lazily like any other chosen member.
 			agentKeyChoicesRead = true
-			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, refreshScope)
+			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 			if err != nil {
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 			}
@@ -801,7 +801,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		gateAuthentication = authentication
 	}
 	if gateMemberChoices == nil && membership.agentID != uuid.Nil && !agentKeyChoicesRead {
-		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, refreshScope)
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 		}
