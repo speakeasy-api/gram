@@ -61,7 +61,9 @@ import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
   isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
 } from "./types";
+import { resourceKindForScope } from "@/hooks/useRBAC";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
@@ -158,18 +160,64 @@ interface CreateRoleDialogProps {
   /** Pre-fills the name of a new role, such as the group it is created for. */
   defaultName?: string;
   /**
-   * Pre-selects unrestricted allow grants on a new role, such as the one
-   * permission an access request asked for.
+   * Pre-selects allow grants on a new role, such as the one permission an
+   * access request asked for.
    */
   defaultScopes?: Scope[];
+  /**
+   * The resource the default scopes were asked for. The pre-filled rules are
+   * limited to it, so the new role grants no more than the request.
+   */
+  defaultResource?: { resourceId?: string; projectId?: string };
 }
 
-function unrestrictedGrantsFor(scopes: Scope[]): Record<string, RoleGrant> {
+/**
+ * The selectors that limit a pre-filled grant to the requested resource, in
+ * the shape the rule editor reads: the resource by its id, or a project-wide
+ * rule for the kinds that narrow by project. Null means unrestricted, which
+ * is all a kind without resources of its own can be.
+ */
+function requestedSelectors(
+  scope: Scope,
+  resource: CreateRoleDialogProps["defaultResource"],
+): Selector[] | null {
+  const kind = resourceKindForScope(scope);
+  if (
+    !resource ||
+    !isKnownResourceType(kind) ||
+    isUnrestrictedResourceType(kind)
+  )
+    return null;
+  if (resource.resourceId) {
+    return [{ resourceKind: kind, resourceId: resource.resourceId }];
+  }
+  if (!resource.projectId) return null;
+  if (kind === "mcp" || isProjectFilteredResourceType(kind)) {
+    return [
+      { resourceKind: kind, resourceId: "*", projectId: resource.projectId },
+    ];
+  }
+  if (isProjectSelectableResourceType(kind)) {
+    return [{ resourceKind: kind, resourceId: resource.projectId }];
+  }
+  return null;
+}
+
+function grantsFor(
+  scopes: Scope[],
+  resource: CreateRoleDialogProps["defaultResource"],
+): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = Object.create(null);
   for (const scope of scopes) {
     result[scope] = {
       scope,
-      rules: [{ id: crypto.randomUUID(), effect: "allow", selectors: null }],
+      rules: [
+        {
+          id: crypto.randomUUID(),
+          effect: "allow",
+          selectors: requestedSelectors(scope, resource),
+        },
+      ],
     };
   }
   return result;
@@ -185,6 +233,7 @@ export function CreateRoleDialog({
   hideAssignments = false,
   defaultName = "",
   defaultScopes,
+  defaultResource,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -193,7 +242,7 @@ export function CreateRoleDialog({
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
   const [grants, setGrants] = useState<Record<string, RoleGrant>>(() =>
-    unrestrictedGrantsFor(defaultScopes ?? []),
+    grantsFor(defaultScopes ?? [], defaultResource),
   );
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),

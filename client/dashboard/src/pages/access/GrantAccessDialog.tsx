@@ -22,7 +22,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
-import { suggestRolesForScope, type RoleSuggestions } from "./roleSuggestions";
+import {
+  breadthLabel,
+  suggestRolesForScope,
+  type RoleSuggestions,
+  type SuggestedRole,
+} from "./roleSuggestions";
 import { scopeLabel, workflowsNeeding } from "./scopeCatalogue";
 
 interface GrantAccessDialogProps {
@@ -80,6 +85,8 @@ export function GrantAccessDialog({
     catalogue,
     workflows,
     isLoading: scopesLoading,
+    isError: scopesError,
+    refetch: refetchScopes,
   } = useScopeCatalogue();
 
   const member = useMemo(
@@ -126,11 +133,13 @@ export function GrantAccessDialog({
   };
 
   const isLoading = membersLoading || rolesLoading || scopesLoading;
-  const loadFailed = membersError || rolesError;
+  // Suggestions and sensitivity warnings are read off the catalogue, so a
+  // failed catalogue fetch is a failed dialog, not an empty one.
+  const loadFailed = membersError || rolesError || scopesError;
   const granted = assignedRoleId !== null && updateMemberRoles.isSuccess;
   const label = scopeLabel(catalogue, scope);
   const entry = catalogue.get(scope);
-  const partOf = workflowsNeeding(workflows, scope);
+  const partOf = workflowsNeeding(catalogue, workflows, scope);
 
   return (
     <Dialog
@@ -185,7 +194,7 @@ export function GrantAccessDialog({
         {loadFailed && (
           <div className="flex flex-col items-center gap-3 py-4">
             <Text variant="body" className="text-destructive text-sm">
-              Failed to load members and roles.
+              Failed to load members, roles and permissions.
             </Text>
             <Button
               variant="secondary"
@@ -193,6 +202,7 @@ export function GrantAccessDialog({
               onClick={() => {
                 if (membersError) void refetchMembers();
                 if (rolesError) void refetchRoles();
+                if (scopesError) refetchScopes();
               }}
             >
               Retry
@@ -240,6 +250,7 @@ export function GrantAccessDialog({
             ) : (
               <RoleSuggestionList
                 member={member}
+                scope={scope}
                 label={label}
                 suggestions={suggestions}
                 labelFor={(slug) => scopeLabel(catalogue, slug)}
@@ -274,6 +285,7 @@ export function GrantAccessDialog({
           }}
           defaultName={label}
           defaultScopes={[scope as Scope]}
+          defaultResource={{ resourceId, projectId }}
           hideAssignments
           onRoleCreated={(role) => assignRole(role.id)}
         />
@@ -284,6 +296,7 @@ export function GrantAccessDialog({
 
 function RoleSuggestionList({
   member,
+  scope,
   label,
   suggestions,
   labelFor,
@@ -292,6 +305,7 @@ function RoleSuggestionList({
   onCreateRole,
 }: {
   member: AccessMember;
+  scope: string;
   label: string;
   suggestions: RoleSuggestions;
   labelFor: (slug: string) => string;
@@ -303,12 +317,12 @@ function RoleSuggestionList({
   const nothingFits = exact.length === 0;
 
   const renderRole = (
-    roleId: string,
-    name: string,
-    description: string,
+    { role, breadth }: SuggestedRole,
     extra?: { count: number; sensitive: string[] },
   ) => {
+    const { id: roleId, name, description } = role;
     const alreadyAssigned = member.roleIds.includes(roleId);
+    const reach = breadthLabel(scope, breadth);
     return (
       <li
         key={roleId}
@@ -321,6 +335,11 @@ function RoleSuggestionList({
           {description && (
             <Text muted small className="truncate">
               {description}
+            </Text>
+          )}
+          {reach && (
+            <Text muted small>
+              Grants {label} {reach}.
             </Text>
           )}
           {extra && (
@@ -367,9 +386,7 @@ function RoleSuggestionList({
             Roles that give exactly this:
           </Text>
           <ul className="space-y-1.5">
-            {exact.map((role) =>
-              renderRole(role.id, role.name, role.description),
-            )}
+            {exact.map((item) => renderRole(item))}
           </ul>
         </div>
       )}
@@ -395,10 +412,10 @@ function RoleSuggestionList({
             Roles that give more than this:
           </Text>
           <ul className="space-y-1.5">
-            {broader.map(({ role, extraScopes, extraSensitive }) =>
-              renderRole(role.id, role.name, role.description, {
-                count: extraScopes.length,
-                sensitive: extraSensitive,
+            {broader.map((item) =>
+              renderRole(item, {
+                count: item.extraScopes.length,
+                sensitive: item.extraSensitive,
               }),
             )}
           </ul>

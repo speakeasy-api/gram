@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  breadthLabel,
   rolesCoveringChallengeScopes,
   rolesCoveringScope,
   suggestRolesForScope,
@@ -44,8 +45,8 @@ function def(
   };
 }
 
-// The inclusions mirror what the server serves; the test does not keep its
-// own copy of scopeExpansions.
+// The inclusions are a hand-written subset of the server's scopeExpansions;
+// the server's catalog tests guard the full graph.
 const catalogue = scopeCatalogue([
   def("org:read"),
   def("org:admin", {
@@ -53,8 +54,8 @@ const catalogue = scopeCatalogue([
     sensitive: true,
     sensitivity: "destructive_admin",
   }),
-  def("project:read"),
-  def("mcp:connect"),
+  def("project:read", { exclusionScope: "project:blocked_read" }),
+  def("mcp:connect", { exclusionScope: "mcp:blocked_connect" }),
   def("mcp:read", { subScopes: ["mcp:connect"] }),
   def("mcp:write", { subScopes: ["mcp:connect", "mcp:read"] }),
   def("mcp:blocked_connect"),
@@ -144,6 +145,38 @@ describe("rolesCoveringScope", () => {
       rolesCoveringScope(roles, "org:read", scopeCatalogue(undefined)),
     ).toEqual([]);
   });
+
+  it("leaves out a role that blocks the scope on the requested resource", () => {
+    const roles = [
+      role("writer-blocked-everywhere", [
+        { scope: "mcp:write", selectors: undefined },
+        { scope: "mcp:blocked_connect", selectors: undefined },
+      ]),
+      role("writer-blocked-elsewhere", [
+        { scope: "mcp:write", selectors: undefined },
+        {
+          scope: "mcp:blocked_connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
+        },
+      ]),
+      role("writer", [{ scope: "mcp:write", selectors: undefined }]),
+    ];
+
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", catalogue, "server-a").map(
+        (r) => r.slug,
+      ),
+    ).toEqual(["writer-blocked-elsewhere", "writer"]);
+    // Without a resource only a block on everything disqualifies.
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", catalogue).map((r) => r.slug),
+    ).toEqual(["writer-blocked-elsewhere", "writer"]);
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", catalogue, "server-b").map(
+        (r) => r.slug,
+      ),
+    ).toEqual(["writer"]);
+  });
 });
 
 describe("suggestRolesForScope", () => {
@@ -169,7 +202,9 @@ describe("suggestRolesForScope", () => {
   it("puts roles that give exactly the scope first and names what broader roles add", () => {
     const suggestions = suggestRolesForScope(roles, "log:read", catalogue);
 
-    expect(suggestions.exact.map((r) => r.slug)).toEqual(["log-reviewer"]);
+    expect(suggestions.exact.map(({ role }) => role.slug)).toEqual([
+      "log-reviewer",
+    ]);
     expect(
       suggestions.broader.map(({ role, extraScopes, extraSensitive }) => ({
         slug: role.slug,
@@ -203,7 +238,9 @@ describe("suggestRolesForScope", () => {
       "mcp:write",
       catalogue,
     );
-    expect(suggestions.exact.map((r) => r.slug)).toEqual(["mcp-writer"]);
+    expect(suggestions.exact.map(({ role }) => role.slug)).toEqual([
+      "mcp-writer",
+    ]);
     expect(suggestions.broader).toEqual([]);
   });
 
@@ -219,7 +256,57 @@ describe("suggestRolesForScope", () => {
       "log:read",
       catalogue,
     );
-    expect(suggestions.exact.map((r) => r.slug)).toEqual(["narrow"]);
+    expect(suggestions.exact.map(({ role }) => role.slug)).toEqual(["narrow"]);
+  });
+
+  it("puts a role limited to the requested project before one that grants the scope everywhere", () => {
+    const suggestions = suggestRolesForScope(
+      [
+        role("everywhere", [{ scope: "log:read", selectors: undefined }]),
+        role("one-project", [
+          {
+            scope: "log:read",
+            selectors: [{ resourceKind: "project", resourceId: "project-a" }],
+          },
+        ]),
+        role("admin-everywhere", [
+          { scope: "org:admin", selectors: undefined },
+          { scope: "log:read", selectors: undefined },
+        ]),
+        role("admin-one-project", [
+          { scope: "org:admin", selectors: undefined },
+          {
+            scope: "log:read",
+            selectors: [{ resourceKind: "project", resourceId: "project-a" }],
+          },
+        ]),
+      ],
+      "log:read",
+      catalogue,
+      "project-a",
+    );
+
+    expect(
+      suggestions.exact.map(({ role, breadth }) => [role.slug, breadth]),
+    ).toEqual([
+      ["one-project", "project"],
+      ["everywhere", "all"],
+    ]);
+    expect(
+      suggestions.broader.map(({ role, breadth }) => [role.slug, breadth]),
+    ).toEqual([
+      ["admin-one-project", "project"],
+      ["admin-everywhere", "all"],
+    ]);
+    expect(breadthLabel("log:read", "all")).toBe("across all projects");
+    expect(breadthLabel("log:read", "project")).toBe(
+      "limited to specific projects",
+    );
+    expect(breadthLabel("mcp:connect", "resource")).toBe(
+      "limited to specific MCP servers",
+    );
+    // An organization scope reaches the whole organization either way.
+    expect(breadthLabel("org:read", "all")).toBeNull();
   });
 });
 

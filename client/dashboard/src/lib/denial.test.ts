@@ -48,6 +48,18 @@ describe("denialMessage", () => {
     );
   });
 
+  it("names every resource kind the server checks against", () => {
+    expect(
+      denialMessage({
+        scope: "risk_policy:evaluate",
+        resourceKind: "risk_policy",
+      }),
+    ).toContain("on this risk policy.");
+    expect(
+      denialMessage({ scope: "inference:execute", resourceKind: "inference" }),
+    ).toContain("on this project.");
+  });
+
   it("falls back to the slug and a generic place", () => {
     expect(denialMessage({ scope: "log:read", resourceKind: "" })).toBe(
       "You need the log:read permission on this resource. An organization admin can grant it.",

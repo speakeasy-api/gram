@@ -63,7 +63,9 @@ export function GrantDrawer({
   const [roleAssignmentConfirmed, setRoleAssignmentConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
-  const { catalogue } = useScopeCatalogue();
+  // Role matching reads inclusions off the catalogue, so until it loads a
+  // mcp:write role would look unable to grant mcp:connect.
+  const { catalogue, isLoading: catalogueLoading } = useScopeCatalogue();
   const allRoles = rolesData?.roles ?? [];
   const canAssignRole = challenge ? canAssignChallengeRole(challenge) : false;
   const challengeIds = challengeIdsProp ?? (challenge ? [challenge.id] : []);
@@ -276,7 +278,7 @@ export function GrantDrawer({
                     </Button.Text>
                   </Button>
                 </div>
-              ) : areChallengesPending ? (
+              ) : areChallengesPending || catalogueLoading ? (
                 <div className="border-border flex w-full items-center gap-3 border p-4 text-left">
                   <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                   <Text

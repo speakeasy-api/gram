@@ -86,6 +86,8 @@ vi.mock("@/hooks/useScopeCatalogue", () => ({
     catalogue: new Map(),
     workflows: [],
     isLoading: false,
+    isError: false,
+    refetch: () => {},
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({

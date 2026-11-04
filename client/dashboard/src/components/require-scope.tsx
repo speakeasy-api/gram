@@ -7,10 +7,14 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { suggestRolesForScope } from "@/pages/access/roleSuggestions";
+import {
+  breadthLabel,
+  suggestRolesForScope,
+} from "@/pages/access/roleSuggestions";
 import {
   scopeLabel,
   scopeTitle,
+  workflowNeeds,
   type ScopeCatalogue,
 } from "@/pages/access/scopeCatalogue";
 import React from "react";
@@ -381,6 +385,7 @@ function Unauthorized({
                     scopes={scopes}
                     catalogue={catalogue}
                     workflows={workflows}
+                    held={(s) => hasScope(s, resourceId, projectId)}
                   />
                   {scopes.length === 1 && (
                     <RoleHint
@@ -400,25 +405,30 @@ function Unauthorized({
   );
 }
 
-/** Names the task the missing permission is part of, and what else it needs. */
+/**
+ * Names the task the missing permission is part of, and what else it needs
+ * that the person does not hold yet.
+ */
 function WorkflowHint({
   scopes,
   catalogue,
   workflows,
+  held,
 }: {
   scopes: Scope[];
   catalogue: ScopeCatalogue;
   workflows: ReturnType<typeof useScopeCatalogue>["workflows"];
+  held: (scope: Scope) => boolean;
 }): React.JSX.Element | null {
   const partOf = workflows.filter((workflow) =>
-    scopes.some((s) => workflow.scopes.includes(s)),
+    scopes.some((s) => workflowNeeds(catalogue, workflow, s)),
   );
   if (partOf.length === 0) return null;
   return (
     <ul className="text-muted-foreground mt-3 space-y-1 text-xs">
       {partOf.map((workflow) => {
         const alsoNeeds = workflow.scopes.filter(
-          (s) => !scopes.includes(s as Scope),
+          (s) => !scopes.includes(s as Scope) && !held(s as Scope),
         );
         return (
           <li key={workflow.slug}>
@@ -471,9 +481,16 @@ function RoleHint({
       {suggestions.exact.length > 0 && (
         <p>
           Roles that give exactly this:{" "}
-          <span className="text-foreground">
-            {suggestions.exact.map((role) => role.name).join(", ")}
-          </span>
+          {suggestions.exact.map(({ role, breadth }, i) => {
+            const reach = breadthLabel(scope, breadth);
+            return (
+              <React.Fragment key={role.id}>
+                {i > 0 && ", "}
+                <span className="text-foreground">{role.name}</span>
+                {reach && ` (${reach})`}
+              </React.Fragment>
+            );
+          })}
           .
         </p>
       )}

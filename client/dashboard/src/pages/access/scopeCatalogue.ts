@@ -71,10 +71,28 @@ export function isSensitiveScope(
   return catalogue.get(slug)?.sensitive ?? false;
 }
 
+/**
+ * True when the workflow needs the scope: it lists the scope itself or one
+ * whose grant includes it, so a denied mcp:read is part of a task that lists
+ * mcp:write.
+ */
+export function workflowNeeds(
+  catalogue: ScopeCatalogue,
+  workflow: ScopeWorkflow,
+  scope: string,
+): boolean {
+  return workflow.scopes.some((listed) =>
+    scopeCovers(catalogue, listed, scope),
+  );
+}
+
 /** Workflows that need the scope, so a denial can say what task it is part of. */
 export function workflowsNeeding(
+  catalogue: ScopeCatalogue,
   workflows: readonly ScopeWorkflow[],
   scope: string,
 ): ScopeWorkflow[] {
-  return workflows.filter((workflow) => workflow.scopes.includes(scope));
+  return workflows.filter((workflow) =>
+    workflowNeeds(catalogue, workflow, scope),
+  );
 }

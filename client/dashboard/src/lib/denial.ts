@@ -34,6 +34,9 @@ const RESOURCE_KIND_LABELS: Record<string, string> = {
   skill: "this skill",
   plugin: "this plugin",
   assistant: "this assistant",
+  risk_policy: "this risk policy",
+  // Inference is checked against the project it runs in.
+  inference: "this project",
   chat: "this session",
   agent: "this agent",
   workload: "this workload",
