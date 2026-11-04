@@ -51,6 +51,13 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 		{name: "rejected", status: http.StatusBadRequest, body: `{"error":"unauthorized_client"}`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rejected with an unreadable body", status: http.StatusBadRequest, body: `nope`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rate limited", status: http.StatusTooManyRequests, body: `{}`, want: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider},
+		{name: "malformed success", status: http.StatusOK, body: `nope`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
+		{name: "missing access token", status: http.StatusOK, body: `{}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
+		{name: "wrong access token type", status: http.StatusOK, body: `{"access_token":123}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
+		{name: "server_error http.StatusOK", status: http.StatusOK, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "server_error http.StatusBadRequest", status: http.StatusBadRequest, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "temporarily_unavailable http.StatusOK", status: http.StatusOK, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "temporarily_unavailable http.StatusBadRequest", status: http.StatusBadRequest, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
 		{name: "provider outage", status: http.StatusServiceUnavailable, body: `{}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -77,6 +84,12 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 			require.Equal(t, env.subject.String(), row.SubjectURN)
 			require.Equal(t, string(remotesessionmetrics.RefreshTriggerRequest), row.SubReason)
 			require.Len(t, rec.Rows(), 1)
+			if tc.want == mcpconnectionattempts.CodeMalformedResponse || tc.want == mcpconnectionattempts.CodeProviderUnavailable || tc.want == mcpconnectionattempts.CodeProviderServerError {
+				active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+				require.NoError(t, err)
+				require.True(t, active.RefreshTokenEncrypted.Valid, "provider failures must preserve the refresh grant")
+			}
+
 		})
 	}
 }

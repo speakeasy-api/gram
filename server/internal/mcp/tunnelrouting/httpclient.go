@@ -32,6 +32,9 @@ func routeCleanupError(action string, err error) error {
 // ErrRouteStoreUnavailable marks a failure reading our own route store, not the tunnel or its provider.
 var ErrRouteStoreUnavailable = errors.New("tunnel route store unavailable")
 
+// ErrTransportConfiguration marks a local forwarding setup failure, not a tenant tunnel outage.
+var ErrTransportConfiguration = errors.New("tunnel transport configuration invalid")
+
 // maxForwardAttempts bounds the gateway failover loop for one request. Each
 // retried attempt excludes the gateway that refused, so the loop also ends
 // when candidates run out.
@@ -97,10 +100,10 @@ func NewHTTPClient(routes route.Store, forwardToken string, policy *guardian.Pol
 // transport's default connect window.
 func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, error) {
 	if c == nil || c.routes == nil {
-		return nil, fmt.Errorf("tunnel forwarding is not configured")
+		return nil, fmt.Errorf("tunnel forwarding is not configured: %w", ErrTransportConfiguration)
 	}
 	if c.forwardToken == "" {
-		return nil, fmt.Errorf("tunnel forward token is not configured")
+		return nil, fmt.Errorf("tunnel forward token is not configured: %w", ErrTransportConfiguration)
 	}
 	ctx := req.Context()
 
@@ -132,11 +135,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("build tunnel route URL: %w", err), unpublishErr)
+			return nil, errors.Join(fmt.Errorf("build tunnel route URL: %w: %w", ErrTransportConfiguration, err), unpublishErr)
 		}
 		forward, err := buildForward(req, body, gatewayURL, tunnelID, c.forwardToken)
 		if err != nil {
-			return nil, errors.Join(err, unpublishErr)
+			return nil, errors.Join(ErrTransportConfiguration, err, unpublishErr)
 		}
 
 		resp, err := c.client.Do(forward)
