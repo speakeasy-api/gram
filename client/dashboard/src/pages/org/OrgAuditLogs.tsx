@@ -347,14 +347,13 @@ const CATEGORY_OPTIONS: {
     value: "security",
     label: "Security activity",
     tooltip:
-      "Machine access, such as an agent's runtime admitting its workload identity",
+      "Machine access and other security activity that isn't a settings change",
   },
 ];
 
 /**
- * A collapsed run of consecutive security entries by one actor, typically an
- * agent's runtime admitting and withdrawing its workload identity on every
- * start and teardown. Expanding it shows each entry.
+ * A collapsed run of consecutive security entries by one actor. Expanding it
+ * shows each entry.
  */
 function ActorRunRow({
   run,
@@ -629,8 +628,8 @@ function OrgAuditLogsInner() {
     [logs, tsMode],
   );
 
-  // Security entries from one actor arrive in bursts (a runtime writes one on
-  // every start and teardown), so each day groups consecutive entries by actor.
+  // Security entries from one actor arrive in bursts, so each day groups
+  // consecutive entries by actor.
   // Configuration changes stay one row each.
   const dateRuns = useMemo(
     () =>
@@ -1128,7 +1127,7 @@ function OrgAuditLogsInner() {
                   {hasActiveFilters
                     ? "No audit logs match the selected filters."
                     : category === "security"
-                      ? "Machine access appears here, such as an agent's runtime admitting its workload identity."
+                      ? "Machine access and other security activity appear here."
                       : "Activity will appear here as changes are made across your organization."}
                 </Text>
               </div>

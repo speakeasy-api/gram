@@ -179,8 +179,26 @@ type FederatedAccessRow =
       issuer: WorkloadIssuer | undefined;
     };
 
-// Speakeasy registers this issuer for its own assistant sandboxes and tags it.
-const RUNTIME_ISSUER_TAG = "kit-runtime";
+/**
+ * Whether Speakeasy created this admission for one of its own assistant
+ * sandboxes. Tags and names can be edited, so this requires every marker the
+ * server checks before it treats an issuer as its own, plus the admission
+ * name it gives each sandbox. Anything else keeps its own row and Remove.
+ */
+function isRuntimeAdmission(
+  admission: WorkloadAdmission,
+  issuer: WorkloadIssuer,
+): boolean {
+  return (
+    /^kit-runtime-[0-9a-f]{32}$/.test(issuer.name) &&
+    issuer.tags.length === 1 &&
+    issuer.tags[0] === "kit-runtime" &&
+    issuer.allowAssertionReuse &&
+    !issuer.allowWildcardAdmission &&
+    admission.matchKind === "exact" &&
+    /^kit-runtime-[0-9a-f-]{36}-[0-9a-f]{32}$/.test(admission.name)
+  );
+}
 
 /**
  * One row per admission, except that an assistant's sandboxes collapse into a
@@ -197,7 +215,7 @@ function federatedAccessRows(
   const issuersShown = new Set<string>();
   for (const admission of admissions) {
     const issuer = issuerByID.get(admission.workloadIssuerId);
-    if (issuer?.tags.includes(RUNTIME_ISSUER_TAG)) {
+    if (issuer && isRuntimeAdmission(admission, issuer)) {
       const existing = runtimeRows.get(issuer.id);
       if (existing) {
         existing.count += 1;
