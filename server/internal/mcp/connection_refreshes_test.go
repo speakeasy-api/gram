@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -32,6 +33,43 @@ func TestInboundRefresh_Refreshed(t *testing.T) {
 	require.Equal(t, "refresh_token", row.GrantType)
 	require.Equal(t, urn.NewUserSubject("refresh-replay-user").String(), row.SubjectURN)
 	require.Equal(t, client.ID.String(), row.UserSessionClientID)
+}
+
+func TestInboundRefresh_WriteFailureLeavesNoVerdict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, _, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "client_id": {client.ClientID}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+	writeErr := errors.New("client disconnected during token response")
+	w := &refreshFailingResponseWriter{ResponseRecorder: httptest.NewRecorder(), err: writeErr}
+
+	require.ErrorIs(t, ti.service.HandleToken(w, req), writeErr)
+	require.Equal(t, http.StatusOK, w.Code)
+	rec.RequireNothing()
+
+	// Rotation is committed despite the failed delivery; retry recovers its successor.
+	replayed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, replayed.err)
+	require.Equal(t, http.StatusOK, replayed.code, replayed.body)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshReplayed)
+}
+
+type refreshFailingResponseWriter struct {
+	*httptest.ResponseRecorder
+	err error
+}
+
+func (w *refreshFailingResponseWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }
 
 func TestInboundRefresh_Expired(t *testing.T) {
