@@ -25,12 +25,13 @@ const parent = {
   setValue: (_: string) => {},
 };
 
-function LaggyParent() {
+function LaggyParent({ debounceMs }: { debounceMs?: number }) {
   const [value, setValue] = useState("");
   parent.setValue = setValue;
   return (
     <Page.Toolbar.Search
       value={value}
+      debounceMs={debounceMs}
       onChange={(v) => {
         parent.sent.push(v);
       }}
@@ -38,19 +39,23 @@ function LaggyParent() {
   );
 }
 
-function setup() {
+function setup(debounceMs?: number) {
   parent.sent = [];
-  render(<LaggyParent />);
+  render(<LaggyParent debounceMs={debounceMs} />);
   const input = screen.getByRole<HTMLInputElement>("textbox");
-  const type = (text: string) => {
+  const type = (text: string, { flush = true } = {}) => {
     fireEvent.change(input, { target: { value: text } });
-    act(() => {
-      vi.runAllTimers();
-    });
+    if (flush) {
+      act(() => {
+        vi.runAllTimers();
+      });
+    }
   };
   const show = (value: string) => {
     act(() => {
       parent.setValue(value);
+    });
+    act(() => {
       vi.runAllTimers();
     });
   };
@@ -78,6 +83,38 @@ describe("Page.Toolbar.Search", () => {
     show("");
     expect(input.value).toBe("");
     expect(parent.sent).toEqual(["a", "", "a"]);
+  });
+
+  it("adopts an external change that supersedes a pending echo", () => {
+    const { input, type, show } = setup();
+    type("new");
+    show("external");
+    expect(input.value).toBe("external");
+    show("again");
+    expect(input.value).toBe("again");
+    expect(parent.sent).toEqual(["new"]);
+  });
+
+  it("drops unsent keystrokes when an external change lands", () => {
+    const { input, type, show } = setup(150);
+    type("new");
+    type("newer", { flush: false });
+    show("external");
+    expect(input.value).toBe("external");
+    expect(parent.sent).toEqual(["new"]);
+  });
+
+  it("does not swallow an external change after repeating a value", () => {
+    const { input, type, show } = setup();
+    show("q");
+    type("");
+    type("a");
+    type("");
+    show("");
+    type("a");
+    show("a");
+    show("");
+    expect(input.value).toBe("");
   });
 
   it("adopts a value changed outside the input", () => {

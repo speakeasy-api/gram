@@ -213,19 +213,25 @@ function ToolbarSearch({
   className,
 }: ToolbarSearchProps): JSX.Element {
   const [local, setLocal] = useState(value);
-  // Last value sent that the parent hasn't rendered yet; older echoes are stale.
-  const pending = useRef<string | null>(null);
+  // Values sent this burst that the parent hasn't rendered; their echoes are stale.
+  const sent = useRef<string[]>([]);
 
   // Sync when value changes externally (back/forward, clear-all).
   useEffect(() => {
-    if (pending.current === null) setLocal(value);
-    else if (value === pending.current) pending.current = null;
+    const i = sent.current.lastIndexOf(value);
+    if (i === -1) {
+      sent.current = [];
+      setLocal(value);
+    } else {
+      sent.current =
+        i === sent.current.length - 1 ? [] : sent.current.slice(i + 1);
+    }
   }, [value]);
 
   useEffect(() => {
-    if (local === (pending.current ?? value)) return;
+    if (local === (sent.current.at(-1) ?? value)) return;
     const timer = setTimeout(() => {
-      pending.current = local === value ? null : local;
+      sent.current = local === value ? [] : [...sent.current, local];
       onChange(local);
     }, debounceMs);
     return () => clearTimeout(timer);
