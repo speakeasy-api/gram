@@ -25221,6 +25221,241 @@ func DecodeBackfillMcpAuthGrantsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildBackfillMcpConnectGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "backfillMcpConnectGrants"
+// endpoint
+func (c *Client) BuildBackfillMcpConnectGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BackfillMcpConnectGrantsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "backfillMcpConnectGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBackfillMcpConnectGrantsRequest returns an encoder for requests sent
+// to the admin backfillMcpConnectGrants server.
+func EncodeBackfillMcpConnectGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BackfillMcpConnectGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "backfillMcpConnectGrants", "*admin.BackfillMcpConnectGrantsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewBackfillMcpConnectGrantsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "backfillMcpConnectGrants", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBackfillMcpConnectGrantsResponse returns a decoder for responses
+// returned by the admin backfillMcpConnectGrants endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeBackfillMcpConnectGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBackfillMcpConnectGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BackfillMcpConnectGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			res := NewBackfillMcpConnectGrantsAdminBackfillMCPConnectGrantsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BackfillMcpConnectGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BackfillMcpConnectGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BackfillMcpConnectGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BackfillMcpConnectGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BackfillMcpConnectGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BackfillMcpConnectGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BackfillMcpConnectGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BackfillMcpConnectGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+				}
+				err = ValidateBackfillMcpConnectGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+				}
+				return nil, NewBackfillMcpConnectGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BackfillMcpConnectGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+				}
+				err = ValidateBackfillMcpConnectGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+				}
+				return nil, NewBackfillMcpConnectGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "backfillMcpConnectGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BackfillMcpConnectGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpConnectGrants", err)
+			}
+			err = ValidateBackfillMcpConnectGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpConnectGrants", err)
+			}
+			return nil, NewBackfillMcpConnectGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "backfillMcpConnectGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.

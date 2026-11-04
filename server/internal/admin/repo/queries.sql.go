@@ -77,6 +77,90 @@ func (q *Queries) AdminBackfillMCPAuthFromConnect(ctx context.Context) (int64, e
 	return result.RowsAffected(), nil
 }
 
+const adminBackfillMCPConnectFromReadWrite = `-- name: AdminBackfillMCPConnectFromReadWrite :one
+WITH sources AS (
+  SELECT
+    g.organization_id,
+    g.principal_urn,
+    g.selectors,
+    CASE WHEN bool_or(g.expires_at IS NULL) THEN NULL ELSE max(g.expires_at) END AS expires_at
+  FROM principal_grants AS g
+  WHERE g.scope IN ('mcp:read', 'mcp:write')
+    AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
+    AND ($1::timestamptz IS NULL OR g.created_at < $1::timestamptz)
+  GROUP BY g.organization_id, g.principal_urn, g.selectors
+),
+written AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+  SELECT s.organization_id, s.principal_urn, 'mcp:connect', s.selectors, s.expires_at
+  FROM sources AS s
+  ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+  SET expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()
+  WHERE principal_grants.expires_at IS NOT NULL
+    AND (EXCLUDED.expires_at IS NULL OR EXCLUDED.expires_at > principal_grants.expires_at)
+  RETURNING (xmax = 0) AS inserted
+),
+taken_over AS (
+  UPDATE auth_permission_provisions AS p
+  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+  FROM sources AS s
+  WHERE p.organization_id = s.organization_id
+    AND p.principal_urn = s.principal_urn
+    AND p.scope = 'mcp:connect'
+    AND p.selectors = s.selectors
+    AND p.taken_over_at IS NULL
+    AND (
+      s.expires_at IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM principal_grants AS c
+        WHERE c.organization_id = s.organization_id
+          AND c.principal_urn = s.principal_urn
+          AND c.scope = 'mcp:connect'
+          AND c.selectors = s.selectors
+          AND c.expires_at IS NULL
+      )
+    )
+  RETURNING p.id
+)
+SELECT
+  (SELECT count(*) FROM written WHERE inserted)::bigint AS inserted,
+  (SELECT count(*) FROM written WHERE NOT inserted)::bigint AS extended,
+  (SELECT count(*) FROM taken_over)::bigint AS taken_over
+`
+
+type AdminBackfillMCPConnectFromReadWriteRow struct {
+	Inserted  int64
+	Extended  int64
+	TakenOver int64
+}
+
+// Makes the connect access that mcp:read and mcp:write imply explicit, ahead
+// of removing that implication. Every unexpired mcp:read or mcp:write grant
+// gets an mcp:connect grant for the same principal and selectors, every
+// dimension included. Effect is ignored, as grant loading ignores it.
+//
+// The copy lasts as long as the access it mirrors: the latest expiry among the
+// grants it is copied from, or permanent when any of them is. An existing
+// connect grant on the same selectors is kept, and only extended when it would
+// otherwise end before the access it mirrors.
+//
+// A connect grant still provisioned by the default auth permission backfill is
+// inferred and never outranks an inherited block, while the read or write
+// grant it now stands in for does. Taking it over, as an explicit grant write
+// does, keeps that precedence. It is not taken over when a temporary grant
+// would make a permanent connect grant explicit for good.
+//
+// created_before, when set, limits the copy to grants written before it, so a
+// rerun after the implication is removed leaves view-only grants alone.
+// Writes nothing that is already in place, so it is safe to run again.
+func (q *Queries) AdminBackfillMCPConnectFromReadWrite(ctx context.Context, createdBefore pgtype.Timestamptz) (AdminBackfillMCPConnectFromReadWriteRow, error) {
+	row := q.db.QueryRow(ctx, adminBackfillMCPConnectFromReadWrite, createdBefore)
+	var i AdminBackfillMCPConnectFromReadWriteRow
+	err := row.Scan(&i.Inserted, &i.Extended, &i.TakenOver)
+	return i, err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET

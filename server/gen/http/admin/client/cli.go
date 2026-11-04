@@ -3620,3 +3620,28 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 
 	return v, nil
 }
+
+// BuildBackfillMcpConnectGrantsPayload builds the payload for the admin
+// backfillMcpConnectGrants endpoint from CLI flags.
+func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody string, adminBackfillMcpConnectGrantsAdminSessionToken string) (*admin.BackfillMcpConnectGrantsPayload, error) {
+	var err error
+	var body BackfillMcpConnectGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBackfillMcpConnectGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"created_before\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBackfillMcpConnectGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillMcpConnectGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillMcpConnectGrantsPayload{
+		CreatedBefore: body.CreatedBefore,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
