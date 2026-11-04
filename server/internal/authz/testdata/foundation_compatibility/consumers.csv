@@ -222,6 +222,7 @@ internal/chat/conversation_access.go,*Service.ReadableConversations,gate,CheckSe
 internal/chat/impl.go,*Service.GetWorkUnitsTrend,engine,ShouldEnforce,,,1,C3 AIS-872
 internal/chat/impl.go,*Service.chatVisibilityScope,engine,ShouldEnforce,,,1,C3 AIS-872
 internal/chat/impl.go,*Service.loadAuthorizedChat,gate,CheckSensitiveContentAccess,,,1,C1 AIS-869
+internal/chat/turnstream_http.go,*Service.HandleTurnStream,gate,CheckSensitiveContentAccess,,,1,C1 AIS-869
 internal/customdomains/impl.go,*Service.CheckHealth,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/customdomains/impl.go,*Service.CreateDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/customdomains/impl.go,*Service.DeleteDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
