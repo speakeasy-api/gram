@@ -2,7 +2,7 @@ import {
   headerDraftFromCatalog,
   type HeaderDraft,
 } from "@/lib/remote-identity";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { catalogHeadersForRemoteUrl } from "@/pages/catalog/remotes";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMemo } from "react";
@@ -32,7 +32,7 @@ export function useCatalogHeaderSuggestions(
   return useMemo(() => {
     if (!remoteMcpServer?.url || !catalogData?.servers) return [];
     return catalogHeadersForRemoteUrl(
-      catalogData.servers as PulseMCPServer[],
+      catalogData.servers as CatalogServer[],
       remoteMcpServer.url,
     ).map(headerDraftFromCatalog);
   }, [catalogData?.servers, remoteMcpServer?.url]);

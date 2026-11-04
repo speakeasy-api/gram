@@ -81,7 +81,7 @@ func newSchedulingWorkers(t *testing.T, env *tenv.Environment) *Workers {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
-		ForDeploymentProcessing(nil, nil, nil, nil, nil, nil, nil, nil),
+		ForDeploymentProcessing(nil, nil, nil, nil, nil, nil, nil),
 	)
 }
 

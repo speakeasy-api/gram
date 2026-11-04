@@ -429,7 +429,8 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 		if err != nil {
 			if h.IsRequired {
 				kind := ForwardSetupConfiguration
-				if h.ValueFromRequestHeader != "" {
+				// Only a valid stored definition can fail because of its inbound value.
+				if h.ValueFromRequestHeader != "" && checkStoredRemoteHeader(h) == nil {
 					kind = ForwardSetupCaller
 				}
 				return &ForwardSetupError{Err: oops.E(oops.CodeBadRequest, err, "%s", remoteHeaderFailureMessage(h, err)).LogWarn(ctx, p.Logger), Kind: kind}

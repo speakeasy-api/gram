@@ -38,7 +38,42 @@ function cellsOf(row: HTMLElement): (string | null)[] {
     .map((cell) => cell.textContent);
 }
 
+const unexpectedRequests: string[] = [];
+
 beforeEach(() => {
+  unexpectedRequests.length = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      );
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
+      // The overview-separation test mounts the real overview, including these
+      // background reads. No other request may leave this test process.
+      if (method === "GET") {
+        if (url.pathname === "/admin/onboarding.stackOptions") {
+          return Response.json({ mdm_vendors: [], vendors: [] });
+        }
+        if (url.searchParams.get("organization_id") === ORG.id) {
+          if (url.pathname === "/admin/organization.onboardingStack") {
+            return Response.json({ organization_id: ORG.id, vendors: [] });
+          }
+          if (url.pathname === "/admin/organization.onboardingPlaybook") {
+            return Response.json({
+              organization_id: ORG.id,
+              applicability: [],
+            });
+          }
+        }
+      }
+      unexpectedRequests.push(`${method} ${url.pathname}`);
+      throw new Error("Unexpected request in Members test");
+    }),
+  );
   // Every date below is midnight UTC, which is the previous day in this zone.
   // CI runs in UTC, where a cell that reads the operator's own zone renders the
   // same string as one that reads the server's and the assertions below prove
@@ -69,6 +104,29 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  expect(unexpectedRequests).toEqual([]);
+});
+
+it("records unexpected requests for every fetch input form", async () => {
+  await expect(fetch("/admin/unexpected", { method: "POST" })).rejects.toThrow(
+    "Unexpected request in Members test",
+  );
+  await expect(
+    fetch(new URL("/admin/unexpected", window.location.origin)),
+  ).rejects.toThrow("Unexpected request in Members test");
+  await expect(
+    fetch(new Request(new URL("/admin/unexpected", window.location.origin)), {
+      method: "DELETE",
+    }),
+  ).rejects.toThrow("Unexpected request in Members test");
+  expect(unexpectedRequests).toEqual([
+    "POST /admin/unexpected",
+    "GET /admin/unexpected",
+    "DELETE /admin/unexpected",
+  ]);
+  // Only this guard test deliberately makes these rejected requests.
+  unexpectedRequests.length = 0;
 });
 
 describe("Members", () => {
