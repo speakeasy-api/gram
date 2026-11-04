@@ -71,7 +71,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 	}
 	org := authCtx.ActiveOrganizationID
 	logger := s.logger.With(attr.SlogOrganizationID(org))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: org, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(org).Read()); err != nil {
 		return nil, err
 	}
 	q := repo.New(s.db)
@@ -106,7 +106,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 	}
 
 	services := map[string]*emaService{}
-	serverChecks := map[string]authz.Check{}
+	serverChecks := map[string]authz.Operation{}
 	for _, row := range rows {
 		vendor, err := NormalizeVendorIssuer(row.Issuer)
 		if err != nil {
@@ -129,7 +129,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if !row.McpServerID.Valid || !emaBindingSetUp(row.State) {
 			continue
 		}
-		serverChecks[row.McpServerID.UUID.String()] = authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID), row.ProjectID.String())
+		serverChecks[row.McpServerID.UUID.String()] = authz.MCPServer(row.ProjectID.String(), mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID)).Read()
 		server := &orgissuersgen.EMAServiceServer{
 			ID: row.McpServerID.UUID.String(), Name: row.McpServerName, Slug: row.McpServerSlug,
 			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,
@@ -213,14 +213,14 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		server *orgissuersgen.EMAServiceServer
 	}
 	var candidates []candidate
-	var checks []authz.Check
+	var checks []authz.Operation
 	for _, vendor := range vendors {
 		for _, server := range services[vendor].servers {
 			candidates = append(candidates, candidate{vendor: vendor, server: server})
 			checks = append(checks, serverChecks[server.ID])
 		}
 	}
-	readable, err := s.authz.FindMatched(ctx, checks)
+	readable, err := s.authz.MatchMany(ctx, checks)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}

@@ -32,7 +32,7 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	}
 	org := authCtx.ActiveOrganizationID
 	logger := s.logger.With(attr.SlogOrganizationID(org), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: org, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(org).Administer()); err != nil {
 		return nil, err
 	}
 	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {

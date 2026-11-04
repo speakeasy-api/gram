@@ -297,6 +297,9 @@ func brokenProjectRegistry(t *testing.T) *s.Registry {
 			s.Alternative("project", "publish_plugin"),
 			s.Alternative("organization", "administer"),
 			s.VetoBlocks()),
+		s.Alternatives("write_or_administer",
+			s.Alternative("project", "write"),
+			s.Alternative("organization", "administer")),
 	))
 	registry, err := s.Compile(DefaultRegistryConfig(), decls...)
 	require.NoError(t, err)

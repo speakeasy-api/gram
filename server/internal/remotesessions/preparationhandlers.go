@@ -23,11 +23,12 @@ func (s *Service) preparationAPIInput(ctx context.Context, userID, issuerID, res
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return PreparationInput{}, oops.C(oops.CodeUnauthorized)
 	}
-	scope := authz.ScopeProjectRead
+	project := authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	op := project.Read()
 	if write {
-		scope = authz.ScopeProjectWrite
+		op = project.Write()
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, op); err != nil {
 		return PreparationInput{}, err
 	}
 	user, err := uuid.Parse(userID)
@@ -128,7 +129,7 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	}
 	// Acceptance is status evidence: a failed read leaves it out rather than
 	// failing the whole read. Organization-wide evidence needs org:read.
-	orgReader, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: org, Dimensions: nil})
+	orgReader, err := s.authz.Evaluate(ctx, authz.Organization(org).Read())
 	if err != nil {
 		logger.WarnContext(ctx, "check organization read access", attr.SlogError(err))
 	}

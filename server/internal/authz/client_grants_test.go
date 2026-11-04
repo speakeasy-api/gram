@@ -63,3 +63,35 @@ func TestEvaluateGrantsRejectsAlternatives(t *testing.T) {
 	_, err = client.EvaluateGrants(ctx, nil, Operation{})
 	require.Error(t, err)
 }
+
+// TestWriteOrAdministerFallsThroughBlocks mirrors the engine's RequireAny:
+// a block on one alternative does not stop the other.
+func TestWriteOrAdministerFallsThroughBlocks(t *testing.T) {
+	t.Parallel()
+
+	role := "role:organization:role_1"
+	project := Project(fixtureOrgID, "proj_1")
+	for _, mode := range []MigrationMode{MigrationModeOld, MigrationModeShadow, MigrationModeNew} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			recorder := &capturedComparisons{}
+			client, _ := newRoutedTestClient(t, nil, fixedModes(mode), recorder)
+
+			admin := humanClientContext(t,
+				grantOf(role, string(ScopeOrgAdmin), ResourceKindOrg, fixtureOrgID),
+				grantOf(role, string(ScopeProjectBlockedWrite), ResourceKindProject, "proj_1"),
+			)
+			require.NoError(t, client.Require(admin, project.WriteOrAdminister()), "the administer alternative survives a write block")
+
+			writer := humanClientContext(t, grantOf(role, string(ScopeProjectWrite), ResourceKindProject, "proj_1"))
+			require.NoError(t, client.Require(writer, project.WriteOrAdminister()))
+
+			reader := humanClientContext(t, grantOf(role, string(ScopeProjectRead), ResourceKindProject, "proj_1"))
+			require.Error(t, client.Require(reader, project.WriteOrAdminister()))
+
+			for _, outcome := range recorder.outcomes() {
+				require.Equal(t, ShadowMatch, outcome)
+			}
+		})
+	}
+}
