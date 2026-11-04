@@ -4,8 +4,61 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export const Scopes = {
+  OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
+  OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
+  McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
+  EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
+  RiskPolicyBlock: "risk_policy:block",
+  ChatRead: "chat:read",
+  ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
+  LogRead: "log:read",
+  AgentRead: "agent:read",
+  AgentWrite: "agent:write",
+  AgentAuthorize: "agent:authorize",
+  AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
+} as const;
+export type Scopes = OpenEnum<typeof Scopes>;
 
 export type ScopeWorkflow = {
   /**
@@ -15,7 +68,7 @@ export type ScopeWorkflow = {
   /**
    * Every scope the task needs end to end.
    */
-  scopes: Array<string>;
+  scopes: Array<Scopes>;
   /**
    * Stable identifier of the task.
    */
@@ -23,12 +76,16 @@ export type ScopeWorkflow = {
 };
 
 /** @internal */
+export const Scopes$inboundSchema: z.ZodMiniType<Scopes, unknown> = openEnums
+  .inboundSchema(Scopes);
+
+/** @internal */
 export const ScopeWorkflow$inboundSchema: z.ZodMiniType<
   ScopeWorkflow,
   unknown
 > = z.object({
   label: z.string(),
-  scopes: z.array(z.string()),
+  scopes: z.array(Scopes$inboundSchema),
   slug: z.string(),
 });
 

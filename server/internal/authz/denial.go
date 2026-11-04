@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
@@ -45,8 +46,15 @@ func RecordedDenial(ctx context.Context) (Denial, bool) {
 }
 
 // recordDenial notes a refusal on the request's recorder. It is a no-op when
-// no recorder was installed, so the engine behaves the same outside HTTP.
-func recordDenial(ctx context.Context, denied *DeniedError) {
+// no recorder was installed, so the engine behaves the same outside HTTP, and
+// when err is not a denial. A refusal an explicit block produced is not
+// recorded either: the caller may hold the scope already, so naming it would
+// send them after a grant that cannot help.
+func recordDenial(ctx context.Context, err error) {
+	denied, ok := errors.AsType[*DeniedError](err)
+	if !ok || denied.Blocked {
+		return
+	}
 	recorder, ok := ctx.Value(denialRecorderKey{}).(*denialRecorder)
 	if !ok {
 		return

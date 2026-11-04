@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -228,7 +229,14 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.evaluateRequired(ctx, authorization, checks...)
+	// Only the caller's own refusal is explained to the client: a probe of
+	// some other principal's grants (EvaluateLoadedGrants) says nothing about
+	// what the caller lacks.
+	if err := e.evaluateRequired(ctx, authorization, checks...); err != nil {
+		recordDenial(ctx, err)
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
 // EvaluateLoadedGrants evaluates explicit grants against checks without
@@ -241,12 +249,18 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		return oops.C(oops.CodeForbidden)
 	}
-	return e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...)
+	if err := e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...); err != nil {
+		return e.mapError(ctx, err)
+	}
+	return nil
 }
 
+// evaluateRequired returns the engine's own error types; callers map them
+// with mapError once they have decided whether the refusal is theirs to
+// explain.
 func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthorization, checks ...Check) error {
 	if len(checks) == 0 {
-		return e.mapError(ctx, ErrNoChecks)
+		return ErrNoChecks
 	}
 
 	matches := make([]grantMatch, 0, len(checks))
@@ -263,7 +277,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 
 		evaluation, err := authorization.evaluate(check)
@@ -279,7 +293,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
+			return err
 		}
 		if evaluation.Grant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
@@ -300,7 +314,10 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+			if evaluation.Denied {
+				return deniedByBlock(check.Scope, check.selector())
+			}
+			return Denied(check.Scope, check.selector())
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
@@ -357,7 +374,8 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	anyDenied := false
-	for _, check := range checks {
+	blocked := make([]bool, len(checks))
+	for i, check := range checks {
 		evaluation, err := authorization.evaluate(check)
 		if err != nil {
 			challengeLogger{
@@ -375,6 +393,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 		if evaluation.Denied {
 			anyDenied = true
+			blocked[i] = true
 			continue
 		}
 		if evaluation.Grant != nil {
@@ -411,7 +430,78 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	// The alternatives are equivalent to the handler but not to the person
+	// asking for access: explain the one that grants the least.
+	if suggested, ok := leastPrivilegedAlternative(checks, blocked); ok {
+		recordDenial(ctx, Denied(suggested.Scope, suggested.selector()))
+	}
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
+}
+
+// resourceKindBreadth orders resource kinds by how much a grant on one covers:
+// an organization holds projects, a project holds everything else.
+func resourceKindBreadth(check Check) int {
+	kind := check.ResourceKind
+	if kind == "" {
+		kind = ResourceKindForScope(check.Scope)
+	}
+	switch kind {
+	case ResourceKindOrg:
+		return 2
+	case ResourceKindProject:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// leastPrivilegedAlternative picks, among the checks a RequireAny offered, the
+// one a client should ask to be granted. Alternatives a block refused are left
+// out, since granting them again changes nothing. Of the rest, a scope that
+// satisfies fewer of the other alternatives is narrower, then a scope checked
+// on a smaller kind of resource, then one that satisfies fewer scopes overall;
+// the handler's own order breaks any remaining tie.
+func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
+	type ranked struct {
+		check   Check
+		covers  int
+		breadth int
+		implies int
+		index   int
+	}
+	candidates := make([]ranked, 0, len(checks))
+	for i, check := range checks {
+		if blocked[i] {
+			continue
+		}
+		closure := ScopeImplicationClosure(check.Scope)
+		covers := 0
+		for j, other := range checks {
+			if j != i && slices.Contains(closure, other.Scope) {
+				covers++
+			}
+		}
+		candidates = append(candidates, ranked{
+			check:   check,
+			covers:  covers,
+			breadth: resourceKindBreadth(check),
+			implies: len(closure),
+			index:   i,
+		})
+	}
+	if len(candidates) == 0 {
+		var none Check
+		return none, false
+	}
+	best := slices.MinFunc(candidates, func(a, b ranked) int {
+		return cmp.Or(
+			cmp.Compare(a.covers, b.covers),
+			cmp.Compare(a.breadth, b.breadth),
+			cmp.Compare(a.implies, b.implies),
+			cmp.Compare(a.index, b.index),
+		)
+	})
+	return best.check, true
 }
 
 // Evaluate reports whether the caller satisfies every check, WITHOUT recording an
@@ -742,9 +832,6 @@ func validateInput(c Check) error {
 func (e *Engine) mapError(ctx context.Context, err error) error {
 	switch {
 	case errors.Is(err, ErrDenied):
-		if denied, ok := errors.AsType[*DeniedError](err); ok {
-			recordDenial(ctx, denied)
-		}
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
 		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)

@@ -75,6 +75,45 @@ func TestDenialHeaders_StaysQuietWhenTheHandlerRecovers(t *testing.T) {
 	require.Empty(t, rec.Header().Get(HeaderRequiredResourceKind))
 }
 
+// net/http keeps the final status open after an informational response, so a
+// 103 must not consume the writer's one shot at explaining the 403.
+func TestDenialHeaders_NamesTheMissingScopeAfterEarlyHints(t *testing.T) {
+	t.Parallel()
+
+	denying := denyingHandler(t, http.StatusForbidden, authz.Check{
+		Scope: authz.ScopeLogRead, ResourceKind: "", ResourceID: "proj_1", Dimensions: nil,
+	})
+	handler := DenialHeaders()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusEarlyHints)
+		denying.ServeHTTP(w, r)
+	}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/rpc/telemetry.logs", nil))
+
+	// Only the headers are asserted: httptest.ResponseRecorder records the
+	// first WriteHeader it sees, so rec.Code reports the 103.
+	require.Equal(t, "log:read", rec.Header().Get(HeaderRequiredScope))
+	require.Equal(t, "project", rec.Header().Get(HeaderRequiredResourceKind))
+}
+
+// 101 is terminal, not informational: nothing follows it.
+func TestDenialHeaders_TreatsSwitchingProtocolsAsFinal(t *testing.T) {
+	t.Parallel()
+
+	denying := denyingHandler(t, http.StatusForbidden, authz.Check{
+		Scope: authz.ScopeLogRead, ResourceKind: "", ResourceID: "proj_1", Dimensions: nil,
+	})
+	handler := DenialHeaders()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusSwitchingProtocols)
+		denying.ServeHTTP(w, r)
+	}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/rpc/telemetry.logs", nil))
+
+	require.Equal(t, http.StatusSwitchingProtocols, rec.Code)
+	require.Empty(t, rec.Header().Get(HeaderRequiredScope))
+}
+
 func TestDenialHeaders_StaysQuietOn403WithoutAnAuthzDenial(t *testing.T) {
 	t.Parallel()
 

@@ -33,7 +33,7 @@ func TestWorkflows_StayInsideTheCatalogue(t *testing.T) {
 				if other == scope {
 					continue
 				}
-				require.NotContains(t, CalculateSubScopes(other), string(scope),
+				require.NotContains(t, ScopeImplicationClosure(other), scope,
 					"%s: %s already includes %s", workflow.Slug, other, scope)
 			}
 		}
