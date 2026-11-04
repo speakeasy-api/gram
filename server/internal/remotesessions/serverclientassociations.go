@@ -40,7 +40,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(serverID.String()).Read()); err != nil {
 		return nil, err
 	}
 	if _, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -100,7 +100,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(serverID.String()).Edit()); err != nil {
 		return err
 	}
 

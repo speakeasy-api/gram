@@ -399,7 +399,7 @@ func (s *Service) describeMemberToolset(
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !hosting.Public {
-		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authzClient, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
+		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authzClient, toolset.ID.String(), toolset.OrganizationID, toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
@@ -604,7 +604,7 @@ func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *manda
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	err := s.authzClient.Require(ctx, authz.MCPServer(toolset.ProjectID.String(), toolset.ID.String()).Connect())
+	err := s.authzClient.Require(ctx, authz.Project(toolset.OrganizationID, toolset.ProjectID.String()).MCPServer(toolset.ID.String()).Connect())
 	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
 	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {

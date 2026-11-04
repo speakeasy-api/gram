@@ -231,7 +231,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.MCPServer(row.ProjectID.String(), mcpGrantResourceID(row.ID, row.ToolsetID)).Read())
+		checks = append(checks, authz.Project(orgID, row.ProjectID.String()).MCPServer(mcpGrantResourceID(row.ID, row.ToolsetID)).Read())
 	}
 	for _, row := range gateways {
 		impact := change.gatewayImpactOf(row.ProjectID)
@@ -247,7 +247,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.MCPServersInProject(row.ProjectID.String()).Read())
+		checks = append(checks, authz.Project(orgID, row.ProjectID.String()).MCPServers().Read())
 	}
 
 	readable, err := s.authz.MatchMany(ctx, checks)
@@ -270,12 +270,13 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 // access to the server it is made from, or to the project for a change made
 // without one.
 func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slog.Logger, projectID, userIssuerID uuid.UUID, targetID uuid.NullUUID) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	project := authz.Project(authCtx.ActiveOrganizationID, projectID.String())
 	if !targetID.Valid {
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil {
-			return oops.C(oops.CodeUnauthorized)
-		}
-		return s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Write())
+		return s.authz.Require(ctx, project.Write())
 	}
 	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID.UUID,
@@ -287,7 +288,7 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), mcpGrantResourceID(target.ID, target.ToolsetID)).Edit()); err != nil {
+	if err := s.authz.Require(ctx, project.MCPServer(mcpGrantResourceID(target.ID, target.ToolsetID)).Edit()); err != nil {
 		return err
 	}
 	if !target.UserSessionIssuerID.Valid || target.UserSessionIssuerID.UUID != userIssuerID {

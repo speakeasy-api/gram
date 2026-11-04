@@ -22,8 +22,8 @@ func roleGrant(scope Scope, selector Selector) Grant {
 func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 	t.Parallel()
 
-	assistantRead := Assistant("proj_1", "asst_1").Read()
-	assistantWrite := Assistant("proj_1", "asst_1").Write()
+	assistantRead := Project("org_1", "proj_1").Assistant("asst_1").Read()
+	assistantWrite := Project("org_1", "proj_1").Assistant("asst_1").Write()
 	projectRead := Project(fixtureOrgID, "proj_1").Read()
 
 	projectWide := roleGrant(ScopeAssistantWrite, Selector{

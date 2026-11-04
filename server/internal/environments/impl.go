@@ -80,8 +80,8 @@ func NewService(logger *slog.Logger,
 // env:write grant satisfies it; a single-env grant does not. Used for create
 // and for slug-miss paths in update/delete/clone, where authorizing before
 // reporting not-found keeps the response from becoming an existence oracle.
-func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.EnvironmentsInProject(projectID.String()).Write())
+func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).Environments().Write())
 }
 
 // requireProjectEnvironmentRead gates on an environment:read grant confined to
@@ -92,8 +92,8 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 // invoke, so the caller must already hold read access to those secrets. Gating
 // on project:write instead would let a caller without environment:read
 // exfiltrate secrets by linking an environment to a resource they can run.
-func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.EnvironmentsInProject(projectID.String()).Read())
+func (s *Service) requireProjectEnvironmentRead(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).Environments().Read())
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -112,7 +112,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); err != nil {
+	if err := s.requireProjectEnvironmentWrite(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +243,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); authErr != nil {
 				return nil, authErr
 			}
 			return nil, oops.E(oops.CodeNotFound, err, "environment not found")
@@ -251,7 +251,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), environment.ID.String()).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Environment(environment.ID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -424,7 +424,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); authErr != nil {
 				return nil, authErr
 			}
 			return nil, oops.E(oops.CodeNotFound, err, "environment not found")
@@ -437,7 +437,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	// check covers both reading the source and producing the destination. Future
 	// per-env granularity is additive at the role layer (per-env grants instead
 	// of wildcard).
-	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), sourceEnv.ID.String()).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Environment(sourceEnv.ID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -534,7 +534,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			if authErr := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); authErr != nil {
+			if authErr := s.requireProjectEnvironmentWrite(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); authErr != nil {
 				return authErr
 			}
 			return nil
@@ -542,7 +542,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), environment.ID.String()).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Environment(environment.ID.String()).Write()); err != nil {
 		return err
 	}
 
@@ -620,7 +620,7 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -662,7 +662,7 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return err
 	}
 
@@ -715,7 +715,7 @@ func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.Se
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -760,7 +760,7 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	if err := s.requireProjectEnvironmentRead(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
 		return err
 	}
 

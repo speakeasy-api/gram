@@ -465,7 +465,7 @@ func (s *Service) admitMetaMembers(
 		case mcpservers.VisibilityPublic:
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
-			if err := s.authzClient.Require(ctx, authz.MCPServer(candidate.projectID.String(), connectResourceID.String()).Connect()); err != nil {
+			if err := s.authzClient.Require(ctx, authz.Project(organizationID, candidate.projectID.String()).MCPServer(connectResourceID.String()).Connect()); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
 				// endpoint carry no AuthContext) are denials: filter the
 				// member. Anything else is an evaluation failure.

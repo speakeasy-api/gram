@@ -1749,7 +1749,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 				return ctx, false, oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			ctx = prepared
-			if err := s.authzClient.Require(ctx, authz.MCPServer(toolset.ProjectID.String(), cfg.rbacResourceID.String()).Connect()); err != nil {
+			if err := s.authzClient.Require(ctx, authz.Project(toolset.OrganizationID, toolset.ProjectID.String()).MCPServer(cfg.rbacResourceID.String()).Connect()); err != nil {
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
 			}
 		}

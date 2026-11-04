@@ -628,7 +628,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
 		authorizationCtx, err = s.authzClient.PrepareContext(authorizationCtx)
 		if err == nil {
-			err = s.authzClient.Require(authorizationCtx, authz.MCPServer(endpoint.ProjectID.String(), endpoint.connectResourceID().String()).Connect())
+			err = s.authzClient.Require(authorizationCtx, authz.Project(endpoint.OrganizationID, endpoint.ProjectID.String()).MCPServer(endpoint.connectResourceID().String()).Connect())
 		}
 		s.newMandatoryShadow(authorizationCtx, endpoint.OrganizationID).shadowRequire(authorizationCtx, mandatorySurfaceTokenIssuance, err, connect)
 	}

@@ -45,11 +45,12 @@ import (
 // member ever carry tool identities the way tools does, this filter will not
 // scrub it.
 type ToolsListMCPConnectFilterInterceptor struct {
-	authz       *authz.Client
-	resolver    ToolDispositionResolver
-	mcpServerID string
-	projectID   string
-	logger      *slog.Logger
+	authz          *authz.Client
+	resolver       ToolDispositionResolver
+	mcpServerID    string
+	organizationID string
+	projectID      string
+	logger         *slog.Logger
 }
 
 var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterInterceptor)(nil)
@@ -59,13 +60,14 @@ var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterIntercepto
 // remote_mcp_servers id), so the filter resolves grants against the same row
 // as the handler's upfront server-level connect check and as the paired
 // tools/call enforcement does through [authz.MCPServerRef.CallTool].
-func NewToolsListMCPConnectFilterInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
+func NewToolsListMCPConnectFilterInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, organizationID, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
-		authz:       authzClient,
-		resolver:    resolver,
-		mcpServerID: mcpServerID,
-		projectID:   projectID,
-		logger:      logger,
+		authz:          authzClient,
+		resolver:       resolver,
+		mcpServerID:    mcpServerID,
+		organizationID: organizationID,
+		projectID:      projectID,
+		logger:         logger,
 	}
 }
 
@@ -107,7 +109,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 
 	ops := make([]authz.Operation, len(tools))
 	for idx, t := range tools {
-		ops[idx] = authz.MCPServer(i.projectID, i.mcpServerID).CallTool(t.Name, dispositions[t.Name])
+		ops[idx] = authz.Project(i.organizationID, i.projectID).MCPServer(i.mcpServerID).CallTool(t.Name, dispositions[t.Name])
 	}
 
 	matched, err := i.authz.MatchMany(ctx, ops)

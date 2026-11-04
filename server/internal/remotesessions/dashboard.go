@@ -147,7 +147,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 
-	checks := []authz.Operation{authz.MCPServer(target.ProjectID.String(), target.ID.String()).Edit()}
+	checks := []authz.Operation{authz.Project(authCtx.ActiveOrganizationID, target.ProjectID.String()).MCPServer(target.ID.String()).Edit()}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 	}
@@ -167,7 +167,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 			if id == target.ID {
 				continue
 			}
-			checks = append(checks, authz.MCPServer(target.ProjectID.String(), id.String()).Edit())
+			checks = append(checks, authz.Project(authCtx.ActiveOrganizationID, target.ProjectID.String()).MCPServer(id.String()).Edit())
 		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {

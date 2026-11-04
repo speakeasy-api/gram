@@ -21,9 +21,10 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 	if !ok || auth == nil || auth.ProjectID == nil || len(ids) == 0 || authz.CheckSensitiveContentAccess(ctx) != nil {
 		return visible, nil
 	}
+	project := authz.Project(auth.ActiveOrganizationID, auth.ProjectID.String())
 	ops := make([]authz.Operation, len(ids))
 	for i, id := range ids {
-		ops[i] = authz.Chat(id).Read()
+		ops[i] = project.Chat(id).Read()
 	}
 	granted, err := s.authzClient.MatchMany(ctx, ops)
 	if err != nil {

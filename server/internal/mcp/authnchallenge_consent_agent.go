@@ -90,7 +90,7 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 // connectOperation is connectCheck as a typed operation, for decisions the
 // authorization client makes on the request's own policies.
 func (t AgentAuthorizationTarget) connectOperation() authz.Operation {
-	return authz.MCPServer(t.ProjectID.String(), t.MCPResourceID.String()).Connect()
+	return authz.Project(t.OrganizationID, t.ProjectID.String()).MCPServer(t.MCPResourceID.String()).Connect()
 }
 
 // agentSetupURL is the dashboard page where the organization's humans

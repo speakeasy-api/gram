@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSkillReadAcceptsProjectOrSkillGrants holds Skill(project, skill).Read()
+// TestSkillReadAcceptsProjectOrSkillGrants holds Project(org, project).Skill(skill).Read()
 // to the engine's RequireAnyUnblocked over the project-wide and the per-skill
 // check, in every migration mode: either grant passes, and a block on either
 // refuses.
@@ -14,7 +14,7 @@ func TestSkillReadAcceptsProjectOrSkillGrants(t *testing.T) {
 	t.Parallel()
 
 	const role = "role:member"
-	skill := Skill("proj_1", "skill_1")
+	skill := Project("org_1", "proj_1").Skill("skill_1")
 	cases := []struct {
 		name   string
 		grants []Grant

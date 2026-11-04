@@ -90,7 +90,7 @@ func (s *Service) List(ctx context.Context, _ *srv.ListPayload) (*srv.ListHidden
 	}
 	servers := make([]*srv.HiddenMcpServer, 0, len(rows))
 	for _, row := range rows {
-		allowed, err := s.canConnect(ctx, row.Visibility, row.McpServerID, row.ToolsetID, row.ProjectID)
+		allowed, err := s.canConnect(ctx, authCtx.ActiveOrganizationID, row.Visibility, row.McpServerID, row.ToolsetID, row.ProjectID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check server access").LogError(ctx, logger)
 		}
@@ -121,7 +121,7 @@ func (s *Service) Hide(ctx context.Context, payload *srv.HidePayload) error {
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
 	}
-	allowed, err := s.canConnect(ctx, server.Visibility, server.ID, server.ToolsetID, server.ProjectID)
+	allowed, err := s.canConnect(ctx, authCtx.ActiveOrganizationID, server.Visibility, server.ID, server.ToolsetID, server.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check server access").LogError(ctx, logger)
 	}
@@ -162,7 +162,7 @@ func (s *Service) mutation(ctx context.Context, rawID string) (*contextvalues.Au
 
 // canConnect applies the gateway's admission rule, so the list never names a
 // server the caller cannot reach and hide cannot probe for one.
-func (s *Service) canConnect(ctx context.Context, serverVisibility string, serverID uuid.UUID, toolsetID uuid.NullUUID, projectID uuid.UUID) (bool, error) {
+func (s *Service) canConnect(ctx context.Context, organizationID string, serverVisibility string, serverID uuid.UUID, toolsetID uuid.NullUUID, projectID uuid.UUID) (bool, error) {
 	switch serverVisibility {
 	case visibility.Public:
 		return true, nil
@@ -174,7 +174,7 @@ func (s *Service) canConnect(ctx context.Context, serverVisibility string, serve
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), resourceID.String()).Connect())
+	err := s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).MCPServer(resourceID.String()).Connect())
 	if err == nil {
 		return true, nil
 	}

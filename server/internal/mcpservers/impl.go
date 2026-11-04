@@ -161,7 +161,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
 		return nil, err
 	}
 
@@ -389,7 +389,7 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 // unauthorized member cannot contend server-lifecycle locks. It keys on a
 // non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
 // locked row, which is authoritative if the backing changes concurrently.
-func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, organizationID string, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
 	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: projectID,
@@ -401,7 +401,7 @@ func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.
 		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), grantResourceID(server.ID, server.ToolsetID)).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).MCPServer(grantResourceID(server.ID, server.ToolsetID)).Edit()); err != nil {
 		return repo.McpServer{}, err
 	}
 	return server, nil
@@ -461,7 +461,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), grantResourceID(server.ID, server.ToolsetID)).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantResourceID(server.ID, server.ToolsetID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -514,7 +514,7 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), grantResourceID(server.ID, server.ToolsetID)).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantResourceID(server.ID, server.ToolsetID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -607,7 +607,7 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 
 	ops := make([]authz.Operation, len(servers))
 	for i, server := range servers {
-		ops[i] = authz.MCPServer(authCtx.ProjectID.String(), grantResourceID(server.ID, server.ToolsetID)).Read()
+		ops[i] = authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantResourceID(server.ID, server.ToolsetID)).Read()
 	}
 	matched, err := s.authz.MatchMany(ctx, ops)
 	if err != nil {
@@ -648,7 +648,7 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 	// org:read lists every server; only mcp:read readers get the server details.
 	ops := make([]authz.Operation, len(servers))
 	for i, server := range servers {
-		ops[i] = authz.MCPServer(server.ProjectID.String(), grantResourceID(server.ID, server.ToolsetID)).Read()
+		ops[i] = authz.Project(authCtx.ActiveOrganizationID, server.ProjectID.String()).MCPServer(grantResourceID(server.ID, server.ToolsetID)).Read()
 	}
 	matched, err := s.authz.MatchMany(ctx, ops)
 	if err != nil {
@@ -700,7 +700,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
-	unlocked, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	unlocked, err := s.requireServerWriteUnlocked(ctx, authCtx.ActiveOrganizationID, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -778,7 +778,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), grantResourceID(existing.ID, existing.ToolsetID)).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantResourceID(existing.ID, existing.ToolsetID)).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -1120,7 +1120,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	preexisting, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	preexisting, err := s.requireServerWriteUnlocked(ctx, authCtx.ActiveOrganizationID, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return err
 	}
@@ -1163,7 +1163,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if isCanonicalHostedWrapper(lockedServer.Server) {
 		return oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the deletion").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID)).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID)).Edit()); err != nil {
 		return err
 	}
 

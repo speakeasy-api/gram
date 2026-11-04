@@ -167,7 +167,7 @@ func handleToolsList(
 	// Both the privacy read and the resource id follow the wrapper when one
 	// fronts the request.
 	if payload.authenticated && authzClient != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		tools, err = filterToolsByMCPConnect(ctx, logger, authzClient, payload.mcpConnectResourceID(toolset.ID), payload.projectID.String(), tools)
+		tools, err = filterToolsByMCPConnect(ctx, logger, authzClient, payload.mcpConnectResourceID(toolset.ID), payload.organizationID, payload.projectID.String(), tools)
 		if err != nil {
 			return nil, err
 		}
@@ -351,13 +351,13 @@ func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 
 // filterToolsByMCPConnect keeps the tools the caller may connect to and stops
 // once the request is canceled.
-func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzClient *authz.Client, resourceID string, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
+func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzClient *authz.Client, resourceID string, organizationID, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
 	allowed := make([]*toolListEntry, 0, len(tools))
 	for _, t := range tools {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		if err := authzClient.Require(ctx, authz.MCPServer(projectID, resourceID).CallTool(t.Name, dispositionFromAnnotations(t.Annotations))); err != nil {
+		if err := authzClient.Require(ctx, authz.Project(organizationID, projectID).MCPServer(resourceID).CallTool(t.Name, dispositionFromAnnotations(t.Annotations))); err != nil {
 			var oopsErr *oops.ShareableError
 			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 				continue

@@ -151,7 +151,7 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve mcp server for skill link").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), mcpGrantResourceID(server.ID, server.ToolsetID)).Edit()); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).MCPServer(mcpGrantResourceID(server.ID, server.ToolsetID)).Edit()); err != nil {
 			return nil, err
 		}
 		return &server.Name, nil
@@ -165,7 +165,7 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve gateway for skill link").LogError(ctx, logger)
 		}
-		if err := s.requireProjectMCPWrite(ctx, projectID); err != nil {
+		if err := s.requireProjectMCPWrite(ctx, authCtx.ActiveOrganizationID, projectID); err != nil {
 			return nil, err
 		}
 		return &server.Name, nil
@@ -183,18 +183,18 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 // that already exists, whose target row may since have been removed.
 func (s *Service) requireStoredLinkTargetWrite(ctx context.Context, organizationID string, projectID uuid.UUID, link mcpskillsrepo.McpSkillLink, toolsetID uuid.NullUUID) error {
 	if link.TargetKind == string(skilllink.TargetMCPServer) && link.McpServerID.Valid {
-		return s.authz.Require(ctx, authz.MCPServer(projectID.String(), mcpGrantResourceID(link.McpServerID.UUID, toolsetID)).Edit())
+		return s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).MCPServer(mcpGrantResourceID(link.McpServerID.UUID, toolsetID)).Edit())
 	}
 	if link.TargetKind == string(skilllink.TargetMetaMCPServer) {
-		return s.requireProjectMCPWrite(ctx, projectID)
+		return s.requireProjectMCPWrite(ctx, organizationID, projectID)
 	}
 	return s.requireProjectWrite(ctx, organizationID, projectID)
 }
 
 // requireProjectMCPWrite asks for project-wide MCP write access, the check the
 // gateway write APIs make.
-func (s *Service) requireProjectMCPWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.MCPServersInProject(projectID.String()).Edit())
+func (s *Service) requireProjectMCPWrite(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.Project(organizationID, projectID.String()).MCPServers().Edit())
 }
 
 func (s *Service) requireProjectWrite(ctx context.Context, organizationID string, projectID uuid.UUID) error {
@@ -503,7 +503,7 @@ func (s *Service) ListLinks(ctx context.Context, payload *gen.ListLinksPayload) 
 		nextCursor = &encoded
 	}
 
-	readable, err := s.readableLinkTargets(ctx, *authCtx.ProjectID, rows)
+	readable, err := s.readableLinkTargets(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +528,7 @@ func (s *Service) ListLinks(ctx context.Context, payload *gen.ListLinksPayload) 
 // link's target: mcp:read on a stored MCP server, and mcp:read on the project
 // for a gateway, as the gateway read APIs check. The organization gateway has
 // no row to grant on, so skill read is enough.
-func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, rows []mcpskillsrepo.ListMCPSkillLinksRow) ([]bool, error) {
+func (s *Service) readableLinkTargets(ctx context.Context, organizationID string, projectID uuid.UUID, rows []mcpskillsrepo.ListMCPSkillLinksRow) ([]bool, error) {
 	readable := make([]bool, len(rows))
 	checks := make([]authz.Operation, 0, len(rows))
 	checkRows := make([]int, 0, len(rows))
@@ -536,10 +536,10 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 		link := row.McpSkillLink
 		switch {
 		case link.TargetKind == string(skilllink.TargetMCPServer) && link.McpServerID.Valid:
-			checks = append(checks, authz.MCPServer(projectID.String(), mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID)).Read())
+			checks = append(checks, authz.Project(organizationID, projectID.String()).MCPServer(mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID)).Read())
 			checkRows = append(checkRows, i)
 		case link.TargetKind == string(skilllink.TargetMetaMCPServer) && link.MetaMcpServerID.Valid:
-			checks = append(checks, authz.MCPServersInProject(projectID.String()).Read())
+			checks = append(checks, authz.Project(organizationID, projectID.String()).MCPServers().Read())
 			checkRows = append(checkRows, i)
 		default:
 			readable[i] = true

@@ -26,11 +26,12 @@ import (
 // [ToolDispositionResolver]; a tool with no recorded metadata resolves to the
 // empty disposition, leaving the check as a pure tool-name match.
 type ToolsCallAuthzInterceptor struct {
-	authz       *authz.Client
-	resolver    ToolDispositionResolver
-	mcpServerID string
-	projectID   string
-	logger      *slog.Logger
+	authz          *authz.Client
+	resolver       ToolDispositionResolver
+	mcpServerID    string
+	organizationID string
+	projectID      string
+	logger         *slog.Logger
 }
 
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallAuthzInterceptor)(nil)
@@ -44,13 +45,14 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallAuthzInterceptor)(nil)
 // keeping per-tool and server-level authorization consistent. projectID is
 // the owning project for the mcp_endpoint and is forwarded as a dimension so
 // project-scoped grants can match.
-func NewToolsCallAuthzInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
+func NewToolsCallAuthzInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, organizationID, mcpServerID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
 	return &ToolsCallAuthzInterceptor{
-		authz:       authzClient,
-		resolver:    resolver,
-		mcpServerID: mcpServerID,
-		projectID:   projectID,
-		logger:      logger,
+		authz:          authzClient,
+		resolver:       resolver,
+		mcpServerID:    mcpServerID,
+		organizationID: organizationID,
+		projectID:      projectID,
+		logger:         logger,
 	}
 }
 
@@ -89,7 +91,7 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 		return fmt.Errorf("resolve remote MCP tool disposition: %w", err)
 	}
 
-	err = i.authz.Require(ctx, authz.MCPServer(i.projectID, i.mcpServerID).CallTool(call.Params.Name, dispositions[call.Params.Name]))
+	err = i.authz.Require(ctx, authz.Project(i.organizationID, i.projectID).MCPServer(i.mcpServerID).CallTool(call.Params.Name, dispositions[call.Params.Name]))
 	if err != nil {
 		return fmt.Errorf("authorize remote MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 	}

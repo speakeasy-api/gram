@@ -1032,8 +1032,8 @@ const (
 	chatAccessWrite
 )
 
-func (a chatAccess) operation(chat repo.GetChatRow) authz.Operation {
-	ref := authz.Chat(chat.ID.String())
+func (a chatAccess) operation(organizationID string, chat repo.GetChatRow) authz.Operation {
+	ref := authz.Project(organizationID, chat.ProjectID.String()).Chat(chat.ID.String())
 	if a == chatAccessWrite {
 		return ref.Write()
 	}
@@ -1133,7 +1133,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 			}
 			return nil
 		}
-		if err := s.authzClient.Require(ctx, access.operation(chat)); err != nil {
+		if err := s.authzClient.Require(ctx, access.operation(authCtx.ActiveOrganizationID, chat)); err != nil {
 			return err
 		}
 	}
