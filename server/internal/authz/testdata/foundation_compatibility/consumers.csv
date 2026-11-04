@@ -21,7 +21,6 @@ cmd/gram/start.go,newStartCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,NewProvisioner,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,SetUpstreamSelectorWriteGate,,,1,F5 AIS-835
 cmd/gram/streams.go,newStreamsCommand,wiring,NewChallengeCHWriter,,,1,F5 AIS-835
-cmd/gram/streams.go,newStreamsCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,ChallengeLoggingEnabled,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,SetUpstreamSelectorWriteGate,,,1,F5 AIS-835

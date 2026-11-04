@@ -62,7 +62,8 @@ func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
 	return e.PrepareContext(ctx)
 }
 
-// AdmissionBoundary retains only authorization policies for an admitted job.
+// AdmissionBoundary retains the authorization policies and migration route
+// pins of an admitted request, and nothing else, for a job it starts.
 // A newly granted permission cannot expand the running job's authority.
 type AdmissionBoundary struct {
 	policies grantAuthorization
