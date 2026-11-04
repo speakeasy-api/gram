@@ -81,6 +81,26 @@ VALUES (@organization_id, @principal_urn::text, 'risk_policy:bypass',
         jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', @resource_id::text,
                            'server_url', 'https://shadow-mcp.demo.getgram.ai/research'));
 
+-- name: RiskInsertMCPReview :exec
+-- One MCP server review waiting on an admin, so the MCP reviews queue and the
+-- Slack app's Home tab have a request to show. Evidence is left ungathered.
+-- The project delete cascades the review and its requesters.
+INSERT INTO mcp_approval_requests
+  (id, organization_id, project_id, target_kind, target_raw, target_key,
+   status, created_at, updated_at)
+VALUES
+  (@id, @organization_id, @project_id, @target_kind, @target_raw, @target_key,
+   'requested', now() - interval '2 hours', now() - interval '2 hours');
+
+-- name: RiskInsertMCPReviewRequester :exec
+INSERT INTO mcp_approval_request_requesters
+  (id, organization_id, project_id, mcp_approval_request_id, user_id,
+   user_email, note, requested_at, created_at, updated_at)
+VALUES
+  (@id, @organization_id, @project_id, @mcp_approval_request_id, @user_id,
+   @user_email::text, @note::text, now() - interval '2 hours',
+   now() - interval '2 hours', now() - interval '2 hours');
+
 -- name: RiskInsertSessionQuarantine :exec
 INSERT INTO session_quarantines
   (id, organization_id, project_id, session_id, risk_policy_id,

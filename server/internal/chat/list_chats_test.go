@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -541,6 +542,33 @@ func TestListChats_ChatRead_SeesAllChats(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 }
 
+// Cron chats captured before cron titles existed stored the raw OpenClaw
+// envelope. They list under the job name, unless someone renamed them by hand.
+func TestListChats_ShowsStoredCronEnvelopesUnderTheJobName(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	envelope := "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 nightly-digest] Summarize the day"
+	derived := seedChat(t, ctx, ti, "", "ext-cron", envelope)
+	renamed := seedChat(t, ctx, ti, "", "ext-cron", "placeholder")
+	require.NoError(t, repo.New(ti.conn).RenameChat(ctx, repo.RenameChatParams{
+		ID:               renamed,
+		ProjectID:        ti.projectID,
+		Title:            conv.ToPGText(envelope),
+		TitleManuallySet: true,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	titles := make(map[string]string, len(result.Chats))
+	for _, c := range result.Chats {
+		titles[c.ID] = c.Title
+	}
+	require.Equal(t, "Cron: nightly-digest", titles[derived.String()])
+	require.Equal(t, envelope, titles[renamed.String()])
+}
+
 // TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats is the regression guard
 // for the blind spot in the see-all path: org:admin alone does NOT grant chat
 // session see-all visibility — only chat:read does. An admin without chat:read
@@ -625,6 +653,47 @@ func TestListChats_Member_SeesOwnedAgentSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result.Chats)
 	require.Equal(t, 2, result.Total)
+}
+
+// An agent's editors (agent:write) answer for it as its owner does, so a member
+// granted agent:write on someone else's agent lists that agent's sessions, and
+// no other agent's.
+func TestListChats_Member_SeesEditableAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	edited := seedAgent(t, ctx, ti, "other-owner", "Shared Agent")
+	untouched := seedAgent(t, ctx, ti, "other-owner", "Their Agent")
+	editedChat := seedAgentChat(t, ctx, ti, edited, "shared agent's session")
+	seedAgentChat(t, ctx, ti, untouched, "their agent's session")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	editorCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentWrite, edited.String()))
+	result, err := ti.service.ListChats(editorCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, editedChat.String(), result.Chats[0].ID)
+
+	// agent:read alone does not open what the agent did.
+	readerCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentRead, edited.String()))
+	result, err = ti.service.ListChats(readerCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+
+	// Where RBAC is not enforced (no session), an agent:write grant does not
+	// widen visibility: the editor sees only their own sessions.
+	authCtx, ok := contextvalues.GetAuthContext(editorCtx)
+	require.True(t, ok)
+	unenforced := *authCtx
+	unenforced.SessionID = nil
+	own := seedChat(t, ctx, ti, unenforced.UserID, "", "own chat")
+	result, err = ti.service.ListChats(contextvalues.SetAuthContext(editorCtx, &unenforced), defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, own.String(), result.Chats[0].ID)
 }
 
 // A chat that carries a human identity belongs to that human, even if an
@@ -1736,4 +1805,31 @@ func TestListChats_NumMessagesIgnoresOtherProjectRows(t *testing.T) {
 	require.NoError(t, err)
 	require.WithinDuration(t, early.Add(time.Minute), lastMessageAt, 0,
 		"a later sibling-project stamp must not move last_message_timestamp")
+}
+
+func TestListChatsSpeakeasySlackSurface(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	slackChat := seedChatWithSource(t, ctx, ti, "ext-slack", "assistants")
+	ordinaryChat := seedChatWithSource(t, ctx, ti, "ext-assistant", "assistants")
+	require.NoError(t, assistantsrepo.New(ti.conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID: slackChat, ProjectID: ti.projectID, OrganizationID: ti.orgID, UserID: pgtype.Text{}, Title: pgtype.Text{}, SessionSurface: conv.ToPGText("speakeasy-slack"),
+	}))
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"assistants", "speakeasy-slack"}, sources.Sources)
+	for _, tc := range []struct {
+		source string
+		id     uuid.UUID
+	}{{"speakeasy-slack", slackChat}, {"assistants", ordinaryChat}} {
+		payload := defaultPayload()
+		payload.Source = &tc.source
+		result, err := ti.service.ListChats(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.Total)
+		require.Len(t, result.Chats, 1)
+		require.Equal(t, tc.id.String(), result.Chats[0].ID)
+		require.Equal(t, &tc.source, result.Chats[0].Source)
+	}
 }

@@ -435,6 +435,12 @@ func (tp *ToolProxy) doFunction(
 
 	setUserEmailEnv(payloadEnv, plan.AuthInput != nil && plan.AuthInput.GramEmail, env.GramEmail)
 
+	// The manifest does not say which declared variables a function requires,
+	// so a missing one cannot refuse the call outright. When the function then
+	// fails, the missing variables are the cause the caller can act on, not
+	// the runner's validation dump.
+	missingVariables := missingFunctionVariables(plan.Variables, payloadEnv)
+
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,
@@ -497,7 +503,18 @@ func (tp *ToolProxy) doFunction(
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
 			}
-			return nil
+			if resp.StatusCode < http.StatusBadRequest || len(missingVariables) == 0 {
+				return nil
+			}
+			named, err := namesMissingVariable(resp, missingVariables)
+			if err != nil {
+				return err
+			}
+			if !named {
+				return nil
+			}
+			responseStatusCode = resp.StatusCode
+			return oops.E(oops.CodeFailedPrecondition, nil, "server not configured: missing environment variables %s", strings.Join(missingVariables, ", ")).LogWarn(ctx, logger)
 		},
 		RetryConfig:       functionRunnerRetryConfig(),
 		Timeout:           functionRunnerCallTimeout,
@@ -510,6 +527,43 @@ func (tp *ToolProxy) doFunction(
 		OrganizationID:    descriptor.OrganizationID,
 		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
+}
+
+// maxMissingVariablePeek bounds how much of a failed runner response is read
+// for the names of missing variables.
+const maxMissingVariablePeek = 64 * 1024
+
+// namesMissingVariable reports whether a failed runner response names one of
+// the missing variables, so an unrelated failure keeps the runner's answer.
+// The body stays readable from its start.
+func namesMissingVariable(resp *http.Response, missing []string) (bool, error) {
+	peek, err := io.ReadAll(io.LimitReader(resp.Body, maxMissingVariablePeek))
+	if err != nil {
+		return false, fmt.Errorf("read function runner response: %w", err)
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(peek), resp.Body), resp.Body}
+	for _, name := range missing {
+		if bytes.Contains(peek, []byte(name)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// missingFunctionVariables lists, sorted, the variables a function declares
+// that the environment sent to its runner leaves unset or empty.
+func missingFunctionVariables(declared map[string]*functions.ManifestVariableAttributeV0, payloadEnv map[string]string) []string {
+	var missing []string
+	for key := range declared {
+		if payloadEnv[key] == "" {
+			missing = append(missing, key)
+		}
+	}
+	slices.Sort(missing)
+	return missing
 }
 
 // toolCallMeta converts a resolved caller identity into the `_meta` block sent
@@ -1159,6 +1213,14 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	})
 
 	if err := opts.VerifyResponse(resp); err != nil {
+		// A verifier that already explains the failure to the caller keeps
+		// its own code and message, and the span status its logging chose.
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			if !shareable.SpanHandled() {
+				span.SetStatus(codes.Error, err.Error())
+			}
+			return shareable
+		}
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "response verification failed").LogError(ctx, opts.Logger)
 	}

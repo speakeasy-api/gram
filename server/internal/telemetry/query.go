@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -631,7 +632,7 @@ func (s *Service) chatTitlesForSessions(ctx context.Context, items []repo.Sessio
 	titles := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if row.Title.Valid && row.Title.String != "" {
-			titles[row.ID.String()] = row.Title.String
+			titles[row.ID.String()] = chattitle.Display(row.Title.String, row.TitleManuallySet)
 		}
 	}
 	return titles

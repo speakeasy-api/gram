@@ -755,6 +755,19 @@ func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightCountMCPReviews = `-- name: PostflightCountMCPReviews :one
+SELECT count(*) FROM mcp_approval_requests
+WHERE organization_id = $1::text AND deleted IS FALSE AND status = 'requested'
+`
+
+// The MCP reviews queue needs its one seeded request awaiting a decision.
+func (q *Queries) PostflightCountMCPReviews(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPReviews, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountMCPSkillLinks = `-- name: PostflightCountMCPSkillLinks :one
 SELECT count(*)
 FROM mcp_skill_links l

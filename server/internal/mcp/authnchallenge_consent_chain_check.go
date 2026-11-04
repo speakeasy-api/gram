@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -139,6 +140,58 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		return oops.E(oops.CodeUnexpected, err, "encode identity chaining check").LogError(ctx, logger)
 	}
 	return nil
+}
+
+// consentChainedUpstreamToken exchanges the sign-in under the consent discovery gate.
+func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clientID uuid.UUID) *remotesessions.UpstreamToken {
+	if s.identityChainer == nil {
+		return nil
+	}
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		logger.WarnContext(ctx, "list clients for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	clients := subjectConnectedClients(bound)
+	_, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve routing for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	chained := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	var requests []identitychaining.Request
+	switch {
+	case clientID != uuid.Nil:
+		requests = chained[clientID]
+	case len(chained) == 1:
+		for _, r := range chained {
+			requests = r
+		}
+	}
+	if len(requests) != 1 {
+		return nil
+	}
+	sel := requests[0]
+	req, ok := s.identityChainingRequestForKind(ctx, mcpidentity.KindConsentDiscovery, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, sel.UpstreamResource, sel.RemoteSessionIssuerID.Valid, sel.RemoteSessionIssuerID, sel.RemoteSessionClientID)
+	if !ok || req.UserID != sel.UserID {
+		return nil
+	}
+	signInID := uuid.Nil
+	if challengeState.SignInID != nil {
+		signInID = *challengeState.SignInID
+	}
+	acquireCtx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
+	defer cancel()
+	token, outcome := s.identityChainer.AcquireConsent(acquireCtx, req, signInID)
+	if !outcome.Succeeded() {
+		logger.InfoContext(ctx, "consent tool inventory could not use identity chaining",
+			attr.SlogReason(string(outcome.Reason)),
+			attr.SlogIdentityChainingProvider(string(outcome.Provider)),
+		)
+		return nil
+	}
+	upstream := chainedUpstreamToken(token)
+	return &upstream
 }
 
 // retireDeniedConsentCredentials erases the vendor credentials this sign-in's

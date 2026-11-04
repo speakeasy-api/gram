@@ -17,9 +17,24 @@ SELECT * FROM slack_directory_connections
 WHERE organization_id = @organization_id AND slack_team_id = @slack_team_id
 FOR UPDATE;
 
+-- name: LockOrganizationDefaultProject :many
+-- Serializes authorizations that may assign the organization's "default"
+-- project, so two workspaces connected at once cannot both claim it and fail
+-- on the default_project_id unique index. The later one sees the earlier
+-- assignment and connects without a default project.
+SELECT p.id FROM projects p
+WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
+FOR NO KEY UPDATE;
+
 -- name: CreateSlackDirectoryConnection :one
-INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health)
-VALUES (@organization_id, @slack_team_id, @slack_team_name, @credentials_encrypted, @granted_scopes, @generation, 'connected')
+-- A new workspace answers for the organization's "default" project unless that
+-- project already answers in another workspace.
+INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, default_project_id)
+VALUES (@organization_id, @slack_team_id, @slack_team_name, @credentials_encrypted, @granted_scopes, @generation, 'connected', (
+  SELECT p.id FROM projects p
+  WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
+))
 ON CONFLICT (organization_id, slack_team_id) DO NOTHING
 RETURNING *;
 
@@ -30,8 +45,15 @@ credentials_encrypted = @credentials_encrypted,
 granted_scopes = @granted_scopes,
 generation = @generation,
 health = 'connected', disconnected_at = NULL, last_error_code = NULL,
+-- Reconnecting a workspace with no project falls back to "default", as on create.
+default_project_id = COALESCE(default_project_id, (
+  SELECT p.id FROM projects p
+  WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
+)),
 updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND id = @id AND generation = @expected_generation AND slack_team_id = @slack_team_id
+WHERE slack_directory_connections.organization_id = @organization_id AND slack_directory_connections.id = @id
+  AND slack_directory_connections.generation = @expected_generation AND slack_directory_connections.slack_team_id = @slack_team_id
 RETURNING *;
 
 -- name: DisconnectSlackDirectoryConnection :one
@@ -316,3 +338,30 @@ WHERE im.organization_id = @organization_id
   AND im.revoked_at IS NULL
   AND c.disconnected_at IS NULL
 ORDER BY im.created_at DESC, im.id DESC;
+-- name: SetSlackDirectoryConnectionDefaultProject :one
+-- Clearing passes NULL. The unique index rejects a project that already
+-- answers in another workspace.
+UPDATE slack_directory_connections SET
+default_project_id = sqlc.narg(default_project_id)::uuid,
+updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id
+RETURNING *;
+
+-- name: ListSlackRoutingConnectionsByTeam :many
+-- Connected workspaces that route Slack events to a project. A workspace can
+-- be connected by more than one organization, so callers must handle several.
+SELECT * FROM slack_directory_connections c
+WHERE c.slack_team_id = @slack_team_id
+  AND c.default_project_id IS NOT NULL
+  AND c.disconnected_at IS NULL
+  -- Soft-deleting a project keeps the assignment, so skip it here.
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE)
+ORDER BY c.created_at, c.id;
+
+-- name: GetSlackRoutingConnectionByProject :one
+-- The connected workspace whose Speakeasy app replies for a project.
+SELECT * FROM slack_directory_connections c
+WHERE c.organization_id = @organization_id
+  AND c.default_project_id = @default_project_id
+  AND c.disconnected_at IS NULL
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE);

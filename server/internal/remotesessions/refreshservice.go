@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -701,11 +702,11 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 		return remotesessionmetrics.RefreshOutcomeInvalidGrant
 	case tokenErr.invalidClient():
 		return remotesessionmetrics.RefreshOutcomeInvalidClient
-	case tokenErr.statusCode == http.StatusTooManyRequests:
+	case tokenErr.failure().Status == oautherr.RefreshStatusRateLimited:
 		return remotesessionmetrics.RefreshOutcomeRateLimited
-	case tokenErr.statusCode >= http.StatusInternalServerError:
+	case tokenErr.failure().Status == oautherr.RefreshStatusServerError:
 		return remotesessionmetrics.RefreshOutcomeUpstreamError
-	case tokenErr.code == "":
+	case tokenErr.failure().Code == oautherr.RefreshCodeMissing:
 		return remotesessionmetrics.RefreshOutcomeRejectedUnparsed
 	default:
 		return remotesessionmetrics.RefreshOutcomeRejected
