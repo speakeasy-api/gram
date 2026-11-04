@@ -94,6 +94,8 @@ The plan for that operation must reproduce:
 6. Unauthorized when the own scope has no user ID.
 7. Predicates applied before pagination and counting, with the page and total read from one repeatable-read snapshot.
 
+The plan compiler and the first chat adapter are described in `docs/rbac-access-plan.md`.
+
 **Expected improvement:** resolving owned agents inside that snapshot (a join or subquery instead of a prefetched ID list) is allowed. It narrows a race and does not change any answer above.
 
 ## Open decisions that block cutover
