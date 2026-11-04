@@ -23,7 +23,7 @@ import (
 
 // CreateCimdClient adds an issuer-specific CIMD URL to organization policy.
 func (s *Service) CreateCimdClient(ctx context.Context, payload *orggen.CreateCimdClientPayload) (*orggen.CreateUserSessionIssuerCimdClientResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orggen.CreateCi
 
 // ListCimdClients lists custom CIMD URLs on one organization-owned issuer.
 func (s *Service) ListCimdClients(ctx context.Context, payload *orggen.ListCimdClientsPayload) (*orggen.ListUserSessionIssuerCimdClientsResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (s *Service) ListCimdClients(ctx context.Context, payload *orggen.ListCimdC
 
 // GetCimdClient gets one custom CIMD URL owned by the organization.
 func (s *Service) GetCimdClient(ctx context.Context, payload *orggen.GetCimdClientPayload) (*types.UserSessionIssuerCimdClient, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) GetCimdClient(ctx context.Context, payload *orggen.GetCimdClie
 
 // DeleteCimdClient removes one custom CIMD URL from organization policy.
 func (s *Service) DeleteCimdClient(ctx context.Context, payload *orggen.DeleteCimdClientPayload) error {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return err
 	}

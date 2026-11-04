@@ -23,7 +23,7 @@ import (
 // GetAuthenticationHostImpact previews moving an issuer onto or off the
 // authentication host.
 func (s *Service) GetAuthenticationHostImpact(ctx context.Context, payload *orggen.GetAuthenticationHostImpactPayload) (*orggen.UserSessionIssuerAuthenticationHostImpact, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) GetAuthenticationHostImpact(ctx context.Context, payload *orgg
 
 // SetAuthenticationHost moves an issuer onto or off the authentication host.
 func (s *Service) SetAuthenticationHost(ctx context.Context, payload *orggen.SetAuthenticationHostPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

@@ -109,6 +109,20 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithAuthorization(t, hosts, revoker, nil, guardianOpts...)
+}
+
+// newTestServiceInMode builds the service with every authorization unit
+// routed to mode instead of comparing every decision in shadow mode.
+func newTestServiceInMode(t *testing.T, mode authz.MigrationMode) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestServiceWithAuthorization(t, testHosts, nil, &mode)
+}
+
+func newTestServiceWithAuthorization(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, mode *authz.MigrationMode, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -125,6 +139,12 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	// Shadow mode keeps the parity client, so a disagreement fails the test
+	// instead of only being logged.
+	authorization := authztest.NewParityClient(t, authzEngine)
+	if mode != nil && *mode != authz.MigrationModeShadow {
+		authorization = authztest.NewClientInMode(t, authzEngine, *mode)
+	}
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
@@ -144,6 +164,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		sessionManager,
 		tokenRevoker,
 		authzEngine,
+		authorization,
 		audit.NewLogger(),
 		guardianPolicy,
 		nil,

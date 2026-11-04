@@ -31,7 +31,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+// requireOrganizationIssuerAccess requires operation on the active
+// organization from a user session.
+func (s *Service) requireOrganizationIssuerAccess(ctx context.Context, operation func(authz.OrganizationRef) authz.Operation) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -39,7 +41,7 @@ func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope auth
 	if authCtx.APIKeyID != "" {
 		return nil, oops.E(oops.CodeForbidden, nil, "organization user session issuer management requires a user session")
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.Organization(authCtx.ActiveOrganizationID))); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +150,7 @@ func parseTrustedRemoteSessionClientID(raw *string, allowClear bool) (uuid.NullU
 // CreateIssuer creates an organization-owned issuer inherited by every project
 // in the caller's organization.
 func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +239,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 // this service; project-specific ones are listed for administration across
 // projects and managed through the project service.
 func (s *Service) ListIssuers(ctx context.Context, payload *orggen.ListIssuersPayload) (*orggen.ListOrganizationUserSessionIssuersResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +279,7 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orggen.ListIssuersPa
 // GetIssuer resolves any issuer in the caller's organization by id,
 // organization-owned or project-specific.
 func (s *Service) GetIssuer(ctx context.Context, payload *orggen.GetIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +314,7 @@ func (s *Service) organizationIssuerView(ctx context.Context, row repo.UserSessi
 // ListMcpServers lists the live MCP servers, toolsets, and meta MCP servers
 // attached to an issuer in the caller's organization.
 func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpServersPayload) (*orggen.ListUserSessionIssuerMcpServersResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +383,7 @@ func (s *Service) UpdateIssuerIfTrusting(ctx context.Context, payload *orggen.Up
 }
 
 func (s *Service) updateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedIssuerID *string) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +549,7 @@ func (s *Service) updateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 // GetIssuerDeletePreflight returns the same live owner set DeleteIssuer uses
 // as its blocking condition, plus informational client and session counts.
 func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.GetIssuerDeletePreflightPayload) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +572,7 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.
 // DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
 // server or toolset references it.
 func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuerPayload) error {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return err
 	}

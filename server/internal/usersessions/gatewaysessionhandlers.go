@@ -54,7 +54,7 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load gateway session scope")
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: gateway.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(scope.organizationID, gateway.ProjectID.String()).Read()); err != nil {
 			return nil, err
 		}
 		scope.projects = []uuid.UUID{gateway.ProjectID}
@@ -83,7 +83,7 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 		}
 		return scope, nil
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: scope.organizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(scope.organizationID).Read()); err != nil {
 		return nil, err
 	}
 	// Turning off the gateway must not hide existing authorizations.
