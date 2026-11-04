@@ -39,7 +39,19 @@ async function withPageContext(
   assertion: () => Promise<void>,
 ): Promise<void> {
   try {
-    await assertion();
+    try {
+      await assertion();
+    } catch (err) {
+      // Chrome drops every in-flight request when the host's network
+      // interfaces change, which container churn on a CI runner can cause
+      // mid-navigation, leaving a blank page. That says nothing about the
+      // gate, so load the page again once.
+      const errors = pageErrors.get(page) ?? [];
+      if (!errors.some((e) => e.includes("ERR_NETWORK_CHANGED"))) throw err;
+      errors.length = 0;
+      await page.reload();
+      await assertion();
+    }
   } catch (err) {
     const text = await page
       .locator("body")
