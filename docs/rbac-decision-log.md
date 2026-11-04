@@ -109,4 +109,4 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 1. **Same method-expression helpers as P4.** `triggers.requireAccess` and `assistantmemories.requireMemoryAccess` take `func(authz.ProjectRef) authz.Operation`; callers pass `authz.ProjectRef.Read` or `.Write`. Model keys use the operations directly.
 2. **Assistant memories stay project-scoped.** Memories belong to assistants, which AS1 migrates, but today's check is `project:read`/`project:write` on the request's project; the slice keeps exactly that rather than introducing an assistant-memory permission. _If reversed:_ AS1 can move memories under the assistant type once assistants are declared.
-3. **Parity:** the triggers, modelkeys and assistantmemories suites made 78 comparisons, all matching. The assistant-memories unit tests run without an organization and so exercise the engine path only, as production does for org-less contexts.
+3. **Parity:** the triggers, modelkeys and assistantmemories suites made 78 comparisons, all matching. The assistant-memories tests authenticate an organization and project, so their decisions are included in the shadow comparisons.
