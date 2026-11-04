@@ -119,10 +119,7 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	// reaches an admin through user:all or one of their roles would hide the
 	// server's rules from them, and the organization-wide assignment review
 	// could never load.
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil},
-		authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID),
-	); err != nil {
+	if err := s.authzClient.Require(ctx, authz.MCPServer(projectID, payload.ResourceID).ReadOrAdminister(ac.ActiveOrganizationID)); err != nil {
 		return nil, err
 	}
 	// The entries name the people each rule reaches, so seeing them takes

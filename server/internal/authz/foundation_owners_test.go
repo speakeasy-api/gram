@@ -111,6 +111,10 @@ var foundationFileOwners = map[string]string{
 	// until the dashboards, widgets and Platform MCP callers move to
 	// AccessOperation.
 	"internal/telemetry/analytics/catalog.go": ownerP4,
+	// Access explanations describe stored grants and how the engine matches
+	// them; they change when the stored grants and the evaluator switch
+	// together.
+	"internal/access/explain_access.go": ownerX1,
 }
 
 var foundationFunctionOwners = map[string]string{

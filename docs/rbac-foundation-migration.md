@@ -102,6 +102,7 @@ Counts are call sites at the baseline. Prerequisites are the Linear blocked-by r
 Rows reassigned after the baseline:
 
 - O3 moves the directory review emails audience onto the client. The remaining loader row is the fallback for workers built without a client, so it moves from O3 to X1, which deletes it.
+- O2 moves the two request gates in access explanations and resource audiences onto the client. The explanation-helper rows left in `explain_access.go` (13 rows, 15 call sites in the current inventory) describe stored grants and the engine's matching of them, so they belong to X1, which replaces both.
 
 F1-F4, F6, C2, Q1, Z1 and Z2 own no call site: they build the foundation, characterize chat collections, or verify and retire. The total is 962 sites in 931 rows.
 

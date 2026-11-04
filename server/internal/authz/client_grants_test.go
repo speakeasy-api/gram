@@ -95,3 +95,42 @@ func TestWriteOrAdministerFallsThroughBlocks(t *testing.T) {
 		})
 	}
 }
+
+// TestMCPServerReadOrAdministerFallsThroughBlocks mirrors the engine's
+// RequireAny over organization administration and server read: a block on one
+// alternative does not stop the other.
+func TestMCPServerReadOrAdministerFallsThroughBlocks(t *testing.T) {
+	t.Parallel()
+
+	role := "role:organization:role_1"
+	server := MCPServer("proj_1", "srv_1")
+	for _, mode := range []MigrationMode{MigrationModeOld, MigrationModeShadow, MigrationModeNew} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			recorder := &capturedComparisons{}
+			client, _ := newRoutedTestClient(t, nil, fixedModes(mode), recorder)
+
+			admin := humanClientContext(t,
+				grantOf(role, string(ScopeOrgAdmin), ResourceKindOrg, fixtureOrgID),
+				grantOf(role, string(ScopeMCPBlockedRead), ResourceKindMCP, "srv_1"),
+			)
+			require.NoError(t, client.Require(admin, server.ReadOrAdminister(fixtureOrgID)), "the administer alternative survives a read block")
+
+			reader := humanClientContext(t, grantOf(role, string(ScopeMCPRead), ResourceKindMCP, "srv_1"))
+			require.NoError(t, client.Require(reader, server.ReadOrAdminister(fixtureOrgID)))
+
+			otherServer := humanClientContext(t, grantOf(role, string(ScopeMCPRead), ResourceKindMCP, "srv_2"))
+			require.Error(t, client.Require(otherServer, server.ReadOrAdminister(fixtureOrgID)))
+
+			orgReader := humanClientContext(t, grantOf(role, string(ScopeOrgRead), ResourceKindOrg, fixtureOrgID))
+			require.Error(t, client.Require(orgReader, server.ReadOrAdminister(fixtureOrgID)))
+
+			for _, outcome := range recorder.outcomes() {
+				require.Equal(t, ShadowMatch, outcome)
+			}
+			if mode == MigrationModeShadow {
+				require.Len(t, recorder.outcomes(), 4)
+			}
+		})
+	}
+}
