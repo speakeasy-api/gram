@@ -45,8 +45,9 @@ func (f *hostedAddressFixture) deleteDomain(t *testing.T, ctx context.Context) {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
+	domainsEngine := authz.NewEngine(logger, f.ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	service := customdomains.NewService(logger, testenv.NewTracerProvider(t), f.ti.conn, f.ti.sessionManager, deleteOnlyTemporal{},
-		authz.NewEngine(logger, f.ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(),
+		domainsEngine, authztest.NewParityClient(t, domainsEngine), audit.NewLogger(),
 		func(context.Context, pgx.Tx, string, uuid.UUID) (bool, error) { return false, nil }, "cname.example.net.", nil)
 	require.NoError(t, service.DeleteDomain(ctx, &domainsgen.DeleteDomainPayload{}))
 }

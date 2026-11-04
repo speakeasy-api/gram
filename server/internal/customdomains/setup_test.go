@@ -151,6 +151,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 		sessionManager,
 		temporal,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		auditLogger,
 		func(ctx context.Context, dbtx pgx.Tx, organizationID string, customDomainID uuid.UUID) (bool, error) {
 			return networkingressrepo.New(dbtx).HasActiveNetworkIngressForCustomDomain(ctx, networkingressrepo.HasActiveNetworkIngressForCustomDomainParams{

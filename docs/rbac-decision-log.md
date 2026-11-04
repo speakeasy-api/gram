@@ -95,3 +95,10 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 1. **Shared access helpers take an operation.** `requireOrgAccess`, `authorize` and `access` now take `func(authz.OrganizationRef) authz.Operation`, and callers pass `authz.OrganizationRef.Administer` or `.Read`, as identity-provider connections do in O3. _If reversed:_ map scopes locally, as product features does.
 2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only change outside O4's packages.
+
+## O5 (AIS-840): custom domains, network ingress, assets and LiteLLM
+
+### Decided without reviewer input
+
+1. **Audience resolution is shared by every activity.** `organizationAdministratorEmails` in the activities package wraps `Client.OrganizationAdministratorEmails` and handles the missing-client fallback. Directory review and custom-domain health both use it, and X1 owns its fallback row. _If reversed:_ each activity keeps its own fallback.
+2. **Other packages' test setups pass a parity client to assets.** The test setups for MCP servers, toolsets, tools, functions and deployments build an assets service, so they now pass one. Their assets calls are project-scoped and do not reach the organization handler. These are setup-only edits to tests that other slices own.

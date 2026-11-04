@@ -47,6 +47,7 @@ type CustomDomainHealth struct {
 	expectedARecords []netip.Addr
 	emails           *email.Service
 	orgHosts         *orghost.Resolver
+	authz            *authz.Client
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -73,7 +74,7 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy) *CustomDomainHealth {
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy, authzClient *authz.Client) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
 	}
@@ -92,6 +93,7 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		expectedARecords: expectedARecords,
 		emails:           emails,
 		orgHosts:         orgHosts,
+		authz:            authzClient,
 	}
 }
 
@@ -330,7 +332,7 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 		domainLink = siteURL.JoinPath(organization.Slug, "domains").String()
 	}
 
-	recipients, resolutionErr := authz.ResolveOrganizationAdminEmails(ctx, c.db, organizationID)
+	recipients, resolutionErr := organizationAdministratorEmails(ctx, c.authz, c.db, organizationID)
 	notificationErrors := []error{resolutionErr}
 	for _, recipient := range recipients {
 		tmpl := email.CustomDomainUnhealthy{

@@ -165,7 +165,7 @@ func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *gu
 	logger = logger.With(attr.SlogComponent("assets"))
 	return &Service{
 		auth:           nil,
-		authz:          nil,
+		authzClient:    nil,
 		jwtSecret:      "",
 		chatSessions:   nil,
 		projects:       nil,

@@ -151,7 +151,7 @@ func (d *DirectoryReviewEmails) sendOne(ctx context.Context, candidate repo.List
 	// idempotency key keeps the first ones from a second copy. An
 	// organization with no admins is logged and recorded as sent, so it isn't
 	// retried every run.
-	recipients, resolveErr := d.organizationAdministratorEmails(ctx, organizationID)
+	recipients, resolveErr := organizationAdministratorEmails(ctx, d.authz, d.db, organizationID)
 	if len(recipients) == 0 && resolveErr == nil {
 		d.logger.WarnContext(ctx, "no organization admins to email about directory review", attr.SlogOrganizationID(organizationID))
 	}
@@ -224,19 +224,4 @@ func directoryReviewEmailSummary(total int64) string {
 		return "1 directory change needs a decision"
 	}
 	return strconv.FormatInt(total, 10) + " directory changes need a decision"
-}
-
-func (d *DirectoryReviewEmails) organizationAdministratorEmails(ctx context.Context, organizationID string) ([]string, error) {
-	if d.authz == nil {
-		recipients, err := authz.ResolveOrganizationAdminEmails(ctx, d.db, organizationID)
-		if err != nil {
-			return recipients, fmt.Errorf("resolve organization administrators: %w", err)
-		}
-		return recipients, nil
-	}
-	recipients, err := d.authz.OrganizationAdministratorEmails(ctx, d.db, organizationID)
-	if err != nil {
-		return recipients, fmt.Errorf("resolve organization administrators: %w", err)
-	}
-	return recipients, nil
 }
