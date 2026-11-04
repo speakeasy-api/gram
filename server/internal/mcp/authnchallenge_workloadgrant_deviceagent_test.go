@@ -28,6 +28,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -235,7 +236,7 @@ func TestDeviceAgentToken_DeviceWithoutHooksGrantGetsATokenButNoHooks(t *testing
 
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
-	admitted, _, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, f.ti.authzEngine)
+	admitted, _, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, authztest.NewClient(t, f.ti.authzEngine))
 	require.NoError(t, err)
 
 	err = f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String()))
@@ -333,7 +334,7 @@ func TestDeviceAgentToken_IssuedTokenRefusedAfterDeviceRevoked(t *testing.T) {
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
 	tokens := deviceagenttoken.New(callerIssuer, f.ti.conn)
-	_, agent, err := tokens.Admit(t.Context(), token, f.ti.authzEngine)
+	_, agent, err := tokens.Admit(t.Context(), token, authztest.NewClient(t, f.ti.authzEngine))
 	require.NoError(t, err, "the token is admitted before revocation")
 	require.Equal(t, f.agentID.String(), agent.Principal.ID)
 
@@ -350,7 +351,7 @@ func TestDeviceAgentToken_IssuedTokenRefusedAfterDeviceRevoked(t *testing.T) {
 	_, err = policy.WithdrawSubject(f.ctx, &gen.WithdrawSubjectPayload{ID: admissionID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
-	_, _, err = tokens.Admit(t.Context(), token, f.ti.authzEngine)
+	_, _, err = tokens.Admit(t.Context(), token, authztest.NewClient(t, f.ti.authzEngine))
 	require.Error(t, err, "the already-issued token is refused on its next request")
 	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL)))
 }

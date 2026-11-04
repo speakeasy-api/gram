@@ -174,7 +174,7 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
 	tokens := deviceagenttoken.New(callerIssuer, f.ti.conn)
-	admitted, assigned, err := tokens.Admit(t.Context(), accessToken, f.ti.authzEngine)
+	admitted, assigned, err := tokens.Admit(t.Context(), accessToken, authztest.NewClient(t, f.ti.authzEngine))
 	require.NoError(t, err)
 	require.Equal(t, f.agentID.String(), assigned.Principal.ID, "the job acts as the agent the rule assigns")
 
