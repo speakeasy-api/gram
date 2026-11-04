@@ -230,7 +230,8 @@ func routeDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger
 // upstreamTokenPresent reports, without routing or logging, whether any
 // resolved token claims the backend's upstream. Duplicates and self clients
 // whose credential could not be obtained count as present, so routing still
-// fails closed on them rather than chaining around them.
+// fails closed on them rather than chaining around them. A subject's connection
+// in an outage doesn't count: chaining may serve it.
 func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) bool {
 	want := strings.TrimRight(upstreamResource, "/")
 	if tunneled {
@@ -238,10 +239,10 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 			return false
 		}
 		entry, ok := tokens[backendIssuerID.UUID]
-		return ok && grantRoutesToUpstream(entry.Resource, want, true)
+		return ok && !entry.SessionUnavailable() && grantRoutesToUpstream(entry.Resource, want, true)
 	}
 	for issuerID, entry := range tokens {
-		if upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+		if !entry.SessionUnavailable() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			return true
 		}
 	}

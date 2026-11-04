@@ -656,6 +656,7 @@ func (s *Service) loadAuthClientHeaders(ctx context.Context, organizationID stri
 		}
 		current.headers = append(current.headers, proxy.ConfiguredHeader{
 			IsRequired:             row.IsRequired,
+			IsSecret:               row.IsSecret,
 			Name:                   row.Name,
 			StaticValue:            value,
 			ValueFromRequestHeader: row.ValueFromRequestHeader.String,

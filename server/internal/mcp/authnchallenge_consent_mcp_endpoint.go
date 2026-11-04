@@ -520,6 +520,7 @@ func (s *Service) serveConsentProxiedMCP(
 			Request:            nil,
 		})
 		if err != nil {
+			tagTunnelOutage(w, err)
 			return err
 		}
 	}

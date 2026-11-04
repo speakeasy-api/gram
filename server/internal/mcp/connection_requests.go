@@ -23,9 +23,6 @@ import (
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
 
-// errTunnelNoLiveRoute marks a tunneled server with no connected tunnel.
-var errTunnelNoLiveRoute = errors.New("tunnel has no live route")
-
 // reportedClient names the client a request's MCP session reported, for a row. The writer does the
 // lookup. Only a session the client sent counts: a generated id has no record.
 func (s *Service) reportedClient(ctx context.Context, r *http.Request, projectID uuid.UUID, scope string) mcpconnectionattempts.Option {
