@@ -188,19 +188,16 @@ jobs:
                server names, emails, IDs, slugs, URLs, tokens, log lines or span attributes.
 
             Report only specific issues with file and line. Use verdict "no-concerns" when there are none.
-          # TODO: allow the Datadog MCP's read-only tools once the first run's
-          # "List the job's MCP servers" step shows the entry name, as
-          # mcp__speakeasy-datadog-<suffix>__get_datadog_metric,
-          # ..._get_datadog_metric_context, ..._search_datadog_metrics,
-          # ..._aggregate_spans, ..._list_datadog_skills and
-          # ..._load_datadog_skill, and disallow ..._execute_code. Until then
-          # every MCP call is denied and the review is static only.
+          # Datadog's read-only tools, by the entry name "List the job's MCP
+          # servers" prints (speakeasy-datadog-01b5). Its code execution and
+          # monitor, notebook and dashboard writes stay denied, and so does
+          # every other MCP server's tool.
           claude_args: |
             --max-turns 40
             --add-dir ${{ runner.temp }}/pr
             --json-schema '{"type":"object","required":["verdict","summary","findings","baselines"],"properties":{"verdict":{"type":"string","enum":["no-concerns","minor","investigate","likely-regression"]},"summary":{"type":"string","maxLength":400},"mcp_status":{"type":"string","maxLength":200},"findings":{"type":"array","maxItems":8,"items":{"type":"object","required":["severity","file","title","detail"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string","maxLength":120},"detail":{"type":"string","maxLength":600},"evidence":{"type":"string","maxLength":400}}}},"baselines":{"type":"array","maxItems":10,"items":{"type":"object","required":["resource","query"],"properties":{"resource":{"type":"string"},"requests_per_day":{"type":"number"},"p50_ms":{"type":"number"},"p95_ms":{"type":"number"},"query":{"type":"string","maxLength":300}}}}}}'
-            --allowedTools "Read,Grep,Glob"
-            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
+            --allowedTools "Read,Grep,Glob,mcp__speakeasy-datadog-01b5__get_datadog_metric,mcp__speakeasy-datadog-01b5__get_datadog_metric_context,mcp__speakeasy-datadog-01b5__search_datadog_metrics,mcp__speakeasy-datadog-01b5__aggregate_spans,mcp__speakeasy-datadog-01b5__list_datadog_skills,mcp__speakeasy-datadog-01b5__load_datadog_skill"
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,mcp__speakeasy-datadog-01b5__execute_code"
 
       # With full output off, the action hides why Claude stopped. The logs are
       # public, so only Claude Code's own "API Error:" prefix (status and
