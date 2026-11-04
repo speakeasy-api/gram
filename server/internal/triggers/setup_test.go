@@ -119,12 +119,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		assistantidentity.New("https://platform.example.invalid", auditLogger),
 	)
 
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := triggers.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		app,
 		auditLogger,
 	)

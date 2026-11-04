@@ -189,7 +189,6 @@ internal/assistantidentity/provision.go,*Service.selectAgent,check,Check,ScopeAg
 internal/assistantidentity/provision.go,*Service.selectAgent,evaluator,GrantsSatisfy,,,1,AS1 AIS-860
 internal/assistantidentity/provision.go,*Service.selectAgent,loader,LoadGrants,,,1,AS1 AIS-860
 internal/assistantidentity/provision.go,*Service.selectAgent,loader,ResolveUserPrincipals,,,1,AS1 AIS-860
-internal/assistantmemories/impl.go,*Service.requireMemoryAccess,check,Check,scope,Require,1,P5 AIS-848
 internal/assistants/execution_profiles_api.go,*Service.ListExecutionProfiles,check,AssistantCheck,ScopeAssistantRead,Require,1,AS1 AIS-860
 internal/assistants/execution_profiles_api.go,*Service.SetExecutionProfileChoice,check,AssistantCheck,ScopeAssistantWrite,Require,1,AS1 AIS-860
 internal/assistants/impl.go,*Service.CreateAssistant,check,AssistantCheck,ScopeAssistantWrite,Require,1,AS1 AIS-860
@@ -422,10 +421,6 @@ internal/metamcp/impl.go,*Service.ListMetaMcpServers,check,Check,ScopeMCPRead,Re
 internal/metamcp/impl.go,*Service.RemoveMetaMcpMember,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
 internal/metamcp/impl.go,*Service.UpdateMetaMcpMember,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
 internal/metamcp/impl.go,*Service.UpdateMetaMcpServer,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
-internal/modelkeys/impl.go,*Service.DeleteKey,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
-internal/modelkeys/impl.go,*Service.ListKeys,check,Check,ScopeProjectRead,Require,1,P5 AIS-848
-internal/modelkeys/impl.go,*Service.SetKeyEnabled,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
-internal/modelkeys/impl.go,*Service.UpsertKey,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
 internal/networkingress/impl.go,*Service.authorize,check,Check,scope,Require,1,O5 AIS-840
 internal/oktaresourceconnections/impl.go,*Service.authorize,check,Check,ScopeOrgAdmin,Require,1,M2 AIS-865
 internal/oktaresourceconnections/impl.go,*Service.readable,check,MCPCheck,ScopeMCPRead,,1,M2 AIS-865
@@ -807,7 +802,6 @@ internal/toolsets/impl.go,*Service.UpdateToolset,check,MCPCheck,ScopeMCPWrite,Re
 internal/toolsets/list_tool_schema_static_values.go,*Service.ListToolSchemaStaticValues,check,MCPCheck,ScopeMCPRead,Require,1,M1 AIS-859
 internal/toolsets/set_tool_variations_group.go,*Service.SetToolVariationsGroup,check,Check,ScopeMCPWrite,Require,1,M1 AIS-859
 internal/toolsets/set_user_session_issuer.go,*Service.SetUserSessionIssuer,check,MCPCheck,ScopeMCPWrite,Require,1,M1 AIS-859
-internal/triggers/impl.go,*Service.requireAccess,check,Check,scope,Require,1,P5 AIS-848
 internal/tunneledmcp/impl.go,*Service.CreateServer,check,MCPCheck,ScopeMCPWrite,Require,1,M4 AIS-866
 internal/tunneledmcp/impl.go,*Service.DeleteServer,check,MCPCheck,ScopeMCPWrite,Require,1,M4 AIS-866
 internal/tunneledmcp/impl.go,*Service.GetServer,check,MCPCheck,ScopeMCPRead,Require,1,M4 AIS-866
