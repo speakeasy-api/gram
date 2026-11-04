@@ -388,7 +388,7 @@ func TestService_SetResourceAudience_BlocksOneScopeOfAnOrganizationWideRule(t *t
 	// and view intact, and every other server untouched.
 	//
 	// The mcp:blocked_* scopes do not satisfy one another, so each block
-	// stands alone — see scopeExpansions in authz/scopes.go.
+	// stands alone — see mcpServerType in authz/declarations.go.
 	for _, tt := range []struct {
 		name  string
 		level string
