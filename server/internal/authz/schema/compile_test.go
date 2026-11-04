@@ -565,6 +565,11 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `type "thing" declares no permission "write"`,
 		},
 		{
+			name:  "repeated alternative",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.Alternative("thing", "read"), s.Alternative("thing", "read")))},
+			want:  `alternative thing.read listed twice`,
+		},
+		{
 			name:  "veto without blocks",
 			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.Alternative("thing", "read"), s.Alternative("thing", "again"), s.VetoBlocks()))},
 			want:  `VetoBlocks needs an alternative with ExcludedBy`,

@@ -22,18 +22,6 @@ func evaluatorSliceDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
 	riskSurface := string(GrantSurfaceRiskPolicy)
 	return append(frozenSliceDeclarations(),
-		s.NewType("skill", s.Parent("project"), s.WrittenBy(access),
-			s.Grant("reader", s.StoredAs(string(ScopeSkillRead)),
-				s.Describe("Read skills"), s.DefaultFor(SystemRoleAdmin, SystemRoleMember), s.RuntimeSafeSince(1)),
-			s.Grant("writer", s.StoredAs(string(ScopeSkillWrite)),
-				s.Describe("Change skills"), s.DefaultFor(SystemRoleAdmin), s.RuntimeSafeSince(1)),
-			s.Block("read_blocked", s.StoredAs(string(ScopeSkillBlockedRead)), s.RuntimeSafeSince(4)),
-			s.Block("write_blocked", s.StoredAs(string(ScopeSkillBlockedWrite)), s.RuntimeSafeSince(4)),
-			s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")),
-				s.Checks(string(ScopeSkillRead)), s.ExcludedBy("read_blocked")),
-			s.Permission("write", s.Rel("writer"),
-				s.Checks(string(ScopeSkillWrite)), s.ExcludedBy("write_blocked", "read_blocked")),
-		),
 		s.NewType("chat", s.Parent("project"), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeChatRead)), s.Sensitive(), s.Describe("Read session transcripts")),
 			s.Grant("writer", s.StoredAs(string(ScopeChatWrite)), s.Describe("Change sessions")),
@@ -143,7 +131,7 @@ func TestRegistryEvaluatorFoundationCorpus(t *testing.T) {
 		}
 	}
 	require.Empty(t, stale, "corpusSkips lists fixtures that are no longer selected")
-	require.Len(t, ran, 71, "the selected frozen corpus changed; update the expected count after checking every new case runs")
+	require.Len(t, ran, 74, "the selected frozen corpus changed; update the expected count after checking every new case runs")
 }
 
 func runEvaluatorCorpusCase(t *testing.T, reg *s.Registry, evaluator *RegistryEvaluator, f foundationFixture) {

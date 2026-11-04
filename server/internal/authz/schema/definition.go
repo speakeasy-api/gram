@@ -104,9 +104,10 @@ type permissionDecl struct {
 }
 
 type alternativesDecl struct {
-	name    string
-	options []PermissionRef
-	veto    bool
+	name      string
+	options   []PermissionRef
+	veto      bool
+	instances bool
 }
 
 // PermissionRef names a permission on a declared type.
@@ -269,7 +270,7 @@ func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 func Alternatives(name string, opts ...AlternativesOption) TypeOption {
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
-		a := alternativesDecl{name: name, options: nil, veto: false}
+		a := alternativesDecl{name: name, options: nil, veto: false, instances: false}
 		for _, opt := range opts {
 			opt.applyAlternatives(&a)
 		}
@@ -295,6 +296,17 @@ func (vetoBlocksOption) applyAlternatives(a *alternativesDecl) { a.veto = true }
 // VetoBlocks rejects the request when any alternative's ExcludedBy block
 // matches in any policy, even if another alternative passes.
 func VetoBlocks() AlternativesOption { return vetoBlocksOption{} }
+
+type acrossInstancesOption struct{}
+
+func (acrossInstancesOption) applyAlternatives(a *alternativesDecl) { a.instances = true }
+
+// AcrossInstances lets Alternatives name the same permission more than once,
+// because each position is asked of a different resource instance: for
+// example a grant stored against the whole collection, or one against a
+// single member. The typed constructor supplies the instance for each
+// position. Without it a repeated alternative is a declaration error.
+func AcrossInstances() AlternativesOption { return acrossInstancesOption{} }
 
 // StoredAs names the existing stored scope a Grant or Block reads.
 func StoredAs(scope string) RelationOption {

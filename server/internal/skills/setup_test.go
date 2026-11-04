@@ -164,7 +164,7 @@ func newTestServiceWithPublisher(t *testing.T, publisher *capturePublishSignaler
 	}
 	siteURL, err := url.Parse("https://app.getgram.test")
 	require.NoError(t, err)
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), signaler, publishSignaler, siteURL)
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), features, audit.NewLogger(), signaler, publishSignaler, siteURL)
 
 	ti := &testInstance{
 		service:        service,

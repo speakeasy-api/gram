@@ -37,7 +37,7 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: beforeView.ID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), beforeView.ID).Edit()); err != nil {
 		return nil, err
 	}
 

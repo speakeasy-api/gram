@@ -186,6 +186,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		AdmitWorkloadSessionInTx: runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                  c.String("environment") == "local",
 	})
+	authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
+	if err != nil {
+		return nil, err
+	}
 	_, broker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {
 		return nil, err
@@ -264,7 +268,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cacheImpl)
-	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
+	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzClient)
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
@@ -277,7 +281,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetFeatureProvider(featureFlags)
 	assistantsCore.SetSiteURL(siteURL)
 	assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
-	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
+	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, authzClient, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
 	gcpIdentity := newGCPIdentity(ctx, logger, c)

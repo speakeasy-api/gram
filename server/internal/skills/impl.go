@@ -64,7 +64,7 @@ type Service struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	auth     *auth.Auth
-	authz    *authz.Engine
+	authz    *authz.Client
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
@@ -87,6 +87,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
@@ -100,7 +101,7 @@ func NewService(
 		logger:    logger,
 		db:        db,
 		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
+		authz:     authzClient,
 		features:  features,
 		audit:     auditLogger,
 		signaler:  signaler,
@@ -149,18 +150,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	}
 }
 
-func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireAccess(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
 		return nil, s.logger, err
 	}
 
@@ -181,13 +177,13 @@ func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contex
 
 // requireSkillAccess accepts project-wide grants or grants for one skill. An empty
 // skill ID retains the project-wide requirement for collection endpoints.
-func (s *Service) requireSkillAccess(ctx context.Context, scope authz.Scope, skillID string) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireSkillAccess(ctx context.Context, skillID string) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireSkillGrant(ctx, scope, authCtx.ProjectID.String(), skillID); err != nil {
+	if err := s.requireSkillGrant(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), skillID); err != nil {
 		return nil, s.logger, err
 	}
 
@@ -217,16 +213,14 @@ func (s *Service) requireSkillAccess(ctx context.Context, scope authz.Scope, ski
 	return authCtx, logger, nil
 }
 
-func (s *Service) requireSkillGrant(ctx context.Context, scope authz.Scope, projectID, skillID string) error {
-	// Skill grants select either the project resource or an individual skill.
-	checks := []authz.Check{{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil}}
-	if skillID != "" {
-		checks = append(checks, authz.Check{
-			Scope: scope, ResourceKind: authz.ResourceKindSkill,
-			ResourceID: skillID, Dimensions: nil,
-		})
+// requireSkillGrant asks for skill read access. Skill grants select either
+// the project, covering every skill in it, or one skill; a collection
+// endpoint passes no skill ID and needs the project-wide grant.
+func (s *Service) requireSkillGrant(ctx context.Context, organizationID, projectID, skillID string) error {
+	if skillID == "" {
+		return s.authz.Require(ctx, authz.Project(organizationID, projectID).ReadSkills())
 	}
-	return s.authz.RequireAnyUnblocked(ctx, checks...)
+	return s.authz.Require(ctx, authz.Skill(projectID, skillID).Read())
 }
 
 func manifestErrorMessage(err error) string {
@@ -684,7 +678,7 @@ func (s *Service) recordVersion(
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -773,7 +767,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 }
 
 func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -874,7 +868,7 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 }
 
 func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -979,7 +973,7 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 }
 
 func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*types.Skill, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1176,7 +1170,7 @@ func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs 
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1272,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 }
 
 func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.ListSkillTagsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1295,7 +1289,7 @@ func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.Li
 }
 
 func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPayload) (*gen.ListSkillFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1385,7 +1379,7 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 }
 
 func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSuggestionPayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return err
 	}
@@ -1406,7 +1400,7 @@ func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSug
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSkillResult, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
+	authCtx, logger, err := s.requireSkillAccess(ctx, payload.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1535,7 +1529,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 }
 
 func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListUnknownActivationsPayload) (*gen.ListUnknownSkillActivationsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1580,7 +1574,7 @@ func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListU
 }
 
 func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -1645,7 +1639,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 }
 
 func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload) (*types.SkillDistribution, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
+	authCtx, logger, err := s.requireSkillAccess(ctx, payload.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1655,9 +1649,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	}
 	var mutationErr error
 	if target.mutationScope() == authz.ScopePluginWrite {
-		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+		mutationErr = s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).PublishPlugin())
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		mutationErr = s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 	}
 	if err := mutationErr; err != nil {
 		return nil, err
@@ -1840,7 +1834,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
+	authCtx, logger, err := s.requireSkillAccess(ctx, payload.ID)
 	if err != nil {
 		return err
 	}
@@ -1850,9 +1844,9 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	}
 	var mutationErr error
 	if target.mutationScope() == authz.ScopePluginWrite {
-		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+		mutationErr = s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).PublishPlugin())
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		mutationErr = s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 	}
 	if err := mutationErr; err != nil {
 		return err
@@ -1930,7 +1924,7 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 }
 
 func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistributionsPayload) (*gen.ListSkillDistributionsResult, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, conv.PtrValOr(payload.SkillID, ""))
+	authCtx, logger, err := s.requireSkillAccess(ctx, conv.PtrValOr(payload.SkillID, ""))
 	if err != nil {
 		return nil, err
 	}
@@ -1996,7 +1990,7 @@ func newShareToken() (string, error) {
 }
 
 func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.SkillShareLink, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -2090,7 +2084,7 @@ func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.
 }
 
 func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return err
 	}
@@ -2180,7 +2174,7 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 }
 
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return err
 	}
