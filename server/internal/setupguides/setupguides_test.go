@@ -24,11 +24,22 @@ func TestPinnedVersionMatchesGoMod(t *testing.T) {
 func TestListCoversEveryPinnedGuide(t *testing.T) {
 	t.Parallel()
 
+	pinned := guides.Guides()
 	list := List()
-	require.Len(t, list, len(guides.Slugs()))
-	for _, guide := range list {
+	require.Len(t, list, len(pinned))
+	seen := make(map[string]struct{}, len(list))
+	for i, guide := range list {
 		require.NotEmpty(t, guide.Slug)
 		require.NotEmpty(t, guide.Title)
+		require.Equal(t, string(pinned[i].Slug), guide.Slug, "List keeps the export's order")
+		require.Equal(t, pinned[i].Title, guide.Title)
+		_, duplicate := seen[guide.Slug]
+		require.False(t, duplicate, "slug %q is listed twice", guide.Slug)
+		seen[guide.Slug] = struct{}{}
+	}
+	for _, slug := range guides.Slugs() {
+		_, ok := seen[string(slug)]
+		require.True(t, ok, "pinned guide %q is missing from List", slug)
 	}
 }
 
