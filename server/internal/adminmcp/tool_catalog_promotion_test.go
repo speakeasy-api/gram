@@ -183,6 +183,7 @@ func TestCatalogPromotionProjectsGuideDeliveryOutcomes(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, tt.status, safe.DocsStatus)
 			require.Equal(t, tt.url, safe.DocsURL)
+			require.Equal(t, tt.deliveryError, safe.DeliveryError)
 		})
 	}
 }
