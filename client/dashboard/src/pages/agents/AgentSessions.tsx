@@ -440,9 +440,6 @@ export function AgentSessionsSection({
               {selected.authorizerUserId
                 ? ` Authorized by ${nameFor(selected.authorizerUserId)}.`
                 : ""}
-              {selected.keyIssuerUserId
-                ? ` Issued by ${nameFor(selected.keyIssuerUserId)}.`
-                : ""}
             </Text>
           )}
           {revokeError && (
