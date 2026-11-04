@@ -1111,7 +1111,7 @@ func TestShutdownAndWait_CancelsIOAndDiscardsBacklog(t *testing.T) {
 				t.Fatal("writer still running after shutdown")
 			}
 			require.Zero(t, r.unfinished.Load())
-			require.Zero(t, len(r.queue))
+			require.Empty(t, r.queue)
 			require.LessOrEqual(t, conn.prepares.Load(), int64(1))
 			require.LessOrEqual(t, check.checks.Load(), int64(1))
 		})
