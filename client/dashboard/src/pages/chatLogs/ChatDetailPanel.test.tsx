@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatDetailSheet } from "./ChatDetailPanel";
+import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
 
 const state = vi.hoisted(() => ({ chat: undefined as Chat | undefined }));
 
@@ -342,5 +343,32 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
     expect(userTurnName()).toBe("Ada Lovelace");
+  });
+});
+
+describe("ChatDetailSheet session cost", () => {
+  afterEach(() => {
+    cleanup();
+    state.chat = undefined;
+  });
+
+  it("shows unknown cost, not $0, for a session that used tokens but reports no cost", () => {
+    // Codex and OpenClaw report tokens alone; their missing cost arrives as 0.
+    renderPanel(makeChat({ totalCost: 0, totalTokens: 1200 }));
+
+    expect(screen.queryByText("$0.00")).toBeNull();
+    // The details trigger reads a dash where the cost would be.
+    expect(screen.getByLabelText("Unknown cost")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /tokens/ }));
+    const details = screen.getByText("Session details").parentElement!;
+    expect(within(details).getByText(UNKNOWN_COST_EXPLANATION)).toBeTruthy();
+  });
+
+  it("shows the cost a session reports", () => {
+    renderPanel(makeChat({ totalCost: 0.42, totalTokens: 1200 }));
+
+    expect(screen.getAllByText("$0.42").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Unknown cost")).toBeNull();
   });
 });
