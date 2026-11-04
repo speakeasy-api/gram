@@ -137,6 +137,17 @@ type inference
 
   permission execute = inference:execute  answers inference:execute
 
+type agent
+  parent       organization
+  stored_kind  agent
+
+  attr owner: user
+  attr deleted: bool
+  attr owner_reassignment_required_at: nullable_timestamp
+  guard live = is_false(deleted) and is_null(owner_reassignment_required_at)
+
+  permission is_owner = when live (is(owner))
+
 type chat
   parent       project
   stored_kind  chat
@@ -145,5 +156,13 @@ type chat
   grant chat:read "Read session transcripts"  sensitive  anchored_at: organization, project, self
   grant chat:write "Change session transcripts"  anchored_at: organization, project, self
 
+  attr internal_user_id: nullable_string
+  attr external_user_id: nullable_string
+  attr agent: agent
+  attr author: user = derived(internal_user_id)
+  guard agent_only = is_null(internal_user_id) and null_or_empty(external_user_id) and present(agent)
+
   permission read_grant = chat:read | chat:write  answers chat:read
   permission write_grant = chat:write  answers chat:write
+  permission read = read_grant | is(author) | when agent_only (via(agent).is_owner)
+  permission write = write_grant | is(author)

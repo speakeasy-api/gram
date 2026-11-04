@@ -19,13 +19,16 @@ import (
 // only in tests; TestRegistryEvaluatorSliceMatchesFrozenTables keeps them
 // honest against scope_tables.golden.
 func evaluatorSliceDeclarations() []s.TypeDecl {
-	access := string(GrantSurfaceAccess)
-	return append(frozenSliceDeclarations(),
-		s.NewType("agent", s.Parent("organization"), s.GrantSurface(access),
-			s.Grant(ScopeAgentRead, s.GrantSpec{Description: "Read agents", DefaultFor: []string{SystemRoleAdmin}}),
-			s.Permission("read", s.Rel(ScopeAgentRead), s.AnswersScope(string(ScopeAgentRead))),
-		),
-	)
+	decls := make([]s.TypeDecl, 0, len(frozenSliceDeclarations())+1)
+	for _, decl := range frozenSliceDeclarations() {
+		if decl.Name() != "agent" {
+			decls = append(decls, decl)
+		}
+	}
+	return append(decls, agentOwnershipType(
+		s.Grant(ScopeAgentRead, s.GrantSpec{Description: "Read agents", DefaultFor: []string{SystemRoleAdmin}}),
+		s.Permission("read", s.Rel(ScopeAgentRead), s.AnswersScope(string(ScopeAgentRead))),
+	))
 }
 
 func compileEvaluatorSlice(t *testing.T) *s.Registry {

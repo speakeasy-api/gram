@@ -680,6 +680,36 @@ func (q *Queries) GetActiveUserCountByMessages(ctx context.Context, arg GetActiv
 	return active_user_count, err
 }
 
+const getAgentOwnership = `-- name: GetAgentOwnership :one
+SELECT
+  a.owner_user_id,
+  a.deleted,
+  (a.owner_reassignment_required_at IS NOT NULL)::boolean AS owner_reassignment_required
+FROM agents a
+WHERE a.id = $1
+  AND a.organization_id = $2
+`
+
+type GetAgentOwnershipParams struct {
+	AgentID        uuid.UUID
+	OrganizationID string
+}
+
+type GetAgentOwnershipRow struct {
+	OwnerUserID               string
+	Deleted                   bool
+	OwnerReassignmentRequired bool
+}
+
+// The ownership state of the agent that ran a chat session, as the chat's
+// ownership rule reads it. No row when the agent is not in the organization.
+func (q *Queries) GetAgentOwnership(ctx context.Context, arg GetAgentOwnershipParams) (GetAgentOwnershipRow, error) {
+	row := q.db.QueryRow(ctx, getAgentOwnership, arg.AgentID, arg.OrganizationID)
+	var i GetAgentOwnershipRow
+	err := row.Scan(&i.OwnerUserID, &i.Deleted, &i.OwnerReassignmentRequired)
+	return i, err
+}
+
 const getAssistantSessionSummaryProjection = `-- name: GetAssistantSessionSummaryProjection :one
 WITH target_assistant AS (
   SELECT a.id
@@ -1828,31 +1858,6 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const isAgentOwner = `-- name: IsAgentOwner :one
-SELECT EXISTS (
-  SELECT 1
-  FROM agents a
-  WHERE a.id = $1
-    AND a.organization_id = $2
-    AND a.owner_user_id = $3
-    AND a.owner_reassignment_required_at IS NULL
-    AND a.deleted IS FALSE
-)
-`
-
-type IsAgentOwnerParams struct {
-	AgentID        uuid.UUID
-	OrganizationID string
-	OwnerUserID    string
-}
-
-func (q *Queries) IsAgentOwner(ctx context.Context, arg IsAgentOwnerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isAgentOwner, arg.AgentID, arg.OrganizationID, arg.OwnerUserID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :one

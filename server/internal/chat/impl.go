@@ -1024,7 +1024,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 // destructive mutations are deliberately separate scopes: a session reviewer
 // holding chat:read can open every transcript in the project and pin one as a
 // shared bookmark, but deleting or otherwise mutating someone else's session
-// is destructive and needs chat:write. Owners bypass both.
+// is destructive and needs chat:write. Authors pass both without a grant.
 type chatAccess int
 
 const (
@@ -1032,12 +1032,41 @@ const (
 	chatAccessWrite
 )
 
-func (a chatAccess) operation(chat repo.GetChatRow) authz.Operation {
-	ref := authz.Chat(chat.ID.String())
-	if a == chatAccessWrite {
-		return ref.Write()
+// chatOperation names the check for one access to a chat, together with the
+// chat's owner so the ownership rule can decide. Only reading an agent-only
+// session (no author and no external user) consults the agent that ran it,
+// so only such a read loads the agent.
+func (s *Service) chatOperation(ctx context.Context, chat repo.GetChatRow, access chatAccess) (authz.Operation, error) {
+	owner := authz.ChatOwner{
+		UserID:         conv.FromPGText[string](chat.UserID),
+		ExternalUserID: conv.FromPGText[string](chat.ExternalUserID),
+		Agent:          nil,
 	}
-	return ref.Read()
+	ref := authz.Chat(chat.ID.String())
+	if access == chatAccessWrite {
+		return ref.WithOwner(owner).Write(), nil
+	}
+	agentOnly := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
+	if agentOnly {
+		agent, err := s.repo.GetAgentOwnership(ctx, repo.GetAgentOwnershipParams{
+			AgentID:        chat.AgentID.UUID,
+			OrganizationID: chat.OrganizationID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			var none authz.Operation
+			return none, oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
+		default:
+			owner.Agent = &authz.AgentOwner{
+				ID:                        chat.AgentID.UUID.String(),
+				OwnerUserID:               agent.OwnerUserID,
+				Deleted:                   agent.Deleted,
+				OwnerReassignmentRequired: agent.OwnerReassignmentRequired,
+			}
+		}
+	}
+	return ref.WithOwner(owner).Read(), nil
 }
 
 // authorizeChatRead decides whether the caller may read a chat's content.
@@ -1102,40 +1131,29 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 		}
 	}
 
-	// Gate dashboard access on chat:read or chat:write. The check is a no-op
-	// unless RBAC is enforced for the request (see authz.Client.ShouldEnforce —
-	// API-key and sessionless callers are exempt). Members can always reach
-	// sessions they own, so bypass the scope check for the owner; reaching
-	// anyone else's session requires an explicit grant, which no system role
-	// holds. The managed-assistant runtime is exempt — it consumes transcripts
-	// programmatically, not as a reviewer.
-	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	// An agent's session has no human owner, so the agent's owner stands in for
-	// one — for reading only. A session that also carries a human identity
-	// (user_id or external_user_id) stays that human's, whatever agent_id says.
-	// Deleting or otherwise mutating what the agent did still needs chat:write.
-	agentOnlySession := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
-	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && agentOnlySession {
-		owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
-			AgentID:        chat.AgentID.UUID,
-			OrganizationID: chat.OrganizationID,
-			OwnerUserID:    authCtx.UserID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
-		}
-		isOwner = owns
+	// Gate dashboard access on the chat's read or write permission. The check
+	// is a no-op unless RBAC is enforced for the request (see
+	// authz.Client.ShouldEnforce: API-key and sessionless callers are exempt).
+	// The permission is declared with the chat type: the session's author
+	// passes on ownership alone, so does the owner of the live agent that ran
+	// an agent-only session, for reading; anyone else needs a grant, which no
+	// system role holds. The managed-assistant runtime is exempt, as it
+	// consumes transcripts programmatically, not as a reviewer.
+	if isAssistantCall {
+		return nil
 	}
-	if !isAssistantCall && !isOwner {
-		if filteredGrant != nil {
-			if !*filteredGrant {
-				return oops.C(oops.CodeForbidden)
-			}
-			return nil
+	if filteredGrant != nil {
+		if !*filteredGrant {
+			return oops.C(oops.CodeForbidden)
 		}
-		if err := s.authzClient.Require(ctx, access.operation(chat)); err != nil {
-			return err
-		}
+		return nil
+	}
+	op, err := s.chatOperation(ctx, chat, access)
+	if err != nil {
+		return err
+	}
+	if err := s.authzClient.Require(ctx, op); err != nil {
+		return err
 	}
 
 	return nil

@@ -44,6 +44,7 @@ func DefaultDeclarations() []s.TypeDecl {
 		skillType(),
 		assistantType(),
 		inferenceType(),
+		agentOwnershipType(),
 		chatType(),
 	}
 }
@@ -302,16 +303,29 @@ func inferenceType() s.TypeDecl {
 	)
 }
 
-// chatType declares session transcripts. The permissions answer the stored
-// grants only; the service decides ownership.
+// chatType declares session transcripts and who may reach them.
 //
 // chat:read and chat:write are not defaults for any system role: reading other
 // members' transcripts is sensitive and mutating them (rename, feedback,
 // delete) is destructive, so both are granted explicitly through a custom
 // role. Pinning follows chat:read, because a pin is a shared project bookmark.
-// Everyone reads and changes their own sessions through ownership.
+//
+// Everyone reads and changes their own sessions without a grant: read and
+// write also pass for the session's author. A session an agent ran with no
+// human or external user attached belongs to nobody, so the agent's owner
+// stands in for one, for reading only. read_grant and write_grant are the
+// grant halves alone, for views that list other people's sessions.
 func chatType() s.TypeDecl {
 	return s.NewType("chat", s.Parent("project"), s.GrantSurface(accessSurface),
+		s.Attr("internal_user_id", s.FactNullableString),
+		s.Attr("external_user_id", s.FactNullableString),
+		s.Attr("agent", "agent"),
+		s.Derived("author", s.NonEmptyPrincipal(s.FactUser, "internal_user_id")),
+		s.Guard("agent_only", s.All(
+			s.IsNull("internal_user_id"),
+			s.NullOrEmpty("external_user_id"),
+			s.Present("agent"),
+		)),
 		s.ScopePermission("read_grant", ScopeChatRead, s.GrantSpec{
 			Description: "Read session transcripts",
 			AnchoredAt:  orgProjectAndSelf,
@@ -321,5 +335,27 @@ func chatType() s.TypeDecl {
 			Description: "Change session transcripts",
 			AnchoredAt:  orgProjectAndSelf,
 		}),
+		s.Permission("read", s.Union(
+			s.Perm("read_grant"),
+			s.Is("author"),
+			s.When("agent_only", s.Via("agent", "is_owner")),
+		)),
+		s.Permission("write", s.Union(s.Perm("write_grant"), s.Is("author"))),
 	)
+}
+
+// agentOwnershipType declares the one agent rule chat ownership reads: who
+// owns a live agent. Agent grants are not declared here yet; their scopes
+// stay in undeclaredScopes until the agent type is declared in full, and
+// extra adds to the type until then.
+func agentOwnershipType(extra ...s.TypeOption) s.TypeDecl {
+	opts := []s.TypeOption{
+		s.Parent("organization"), s.StoredKind("agent"), s.GrantSurface(accessSurface),
+		s.Attr("owner", s.FactUser),
+		s.Attr("deleted", s.FactBool),
+		s.Attr("owner_reassignment_required_at", s.FactNullableTimestamp),
+		s.Guard("live", s.All(s.IsFalse("deleted"), s.IsNull("owner_reassignment_required_at"))),
+		s.Permission("is_owner", s.When("live", s.Is("owner"))),
+	}
+	return s.NewType("agent", append(opts, extra...)...)
 }
