@@ -119,15 +119,14 @@ jobs:
       - name: Test
         run: mise run test:rbac-e2e
 
-      # The report and per-test results only: the persona world file and
-      # storage states next to them hold session tokens and API keys.
+      # The HTML report only: the persona world file and storage states hold
+      # session tokens and API keys, and traces are off in CI for the same
+      # reason.
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rbac-e2e-playwright
-          path: |
-            e2e/.playwright/rbac-report
-            e2e/.playwright/rbac-results
+          path: e2e/.playwright/rbac-report
           retention-days: 14
           if-no-files-found: ignore
