@@ -395,7 +395,10 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
 	if err != nil {
-		return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		if errors.Is(err, errTypedLoginDenied) {
+			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		}
+		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID

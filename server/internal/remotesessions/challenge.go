@@ -1825,14 +1825,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		autoRefresh = *state.AutoRefresh
 	}
 
-	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Speakeasy stores it. The
-	// client-row lock serializes the write against the issuer-delete orphan
-	// cascade, which locks the same row before sweeping the client's
-	// sessions: a callback that acquires the lock after that cascade
-	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke. A rejected
-	// callback leaves the revocation armed above still standing.
 	// Recheck subject permission after the exchange, before taking database
 	// locks. The exact typed binding is then locked through grant commit below.
 	if err := m.validateTypedAuthorization(ctx, state); err != nil {
@@ -1849,7 +1841,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// legacy callbacks unchanged, but follow that order for typed logins too.
 	if a := state.TypedAuthorization; a != nil {
 		if _, err := txQueries.LockTypedRemoteLoginServer(ctx, remotesessions_repo.LockTypedRemoteLoginServerParams{McpServerID: a.ServerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID}); err != nil {
-			return none, oops.E(oops.CodeUnauthorized, err, "typed connection server is no longer valid").LogWarn(ctx, logger)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return none, oops.E(oops.CodeUnauthorized, err, "typed connection server is no longer valid").LogWarn(ctx, logger)
+			}
+			return none, oops.E(oops.CodeUnexpected, err, "lock typed connection server").LogError(ctx, logger)
 		}
 	}
 
@@ -1866,17 +1861,21 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
 	}
 
+	// The upstream exchange has already happened, so the token pair exists
+	// either way; this transaction decides whether Speakeasy stores it. The
+	// client-row lock serializes the write against the issuer-delete orphan
+	// cascade, which locks the same row before sweeping the client's
+	// sessions: a callback that acquires the lock after that cascade
+	// committed re-reads the binding as dead and is rejected here, instead
+	// of resurrecting a grant no live issuer can reach or revoke. A rejected
+	// callback leaves the revocation armed above still standing.
+	//
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 
-	// Deliberately the issuer this login started from, not "any live binding
-	// on the client": the consent that produced this code was given on that
-	// issuer's surface, so its deletion ends the login rather than quietly
-	// re-homing the grant onto a sibling the user was never shown. The user
-	// re-authorizes through the surviving surface instead.
 	if state.TypedAuthorization != nil {
 		a := state.TypedAuthorization
 
@@ -1884,9 +1883,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			AuthClientID: a.AuthClientID, OrganizationID: state.OrganizationID, ProjectID: state.ProjectID,
 			RemoteSessionClientID: state.RemoteSessionClientID, McpServerID: a.ServerID,
 		}); err != nil {
-			return none, oops.E(oops.CodeUnauthorized, err, "typed connection binding is no longer valid").LogWarn(ctx, logger)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return none, oops.E(oops.CodeUnauthorized, err, "typed connection binding is no longer valid").LogWarn(ctx, logger)
+			}
+			return none, oops.E(oops.CodeUnexpected, err, "lock typed connection binding").LogError(ctx, logger)
 		}
 	} else {
+		// Deliberately the issuer this login started from, not "any live binding
+		// on the client": the consent that produced this code was given on that
+		// issuer's surface, so its deletion ends the login rather than quietly
+		// re-homing the grant onto a sibling the user was never shown. The user
+		// re-authorizes through the surviving surface instead.
 		bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
 			RemoteSessionClientID: state.RemoteSessionClientID,
 			UserSessionIssuerID:   state.UserSessionIssuerID,

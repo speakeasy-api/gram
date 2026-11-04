@@ -12492,17 +12492,19 @@ JOIN mcp_server_auth_clients AS link
 JOIN mcp_servers AS m
   ON m.id = link.mcp_server_id AND m.project_id = link.project_id
 JOIN projects AS p ON p.id = m.project_id
+JOIN remote_session_clients AS r ON r.id = c.remote_session_client_id
 WHERE c.id = $1::uuid
   AND c.organization_id = $2::text
   AND (c.project_id IS NULL OR c.project_id = $3::uuid)
   AND c.remote_session_client_id = $4::uuid
-  AND c.client_type = 'remote_session'
+  AND c.client_type IN ('remote_session', 'ema')
+  AND r.deleted IS FALSE
   AND c.enabled AND c.deleted IS FALSE
   AND link.mcp_server_id = $5::uuid
   AND link.project_id = $3::uuid AND link.deleted IS FALSE
   AND m.deleted IS FALSE
   AND p.organization_id = $2::text AND p.deleted IS FALSE
-FOR SHARE OF c, link, m, p
+FOR SHARE OF c, link, m, p, r
 `
 
 type LockTypedRemoteLoginAuthorizationParams struct {

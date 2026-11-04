@@ -2,9 +2,11 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -12,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+var errTypedLoginDenied = errors.New("typed connection is not authorized")
 
 // ValidateRemoteLoginTypedAuthorization rechecks the exact binding and subject
 // that authorized a typed login, not another client that happens to be usable.
@@ -21,27 +25,30 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		a.Subject.String() != state.Subject.String() || a.OrganizationID == "" ||
 		a.OrganizationID != state.OrganizationID || a.ProjectID == uuid.Nil || a.ProjectID != state.ProjectID ||
 		a.ServerID == uuid.Nil || a.AuthClientID == uuid.Nil || a.RemoteSessionClientID == uuid.Nil || a.RemoteSessionClientID != state.RemoteSessionClientID {
-		return fmt.Errorf("invalid typed login authorization")
+		return fmt.Errorf("%w: invalid typed login authorization", errTypedLoginDenied)
 	}
 	if a.Subject.Kind != urn.SessionSubjectKindUser && a.Subject.Kind != urn.SessionSubjectKindAgent {
-		return fmt.Errorf("typed login requires a represented subject")
+		return fmt.Errorf("%w: typed login requires a represented subject", errTypedLoginDenied)
 	}
 	enforced, err := s.consentAuthChoicesEnforced(ctx, a.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("load typed authorization mode: %w", err)
 	}
 	if !enforced {
-		return fmt.Errorf("typed login authorization is no longer enforced")
+		return fmt.Errorf("%w: typed login authorization is no longer enforced", errTypedLoginDenied)
 	}
 	if state.McpServerID.Valid && state.McpServerID.UUID != a.ServerID {
-		return fmt.Errorf("typed login server changed")
+		return fmt.Errorf("%w: typed login server changed", errTypedLoginDenied)
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: a.ServerID, OrganizationID: a.OrganizationID})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: typed login server no longer exists", errTypedLoginDenied)
+		}
 		return fmt.Errorf("load typed login server: %w", err)
 	}
 	if server.ProjectID != a.ProjectID {
-		return fmt.Errorf("typed login project changed")
+		return fmt.Errorf("%w: typed login project changed", errTypedLoginDenied)
 	}
 	// Only fields consumed by subject admission are needed here.
 	//nolint:exhaustruct // Callback subject admission does not resolve an endpoint.
@@ -62,15 +69,15 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		return fmt.Errorf("authorize typed login server: %w", err)
 	}
 	if !decision.Allowed {
-		return fmt.Errorf("typed login server access is no longer authorized")
+		return fmt.Errorf("%w: typed login server access is no longer authorized", errTypedLoginDenied)
 	}
 	res, err := s.resolveAuthClientChoiceForConsent(ctx, a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
 	if err != nil {
 		return fmt.Errorf("authorize typed login: %w", err)
 	}
 	if (res.outcome != authClientResolved && res.outcome != authClientLegacy) || res.clientID != a.AuthClientID ||
-		res.clientType != authClientTypeRemoteSession || !res.choice.clientID.Valid || res.choice.clientID.UUID != a.RemoteSessionClientID {
-		return fmt.Errorf("typed login binding is no longer authorized")
+		(res.clientType != authClientTypeRemoteSession && res.clientType != authClientTypeEMA) || !res.choice.clientID.Valid || res.choice.clientID.UUID != a.RemoteSessionClientID {
+		return fmt.Errorf("%w: typed login binding is no longer authorized", errTypedLoginDenied)
 	}
 	return nil
 }
@@ -85,26 +92,39 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		serverID, projectID = member.serverID, member.projectID
 	}
 	if !serverID.Valid && (endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway()) {
-		// Resource ambiguity must not erase the typed authorization boundary.
-		// Only proxied members offer typed registrations; hosted members retain
-		// their existing issuer-bound flow.
+		// Without a resource-qualified member, require exactly one authorized
+		// typed member rather than choosing arbitrary server provenance. Only
+		// proxied members offer typed registrations; hosted members retain their
+		// existing issuer-bound flow.
 		members, err := s.consentSubjectMembers(ctx, endpoint, challenge)
 		if err != nil {
 			return nil, fmt.Errorf("load typed login members: %w", err)
 		}
+		var selected *remotesessions.TypedAuthorization
+		var denied error
 		for _, candidate := range members {
 			if candidate.backend != metaMemberBackendProxied {
 				continue
 			}
 			a, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challenge, client, chosenMetaMember{serverID: uuid.NullUUID{UUID: candidate.serverID, Valid: true}, projectID: candidate.projectID})
 			if err != nil {
-				return nil, err
+				if !errors.Is(err, errTypedLoginDenied) {
+					return nil, err
+				}
+				denied = err
+				continue
 			}
 			if a != nil {
-				return a, nil
+				if selected != nil {
+					return nil, fmt.Errorf("%w: connection must identify one server", errTypedLoginDenied)
+				}
+				selected = a
 			}
 		}
-		return nil, nil
+		if selected != nil {
+			return selected, nil
+		}
+		return nil, denied
 	}
 	if !serverID.Valid || endpoint.ToolsetID.Valid {
 		return nil, nil
@@ -115,7 +135,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 	}
 	var denied error
 	for _, row := range rows {
-		if !row.AuthClientID.Valid || row.ClientType.String != authClientTypeRemoteSession || !row.RemoteSessionClientID.Valid || row.RemoteSessionClientID.UUID != client.ID {
+		if !row.AuthClientID.Valid || (row.ClientType.String != authClientTypeRemoteSession && row.ClientType.String != authClientTypeEMA) || !row.RemoteSessionClientID.Valid || row.RemoteSessionClientID.UUID != client.ID {
 			continue
 		}
 		a := &remotesessions.TypedAuthorization{OrganizationID: endpoint.OrganizationID, ProjectID: projectID, ServerID: serverID.UUID, AuthClientID: row.AuthClientID.UUID, RemoteSessionClientID: client.ID, Subject: *challenge.Subject}
@@ -124,6 +144,9 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err == nil {
 			return a, nil
 		} else {
+			if !errors.Is(err, errTypedLoginDenied) {
+				return nil, err
+			}
 			denied = err
 		}
 	}
