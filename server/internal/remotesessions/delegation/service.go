@@ -26,7 +26,15 @@ var (
 	// ErrConfiguration and reads the same, so callers that do not need the
 	// distinction see no change.
 	ErrStaleRegistration error = staleRegistrationError{}
+
+	// ErrRetainedConfiguration identifies a saved sign-in paused for automatic retry.
+	ErrRetainedConfiguration error = retainedConfigurationError{}
 )
+
+type retainedConfigurationError struct{}
+
+func (retainedConfigurationError) Error() string { return ErrConfiguration.Error() }
+func (retainedConfigurationError) Unwrap() error { return ErrConfiguration }
 
 // staleRegistrationError is ErrStaleRegistration's type.
 type staleRegistrationError struct{}
@@ -200,7 +208,7 @@ func configurationFailureError(c delegationCredential) error {
 	if c.retryAfter.IsZero() {
 		return ErrReauthentication
 	}
-	return ErrConfiguration
+	return ErrRetainedConfiguration
 }
 
 func usableRefresh(c delegationCredential, now time.Time) bool {
@@ -786,7 +794,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	retained := configurationFailureRetained(c)
 	kind := failure.Kind
 	// A token refused this long may be dead. A client rejection or a local setup fault says nothing about it.
-	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
+	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !c.observedAt.IsZero() && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
 	switch kind {
@@ -807,11 +815,13 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
 		next.retryAfter = s.now().Add(configurationRetryDelay)
-		// Keep the first refusal's time, which configurationRetryLimit counts from.
-		if retained && kind == RefreshConfiguration {
+		// Only token-shaped refusals start the clock; client/setup failures reset it.
+		if kind != RefreshConfiguration {
+			next.observedAt = time.Time{}
+		} else if retained && !c.observedAt.IsZero() {
 			next.observedAt = c.observedAt
 		}
-		outcome = ErrConfiguration
+		outcome = ErrRetainedConfiguration
 	case RefreshInvalidIdentity:
 		next = clearDelegationSecrets(next)
 		next.status = "configuration_failure"
@@ -819,8 +829,10 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	case RefreshRetryable, RefreshSetupRetryable:
 		next.retryAfter = s.now().Add(time.Minute)
 		if retained {
-			next.observedAt = c.observedAt
-			outcome = ErrConfiguration
+			if !c.observedAt.IsZero() || kind == RefreshSetupRetryable {
+				next.observedAt = c.observedAt
+			}
+			outcome = ErrRetainedConfiguration
 		} else {
 			next.status = "temporary_failure"
 		}

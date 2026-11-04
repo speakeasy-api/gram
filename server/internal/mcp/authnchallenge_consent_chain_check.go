@@ -209,8 +209,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 	case identitychaining.ReasonReauthenticationRequired:
 		return rejected("A current identity provider sign-in for %s is required. Close this page and start connecting again, or use a separate sign-in.")
 	case identitychaining.ReasonConfigurationRequired:
-		// A kept sign-in the provider turned down retries on its own.
-		if outcome.Stage == identitychaining.StageDelegation {
+		if outcome.Retained {
 			return rejected("Your saved company sign-in for %s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use a separate sign-in.")
 		}
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")

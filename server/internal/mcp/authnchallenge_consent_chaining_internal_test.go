@@ -237,9 +237,12 @@ func TestConsentChainedCardOffersConnectForEveryDefinitiveRefusal(t *testing.T) 
 func TestConsentChainCheckKeptSignInSaysItRetries(t *testing.T) {
 	t.Parallel()
 
-	kept := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
+	kept := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: "", Retained: true}, "Example")
 	require.Equal(t, chainCheckRejected, kept.Status)
 	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use a separate sign-in.", kept.Message)
+
+	noToken := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
+	require.Equal(t, "Example isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.", noToken.Message, "no kept sign-in means nothing retries")
 
 	unset := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
 	require.Equal(t, "Example isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.", unset.Message)
