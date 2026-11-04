@@ -1910,7 +1910,7 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 }
 
 const getOwnedChatForRecall = `-- name: GetOwnedChatForRecall :one
-SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.cwd, c.updated_at, c.project_id
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = $1
@@ -1927,12 +1927,13 @@ type GetOwnedChatForRecallParams struct {
 }
 
 type GetOwnedChatForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
 }
 
 func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatForRecallParams) (GetOwnedChatForRecallRow, error) {
@@ -1942,6 +1943,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 		&i.ID,
 		&i.ExternalChatID,
 		&i.Title,
+		&i.TitleManuallySet,
 		&i.Cwd,
 		&i.UpdatedAt,
 		&i.ProjectID,
@@ -1950,7 +1952,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 }
 
 const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
@@ -1964,15 +1966,21 @@ type GetPlatformChatSearchChatParams struct {
 }
 
 type GetPlatformChatSearchChatRow struct {
-	ID          uuid.UUID
-	OwnerUserID string
-	Title       string
+	ID               uuid.UUID
+	OwnerUserID      string
+	Title            string
+	TitleManuallySet bool
 }
 
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
 	var i GetPlatformChatSearchChatRow
-	err := row.Scan(&i.ID, &i.OwnerUserID, &i.Title)
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.TitleManuallySet,
+	)
 	return i, err
 }
 
@@ -5038,7 +5046,7 @@ func (q *Queries) ListHeadlessCallerClients(ctx context.Context, arg ListHeadles
 
 const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
 
-SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
 FROM chats c
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -5057,15 +5065,16 @@ type ListOwnedChatSessionsForRecallParams struct {
 }
 
 type ListOwnedChatSessionsForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Summary        pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
-	ProjectName    string
-	ProjectSlug    string
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Summary          pgtype.Text
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
 }
 
 // Session recall (list_my_sessions / continue_session). Every read below
@@ -5094,6 +5103,7 @@ func (q *Queries) ListOwnedChatSessionsForRecall(ctx context.Context, arg ListOw
 			&i.ID,
 			&i.ExternalChatID,
 			&i.Title,
+			&i.TitleManuallySet,
 			&i.Summary,
 			&i.Cwd,
 			&i.UpdatedAt,
@@ -8895,6 +8905,7 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
        CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
        CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
@@ -8952,20 +8963,21 @@ type SearchPlatformChatMessagesParams struct {
 }
 
 type SearchPlatformChatMessagesRow struct {
-	ID          uuid.UUID
-	ChatID      uuid.UUID
-	Seq         int64
-	CreatedAt   pgtype.Timestamptz
-	Role        string
-	Generation  int32
-	Source      string
-	UserID      string
-	ChatTitle   string
-	OwnerUserID string
-	Content     string
-	ToolCalls   []byte
-	ContentRaw  []byte
-	Oversized   bool
+	ID                   uuid.UUID
+	ChatID               uuid.UUID
+	Seq                  int64
+	CreatedAt            pgtype.Timestamptz
+	Role                 string
+	Generation           int32
+	Source               string
+	UserID               string
+	ChatTitle            string
+	ChatTitleManuallySet bool
+	OwnerUserID          string
+	Content              string
+	ToolCalls            []byte
+	ContentRaw           []byte
+	Oversized            bool
 }
 
 // Literal substring search over captured messages in one project and interval,
@@ -9006,6 +9018,7 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 			&i.Source,
 			&i.UserID,
 			&i.ChatTitle,
+			&i.ChatTitleManuallySet,
 			&i.OwnerUserID,
 			&i.Content,
 			&i.ToolCalls,
