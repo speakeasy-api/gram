@@ -22597,6 +22597,7 @@ func marshalAdminAdminMcpServerToAdminMcpServerResponseBody(v *admin.AdminMcpSer
 // *AuditLogResponseBody from a value of type *admin.AuditLog.
 func marshalAdminAuditLogToAuditLogResponseBody(v *admin.AuditLog) *AuditLogResponseBody {
 	res := &AuditLogResponseBody{
+		IsInternal:         v.IsInternal,
 		ID:                 v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,

@@ -21,6 +21,7 @@ export function anActivityLog(overrides: Partial<AuditLog> = {}): AuditLog {
     action: "organization:settings_updated",
     actingSurface: "dashboard",
     category: "configuration",
+    isInternal: false,
     subjectId: "org_1",
     subjectType: "organization",
     subjectDisplayName: "Test Org",
