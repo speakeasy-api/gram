@@ -49,8 +49,9 @@ type metaToolCallAttempt struct {
 	// call's tool_call row.
 	logged bool
 
-	// proxied is set when the call is handed to a proxied member, whose
-	// upstream dispatch writes the row.
+	// proxied is set once a proxied member's tools/call is sent upstream,
+	// where the remotemcp interceptor writes the row. A dial or session
+	// failure before that is logged from the attempt.
 	proxied bool
 
 	// status is the HTTP status of a failure answered as an isError result.
@@ -71,6 +72,22 @@ func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 		proxied:     false,
 		status:      0,
 		message:     "",
+	}
+}
+
+// markMetaToolCallProxied records that the call on ctx reached a proxied
+// member's upstream, whose interceptor writes its row.
+func markMetaToolCallProxied(ctx context.Context) {
+	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
+		attempt.proxied = true
+	}
+}
+
+// failMetaToolCall records on the call on ctx a failure answered as an
+// isError result.
+func failMetaToolCall(ctx context.Context, status int, message string) {
+	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
+		attempt.fail(status, message)
 	}
 }
 
@@ -154,6 +171,7 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 	logAttrs.RecordStatusCode(status)
 	logAttrs.RecordRequestBody(int64(len(arguments)))
 	logAttrs.RecordRequestBodyContent(arguments)
+	logAttrs.RecordResponseBody(int64(len(message)))
 	logAttrs.RecordResponseBodyContent([]byte(message))
 	logAttrs.RecordTraceContext(ctx)
 	logAttrs.RecordAuthenticatedActor(ctx)

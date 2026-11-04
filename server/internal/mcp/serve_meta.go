@@ -573,8 +573,9 @@ func (s *Service) callMetaServerTool(
 	// revoked grant lands between requests the same way.
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
-		// A tool call that never reached a member still failed as one.
-		if gate.execute {
+		// A tool call that never reached a member still failed as one. Live
+		// discovery reads also resolve credentials but stay discovery.
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool {
 			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
 			return nil, err
 		}
