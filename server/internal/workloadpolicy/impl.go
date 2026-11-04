@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
@@ -73,8 +74,10 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
-	audit  *audit.Logger
-	repo   *repo.Queries
+	// authzClient decides the service's typed authorization operations.
+	authzClient *authz.Client
+	audit       *audit.Logger
+	repo        *repo.Queries
 
 	// catalog is the platforms the Access Hub offers to trust.
 	catalog catalog.Source
@@ -102,6 +105,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	sharedHosts authserver.Hosts,
 	limitStore ratelimit.Store,
@@ -109,15 +113,16 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		repo:     repo.New(db),
-		catalog:  catalog.Embedded(),
-		features: features,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		authzClient: authzClient,
+		audit:       auditLogger,
+		repo:        repo.New(db),
+		catalog:     catalog.Embedded(),
+		features:    features,
 
 		sharedHosts: sharedHosts,
 
@@ -187,12 +192,14 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 	// organization is the resource the check names. There is no per-workload
 	// resource a grant could narrow to, which is why the dashboard treats this
 	// scope as unrestricted.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	policy := authz.WorkloadPolicy(authCtx.ActiveOrganizationID)
+	op := policy.Read()
+	if scope == authz.ScopeWorkloadWrite {
+		op = policy.Write()
+	} else if scope != authz.ScopeWorkloadRead {
+		return tenancy{}, oops.E(oops.CodeUnexpected, nil, "unsupported workload policy scope %q", scope).LogError(ctx, s.logger)
+	}
+	if err := s.authzClient.Require(ctx, op); err != nil {
 		return tenancy{}, err
 	}
 
@@ -913,14 +920,25 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 // using live membership, ownership, and grants for human assignment requests.
 func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx.Tx, agentID uuid.UUID) error {
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeAgentAuthorize,
-			ResourceKind: authz.ResourceKindAgent,
-			ResourceID:   agentID.String(),
-			Dimensions:   nil,
-		})
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		// The check names the agent's persisted owner, so a grant bounded to
+		// one owner's agents cannot authorize another owner's agent.
+		agent, err := agentrepo.New(dbtx).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agentID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeForbidden)
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error loading workload subject agent").LogError(ctx, s.logger)
+		}
+		if err := s.authzClient.Require(ctx, authz.Agent(agent.ID.String(), agent.OwnerUserID).Authorize()); err != nil {
+			return fmt.Errorf("authorize workload subject agent: %w", err)
+		}
+		return nil
 	}
-	_, _, err := agentmanagement.NewAuthorizer(s.authz, nil).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
+	_, _, err := agentmanagement.NewAuthorizer(s.authz, s.authzClient).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
 		return fmt.Errorf("authorize workload subject agent: %w", err)
 	}
