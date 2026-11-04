@@ -925,8 +925,10 @@ func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx
 			return oops.C(oops.CodeUnauthorized)
 		}
 		// The check names the agent's persisted owner, so a grant bounded to
-		// one owner's agents cannot authorize another owner's agent.
-		agent, err := agentrepo.New(dbtx).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agentID})
+		// one owner's agents cannot authorize another owner's agent. The row
+		// stays locked until commit so ownership cannot change underneath the
+		// admission, as on the session path.
+		agent, err := agentrepo.New(dbtx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agentID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeForbidden)
 		}
