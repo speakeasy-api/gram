@@ -1,15 +1,16 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
-import { HumanizeDateTime } from "@/lib/dates";
 import { IdentityLink } from "@/components/identity-link";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
 import { telemetryGetToolUsageTargets } from "@gram/client/funcs/telemetryGetToolUsageTargets";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useAgentSessionList } from "@/pages/agents/useAgentSessionList";
+import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
+import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { useUser } from "@/contexts/Auth";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { agentToolUsagePayload } from "./identityLocalTools";
@@ -19,14 +20,14 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { useIdentityProject, useIdentityWindow } from "./useIdentityQueries";
+import { summarizeAgentCredentialUse } from "./agentCredentialUse";
 
 /**
  * What an agent has actually been doing, in the window the page is set to.
  *
  * Telemetry attributes a call to exactly one principal, and for an agent that
- * is the agent itself — never also the human who authorized it. So the calls
- * here are the agent's own, and "who it acted for" has to be answered from
- * its sessions instead.
+ * is the agent itself. Whom it acted for is answered per server, from the
+ * credential each call was signed in with.
  */
 export function AgentIdentityUsage({
   agent,
@@ -196,94 +197,150 @@ export function AgentIdentityUsage({
         )}
       </IdentityPanel>
 
-      <AgentAuthorizers agent={agent} />
+      <AgentCredentialUsePanel agent={agent} />
     </>
   );
 }
 
+/** Calls read for "Acting on behalf of": the most one request returns. */
+const CREDENTIAL_TRACE_LIMIT = 1000;
+
+/** The trace target types a Speakeasy server signs in upstream. */
+const SERVED_TARGET_TYPES: ListToolUsageTracesPayloadTargetTypes[] = [
+  "hosted_mcp_server",
+  "tunneled_mcp_server",
+  "meta_mcp_server",
+];
+
 /**
- * The people whose authorization this agent has been acting under.
+ * Whom the agent acted for, per MCP server: the person whose connection
+ * signed its calls in, or no one when a shared credential did.
  *
- * Read from its sessions, not from its calls: a tool call records the agent
- * as the caller and nothing else, because the approving human is credential
- * provenance rather than the actor. The session is the only place the two are
- * recorded together.
+ * Read from the credential each call recorded, not from the agent's keys or
+ * sessions. The person who issued a key or approved a session let the agent
+ * connect; the credential is what the server saw. Not from the agent's
+ * configured sign-in permissions either: those are granted to every auth
+ * client at once today, so they cannot say which credential a server uses.
  */
-function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
-  // The same read the sessions table makes, under the same key, and followed
-  // to the last page: a count over one page of fifty names the wrong people
-  // for any agent busier than that.
-  const sessions = useAgentSessionList(agent, { all: true });
-  const canManage = sessions.canManage;
-  // A session carries the authorizer's id and nothing else, so the name comes
-  // from the member list. A failed read leaves the id, which is still true.
-  // Not read at all without permission to see the sessions it names.
-  const members = useMembers(undefined, undefined, {
-    enabled: canManage,
+function AgentCredentialUsePanel({
+  agent,
+}: {
+  agent: ManagedAgent;
+}): JSX.Element {
+  const client = useGramContext();
+  const viewer = useUser();
+  const canViewToolLogs = useCanViewToolLogs();
+  const { from, to } = useIdentityWindow();
+  const { slug: gramProject } = useIdentityProject();
+
+  const traces = useQuery({
+    // Keyed by hand for the same reason as the usage reads above: the body
+    // carries the agent and the window, which the generated key leaves out.
+    queryKey: [
+      "agent-credential-use",
+      gramProject,
+      agent.id,
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryListToolUsageTraces(client, {
+          gramProject,
+          listToolUsageTracesPayload: {
+            from,
+            to,
+            userFilters: [{ kind: "agent_id", key: agent.id }],
+            targetTypes: SERVED_TARGET_TYPES,
+            limit: CREDENTIAL_TRACE_LIMIT,
+            sort: "desc",
+          },
+        }),
+      ),
+    enabled: canViewToolLogs,
     throwOnError: false,
   });
-  const nameFor = (id: string) =>
-    members.data?.members.find((member) => member.id === id)?.name || id;
-  const all = sessions.sessions;
-  // Counted per authorizer, so a name that appears once does not outrank one
-  // that appears daily, and the most recent session is kept beside it.
-  const ranked = useMemo(() => {
-    const byUser = new Map<string, { count: number; latest: Date }>();
-    for (const session of all) {
-      const id = session.authorizerUserId;
-      if (!id) continue;
-      const seen = byUser.get(id);
-      if (seen) {
-        seen.count += 1;
-        if (session.createdAt > seen.latest) seen.latest = session.createdAt;
-      } else {
-        byUser.set(id, { count: 1, latest: session.createdAt });
-      }
-    }
-    return [...byUser.entries()].sort((a, b) => b[1].count - a[1].count);
-  }, [all]);
+
+  const loaded = traces.data?.traces;
+  const rows = useMemo(
+    () => summarizeAgentCredentialUse(loaded ?? [], viewer.id),
+    [loaded, viewer.id],
+  );
+  const truncated = Boolean(traces.data?.nextCursor);
+
+  let footer: string | undefined;
+  if (rows.length > 0) {
+    footer = truncated
+      ? `From this agent's latest ${CREDENTIAL_TRACE_LIMIT.toLocaleString()} server calls in this period.`
+      : "From the credential each of this agent's server calls signed in with.";
+  }
+
+  let body: JSX.Element | JSX.Element[];
+  if (!canViewToolLogs) {
+    body = (
+      <IdentityPanelEmpty>
+        You need the log:read permission on this project to see whose
+        credentials this agent uses.
+      </IdentityPanelEmpty>
+    );
+  } else if (rows.length === 0) {
+    body = (
+      <IdentityPanelEmpty>
+        This agent called no MCP servers in this period.
+      </IdentityPanelEmpty>
+    );
+  } else {
+    body = rows.map((row) => (
+      <IdentityPanelRow
+        key={row.key}
+        title={row.serverLabel}
+        detail={
+          <CredentialUseDetail
+            label={row.credentialLabel}
+            personUserId={row.personUserId}
+            shared={row.shared}
+          />
+        }
+        trailing={`${row.calls.toLocaleString()} ${row.calls === 1 ? "call" : "calls"}`}
+      />
+    ));
+  }
 
   return (
     <IdentityPanel
-      title="Authorized by"
-      loading={canManage && sessions.isPending}
-      error={sessions.isError && all.length === 0}
-      refreshFailed={sessions.isError && all.length > 0}
-      onRetry={sessions.refetch}
-      footer={
-        ranked.length === 0
-          ? undefined
-          : // Says what is held back, the way Top sources does: five rows
-            // under a panel that reads as complete is a count of its own.
-            `${ranked.length > 5 ? `Top 5 of ${ranked.length} people. ` : ""}Counted from this agent's sessions. A tool call records the agent, not the person who authorized it.`
-      }
+      title="Acting on behalf of"
+      loading={canViewToolLogs && traces.isPending}
+      error={traces.isError && rows.length === 0}
+      refreshFailed={traces.isError && rows.length > 0}
+      onRetry={() => void traces.refetch()}
+      footer={footer}
     >
-      {!canManage ? (
-        <IdentityPanelEmpty>
-          You need permission to manage this agent to see who authorized it.
-        </IdentityPanelEmpty>
-      ) : ranked.length === 0 ? (
-        <IdentityPanelEmpty>
-          No one has authorized a session as this agent. Its keys and platform
-          sign-ins need no person: each server signs them in with its shared
-          credential or the connection assigned to the agent.
-        </IdentityPanelEmpty>
-      ) : (
-        ranked
-          .slice(0, 5)
-          .map(([id, entry]) => (
-            <IdentityPanelRow
-              key={id}
-              title={
-                <IdentityLink identifier={{ userId: id }}>
-                  {nameFor(id)}
-                </IdentityLink>
-              }
-              detail={<HumanizeDateTime date={entry.latest} />}
-              trailing={`${entry.count.toLocaleString()} ${entry.count === 1 ? "session" : "sessions"}`}
-            />
-          ))
-      )}
+      {body}
     </IdentityPanel>
+  );
+}
+
+function CredentialUseDetail({
+  label,
+  personUserId,
+  shared,
+}: {
+  label: string | undefined;
+  personUserId: string | undefined;
+  shared: boolean;
+}): JSX.Element {
+  if (!label) {
+    // Calls recorded before credentials were tracked, or to a server that
+    // signs in no one.
+    return <>No credential recorded</>;
+  }
+  if (shared) {
+    return <>{label}, acts for no one</>;
+  }
+  if (!personUserId) {
+    return <>{label}</>;
+  }
+  return (
+    <IdentityLink identifier={{ userId: personUserId }}>{label}</IdentityLink>
   );
 }
