@@ -50,8 +50,8 @@ import (
 type metaGateContext struct {
 	projectID uuid.UUID
 	// metaServerID is a stored meta_mcp_servers row for an operator-built
-	// gateway, and a synthetic per-agent id for an agent gateway — see
-	// agentGatewayID. Treat it as a telemetry grouping key, never as
+	// gateway, and a synthetic per-agent id (agentgateway.GatewayID) for an
+	// agent gateway. Treat it as a telemetry grouping key, never as
 	// something to read a row back by.
 	metaServerID uuid.UUID
 	// agentID is set only when this request is an agent gateway, which
@@ -573,9 +573,13 @@ func (s *Service) callMetaServerTool(
 	// revoked grant lands between requests the same way.
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
-		if params.Name != metamcp.ToolExecuteTool {
-			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		// A tool call that never reached a member still failed as one. Live
+		// discovery reads also resolve credentials but stay discovery.
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool {
+			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
+			return nil, err
 		}
+		s.logMetaDiscovery(ctx, gate, params.Name, start, err)
 		return nil, err
 	}
 
@@ -596,8 +600,9 @@ func (s *Service) callMetaServerTool(
 	case metamcp.ToolConnectionStatus:
 		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
-		// execute_tool is deliberately not logged here: the member dispatch
-		// writes the single tool_call row, stamped with this gateway's id.
+		// execute_tool is deliberately not logged here: it writes a single
+		// tool_call row stamped with this gateway's id, the member dispatch's
+		// or, when it fails before one, its own.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
 	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
