@@ -12,12 +12,11 @@ import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMem
 import { useQueryClient } from "@tanstack/react-query";
 import {
   type PulseMCPServer,
-  useIsCatalogServerInstalled,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import { McpTabs } from "@/pages/mcp/McpTabs";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
@@ -131,17 +130,7 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  // Legacy installs live on the deployment's external MCP attachments; new
-  // installs are remote MCP servers matched by endpoint URL. Both mark a
-  // catalog entry as added.
-  const { data: deploymentResult } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-  const externalMcps = deployment?.externalMcps ?? [];
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-  const isServerAdded = (server: PulseMCPServer) =>
-    externalMcps.some(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    ) || isInstalledByUrl(server);
+  const { installState } = useCatalogInstallations();
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
@@ -234,7 +223,7 @@ function CatalogInner() {
                   detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
-                  isAdded={isServerAdded(server)}
+                  installState={installState(server)}
                   onAdd={() => handleAdd(server)}
                 />
               );
@@ -261,7 +250,7 @@ function CatalogInner() {
                     detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
-                    isAdded={isServerAdded(server)}
+                    installState={installState(server)}
                     onAdd={() => handleAdd(server)}
                   />
                 );
