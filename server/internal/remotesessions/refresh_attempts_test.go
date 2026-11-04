@@ -39,11 +39,13 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name   string
-		status int
-		body   string
-		want   mcpconnectionattempts.Happened
-		who    mcpconnectionattempts.WhoFixes
+		name          string
+		status        int
+		body          string
+		want          mcpconnectionattempts.Happened
+		who           mcpconnectionattempts.WhoFixes
+		misconfigured bool
+		truncated     bool
 	}{
 		{name: "refreshed", status: http.StatusOK, body: `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`, want: mcpconnectionattempts.ResultRefreshed, who: mcpconnectionattempts.WhoNobody},
 		{name: "invalid grant", status: http.StatusBadRequest, body: `{"error":"invalid_grant"}`, want: mcpconnectionattempts.CodeInvalidGrant, who: mcpconnectionattempts.WhoPerson},
@@ -51,19 +53,26 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 		{name: "rejected", status: http.StatusBadRequest, body: `{"error":"unauthorized_client"}`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rejected with an unreadable body", status: http.StatusBadRequest, body: `nope`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rate limited", status: http.StatusTooManyRequests, body: `{}`, want: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider},
+		{name: "truncated success", truncated: true, status: http.StatusOK, body: `{`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
 		{name: "malformed success", status: http.StatusOK, body: `nope`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
-		{name: "missing access token", status: http.StatusOK, body: `{}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
+		{name: "missing access token", misconfigured: true, status: http.StatusOK, body: `{}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
 		{name: "wrong access token type", status: http.StatusOK, body: `{"access_token":123}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
-		{name: "server_error http.StatusOK", status: http.StatusOK, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
-		{name: "server_error http.StatusBadRequest", status: http.StatusBadRequest, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
-		{name: "temporarily_unavailable http.StatusOK", status: http.StatusOK, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
-		{name: "temporarily_unavailable http.StatusBadRequest", status: http.StatusBadRequest, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "server_error http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "server_error http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "temporarily_unavailable http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "temporarily_unavailable http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
 		{name: "provider outage", status: http.StatusServiceUnavailable, body: `{}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, env := newSyntheticExpiryEnv(t, "refresh-attempts", tokenAnswer(tc.status, tc.body))
+			answer := tokenAnswer(tc.status, tc.body)
+			ctx, env := newSyntheticExpiryEnv(t, "refresh-attempts", func(w http.ResponseWriter, r *http.Request) {
+				if tc.truncated && r.FormValue("grant_type") == "refresh_token" {
+					w.Header().Set("Content-Length", "100")
+				}
+				answer(w, r)
+			})
 			rec := mcpconnectionattemptstest.New(t)
 			refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
 			remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
@@ -73,7 +82,14 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 
 			serverID := uuid.New()
 			scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, serverID, mcpconnectionattempts.AppDCR)
-			_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+			_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+			if tc.misconfigured {
+				require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionMisconfigured)
+				require.NotErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable)
+			}
+			if tc.truncated {
+				require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable)
+			}
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, tc.want)
 			require.Equal(t, string(tc.who), row.WhoFixes)

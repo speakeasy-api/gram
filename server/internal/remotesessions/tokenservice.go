@@ -1442,7 +1442,7 @@ func (s *RefreshService) postRefreshGrant(
 		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
 			return zero, refreshErr
 		}
-		return zero, newTokenRefreshError("the identity provider returned no access token", errRefreshUnusableAnswer, refreshRemedyRetry)
+		return zero, newTokenRefreshError("the identity provider returned no access token", errRefreshUnusableAnswer, refreshRemedyAdministrator)
 	}
 	return tok, nil
 }
