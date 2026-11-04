@@ -438,3 +438,23 @@ Review follow-ups adopted on #8442 (each fails closed):
 1. **The milestone's end state, every authorization consumer on the new client, is reached call site by call site, and the engine stays.** Each domain ticket moves its request decisions onto `authz.Client`. Each decision then runs old, shadow or new per migration unit, so a unit cuts over by flag without a deploy. X1 to X4, Z1 and Z2 remove the engine, the scope tables and the frozen projections. The RFC allows that only after the release gate: production shadow comparisons with every new allow, new deny and new error classified, each mismatch resolved or accepted, and agreed latency and query budgets. None of that evidence can exist before the units run in shadow in production, so those tickets start after rollout, not in this round of PRs. _If reversed:_ remove the engine before production shadow data, which gives up the recovery path the RFC requires.
 2. **X1 also waits for the remaining declarations.** X1 derives the permission catalogue, grant validation and system-role seeding from the compiled registry. `TestSchemaProjectionsMatchFrozenTables` already proves the compiled projections equal the frozen scope tables for every declared type. The agent and workload scopes are not declared until AG1, AG2 and W1 land, and the key and runtime-policy projections belong to X2. Switching the catalogue before then would mix two sources in one projection. _If reversed:_ switch per type and keep the scope tables for undeclared ones, which doubles the paths X1 exists to remove.
 3. **What remains before rollout.** The agents slice (AG1, AG2, then W1) is stacked on #7590. Platform MCP (X3) and sign-in checks (A1) are in their own threads. After that, every ordinary request decision goes through the client. The mandatory server and auth-client gates in `internal/mcp` stay on the engine's dedicated primitives (M5 decision 2 and M3 decision 3) until a separate migration gives them typed operations.
+
+## C2 (AIS-870): chat collection access contract
+
+C2 changes no behaviour. It adds `docs/rbac-chat-collections.md` and the test that runs it (`TestChatCollectionContract`).
+
+### Decided without reviewer input
+
+1. **The contract is a document plus one table-driven test, not a ticket comment.** The ticket asks for the contract to be recorded. A file next to the other RBAC docs survives review and is what the next PR has to edit. _If reversed:_ copy the matrix into the ticket and delete the document; keep the test.
+2. **Characterized callers are the ones production builds.** The external-user case uses chat-session tokens minted by an API key or by a dashboard session. The "RBAC not enforced" case uses a direct legacy API key. A bare external-user context with neither a session nor a key reads every non-external session, but no authentication path builds that context, so it is left out rather than pinned. _If reversed:_ add it to the table as a further row.
+3. **Five divergences between collections and point reads are recorded as blocking decisions, not fixed.** The ticket says any access or error change is separate product work. Each is pinned so a later change is visible:
+   - a project-named `chat:read` grant;
+   - a single-chat grant;
+   - a direct legacy API key;
+   - a dashboard-minted chat-session token;
+   - a failing visibility check.
+
+   _If reversed:_ each needs its own approved change, then the test row flips.
+
+4. **The list operation gets its own name in the plan.** It is "list visible chats": the project-level `ReadChats()` question plus the own-scope predicate. Collections are not reimplemented as "chats a point read would open", because the two answers differ for three of the callers above. _If reversed:_ settle decisions 3.1 to 3.4 first, then the collection could reuse the point operation.
+5. **Resolving owned agents inside the page snapshot is allowed as an improvement.** Today the agent list is fetched before the page statement. Moving it into the query narrows a race and changes no answer. _If reversed:_ keep the prefetched list.
