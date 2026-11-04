@@ -44,6 +44,7 @@ The RFC lets the engine and scope tables go only after production shadow compari
     - access grant loaders and writers, and grant loading through `LoadGrants` for plugin servers, device-agent connections and role snapshots (M6 decision 6);
     - the engine itself: the old-mode decider adapter from item 3, the old and shadow routing modes, the shadow recorder and the migration flags;
     - the missing-client fallbacks for workers and commands (O3, O5, O6 activities and billing);
+    - the `allows` callback in `resolveOrganizationAudience`, which exists only so old, shadow and new modes share the member walk: inline the registry decision into `Client.OrganizationAdministratorEmails` and delete `ResolveOrganizationAdminEmails` (raised in review on #8481);
     - the auth-client backfill planner (`authclientbackfill`), once X1 retires the tables it writes;
     - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
     - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
