@@ -78,7 +78,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/businessmemory":                                ownerO7,
 	"internal/chat":                                          ownerC1,
 	"internal/customdomains":                                 ownerO5,
-	"internal/dashboards":                                    ownerP4,
 	"internal/dataexports":                                   ownerO7,
 	"internal/demoseed":                                      ownerX4,
 	"internal/deviceintegrations":                            ownerO3,
@@ -121,7 +120,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/risk/policycore":                               ownerR1,
 	"internal/risk/policylifecycle":                          ownerR1,
 	"internal/shadowmcp/admission":                           ownerR1,
-	"internal/sigint":                                        ownerP4,
 	"internal/skillefficacy":                                 ownerO7,
 	"internal/skills":                                        ownerS1,
 	"internal/slackdirectoryconnections":                     ownerO3,
@@ -134,7 +132,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/unproxiedmcp":                                  ownerM4,
 	"internal/usage":                                         ownerO6,
 	"internal/usersessions":                                  ownerG2,
-	"internal/widgets":                                       ownerP4,
 	"internal/workloadpolicy":                                ownerW1,
 }
 

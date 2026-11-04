@@ -255,8 +255,6 @@ internal/customdomains/impl.go,*Service.ListMcpEndpoints,check,Check,ScopeOrgRea
 internal/customdomains/impl.go,*Service.ListRootMcpServers,check,Check,ScopeOrgRead,Require,1,O5 AIS-840
 internal/customdomains/impl.go,*Service.SetRootMcpEndpoint,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/customdomains/impl.go,*Service.UpdateDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
-internal/dashboards/impl.go,*Service.authorize,check,Check,scope,Require,1,P4 AIS-846
-internal/dashboards/impl.go,*Service.requireOwnerOrWrite,check,Check,ScopeProjectWrite,Require,1,P4 AIS-846
 internal/dataexports/impl.go,*Service.CreateDestination,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
 internal/dataexports/impl.go,*Service.CreateRoute,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
 internal/dataexports/impl.go,*Service.DeleteDestination,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
@@ -745,17 +743,6 @@ internal/risk/signals_ch.go,*Service.GetRiskSignals,check,Check,ScopeOrgAdmin,Re
 internal/risk/signals_ch.go,*Service.filterMCPServerCountsByRead,check,MCPCheck,ScopeMCPRead,,1,R1 AIS-868
 internal/risk/unmask_ch.go,*Service.unmaskRiskResultFromClickHouse,check,ChatReadCheck,,Require,2,R1 AIS-868
 internal/shadowmcp/admission/approver.go,AdministratorWriteContext,check,Check,ScopeOrgAdmin,Evaluate,1,R1 AIS-868
-internal/sigint/authoring.go,*Service.authoringState,check,Check,scope,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.CreateSensorWithTx,check,Check,ScopeProjectWrite,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.CreateSignalWithTx,check,Check,ScopeProjectWrite,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.DeleteSensor,check,Check,ScopeProjectWrite,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.DeleteSignal,check,Check,ScopeProjectWrite,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.GetSensor,check,Check,ScopeProjectRead,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.GetSignal,check,Check,ScopeProjectRead,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.ListSensors,check,Check,ScopeProjectRead,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.ListSignals,check,Check,ScopeProjectRead,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.UpdateSensorWithTx,check,Check,ScopeProjectWrite,,1,P4 AIS-846
-internal/sigint/impl.go,*Service.UpdateSignalWithTx,check,Check,ScopeProjectWrite,,1,P4 AIS-846
 internal/skillefficacy/impl.go,*Service.QueryInsights,check,Check,ScopeChatRead,Require,1,O7 AIS-841
 internal/skillefficacy/impl.go,*Service.requireAccess,check,Check,scope,Require,1,O7 AIS-841
 internal/skillefficacy/impl.go,*Service.requireProjectAccess,check,Check,scope,Require,1,O7 AIS-841
@@ -880,8 +867,6 @@ internal/usersessions/sessionhandlers.go,*Service.ListFacets,check,Check,ScopePr
 internal/usersessions/sessionhandlers.go,*Service.ListUserSessions,check,Check,ScopeProjectRead,Require,1,G2 AIS-849
 internal/usersessions/sessionhandlers.go,*Service.RevokeUserSession,check,Check,ScopeProjectWrite,Require,1,G2 AIS-849
 internal/variations/impl.go,*Service.CreateGlobal,check,MCPCheck,ScopeMCPWrite,Require,1,P3 AIS-847
-internal/widgets/impl.go,*Service.authorize,check,Check,scope,Require,1,P4 AIS-846
-internal/widgets/impl.go,*Service.requireOwnerOrWrite,check,Check,ScopeProjectWrite,Require,1,P4 AIS-846
 internal/workloadpolicy/devices.go,*Service.CreateDeviceJoinToken,check,Check,ScopeAgentAuthorize,Require,1,W1 AIS-858
 internal/workloadpolicy/devices.go,*Service.requireDeviceEnrollmentGrant,check,Check,ScopeOrgDeviceAgentSync,GrantsSatisfy,1,W1 AIS-858
 internal/workloadpolicy/devices.go,*Service.requireDeviceEnrollmentGrant,evaluator,GrantsSatisfy,,,1,W1 AIS-858

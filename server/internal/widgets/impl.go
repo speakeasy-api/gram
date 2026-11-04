@@ -42,11 +42,14 @@ const copySuffix = " (copy)"
 // Service serves widgets: Explore's saved questions, each kept with the
 // chart that draws it.
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Client
+	// engine answers analytics dataset checks, which are not typed
+	// operations yet.
+	engine  *authz.Engine
 	audit   *audit.Logger
 	catalog *analytics.Catalog
 	now     func() time.Time
@@ -55,14 +58,15 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("widgets"))
 	return &Service{
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/widgets"),
 		logger:  logger,
 		db:      db,
 		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
+		authz:   authzClient,
+		engine:  authzEngine,
 		audit:   auditLogger,
 		catalog: analytics.Default,
 		now:     time.Now,
@@ -95,12 +99,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // authorize resolves the project a request runs in and checks a scope on it.
 // Membership is project:read, which every member holds: saving a chart is
 // not an administrative act.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) authorize(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -237,7 +241,7 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 	if creator != nil && *creator == authCtx.UserID {
 		return nil
 	}
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 }
 
 // checkWidget validates a widget's query against the catalog and its
@@ -275,7 +279,7 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 // widget over a dataset only organization administrators may read is saved
 // by them alone; anyone else could save it but never see it answer.
 func (s *Service) requireDataset(ctx context.Context, ds *analytics.Dataset) error {
-	return RequireDataset(ctx, s.authz, ds)
+	return RequireDataset(ctx, s.engine, ds)
 }
 
 // RequireDataset refuses the caller a widget over ds unless they may read ds.

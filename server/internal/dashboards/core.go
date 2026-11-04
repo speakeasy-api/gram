@@ -73,7 +73,7 @@ type Detail struct {
 // widgets its cards show. The caller needs project:read.
 func (s *Service) ReadDashboard(ctx context.Context, rawID string) (Detail, error) {
 	var zero Detail
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return zero, err
 	}
@@ -105,7 +105,7 @@ func (s *Service) ReadDashboard(ctx context.Context, rawID string) (Detail, erro
 // caller's transaction, so it sees what a write there just placed. The caller
 // needs project:read.
 func (s *Service) CardWidgetsInTx(ctx context.Context, dbtx pgx.Tx, rawID string) (map[string]CardWidget, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}

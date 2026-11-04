@@ -1722,7 +1722,7 @@ func newStartCommand() *cli.Command {
 			plugins.Attach(mux, pluginsSvc)
 			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
-			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures)
+			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, productFeatures)
 			sigint.Attach(mux, sigintSvc)
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
 			// The manual trigger bypasses the write-throttled signaler on purpose:
@@ -1915,8 +1915,8 @@ func newStartCommand() *cli.Command {
 				riskAnalysisDescriber = riskSignaler
 			}
 			riskFindings := riskchrepo.New(chDB)
-			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
-			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
+			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
+			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
 			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
 			platformMCPCfg := platformMCPConfig{
 				DeploymentRedeploy:        deploymentsService,
