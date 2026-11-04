@@ -785,6 +785,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -3059,6 +3060,11 @@ func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(Wo
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
 }
 
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }

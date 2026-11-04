@@ -182,7 +182,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonIdentityChainingReauthentication, authentication.mcpURL, authentication.surface)
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
-		return none, writeRemoteSessionReconnectChallenge(w, authentication)
+		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case unusable && outcome.ProviderRefusal():
 		// The provider refused for good, which refresh also sees, so the
 		// client lands here again only after reauthorizing. Reauthorizing
