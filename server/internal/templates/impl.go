@@ -73,7 +73,7 @@ func NewService(
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, auditLogger),
+		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, authzClient, auditLogger),
 		toolsets:   toolsets,
 		authz:      authzClient,
 		audit:      auditLogger,

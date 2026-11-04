@@ -85,7 +85,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/environments":                                  ownerE1,
 	"internal/externalcredentials":                           ownerO4,
 	"internal/externalkeys":                                  ownerO4,
-	"internal/externalmcp":                                   ownerP3,
 	"internal/hiddenmcpservers":                              ownerM2,
 	"internal/hooks":                                         ownerO8,
 	"internal/identityapi":                                   ownerO3,
@@ -99,7 +98,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/mcpapproval":                                   ownerR1,
 	"internal/mcpendpoints":                                  ownerM2,
 	"internal/mcpmetadata":                                   ownerM2,
-	"internal/mcpregistry":                                   ownerP3,
 	"internal/mcpservers":                                    ownerM2,
 	"internal/mcpservers/upstreamclients":                    ownerM5,
 	"internal/mcpservers/upstreamclients/authclientbackfill": ownerM5,
@@ -117,7 +115,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/productfeatures":                               ownerO1,
 	"internal/remotemcp":                                     ownerM4,
 	"internal/remotesessions":                                ownerG1,
-	"internal/resources":                                     ownerP3,
 	"internal/risk":                                          ownerR1,
 	"internal/risk/approval":                                 ownerR1,
 	"internal/risk/policybypass":                             ownerR1,
@@ -131,14 +128,12 @@ var foundationPackageOwners = map[string]string{
 	"internal/spendrules":                                    ownerO6,
 	"internal/telemetry":                                     ownerL1,
 	"internal/telemetry/analytics":                           ownerL1,
-	"internal/tools":                                         ownerP3,
 	"internal/toolsets":                                      ownerM1,
 	"internal/triggers":                                      ownerP5,
 	"internal/tunneledmcp":                                   ownerM4,
 	"internal/unproxiedmcp":                                  ownerM4,
 	"internal/usage":                                         ownerO6,
 	"internal/usersessions":                                  ownerG2,
-	"internal/variations":                                    ownerP3,
 	"internal/widgets":                                       ownerP4,
 	"internal/workloadpolicy":                                ownerW1,
 }
@@ -170,6 +165,7 @@ var foundationFunctionOwners = map[string]string{
 	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                              ownerC3,
 	"internal/chat/impl.go *Service.chatVisibilityScope":                            ownerC3,
 	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
+	"internal/variations/impl.go *Service.CreateGlobal":                             ownerP3,
 }
 
 // foundationOwner returns the ticket that migrates consumer. Scope metadata

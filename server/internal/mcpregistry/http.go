@@ -25,7 +25,7 @@ import (
 var _ gen.Service = (*Service)(nil)
 
 // AttachDiscovery mounts nothing until both persistence and authorization are ready.
-func (s *Service) AttachDiscovery(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, enabled bool, a *auth.Auth, az *authz.Engine) error {
+func (s *Service) AttachDiscovery(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, enabled bool, a *auth.Auth, az *authz.Client) error {
 	if !enabled {
 		return nil
 	}
@@ -95,7 +95,7 @@ func (s *Service) authorizeDiscovery(ctx context.Context, updated *string) error
 	if !ok || a == nil || a.ProjectID == nil || s.authz == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: a.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(a.ActiveOrganizationID, a.ProjectID.String()).Read()); err != nil {
 		return err
 	}
 	if updated != nil {

@@ -39,7 +39,7 @@ type Service struct {
 	db             *pgxpool.Pool
 	repo           *repo.Queries
 	auth           *auth.Auth
-	authz          *authz.Engine
+	authz          *authz.Client
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 	catalog        *CatalogService
@@ -50,7 +50,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, authzClient *authz.Client, callbackOrigin *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -59,7 +59,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:              db,
 		repo:            repo.New(db),
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authz:           authzClient,
 		sessions:        sessions,
 		registryClient:  registryClient,
 		catalog:         catalog,
@@ -159,7 +159,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -199,7 +199,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -270,7 +270,7 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, fmt.Errorf("require project read: %w", err)
 	}
 

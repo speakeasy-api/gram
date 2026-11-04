@@ -1858,8 +1858,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build MCP server runtime: %w", err)
 			}
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
-			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
-			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, platformFeatureChecker, assistantPlatformExtras))
+			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient))
 			// One probe serves both the authority and tool-declarations slots:
 			// they are two views of the same remote prober.
 			remoteProber := remoteprobe.New(logger, guardianPolicy)
@@ -1891,11 +1891,11 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			if c.Bool("registry-discovery-enabled") {
 				registry := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
-				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
+				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzClient); err != nil {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
-			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.Outbound)
+			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, authzClient, callbackOrigins.Outbound)
 			externalMCPService.SetCallbackOrigins(callbackOrigins)
 			externalmcp.Attach(mux, externalMCPService)
 			riskSignaler := background.NewThrottledSignaler(
@@ -2019,7 +2019,7 @@ func newStartCommand() *cli.Command {
 
 			analyticsSvc.WithConversationAccess(chatService)
 			chat.Attach(mux, chatService)
-			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(
 				logger,
 				tracerProvider,

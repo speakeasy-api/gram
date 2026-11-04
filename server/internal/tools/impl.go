@@ -41,7 +41,7 @@ type Service struct {
 	repo            *repo.Queries
 	variationsRepo  *vr.Queries
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authz           *authz.Client
 	featureChecker  platformtools.FeatureChecker
 	platformExtras  []platformtools.ExternalTool
 	externalMcpRepo *externalmcprepo.Queries
@@ -56,6 +56,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	featureChecker platformtools.FeatureChecker,
 	platformExtras []platformtools.ExternalTool,
 ) *Service {
@@ -68,7 +69,7 @@ func NewService(
 		repo:            repo.New(db),
 		variationsRepo:  vr.New(db),
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authz:           authzClient,
 		featureChecker:  featureChecker,
 		platformExtras:  platformExtras,
 		externalMcpRepo: externalmcprepo.New(db),
@@ -104,7 +105,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
