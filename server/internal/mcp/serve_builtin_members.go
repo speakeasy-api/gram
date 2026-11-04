@@ -42,7 +42,7 @@ func (s *Service) storedBuiltinCandidates(ctx context.Context, gatewayID, projec
 		if !ok {
 			continue
 		}
-		if err := builtinmcp.EnsureServer(ctx, s.db, organizationID, projectID, definition.Key, uuid.NullUUID{}); err != nil {
+		if err := builtinmcp.EnsureServer(ctx, s.db, organizationID, projectID, definition.Key, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
 			return nil, fmt.Errorf("ensure built-in member: %w", err)
 		}
 		candidate := builtinCandidate(projectID, "", definition)
@@ -78,7 +78,7 @@ func (s *Service) derivedBuiltinCandidates(ctx context.Context, organizationID s
 			continue
 		}
 		for _, definition := range builtinmcp.All() {
-			if err := builtinmcp.EnsureServer(ctx, s.db, organizationID, project.ID, definition.Key, uuid.NullUUID{}); err != nil {
+			if err := builtinmcp.EnsureServer(ctx, s.db, organizationID, project.ID, definition.Key, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
 				return nil, fmt.Errorf("ensure built-in member: %w", err)
 			}
 			candidates = append(candidates, builtinCandidate(project.ID, project.Slug, definition))

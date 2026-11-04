@@ -26,6 +26,7 @@ func TestBuiltinStaticAuthEnvironment(t *testing.T) {
 		return &authClientResolution{outcome: authClientResolved, clientID: uuid.New(), clientType: authClientTypeStaticCredential, headers: []proxy.ConfiguredHeader{{Name: "slack_bot_token", StaticValue: "test-secret"}, {Name: "UNRELATED", StaticValue: "not-tool-config"}}}
 	}
 	t.Run("allowlist", func(t *testing.T) {
+		t.Parallel()
 		env, err := builtinStaticAuthEnvironment("slack", valid())
 		require.NoError(t, err)
 		require.Equal(t, "test-secret", env.UserConfig.Get("SLACK_BOT_TOKEN"))
@@ -34,6 +35,7 @@ func TestBuiltinStaticAuthEnvironment(t *testing.T) {
 	})
 	for _, outcome := range []authClientOutcome{authClientNoAuth, authClientGap, authClientNoAccess, authClientLegacy} {
 		t.Run(string(outcome), func(t *testing.T) {
+			t.Parallel()
 			res := valid()
 			res.outcome = outcome
 			env, err := builtinStaticAuthEnvironment("slack", res)
@@ -44,6 +46,7 @@ func TestBuiltinStaticAuthEnvironment(t *testing.T) {
 	}
 	for _, typ := range []string{authClientTypePassThrough, authClientTypeRemoteSession, authClientTypeServiceAccount, authClientTypeEMA} {
 		t.Run(typ, func(t *testing.T) {
+			t.Parallel()
 			res := valid()
 			res.clientType = typ
 			_, err := builtinStaticAuthEnvironment("slack", res)
@@ -61,6 +64,7 @@ func TestBuiltinStaticAuthEnvironment(t *testing.T) {
 		{"duplicate", []proxy.ConfiguredHeader{{Name: "SLACK_TOKEN", StaticValue: "test-secret"}, {Name: "slack_token", StaticValue: "other-secret"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			res := valid()
 			res.headers = tc.headers
 			env, err := builtinStaticAuthEnvironment("slack", res)

@@ -1115,7 +1115,7 @@ func (s *Service) authenticateIssuerGate(
 			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, mcpmetrics.SurfacePlatform)
 			return ctx, nil, nil, err
 		}
-		return next, &issuerGateAuthentication{endpoint: endpoint, protectedResourceURL: "", mcpURL: "", subject: *subject, surface: mcpmetrics.SurfacePlatform, refreshableUserSession: false, chosenClient: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, chosenNoAuth: false, authClient: nil}, nil, nil
+		return next, &issuerGateAuthentication{endpoint: endpoint, protectedResourceURL: "", mcpURL: "", subject: *subject, surface: mcpmetrics.SurfacePlatform, refreshableUserSession: false, chosenClient: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, chosenNoAuth: false, authClient: nil, directWorkloadHandoff: false, chainingAuthClient: nil, attachedSession: uuid.Nil, authorizerOwner: "", agentKeyClients: nil}, nil, nil
 	}
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {

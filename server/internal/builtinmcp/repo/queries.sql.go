@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const bindUserSessionIssuer = `-- name: BindUserSessionIssuer :one
@@ -52,6 +53,22 @@ func (q *Queries) BindUserSessionIssuer(ctx context.Context, arg BindUserSession
 	return i, err
 }
 
+const createBuiltinServerFixture = `-- name: CreateBuiltinServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, builtin_backend, visibility)
+VALUES ($1::uuid, $2::uuid, $3::text, 'private')
+`
+
+type CreateBuiltinServerFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	BuiltinBackend string
+}
+
+func (q *Queries) CreateBuiltinServerFixture(ctx context.Context, arg CreateBuiltinServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, createBuiltinServerFixture, arg.ID, arg.ProjectID, arg.BuiltinBackend)
+	return err
+}
+
 const ensureBuiltinServer = `-- name: EnsureBuiltinServer :exec
 INSERT INTO mcp_servers (id, project_id, name, builtin_backend, visibility, requires_upstream_auth, user_session_issuer_id)
 SELECT $1::uuid, p.id, $2::text, $3::text, 'private', true,
@@ -82,6 +99,38 @@ func (q *Queries) EnsureBuiltinServer(ctx context.Context, arg EnsureBuiltinServ
 		arg.OrganizationID,
 	)
 	return err
+}
+
+const getBuiltinServerFixture = `-- name: GetBuiltinServerFixture :one
+SELECT id, name, visibility, requires_upstream_auth, deleted
+FROM mcp_servers
+WHERE id = $1::uuid AND project_id = $2::uuid
+`
+
+type GetBuiltinServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetBuiltinServerFixtureRow struct {
+	ID                   uuid.UUID
+	Name                 pgtype.Text
+	Visibility           string
+	RequiresUpstreamAuth pgtype.Bool
+	Deleted              bool
+}
+
+func (q *Queries) GetBuiltinServerFixture(ctx context.Context, arg GetBuiltinServerFixtureParams) (GetBuiltinServerFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getBuiltinServerFixture, arg.ID, arg.ProjectID)
+	var i GetBuiltinServerFixtureRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Visibility,
+		&i.RequiresUpstreamAuth,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one

@@ -27,6 +27,7 @@ func TestBuiltinConsentCredentialMembers(t *testing.T) {
 		{name: "hosted", member: metaMember{backend: metaMemberBackendHosted}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.want, consentMemberHasAuthChoices(tc.member))
 		})
 	}

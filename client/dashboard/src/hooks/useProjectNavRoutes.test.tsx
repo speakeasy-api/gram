@@ -301,9 +301,11 @@ describe("useProjectNavRoutes", () => {
 
 it("offers settings to organization administrators without project write", () => {
   testState.isOrgAdmin = true;
-  const { result, rerender } = renderHook(() => useProjectNavRoutes());
+  const { result, rerender } = renderNav();
   expect(
-    result.current.find((entry) => entry.route === routes.settings),
+    result.current.find(
+      (entry) => entry.route.href() === routes.settings.href(),
+    ),
   ).toMatchObject({
     scope: ["org:admin"],
     resourceId: "organization_a",
@@ -311,7 +313,9 @@ it("offers settings to organization administrators without project write", () =>
   testState.isOrgAdmin = false;
   rerender();
   expect(
-    result.current.find((entry) => entry.route === routes.settings),
+    result.current.find(
+      (entry) => entry.route.href() === routes.settings.href(),
+    ),
   ).toMatchObject({
     scope: ["project:write"],
     resourceId: testState.projectId,

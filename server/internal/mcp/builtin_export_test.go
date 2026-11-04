@@ -1,6 +1,9 @@
 package mcp
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ResolveCachedBuiltinForTest exercises the shared cached-reference loader.
 func (s *Service) ResolveCachedBuiltinForTest(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
@@ -15,5 +18,8 @@ func (s *Service) ResolveSharedBuiltinForTest(ctx context.Context, endpoint *Res
 
 // InvalidateSessionPolicyForTest simulates expiry of the ordinary HTTP policy cache.
 func (s *Service) InvalidateSessionPolicyForTest(ctx context.Context, issuerID, jti string) error {
-	return s.sessionPolicyCache.DeleteByKey(ctx, sessionPolicyCacheKey(issuerID, jti))
+	if err := s.sessionPolicyCache.DeleteByKey(ctx, sessionPolicyCacheKey(issuerID, jti)); err != nil {
+		return fmt.Errorf("invalidate session policy: %w", err)
+	}
+	return nil
 }

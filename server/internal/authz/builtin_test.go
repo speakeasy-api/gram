@@ -73,6 +73,7 @@ func TestBuiltinNormalChecksPreserveToolAndCredentialCeilings(t *testing.T) {
 	write := MCPToolCallCheck("builtin", MCPToolCallDimensions{Tool: "write", Disposition: "write", ProjectID: "project"})
 	for _, ceiling := range []string{"credential", "live agent", "owner"} {
 		t.Run(ceiling, func(t *testing.T) {
+			t.Parallel()
 			policies := [][]Grant{{broad}, {broad}, {broad}}
 			index := map[string]int{"credential": 0, "live agent": 1, "owner": 2}[ceiling]
 			policies[index] = []Grant{readOnly}

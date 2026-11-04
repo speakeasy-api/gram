@@ -69,3 +69,12 @@ WITH target AS MATERIALIZED (
   RETURNING ms.id
 )
 SELECT id FROM target;
+
+-- name: CreateBuiltinServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, builtin_backend, visibility)
+VALUES (@id::uuid, @project_id::uuid, @builtin_backend::text, 'private');
+
+-- name: GetBuiltinServerFixture :one
+SELECT id, name, visibility, requires_upstream_auth, deleted
+FROM mcp_servers
+WHERE id = @id::uuid AND project_id = @project_id::uuid;

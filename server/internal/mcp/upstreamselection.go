@@ -990,6 +990,8 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				return nil, err
 			}
 			endpoint := &ResolvedMcpEndpoint{
+				BuiltinID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				builtinOAuthError:         nil,
 				AudienceURN:               "",
 				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
 				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},

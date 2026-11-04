@@ -7,6 +7,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
+	builtinrepo "github.com/speakeasy-api/gram/server/internal/builtinmcp/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +29,7 @@ func TestBuiltinStaticCredentialAttachment(t *testing.T) {
 	require.NoError(t, err)
 	for _, backend := range []string{"approvals", "unknown"} {
 		id := uuid.New()
-		_, err := ti.conn.Exec(ctx, "INSERT INTO mcp_servers(id,project_id,builtin_backend,visibility) VALUES($1,$2,$3,'private')", id, ti.projectID, backend)
+		err := builtinrepo.New(ti.conn).CreateBuiltinServerFixture(ctx, builtinrepo.CreateBuiltinServerFixtureParams{ID: id, ProjectID: ti.projectID, BuiltinBackend: backend})
 		require.NoError(t, err)
 		_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: other.String(), McpServerID: id.String()})
 		require.Error(t, err)
@@ -58,6 +59,7 @@ func TestBuiltinRejectsNonStaticClients(t *testing.T) {
 	}
 	for _, payload := range cases {
 		t.Run(payload.ClientType, func(t *testing.T) {
+			t.Parallel()
 			client, err := ti.service.CreateAuthClient(ctx, payload)
 			require.NoError(t, err)
 			_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: client.ID, McpServerID: serverID})

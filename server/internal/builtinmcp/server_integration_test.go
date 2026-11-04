@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp/repo"
 	mcprepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -46,27 +48,31 @@ func TestEnsureServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed, 1, "built-in discovery must not leak through the ordinary server listing")
 	require.Equal(t, ordinaryID, listed[0].ID)
-	var name, visibility string
-	var requires bool
-	require.NoError(t, db.QueryRow(ctx, "SELECT name, visibility, requires_upstream_auth FROM mcp_servers WHERE id=$1", ID(first.ID, Slack)).Scan(&name, &visibility, &requires))
-	require.Equal(t, "private", visibility)
-	require.True(t, requires)
-	_, err = db.Exec(ctx, "UPDATE mcp_servers SET name='Custom', visibility='public' WHERE id=$1", ID(first.ID, Slack))
+	builtins := repo.New(db)
+	server, err := builtins.GetBuiltinServerFixture(ctx, repo.GetBuiltinServerFixtureParams{ID: ID(first.ID, Slack), ProjectID: first.ID})
+	require.NoError(t, err)
+	require.Equal(t, "private", server.Visibility)
+	require.True(t, server.RequiresUpstreamAuth.Valid)
+	require.True(t, server.RequiresUpstreamAuth.Bool)
+	_, err = mcprepo.New(db).UpdateMCPServer(ctx, mcprepo.UpdateMCPServerParams{
+		ID: server.ID, ProjectID: first.ID, Name: pgtype.Text{String: "Custom", Valid: true}, Visibility: "public",
+	})
 	require.NoError(t, err)
 	require.NoError(t, EnsureServer(ctx, db, org, first.ID, Slack, absent))
-	require.NoError(t, db.QueryRow(ctx, "SELECT name, visibility FROM mcp_servers WHERE id=$1", ID(first.ID, Slack)).Scan(&name, &visibility))
-	require.Equal(t, "Custom", name)
-	require.Equal(t, "public", visibility)
-	_, err = db.Exec(ctx, "UPDATE mcp_servers SET deleted_at=clock_timestamp() WHERE id=$1", ID(first.ID, Slack))
+	server, err = builtins.GetBuiltinServerFixture(ctx, repo.GetBuiltinServerFixtureParams{ID: ID(first.ID, Slack), ProjectID: first.ID})
+	require.NoError(t, err)
+	require.Equal(t, "Custom", server.Name.String)
+	require.Equal(t, "public", server.Visibility)
+	_, err = mcprepo.New(db).DeleteMCPServer(ctx, mcprepo.DeleteMCPServerParams{ID: server.ID, ProjectID: first.ID})
 	require.NoError(t, err)
 	require.Error(t, EnsureServer(ctx, db, org, first.ID, Slack, absent))
-	var deleted bool
-	require.NoError(t, db.QueryRow(ctx, "SELECT deleted FROM mcp_servers WHERE id=$1", ID(first.ID, Slack)).Scan(&deleted))
-	require.True(t, deleted)
-	_, err = db.Exec(ctx, "INSERT INTO mcp_servers(id, project_id, builtin_backend, visibility) VALUES($1,$2,'approvals','private')", ID(second.ID, Slack), first.ID)
+	server, err = builtins.GetBuiltinServerFixture(ctx, repo.GetBuiltinServerFixtureParams{ID: ID(first.ID, Slack), ProjectID: first.ID})
+	require.NoError(t, err)
+	require.True(t, server.Deleted)
+	err = builtins.CreateBuiltinServerFixture(ctx, repo.CreateBuiltinServerFixtureParams{ID: ID(second.ID, Slack), ProjectID: first.ID, BuiltinBackend: "approvals"})
 	require.NoError(t, err)
 	require.Error(t, EnsureServer(ctx, db, org, second.ID, Slack, absent))
-	_, err = db.Exec(ctx, "UPDATE projects SET deleted_at=clock_timestamp() WHERE id=$1", first.ID)
+	_, err = projects.DeleteProject(ctx, first.ID)
 	require.NoError(t, err)
 	require.Error(t, EnsureServer(ctx, db, org, first.ID, Slack, absent))
 }

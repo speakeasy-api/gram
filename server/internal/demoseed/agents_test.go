@@ -3,6 +3,7 @@
 package demoseed
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -79,7 +80,23 @@ func TestAgentGrantsReseed(t *testing.T) {
 				grants, err := fixtures.CountDemoSeedAgentGrantsFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
 				require.EqualValues(t, 7, grants.PolicyGrants, "recreated agents must retain only the scoped seed policies")
-				require.EqualValues(t, 12, grants.AuthGrants, "recreated agents must hold exactly the default auth permissions the upstream auth migration provisions")
+				authGrants, err := fixtures.ListDemoSeedAuthGrantsFixture(ctx, spec.OrgID)
+				require.NoError(t, err)
+				var expectedAgentGrants, actualAgentGrants []string
+				for _, label := range expectedSeedAuthGrants() {
+					if strings.HasPrefix(label, "agent ") {
+						expectedAgentGrants = append(expectedAgentGrants, label)
+					}
+				}
+				for _, grant := range authGrants {
+					label := authGrantLabel(&seeder{spec: spec}, grant)
+					if strings.HasPrefix(label, "agent ") {
+						actualAgentGrants = append(actualAgentGrants, label)
+					}
+				}
+				require.Contains(t, expectedAgentGrants, "agent Identity-bound assistant agent | mcp:auth | Built-in Slack demo token | type= | owner= | upstream= | shared_client")
+				require.ElementsMatch(t, expectedAgentGrants, actualAgentGrants, "reseed must restore the exact default auth selectors, including the built-in Slack static client")
+				require.EqualValues(t, len(expectedAgentGrants), grants.AuthGrants, "recreated agents must hold exactly the seeded default auth permissions")
 				keys, err := fixtures.CountDemoSeedAPIKeysFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
 				require.Zero(t, keys, "shared SQL must never leave usable API keys")
