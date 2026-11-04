@@ -384,7 +384,7 @@ func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 	require.NotContains(t, err.Error(), "reconnect")
 
 	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false})
-	require.Contains(t, err.Error(), "reconnect it from this gateway's sign-in page")
+	require.Contains(t, err.Error(), "Ask your administrator to reconnect it")
 }
 
 func TestConnectionOutageMessage(t *testing.T) {
@@ -422,4 +422,15 @@ func TestMemberReconnectURL_OnlyForPeople(t *testing.T) {
 	require.Empty(t, gate(urn.NewAgentSubject(uuid.New())).memberReconnectURL(member))
 	require.Empty(t, gate(urn.NewWorkloadSubject(uuid.New(), "workload")).memberReconnectURL(member))
 	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect"}.memberReconnectURL(member))
+	require.NotEmpty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1"}.memberReconnectURL(member), "the Platform gateway serves people, with no authentication set")
+	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1", agentID: uuid.New()}.memberReconnectURL(member))
+}
+
+// A caller with no connect page is sent to an administrator, not told to ask a user to open one.
+func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m"}
+	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{}), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }

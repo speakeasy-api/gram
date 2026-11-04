@@ -528,6 +528,21 @@ func TestRefreshNow_RouteStoreFailureIsNotATunnelOutage(t *testing.T) {
 	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
+	require.Equal(t, 30*time.Second, remotesessions.RetryAfter(err), "the client is told when to retry")
+}
+
+// A client row that can't be read leaves the tunnel unchecked, so the page can't call the card healthy.
+func TestConnectionOutage_FailedClientLookupIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-outage-client-gone", func(http.ResponseWriter, *http.Request) {})
+	_, _, known := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.True(t, known)
+
+	_, err := env.q.SoftDeleteRemoteSessionClientFixture(ctx, env.clientID)
+	require.NoError(t, err)
+	_, _, known = env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.False(t, known)
 }
 
 // A cooldown left by a real outage still says what stopped the refresh.

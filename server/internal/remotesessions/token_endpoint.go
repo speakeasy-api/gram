@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -66,6 +67,9 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	}
 	req.Header.Set("User-Agent", constants.UserAgent)
 	resp, err := e.doer.Do(req)
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return none, fmt.Errorf("post token: %w", err)
+	}
 	if err != nil {
 		return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: true, Signing: false}
 	}

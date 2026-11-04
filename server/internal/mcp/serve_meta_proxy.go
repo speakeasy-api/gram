@@ -167,13 +167,13 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 	case dial.anonymous && dial.connectURL != "":
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}}
 	case dial.anonymous:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and has no credential for this caller. Ask your administrator to connect it", member.slug)}}
 	case dial.clientCredential:
 		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.connectURL != "":
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}}
 	}
-	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}}
+	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask your administrator to reconnect it", member.slug)}}
 }
 
 // memberCredentialError is a member failure the caller fixes by connecting or
@@ -202,7 +202,7 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 // memberCredentialLoadError says retry only when a retry can help: a broken query needs a fix.
 func memberCredentialLoadError(member metaMember, err error) error {
 	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
-		return newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug), nil)
+		return newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil)
 	}
 	return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 }
@@ -233,7 +233,7 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity)
-	dial.connectURL = gate.memberConnectURL(member)
+	dial.connectURL = gate.memberReconnectURL(member)
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
 		s.metrics.RecordMetaMemberDispatch(ctx, backend, mcpmetrics.MetaDispatchAmbiguous)

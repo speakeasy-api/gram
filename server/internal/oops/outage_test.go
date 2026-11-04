@@ -144,22 +144,26 @@ func droppedConnectionError(t *testing.T) error {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
-	accepted := make(chan struct{})
+	dialed := make(chan struct{})
+	reset := make(chan struct{})
 	go func() {
-		defer close(accepted)
-		conn, aerr := listener.Accept()
+		defer close(reset)
+		accepted, aerr := listener.Accept()
 		if aerr != nil {
 			return
 		}
-		if tcp, ok := conn.(*net.TCPConn); ok {
+		// Hold it until the dial returns, so the reset reaches the read.
+		<-dialed
+		if tcp, ok := accepted.(*net.TCPConn); ok {
 			_ = tcp.SetLinger(0)
 		}
-		_ = conn.Close()
+		_ = accepted.Close()
 	}()
 	conn, err := net.Dial("tcp", listener.Addr().String())
+	close(dialed)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	<-accepted
+	<-reset
 	_, err = conn.Read(make([]byte, 1))
 	require.ErrorIs(t, err, syscall.ECONNRESET)
 	return fmt.Errorf("read: %w", err)
@@ -219,6 +223,9 @@ func TestStoreTransientFailuresAnswerAsOutage(t *testing.T) {
 			}).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil))
 			require.Equal(t, http.StatusServiceUnavailable, w.Code, "%s through %s", name, handler)
 			require.NotEmpty(t, w.Header().Get("Retry-After"), "%s through %s", name, handler)
+			if handler == "mcp" {
+				require.Contains(t, w.Body.String(), "If it keeps happening, contact Speakeasy support", "a retry may not clear it, so there's a way out")
+			}
 		}
 	}
 

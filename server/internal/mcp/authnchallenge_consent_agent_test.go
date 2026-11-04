@@ -331,6 +331,9 @@ func TestConsentAgentApprovalDuringProviderOutageNamesTheProvider(t *testing.T) 
 	require.Equal(t, http.StatusServiceUnavailable, page.Code, page.Body.String())
 	require.Contains(t, page.Body.String(), "available right now")
 	require.NotContains(t, page.Body.String(), "problem on our side")
+	upstream, err := url.Parse(provider.URL)
+	require.NoError(t, err)
+	require.Contains(t, page.Body.String(), upstream.Hostname(), "names the provider")
 }
 
 func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {

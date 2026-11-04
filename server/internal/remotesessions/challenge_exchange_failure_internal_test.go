@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -152,4 +153,20 @@ func TestExchangeFailure_RouteStoreIsNotAProviderOutage(t *testing.T) {
 	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, true)
 	require.False(t, exchangeFailureIsProviderOutage(failure, err))
 	require.Contains(t, failure.Error(), "could not read the MCP tunnel's routes")
+}
+
+// Our route store failing on a self client isn't the provider's token endpoint failing.
+func TestTokenEndpointPost_RouteStoreFailureIsNotATransportFailure(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &TokenEndpoint{endpoint: "https://as.example.test/token", doer: routeStoreDownDoer{}}
+	_, err := endpoint.Post(t.Context(), url.Values{"grant_type": {"client_credentials"}})
+	require.ErrorIs(t, err, tunnelrouting.ErrRouteStoreUnavailable)
+	require.False(t, TokenEndpointCausedOutage(err))
+}
+
+type routeStoreDownDoer struct{}
+
+func (routeStoreDownDoer) Do(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("list tunnel routes: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis down"))
 }

@@ -795,6 +795,19 @@ func TokenEndpointCausedOutage(err error) bool {
 	return ok && !endpoint.Signing
 }
 
+// OutageProviderHost is the issuer host behind a provider outage; a tunneled provider's stays off the page.
+func OutageProviderHost(err error) string {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	if !ok || refreshErr.outageKind != RefreshOutageProvider {
+		return ""
+	}
+	parsed, perr := url.Parse(refreshErr.IssuerURL)
+	if perr != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
 // RefreshBusy reports a refresh that waited on another request and made no call of its own.
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)

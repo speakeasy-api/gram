@@ -184,7 +184,7 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
 	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
 		if outage.session == nil {
-			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
+			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
 		}
 		retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(outage.session)) + "."
 		switch remotesessions.OutageKindOf(outage.session) {

@@ -1206,7 +1206,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable))
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
 				}
 				return outage
 			}

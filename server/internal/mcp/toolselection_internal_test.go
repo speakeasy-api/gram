@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,7 +44,7 @@ func TestIssuerGateCheckUnavailable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, issuerGateCheckUnavailable(tc.err))
+			require.Equal(t, tc.want, issuerGateCheckUnavailable(t.Context(), tc.err))
 		})
 	}
 }
@@ -121,4 +123,18 @@ func TestCredentialCheckFault(t *testing.T) {
 
 	require.NotErrorIs(t, markCredentialDenial(&pgconn.PgError{Code: "57P01"}), errCredentialRejected)
 	require.ErrorIs(t, markCredentialDenial(oops.C(oops.CodeForbidden)), errCredentialRejected)
+}
+
+func TestCallerDeadlineIsNotAnOutage(t *testing.T) {
+	t.Parallel()
+
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	deadline := fmt.Errorf("load: %w", context.DeadlineExceeded)
+
+	require.True(t, verifyHitStoreOutage(t.Context(), deadline))
+	require.False(t, verifyHitStoreOutage(expired, deadline))
+	require.True(t, issuerGateCheckUnavailable(t.Context(), deadline))
+	require.False(t, issuerGateCheckUnavailable(expired, deadline))
+	require.True(t, issuerGateCheckUnavailable(expired, fmt.Errorf("%w: %w", sessiontokens.ErrRevocationUnavailable, deadline)), "the revocation store still judged nothing")
 }

@@ -45,8 +45,13 @@ var validationRate = ratelimit.PerMinute(6)
 // errValidationUnfinished marks a verify an outage stopped; the connect page reports it.
 var errValidationUnfinished = errors.New("remote session validation did not finish")
 
+// verifyHitStoreOutage rules out the caller's own deadline, which is no outage.
+func verifyHitStoreOutage(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && oops.IsInfrastructureFailure(err)
+}
+
 // validationUnfinishedNotice follows a Verify that reached no verdict; it says nothing about now.
-const validationUnfinishedNotice = "Your last Verify didn't finish. Try again shortly."
+const validationUnfinishedNotice = "Your last Verify didn't finish. Try again shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
 
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
@@ -119,7 +124,7 @@ func (s *Service) probeRemoteSession(
 	)
 	for _, projectID := range tokenProjectIDs {
 		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
-		if oops.IsInfrastructureFailure(rerr) {
+		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
 		}

@@ -547,6 +547,9 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			if recorded {
 				failureKind = kind
 			}
+		case errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable):
+			// Ours and retryable, with no outage of the provider or tunnel to record.
+			retryAfter = refreshOutageCooldown
 		case outcome == remotesessionmetrics.RefreshOutcomeDeferred:
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
 				retryAfter = deferred.wait

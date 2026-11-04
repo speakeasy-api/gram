@@ -24,7 +24,7 @@ import (
 const OutageRetryAfter = 30 * time.Second
 
 // outageMessage answers a request a failed dependency stopped.
-const outageMessage = "Speakeasy is temporarily unavailable. Retry shortly."
+const outageMessage = "Speakeasy couldn't finish this request right now. Retry shortly. If it keeps happening, contact Speakeasy support."
 
 // transientSQLStates are the SQLSTATEs a retry can clear; anything else is a bug or a broken deploy.
 var transientSQLStates = map[string]struct{}{

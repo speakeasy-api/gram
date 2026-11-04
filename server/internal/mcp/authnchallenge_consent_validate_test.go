@@ -1444,6 +1444,7 @@ func TestServeConsentAction_ValidateWithNoRecordedOutageShowsNotice(t *testing.T
 	page := renderConsentAt(t, fx, w.Header().Get("Location"))
 	require.Contains(t, page, "data-validation-notice")
 	require.Contains(t, page, "Your last Verify didn")
+	require.Contains(t, page, "If it keeps happening, ask your administrator to contact Speakeasy support.")
 	require.NotContains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, renderConsent(t, fx), "Your last Verify didn", "the notice is not sticky")
 }

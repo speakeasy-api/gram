@@ -338,7 +338,7 @@ func TestRemoteSessionUnavailable_MessageHonoursALongWait(t *testing.T) {
 	for _, token := range tokens {
 		w := httptest.NewRecorder()
 		answer := mcp.RemoteSessionUnavailableError(w, token.ClientCredentialErr)
-		require.Equal(t, "This MCP server can't get the credential it needs right now. Retry in about 5 minutes.", answer.Error())
+		require.Equal(t, "This MCP server can't get the credential it needs right now. Retry in about 5 minutes. If it keeps happening, ask your administrator.", answer.Error())
 		require.Equal(t, "300", w.Header().Get("Retry-After"))
 	}
 }
@@ -363,7 +363,7 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 	require.NotEmpty(t, w.Header().Get("Retry-After"))
 	require.Empty(t, w.Header().Get("WWW-Authenticate"), "an outage never restarts sign-in")
 	require.Empty(t, w.Header().Get(constants.HeaderProxiedResponse), "our own dependency stays counted")
-	require.Equal(t, "Speakeasy can't check your access right now. Retry shortly.", shareable.Error(), "the check judged nothing, so it promises nothing")
+	require.Equal(t, "Speakeasy can't check your access right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support.", shareable.Error(), "the check judged nothing, so it promises nothing")
 
 	// A token no check accepts stays a sign-in prompt, even with that store down: no fallback hides it.
 	_, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer+"x", nil)

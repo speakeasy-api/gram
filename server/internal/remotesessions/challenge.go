@@ -1026,7 +1026,7 @@ func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.Ses
 	kind, known := m.refresher.RecordedOutage(ctx, sess)
 	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
 	if err != nil {
-		return kind, none, known
+		return kind, none, false
 	}
 	return kind, client.TunneledMcpServerID, known
 }

@@ -244,7 +244,7 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 	require.Contains(t, listPage, "data-gateway-server-page", "Refresh stays one page away")
 
 	_, focusPage, _ := render(t, fx)
-	require.Contains(t, focusPage, "sign-in has expired and couldn't be renewed. Try again shortly.")
+	require.Contains(t, focusPage, "sign-in has expired and hasn't been renewed. Try again shortly.")
 	require.NotContains(t, focusPage, "needs no sign-in")
 }
 

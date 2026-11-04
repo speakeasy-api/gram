@@ -141,7 +141,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
 			}
 			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish unreachable tunnel route: %w", uerr))
+				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish unreachable tunnel route: %w: %w", ErrRouteStoreUnavailable, uerr))
 			}
 			exclude[addr] = struct{}{}
 			dialErr = errors.Join(dialErr, fmt.Errorf("forward request via tunnel: %w", err))
@@ -155,7 +155,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		case wire.TunnelErrorNoLiveSession:
 			drainAndClose(resp)
 			if err := c.routes.Unpublish(ctx, tunnelID, addr); err != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w", err))
+				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w: %w", ErrRouteStoreUnavailable, err))
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:

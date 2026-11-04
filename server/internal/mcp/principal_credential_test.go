@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -139,4 +140,15 @@ func TestIssuerGatePrincipalCredentialOutageIsNotARejection(t *testing.T) {
 		require.Equal(t, tt.code, shareable.Code, tt.name)
 		require.Equal(t, tt.challenge, w.Header().Get("WWW-Authenticate") != "", tt.name)
 	}
+
+	// The caller's own deadline ran out: not an outage, and not a sign-in prompt either.
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	w := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(expired, w, token, ti.serverURL.String(), endpoint)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code, "error: %v", err)
+	require.Empty(t, w.Header().Get("Retry-After"))
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }

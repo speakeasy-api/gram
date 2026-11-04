@@ -434,7 +434,7 @@ const (
 
 	// remoteSessionUnavailableMessage tells the client the failure is
 	// temporary and the request can be retried unchanged.
-	remoteSessionUnavailableMessage = "This MCP server can't get the credential it needs right now. Retry shortly."
+	remoteSessionUnavailableMessage = "This MCP server can't get the credential it needs right now. Retry shortly. If it keeps happening, ask your administrator."
 )
 
 func issuerGateFailureReason(err error) string {
@@ -469,14 +469,15 @@ func issuerGateFailureReason(err error) string {
 }
 
 // issuerGateCheckUnavailableMessage answers a credential check that could not finish.
-const issuerGateCheckUnavailableMessage = "Speakeasy can't check your access right now. Retry shortly."
+const issuerGateCheckUnavailableMessage = "Speakeasy can't check your access right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
 
 // issuerGateCheckUnavailable reports a credential never judged; a gone row is an answer, not an outage.
-func issuerGateCheckUnavailable(err error) bool {
+func issuerGateCheckUnavailable(ctx context.Context, err error) bool {
 	if errors.Is(err, errCredentialRejected) || errors.Is(err, pgx.ErrNoRows) {
 		return false
 	}
-	if oops.IsInfrastructureFailure(err) {
+	// The caller's own deadline is no outage.
+	if ctx.Err() == nil && oops.IsInfrastructureFailure(err) {
 		return true
 	}
 	return errors.Is(err, sessiontokens.ErrRevocationUnavailable)
@@ -1189,7 +1190,7 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
-		if issuerGateCheckUnavailable(valErr) {
+		if issuerGateCheckUnavailable(ctx, valErr) {
 			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
 		}
 		if credentialCheckFault(valErr) {
@@ -1323,7 +1324,7 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 // path that hits one tells the client the same thing and paces its retries.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
-		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+".")
+		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
 		return outage
 	}

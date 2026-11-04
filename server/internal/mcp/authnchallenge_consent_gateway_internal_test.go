@@ -220,7 +220,7 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: true})
-	require.ErrorContains(t, err, "connect it from this gateway's sign-in page")
+	require.ErrorContains(t, err, "Ask your administrator to connect it")
 }
 
 func renderGatewayConsent(t *testing.T, data consentTemplateData) string {
