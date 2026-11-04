@@ -1484,6 +1484,29 @@ var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
 	})
 	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
 	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
+	Attribute("connect_audience", ResourceConnectAudience, "Who can connect to this resource once every rule is applied, blocks and their overrides included. Omitted for an MCP gateway, which has no connect rule of its own: each server it fronts decides.")
+})
+
+// The members a connect rule reaches, after precedence: a block held by a
+// member always wins over their own grants, and a role or everyone block wins
+// over every grant except a direct one naming this resource.
+var ResourceConnectAudience = Type("ResourceConnectAudience", func() {
+	Required("visibility", "members")
+	Attribute("visibility", String, "How the resource admits callers. A public resource admits anyone without a rule and a disabled one serves nobody, so the members list decides access only when the resource is private.", func() {
+		Enum("public", "private", "disabled")
+	})
+	Attribute("members", ArrayOf(ResourceConnectAudienceMember), "Every organization member a connect rule reaches, granted or blocked. Members no rule reaches cannot connect to a private resource and are left out.")
+})
+
+var ResourceConnectAudienceMember = Type("ResourceConnectAudienceMember", func() {
+	Required("user_id", "decision", "tool_access")
+	Attribute("user_id", String, "The member's user id.")
+	Attribute("decision", String, "The connect decision for this member. \"allowed\": a rule lets them connect and nothing blocks it. \"allowed_over_block\": a direct rule naming this resource outranks a block they inherit from a role or everyone. \"blocked\": a block takes connect away.", func() {
+		Enum("allowed", "allowed_over_block", "blocked")
+	})
+	Attribute("tool_access", String, "How many of the resource's tools the member can call once connected.", func() {
+		Enum("all", "some", "none")
+	})
 })
 
 var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {

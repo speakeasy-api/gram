@@ -16,6 +16,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -86,11 +87,15 @@ var audienceLevelOrder = []string{
 // without it, a grant naming one project would authorize every server in the
 // organization.
 func (s *Service) resourceProjectID(ctx context.Context, organizationID, resourceID string) (string, error) {
+	return s.roleMgr.resourceProjectID(ctx, organizationID, resourceID)
+}
+
+func (r *RoleManager) resourceProjectID(ctx context.Context, organizationID, resourceID string) (string, error) {
 	parsed, err := uuid.Parse(resourceID)
 	if err != nil {
 		return "", oops.E(oops.CodeBadRequest, err, "resource id is not a valid identifier")
 	}
-	projectID, err := accessrepo.New(s.db).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{
+	projectID, err := accessrepo.New(r.db).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{
 		OrganizationID: organizationID,
 		ResourceID:     parsed,
 	})
@@ -98,7 +103,7 @@ func (s *Service) resourceProjectID(ctx context.Context, organizationID, resourc
 	case errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeNotFound, err, "server not found")
 	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "resolve resource project").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "resolve resource project").LogError(ctx, r.logger)
 	}
 	return projectID.String(), nil
 }
@@ -140,7 +145,11 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		attr.UserID(ac.UserID),
 	)
 
-	entries, version, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	entries, version, err := s.roleMgr.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	connectAudience, err := s.roleMgr.resourceConnectAudience(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +171,7 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	for _, match := range matches {
 		rolePlugins = append(rolePlugins, &gen.ResourceAudienceRolePlugin{PrincipalUrn: match.PrincipalUrn, PluginID: match.PluginID.String(), Name: match.Name, Slug: match.Slug})
 	}
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: rolePlugins}, nil
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: rolePlugins, ConnectAudience: connectAudience}, nil
 }
 
 // SetResourceAudience replaces the rules that name one resource. Rules that
@@ -185,10 +194,26 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 	)
+	return s.roleMgr.saveResourceAudience(ctx, ac.ActiveOrganizationID, RoleAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+	}, payload.ResourceID, payload.Entries, payload.ExpectedVersion)
+}
+
+// saveResourceAudience replaces the rules naming one resource, with every
+// guard the audience editor relies on: principal validation, the agent
+// retention rules, both lockout guards, optimistic concurrency, role delivery
+// and an audit entry committed with the change. Callers must already have
+// checked that the actor administers the organization.
+func (r *RoleManager) saveResourceAudience(ctx context.Context, organizationID string, actor RoleAuditActor, resourceID string, payloadEntries []*gen.SetResourceAudienceEntry, expectedVersion string) (*gen.ResourceAudienceResult, error) {
+	if actor.Principal.Type != urn.PrincipalTypeUser || actor.Principal.ID == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "resource audience actor must be a user").LogError(ctx, r.logger)
+	}
+	actorUserID := actor.Principal.ID
 	// The resource has to exist in this organization before grants naming it
 	// are written, and the project it belongs to decides which organization-
 	// wide rules the response reports.
-	projectID, err := s.resourceProjectID(ctx, ac.ActiveOrganizationID, payload.ResourceID)
+	projectID, err := r.resourceProjectID(ctx, organizationID, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,22 +222,22 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// be given more, and ValidatePrincipal only rejects deleted agents. The
 	// rules already stored for this resource are therefore the exception set:
 	// re-saving the audience may retain them, but no new one may be added.
-	retainableAgents, err := s.storedAgentRules(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	retainableAgents, err := r.storedAgentRules(ctx, organizationID, resourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	assignableAgents, err := s.assignableAgentPrincipals(ctx, ac.ActiveOrganizationID)
+	assignableAgents, err := r.assignableAgentPrincipals(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := preserveUnassignableAgentBlocks(retainableAgents, assignableAgents, payload.Entries); err != nil {
+	if err := preserveUnassignableAgentBlocks(retainableAgents, assignableAgents, payloadEntries); err != nil {
 		return nil, err
 	}
 
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
-	seen := make(map[string]struct{}, len(payload.Entries))
-	for _, entry := range payload.Entries {
+	seen := make(map[string]struct{}, len(payloadEntries))
+	for _, entry := range payloadEntries {
 		if entry == nil {
 			continue
 		}
@@ -251,13 +276,13 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			return nil, oops.E(oops.CodeInvalid, nil, "principal %q is listed more than once at the same level", entry.PrincipalUrn)
 		}
 		seen[principal.String()+"|"+entry.Level] = struct{}{}
-		if err := authz.ValidatePrincipal(ctx, s.db, ac.ActiveOrganizationID, principal); err != nil {
+		if err := authz.ValidatePrincipal(ctx, r.db, organizationID, principal); err != nil {
 			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
 				return nil, oops.E(oops.CodeInvalid, err, "unknown principal %q", entry.PrincipalUrn)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, r.logger)
 		}
-		selectors, err := audienceSelectors(audienceLevelScopes[entry.Level], payload.ResourceID, entry.Tools, entry.Dispositions)
+		selectors, err := audienceSelectors(audienceLevelScopes[entry.Level], resourceID, entry.Tools, entry.Dispositions)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid narrowing for %q", entry.PrincipalUrn)
 		}
@@ -271,7 +296,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// here, so a view block naming it takes this page away from everyone who
 	// could give it back. The caller guard below does not catch this — the
 	// person restricting a server is rarely an administrator themselves.
-	if err := s.rejectAdminRoleBlocks(ctx, ac.ActiveOrganizationID, principalsByLevel); err != nil {
+	if err := r.rejectAdminRoleBlocks(ctx, organizationID, principalsByLevel); err != nil {
 		return nil, err
 	}
 
@@ -286,11 +311,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	if slices.ContainsFunc(audienceLockoutLevels, func(level string) bool {
 		return len(principalsByLevel[level]) > 0
 	}) {
-		callerPrincipals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
+		callerPrincipals, err := authz.ResolveUserPrincipals(ctx, r.db, organizationID, actorUserID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve caller principals").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve caller principals").LogError(ctx, r.logger)
 		}
-		callerURN := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String()
+		callerURN := urn.NewPrincipal(urn.PrincipalTypeUser, actorUserID).String()
 		keepsOwnView := slices.ContainsFunc(audienceViewLevels, func(level string) bool {
 			return slices.ContainsFunc(principalsByLevel[level], func(entry authz.PrincipalSelectors) bool {
 				return entry.Principal.String() == callerURN
@@ -313,9 +338,9 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
-	tx, err := s.db.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, r.logger)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -325,10 +350,10 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// replacement one step: two saves holding the same version cannot both
 	// pass it and then take turns writing.
 	if err := accessrepo.New(tx).LockResourceAudience(ctx, accessrepo.LockResourceAudienceParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		ResourceID:     payload.ResourceID,
+		OrganizationID: organizationID,
+		ResourceID:     resourceID,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock resource audience").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock resource audience").LogError(ctx, r.logger)
 	}
 	// Capture both removed and proposed roles before replacing any level. Lock
 	// role rows before delivery acquires project admission and plugin locks,
@@ -336,12 +361,12 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	roles := map[string]struct{}{}
 	for level, scope := range audienceLevelScopes {
 		grants, err := authz.ListGrantsForResource(ctx, tx, authz.Resource{
-			OrganizationID: ac.ActiveOrganizationID,
+			OrganizationID: organizationID,
 			Scope:          scope,
-			ResourceID:     payload.ResourceID,
+			ResourceID:     resourceID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list resource roles").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list resource roles").LogError(ctx, r.logger)
 		}
 		for _, grant := range grants {
 			if strings.HasPrefix(grant.PrincipalUrn, "role:") {
@@ -362,27 +387,32 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	for _, role := range roleURNs {
 		roleID, err := uuid.Parse(role[strings.LastIndex(role, ":")+1:])
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse resource role ID").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "parse resource role ID").LogError(ctx, r.logger)
 		}
 		if _, err := accessrepo.New(tx).LockOrganizationRoleByID(ctx, accessrepo.LockOrganizationRoleByIDParams{
-			OrganizationID: ac.ActiveOrganizationID, ID: roleID,
+			OrganizationID: organizationID, ID: roleID,
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock resource role").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "lock resource role").LogError(ctx, r.logger)
 		}
 	}
-	current, err := s.audienceFingerprint(ctx, tx, ac.ActiveOrganizationID, payload.ResourceID)
+	current, err := r.audienceFingerprint(ctx, tx, organizationID, resourceID)
 	if err != nil {
 		return nil, err
 	}
-	if current != payload.ExpectedVersion {
+	if current != expectedVersion {
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
+	}
+
+	rulesBefore, err := audienceRulesSnapshot(ctx, tx, organizationID, resourceID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "snapshot resource audience").LogError(ctx, r.logger)
 	}
 
 	before := make(map[string][]authz.Grant, len(roleURNs))
 	for _, role := range roleURNs {
-		grants, err := roledelivery.Snapshot(ctx, tx, ac.ActiveOrganizationID, role)
+		grants, err := roledelivery.Snapshot(ctx, tx, organizationID, role)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, r.logger)
 		}
 		before[role] = grants
 	}
@@ -394,47 +424,131 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// would delete another surface's work during an unrelated edit.
 	for level, scope := range audienceLevelScopes {
 		if err := authz.ReplaceResourceAudience(ctx, tx, authz.Resource{
-			OrganizationID: ac.ActiveOrganizationID,
+			OrganizationID: organizationID,
 			Scope:          scope,
-			ResourceID:     payload.ResourceID,
+			ResourceID:     resourceID,
 		}, principalsByLevel[level]); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "replace resource audience").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "replace resource audience").LogError(ctx, r.logger)
 		}
 	}
 
 	// Lock the complete project union before delivering any role. Role order
 	// need not match project order, and RoleChanged holds locks until commit.
-	if err := lockAudienceRoleDeliveryProjects(ctx, tx, ac.ActiveOrganizationID, roleURNs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock audience role delivery projects").LogError(ctx, s.logger)
+	if err := lockAudienceRoleDeliveryProjects(ctx, tx, organizationID, roleURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock audience role delivery projects").LogError(ctx, r.logger)
 	}
 
 	changedProjects := map[uuid.UUID]struct{}{}
 	for _, role := range roleURNs {
-		projects, err := roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, before[role], s.roleMgr.roleDeliveryGuard)
+		projects, err := roledelivery.RoleChanged(ctx, tx, organizationID, role, before[role], r.roleDeliveryGuard)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, r.logger)
 		}
 		for _, projectID := range projects {
 			changedProjects[projectID] = struct{}{}
 		}
 	}
 	for projectID := range changedProjects {
-		if err := s.roleMgr.roleDeliveryPublication.Project(ctx, tx, ac.ActiveOrganizationID, projectID, ac.UserID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, s.logger)
+		if err := r.roleDeliveryPublication.Project(ctx, tx, organizationID, projectID, actorUserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
+		}
+	}
+
+	// The audit entry commits with the rules it describes. A save that
+	// changes nothing records nothing.
+	rulesAfter, err := audienceRulesSnapshot(ctx, tx, organizationID, resourceID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "snapshot resource audience").LogError(ctx, r.logger)
+	}
+	if !slices.EqualFunc(rulesBefore, rulesAfter, sameAudienceRule) {
+		if r.audit == nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "resource audience audit logger is not configured").LogError(ctx, r.logger)
+		}
+		if err := r.audit.LogAccessResourceAudienceUpdate(ctx, tx, audit.LogAccessResourceAudienceUpdateEvent{
+			OrganizationID:         organizationID,
+			ProjectID:              uuid.MustParse(projectID),
+			Actor:                  actor.Principal,
+			ActorDisplayName:       actor.DisplayName,
+			ActorSlug:              nil,
+			ResourceID:             resourceID,
+			AudienceSnapshotBefore: rulesBefore,
+			AudienceSnapshotAfter:  rulesAfter,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log resource audience update").LogError(ctx, r.logger)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, r.logger)
 	}
-	s.roleMgr.signalRoleDeliveryPublish(ctx, slices.Collect(maps.Keys(changedProjects)), ac.UserID)
+	r.signalRoleDeliveryPublish(ctx, slices.Collect(maps.Keys(changedProjects)), actorUserID)
 
-	entries, version, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	entries, version, err := r.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: nil}, nil
+	connectAudience, err := r.resourceConnectAudience(ctx, organizationID, resourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: nil, ConnectAudience: connectAudience}, nil
+}
+
+// audienceRulesSnapshot reads the rules naming one resource in the shape a
+// save takes them, one per principal and level, for the audit log.
+func audienceRulesSnapshot(ctx context.Context, db accessrepo.DBTX, organizationID, resourceID string) ([]*gen.SetResourceAudienceEntry, error) {
+	type ruleKey struct{ principalURN, level string }
+	rules := make(map[ruleKey]*gen.SetResourceAudienceEntry)
+	unnarrowed := make(map[ruleKey]bool)
+	for level, scope := range audienceLevelScopes {
+		grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          scope,
+			ResourceID:     resourceID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list %s grants: %w", level, err)
+		}
+		for _, grant := range grants {
+			key := ruleKey{principalURN: grant.PrincipalUrn, level: level}
+			rule, ok := rules[key]
+			if !ok {
+				rule = &gen.SetResourceAudienceEntry{PrincipalUrn: grant.PrincipalUrn, Level: level, Tools: nil, Dispositions: nil}
+				rules[key] = rule
+			}
+			tool, disposition := grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition]
+			switch {
+			case unnarrowed[key]:
+			case tool != "":
+				rule.Tools = appendUnique(rule.Tools, tool)
+			case disposition != "":
+				rule.Dispositions = appendUnique(rule.Dispositions, disposition)
+			default:
+				unnarrowed[key] = true
+				rule.Tools, rule.Dispositions = nil, nil
+			}
+		}
+	}
+
+	snapshot := make([]*gen.SetResourceAudienceEntry, 0, len(rules))
+	for _, rule := range rules {
+		slices.Sort(rule.Tools)
+		slices.Sort(rule.Dispositions)
+		snapshot = append(snapshot, rule)
+	}
+	slices.SortFunc(snapshot, func(a, b *gen.SetResourceAudienceEntry) int {
+		if c := strings.Compare(a.PrincipalUrn, b.PrincipalUrn); c != 0 {
+			return c
+		}
+		return audienceLevelRank(a.Level) - audienceLevelRank(b.Level)
+	})
+	return snapshot, nil
+}
+
+func sameAudienceRule(a, b *gen.SetResourceAudienceEntry) bool {
+	return a.PrincipalUrn == b.PrincipalUrn && a.Level == b.Level && slices.Equal(a.Tools, b.Tools) && slices.Equal(a.Dispositions, b.Dispositions)
 }
 
 // lockAudienceRoleDeliveryProjects follows RoleChanged's project ordering across
@@ -539,7 +653,7 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 
 // resourceAudienceEntries reads every grant that decides access to one
 // resource and renders it with a name a person can recognize.
-func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, string, error) {
+func (r *RoleManager) resourceAudienceEntries(ctx context.Context, organizationID, resourceID, projectID string) ([]*gen.ResourceAudienceEntry, string, error) {
 	// Rules are keyed by principal, reach *and* level. A principal can hold an
 	// organization-wide grant and a rule naming this server at once, and can
 	// hold several levels at once — "connect to the server" alongside "never
@@ -586,13 +700,13 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	}
 
 	for level, scope := range audienceLevelScopes {
-		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+		grants, err := authz.ListGrantsForResource(ctx, r.db, authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          scope,
 			ResourceID:     resourceID,
 		})
 		if err != nil {
-			return nil, "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
+			return nil, "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, r.logger)
 		}
 		for _, grant := range grants {
 			record(grant.PrincipalUrn, level, audienceAppliesToResource, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
@@ -607,13 +721,13 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 
 		// Organization-wide rules are reported alongside them so the surface
 		// can say what this server inherits without pretending to own it.
-		wildcards, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+		wildcards, err := authz.ListGrantsForResource(ctx, r.db, authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          scope,
 			ResourceID:     authz.WildcardResource,
 		})
 		if err != nil {
-			return nil, "", oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, s.logger)
+			return nil, "", oops.E(oops.CodeUnexpected, err, "list organization grants").LogError(ctx, r.logger)
 		}
 		for _, grant := range wildcards {
 			// A wildcard grant can still be confined to one project, in which
@@ -626,17 +740,17 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		}
 	}
 
-	names, err := s.audienceNames(ctx, organizationID)
+	names, err := r.audienceNames(ctx, organizationID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	reach, err := s.audienceReach(ctx, organizationID)
+	reach, err := r.audienceReach(ctx, organizationID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	agentReach, err := s.agentAudienceReach(ctx, organizationID)
+	agentReach, err := r.agentAudienceReach(ctx, organizationID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -711,7 +825,7 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 // on connect and manage leave the page readable, so administrators can still
 // be taken off a server's use or management. Roles other than admin are left
 // alone: taking a team off a server is the point of this surface.
-func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
+func (r *RoleManager) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
 	blocked := make(map[string]struct{})
 	for _, level := range audienceLockoutLevels {
 		for _, entry := range principalsByLevel[level] {
@@ -724,9 +838,9 @@ func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID stri
 		return nil
 	}
 
-	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	roles, err := accessrepo.New(r.db).ListActiveOrganizationRoles(ctx, organizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list roles for lockout guard").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "list roles for lockout guard").LogError(ctx, r.logger)
 	}
 	for _, role := range roles {
 		if role.WorkosSlug != authz.SystemRoleAdmin {
@@ -744,10 +858,10 @@ func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID stri
 // a rule naming a role authorizes that role's agent members at runtime, so a
 // surface that resolved only people would report no access while the role
 // still granted it.
-func (s *Service) agentAudienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
-	assignments, err := accessrepo.New(s.db).ListAgentRoleAssignments(ctx, organizationID)
+func (r *RoleManager) agentAudienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
+	assignments, err := accessrepo.New(r.db).ListAgentRoleAssignments(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments for audience reach").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments for audience reach").LogError(ctx, r.logger)
 	}
 
 	reach := make(map[string][]string, len(assignments))
@@ -757,9 +871,9 @@ func (s *Service) agentAudienceReach(ctx context.Context, organizationID string)
 
 	// An agent principal reaches itself, so a rule naming one reports its own
 	// agent the way a rule naming a person reports that person.
-	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
+	agents, err := accessrepo.New(r.db).ListAgentNames(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience reach").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience reach").LogError(ctx, r.logger)
 	}
 	for _, agent := range agents {
 		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
@@ -776,8 +890,8 @@ func (s *Service) agentAudienceReach(ctx context.Context, organizationID string)
 //
 // Only rules naming this resource count: the payload replaces those and leaves
 // organization-wide rules to the surface that owns them.
-func (s *Service) storedAgentRules(ctx context.Context, organizationID, resourceID, projectID string) (map[string]map[string]struct{}, error) {
-	entries, _, err := s.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
+func (r *RoleManager) storedAgentRules(ctx context.Context, organizationID, resourceID, projectID string) (map[string]map[string]struct{}, error) {
+	entries, _, err := r.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -796,10 +910,10 @@ func (s *Service) storedAgentRules(ctx context.Context, organizationID, resource
 }
 
 // assignableAgentPrincipals returns the agents that may be given new access.
-func (s *Service) assignableAgentPrincipals(ctx context.Context, organizationID string) (map[string]struct{}, error) {
-	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
+func (r *RoleManager) assignableAgentPrincipals(ctx context.Context, organizationID string) (map[string]struct{}, error) {
+	agents, err := accessrepo.New(r.db).ListAssignableAgents(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, r.logger)
 	}
 
 	assignable := make(map[string]struct{}, len(agents))
@@ -812,8 +926,8 @@ func (s *Service) assignableAgentPrincipals(ctx context.Context, organizationID 
 // audienceReach maps every principal an audience row can name to the
 // organization members it currently reaches, so the surface can answer "who
 // can actually use this server" rather than "what rules exist".
-func (s *Service) audienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
-	members, err := s.roleMgr.ListMembers(ctx, organizationID)
+func (r *RoleManager) audienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
+	members, err := r.ListMembers(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -827,9 +941,9 @@ func (s *Service) audienceReach(ctx context.Context, organizationID string) (map
 	reach[urn.PrincipalWildcard] = everyone
 	reach[authz.AllUsersPrincipal().String()] = everyone
 
-	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	roles, err := accessrepo.New(r.db).ListActiveOrganizationRoles(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles for audience reach").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list roles for audience reach").LogError(ctx, r.logger)
 	}
 	roleURNByID := make(map[string]string, len(roles))
 	for _, role := range roles {
@@ -858,12 +972,12 @@ type audienceName struct {
 // audienceNames resolves every principal an audience row can name. Roles,
 // directory groups and directory attributes come from the same resolver the
 // plugin assignment surface uses, so both places name an audience identically.
-func (s *Service) audienceNames(ctx context.Context, organizationID string) (map[string]audienceName, error) {
+func (r *RoleManager) audienceNames(ctx context.Context, organizationID string) (map[string]audienceName, error) {
 	names := make(map[string]audienceName)
 
-	audiences, err := audience.Resolve(ctx, s.db, organizationID)
+	audiences, err := audience.Resolve(ctx, r.db, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve audiences").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve audiences").LogError(ctx, r.logger)
 	}
 	for _, item := range audiences {
 		if item.Kind != "everyone" && item.Kind != "role" {
@@ -877,7 +991,7 @@ func (s *Service) audienceNames(ctx context.Context, organizationID string) (map
 		}
 	}
 
-	members, err := s.roleMgr.ListMembers(ctx, organizationID)
+	members, err := r.ListMembers(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -893,9 +1007,9 @@ func (s *Service) audienceNames(ctx context.Context, organizationID string) (map
 	// Every non-deleted agent, not only the assignable ones: a suspended or
 	// revoked agent keeps the rules it holds, and rendering it as deleted
 	// would misreport access that is still enforced.
-	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
+	agents, err := accessrepo.New(r.db).ListAgentNames(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience names").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience names").LogError(ctx, r.logger)
 	}
 	for _, agent := range agents {
 		names[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = audienceName{
@@ -969,7 +1083,7 @@ func pluralMembers(count int64) string {
 // audienceFingerprint reads the rules a save replaces and fingerprints them.
 // Taken inside the save's transaction, it is the version the write is checked
 // against; taken outside, it is the version a read hands to the client.
-func (s *Service) audienceFingerprint(ctx context.Context, db accessrepo.DBTX, organizationID, resourceID string) (string, error) {
+func (r *RoleManager) audienceFingerprint(ctx context.Context, db accessrepo.DBTX, organizationID, resourceID string) (string, error) {
 	var rows []string
 	for _, scope := range audienceLevelScopes {
 		grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
@@ -978,7 +1092,7 @@ func (s *Service) audienceFingerprint(ctx context.Context, db accessrepo.DBTX, o
 			ResourceID:     resourceID,
 		})
 		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, s.logger)
+			return "", oops.E(oops.CodeUnexpected, err, "list resource grants").LogError(ctx, r.logger)
 		}
 		for _, grant := range grants {
 			rows = append(rows, fmt.Sprintf("%s|%s|%s|%s",
@@ -1027,4 +1141,99 @@ func parseAudiencePrincipal(value string) (urn.Principal, error) {
 		return urn.Principal{}, fmt.Errorf("parse principal: %w", err)
 	}
 	return principal, nil
+}
+
+// Connect decisions a resource's connect audience reports for each member.
+const (
+	connectDecisionAllowed          = "allowed"
+	connectDecisionAllowedOverBlock = "allowed_over_block"
+	connectDecisionBlocked          = "blocked"
+)
+
+// resourceConnectAudience reports who can connect to one resource once every
+// rule is applied. Each member's decision comes from authz.ExplainGrantCheck
+// over that member's own live grants (direct, role, everyone and directory
+// mapped), so blocks and the direct grants that outrank them are decided
+// exactly as the MCP endpoint decides them. A gateway has no connect check of
+// its own and reports nil.
+func (r *RoleManager) resourceConnectAudience(ctx context.Context, organizationID, resourceID, projectID string) (*gen.ResourceConnectAudience, error) {
+	parsed, err := uuid.Parse(resourceID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "resource id is not a valid identifier")
+	}
+	resource, err := accessrepo.New(r.db).FindMCPResourceVisibility(ctx, accessrepo.FindMCPResourceVisibilityParams{
+		OrganizationID: organizationID,
+		ResourceID:     parsed,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "server not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve resource visibility").LogError(ctx, r.logger)
+	}
+	if resource.ResourceType == explainedResourceGateway {
+		return nil, nil
+	}
+
+	members, err := r.ListMembers(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	userIDs := make([]string, 0, len(members.Members))
+	for _, member := range members.Members {
+		userIDs = append(userIDs, member.ID)
+	}
+	grantsByUser, err := authz.LoadUserGrants(ctx, r.db, organizationID, userIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load member grants for connect audience").LogError(ctx, r.logger)
+	}
+
+	check := authz.MCPCheck(authz.ScopeMCPConnect, resourceID, projectID)
+	audienceMembers := make([]*gen.ResourceConnectAudienceMember, 0, len(userIDs))
+	for _, userID := range userIDs {
+		member, err := connectAudienceMember(userID, grantsByUser[userID], check)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "evaluate member connect access").LogError(ctx, r.logger)
+		}
+		if member != nil {
+			audienceMembers = append(audienceMembers, member)
+		}
+	}
+	slices.SortFunc(audienceMembers, func(a, b *gen.ResourceConnectAudienceMember) int {
+		return strings.Compare(a.UserID, b.UserID)
+	})
+
+	return &gen.ResourceConnectAudience{Visibility: resource.Visibility, Members: audienceMembers}, nil
+}
+
+// connectAudienceMember decides one member's connect access. A member no
+// allow or block reaches is left out: on a private resource they cannot
+// connect, and no rule on this page is why.
+func connectAudienceMember(userID string, grants []authz.Grant, check authz.Check) (*gen.ResourceConnectAudienceMember, error) {
+	explanation, err := authz.ExplainGrantCheck(grants, check)
+	if err != nil {
+		return nil, fmt.Errorf("explain connect check: %w", err)
+	}
+	hasEffect := func(effect authz.GrantEffect) bool {
+		return slices.ContainsFunc(explanation.Contributions, func(contribution authz.GrantContribution) bool {
+			return contribution.Effect == effect
+		})
+	}
+
+	if !explanation.Allowed {
+		if !hasEffect(authz.GrantEffectBlocks) {
+			return nil, nil
+		}
+		return &gen.ResourceConnectAudienceMember{UserID: userID, Decision: connectDecisionBlocked, ToolAccess: explainedToolAccessNone}, nil
+	}
+
+	toolAccess, err := effectiveToolAccess(grants, check, explanation)
+	if err != nil {
+		return nil, err
+	}
+	decision := connectDecisionAllowed
+	if hasEffect(authz.GrantEffectOverrides) {
+		decision = connectDecisionAllowedOverBlock
+	}
+	return &gen.ResourceConnectAudienceMember{UserID: userID, Decision: decision, ToolAccess: toolAccess}, nil
 }

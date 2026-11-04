@@ -1397,6 +1397,10 @@ type ResourceAudienceResult struct {
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version string
+	// Who can connect to this resource once every rule is applied, blocks and
+	// their overrides included. Omitted for an MCP gateway, which has no connect
+	// rule of its own: each server it fronts decides.
+	ConnectAudience *ResourceConnectAudience
 }
 
 type ResourceAudienceRolePlugin struct {
@@ -1408,6 +1412,29 @@ type ResourceAudienceRolePlugin struct {
 	Name string
 	// Plugin slug.
 	Slug string
+}
+
+type ResourceConnectAudience struct {
+	// How the resource admits callers. A public resource admits anyone without a
+	// rule and a disabled one serves nobody, so the members list decides access
+	// only when the resource is private.
+	Visibility string
+	// Every organization member a connect rule reaches, granted or blocked.
+	// Members no rule reaches cannot connect to a private resource and are left
+	// out.
+	Members []*ResourceConnectAudienceMember
+}
+
+type ResourceConnectAudienceMember struct {
+	// The member's user id.
+	UserID string
+	// The connect decision for this member. "allowed": a rule lets them connect
+	// and nothing blocks it. "allowed_over_block": a direct rule naming this
+	// resource outranks a block they inherit from a role or everyone. "blocked": a
+	// block takes connect away.
+	Decision string
+	// How many of the resource's tools the member can call once connected.
+	ToolAccess string
 }
 
 // RevokeTemporaryGrantPayload is the payload type of the access service

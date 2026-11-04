@@ -362,7 +362,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 		}
 	}
 
-	names, err := s.audienceNames(ctx, ac.ActiveOrganizationID)
+	names, err := s.roleMgr.audienceNames(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}

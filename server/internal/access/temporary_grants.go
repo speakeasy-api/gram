@@ -123,7 +123,7 @@ func (s *Service) temporaryGrantRecipient(ctx context.Context, organizationID st
 	if principal.Type == urn.PrincipalTypeAgent {
 		// A suspended or revoked agent keeps the access it has but cannot be
 		// given more, the same rule audiences follow.
-		assignable, err := s.assignableAgentPrincipals(ctx, organizationID)
+		assignable, err := s.roleMgr.assignableAgentPrincipals(ctx, organizationID)
 		if err != nil {
 			return urn.Principal{}, err
 		}
