@@ -54,6 +54,16 @@ func federatedHappened(err error) mcpconnectionattempts.Code {
 	}
 }
 
+// federatedOnward records a consumed handoff without changing its response.
+func federatedOnward(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) error {
+	if err != nil {
+		t.Refuse(ctx, federatedHappened(err))
+		return err
+	}
+	t.Continue()
+	return nil
+}
+
 // recoveryScope is the server a recovery link connects.
 func recoveryScope(recovery connectionRecovery) mcpconnectionattempts.Scope {
 	return mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink)

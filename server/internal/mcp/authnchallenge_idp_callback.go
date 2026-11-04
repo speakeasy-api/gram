@@ -537,10 +537,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				if err != nil {
 					return failFederationDependency(err, "Login is unavailable. Restart login")
 				}
-				if err := s.startFederatedLogin(w, r, &challengeState, current); err != nil {
-					return failFederationDependency(err, "Federated login is unavailable. Restart login or contact your administrator")
-				}
-				return onward(nil)
+				// Preserve this handoff's raw error response, unlike the initial login.
+				return federatedOnward(ctx, t, s.startFederatedLogin(w, r, &challengeState, current))
 			}
 		}
 	}

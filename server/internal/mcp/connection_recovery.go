@@ -352,7 +352,13 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	ctx := r.Context()
 	key := "connectionRecovery:" + remote.ParentChallengeID
 	login, err := s.connectionRecoveryCache.Get(ctx, key)
-	if err != nil || login.expired() || login.ID != remote.ParentChallengeID {
+	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("load recovery login: %w", err)
+	}
+	if login.expired() || login.ID != remote.ParentChallengeID {
 		return true, errRecoveryLoginExpired
 	}
 	if remote.Subject == nil || remote.Subject.Kind != urn.SessionSubjectKindUser || remote.Subject.ID != login.UserID ||
