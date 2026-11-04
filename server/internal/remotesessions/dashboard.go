@@ -147,9 +147,9 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 
-	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
+	checks := []authz.Operation{authz.MCPServer(target.ProjectID.String(), target.ID.String()).Edit()}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
-		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		checks = append(checks, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 	}
 	// A user session issuer is not unique to one MCP server. The client binding
 	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
@@ -167,7 +167,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 			if id == target.ID {
 				continue
 			}
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+			checks = append(checks, authz.MCPServer(target.ProjectID.String(), id.String()).Edit())
 		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {
@@ -181,7 +181,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 // project-level commit change bindings every project on an organization-level
 // user session issuer shares.
 func (s *Service) actorIsOrganizationAdmin(ctx context.Context, organizationID string) (bool, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Organization(organizationID).Administer())
 	if err != nil {
 		return false, fmt.Errorf("evaluate organization admin: %w", err)
 	}

@@ -241,6 +241,9 @@ type testInstance struct {
 	assetStorage     blobio.Reader
 	riskPublisher    gcp.Publisher[*meteringv1.MeterReading]
 	platformToolsets map[string]platformtools.Toolset
+	// authzMode routes every authorization unit to one mode. Nil runs the
+	// parity client, which compares the engine with the registry evaluator.
+	authzMode *authz.MigrationMode
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -296,6 +299,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		findingEvidence:  findingEvidence,
 		riskPublisher:    nil,
 		platformToolsets: platformtools.BuildToolsets(platformtools.ToolsetDependencies{}),
+		authzMode:        nil,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -303,7 +307,13 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	if ti.riskPublisher == nil {
 		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
-	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	// Shadow mode keeps the parity client, so a disagreement fails the test
+	// instead of only being logged.
+	authorization := authztest.NewParityClient(t, authzEngine)
+	if ti.authzMode != nil && *ti.authzMode != authz.MigrationModeShadow {
+		authorization = authztest.NewClientInMode(t, authzEngine, *ti.authzMode)
+	}
+	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, authorization, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
@@ -430,4 +440,12 @@ func redeemedBypassRow(t *testing.T, ctx context.Context, ti *testInstance, rede
 	}
 	t.Fatalf("redeemed bypass request %s not found", redemption.ID)
 	return nil
+}
+
+// newRiskAuthorization builds the authorization client risk scanners, policy
+// cores and bypass evaluators use to decide which policies apply. It runs
+// both evaluators and fails the test when they disagree.
+func newRiskAuthorization(t *testing.T, conn *pgxpool.Pool) *authz.Client {
+	t.Helper()
+	return authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 }

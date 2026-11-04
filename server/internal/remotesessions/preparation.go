@@ -371,7 +371,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// Publishing/modifying inherited registrations affects other projects and
 		// therefore requires organization-level authority in addition to project write.
 		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+			if err = s.authz.Require(ctx, authz.Organization(org).Administer()); err != nil {
 				return nil, err
 			}
 		}

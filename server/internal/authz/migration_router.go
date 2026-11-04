@@ -104,6 +104,7 @@ func DefaultMigrationUnits() []MigrationUnit {
 		{Name: "organization", Types: []string{"organization"}, DependsOn: nil},
 		{Name: "project", Types: []string{"project"}, DependsOn: []string{"organization"}},
 		{Name: "mcp", Types: []string{"mcp_server", "mcp_auth_client"}, DependsOn: []string{"project"}},
+		{Name: "risk", Types: []string{"risk_policy"}, DependsOn: nil},
 		{Name: "skill", Types: []string{"skill"}, DependsOn: []string{"project"}},
 		{Name: "assistant", Types: []string{"assistant"}, DependsOn: []string{"project"}},
 		{Name: "environment", Types: []string{"environment"}, DependsOn: []string{"project"}},

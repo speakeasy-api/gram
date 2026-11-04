@@ -15,8 +15,8 @@ import (
 )
 
 // TestSchemaProjectionsMatchFrozenTables declares the organization, project,
-// MCP server and MCP auth client scopes with the schema DSL and compares the
-// compiled projections with the frozen F1 baselines: scope_tables.golden and
+// MCP server, MCP auth client and risk policy scopes with the schema DSL and
+// compares the compiled projections with the frozen baselines: scope_tables.golden and
 // the runtime policy's runtime_scopes.golden. It compiles the production
 // declarations (DefaultRegistry, built from DefaultDeclarations in
 // declarations.go), so every type added there must reproduce today's tables
@@ -39,6 +39,7 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 		ScopeOrgAdmin, ScopeOrgBlockedAdmin, ScopeOrgBlockedRead, ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest, ScopeOrgRead,
 		ScopePluginBlockedWrite, ScopePluginWrite,
 		ScopeProjectBlockedRead, ScopeProjectBlockedWrite, ScopeProjectRead, ScopeProjectWrite,
+		ScopeRiskPolicyBlock, ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate,
 		ScopeSkillBlockedRead, ScopeSkillBlockedWrite, ScopeSkillRead, ScopeSkillWrite,
 	}
 	var compiledNames []Scope

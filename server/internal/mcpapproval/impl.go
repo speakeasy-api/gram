@@ -144,7 +144,7 @@ type Service struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	auth     *auth.Auth
-	authz    *authz.Engine
+	authz    *authz.Client
 	flags    feature.Provider
 	audit    *audit.Logger
 	evidence *evidence.Assembler
@@ -163,7 +163,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, flags feature.Provider, auditLogger *audit.Logger, assembler *evidence.Assembler, research ResearchStarter) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authorization *authz.Client, flags feature.Provider, auditLogger *audit.Logger, assembler *evidence.Assembler, research ResearchStarter) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
@@ -171,7 +171,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:     logger,
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
-		authz:      authzEngine,
+		authz:      authorization,
 		flags:      flags,
 		audit:      auditLogger,
 		evidence:   assembler,
@@ -209,12 +209,7 @@ func (s *Service) project(ctx context.Context) (uuid.UUID, string, error) {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
 	}
 

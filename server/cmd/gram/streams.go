@@ -546,6 +546,10 @@ func newStreamsCommand() *cli.Command {
 				}
 			}
 			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			grantsAuthzClient, err := newGrantsAuthzClient(logger, meterProvider, replicaDB, newFeatureFlags(ctx, c, logger, posthogClient))
+			if err != nil {
+				return err
+			}
 			toolCallHandler := toolcall.NewHandler(
 				logger,
 				shadowmcpscan.NewScanner(
@@ -554,7 +558,7 @@ func newStreamsCommand() *cli.Command {
 					shadowMCPClient,
 					telemetryrepo.New(chConn),
 					nil,
-					shadowmcpscan.WithShadowMCPBypass(background.NewShadowMCPPolicyBypassChecker(logger, replicaDB)),
+					shadowmcpscan.WithShadowMCPBypass(background.NewShadowMCPPolicyBypassChecker(logger, replicaDB, grantsAuthzClient)),
 				),
 				destructivetool.NewScanner(shadowMCPClient),
 				clidestructive.NewScanner(),

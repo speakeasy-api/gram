@@ -16,6 +16,9 @@ package remotesessions_test
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -520,6 +523,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
+	managerOptions = append(managerOptions, remotesessions.WithAuthorization(authztest.NewParityClient(t, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))))
 	managerMeterProvider := testenv.NewMeterProvider(t)
 	var registrationTelemetryReader *sdkmetric.ManualReader
 	if options.registrationTelemetry {

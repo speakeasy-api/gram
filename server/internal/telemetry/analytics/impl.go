@@ -29,7 +29,7 @@ type Service struct {
 	tracer             trace.Tracer
 	logger             *slog.Logger
 	auth               *auth.Auth
-	authz              *authz.Engine
+	authz              *authz.Client
 	engine             *Engine
 	signalFeatures     SignalFeatures
 	conversationAccess ConversationAccess
@@ -43,7 +43,7 @@ type SignalFeatures interface {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine, signalFeatures SignalFeatures) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine, authorization *authz.Client, signalFeatures SignalFeatures) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
 	engine, err := NewEngine(db, ch)
 	if err != nil {
@@ -53,7 +53,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
 		logger:             logger,
 		auth:               auth.New(logger, db, sessions, authzEngine),
-		authz:              authzEngine,
+		authz:              authorization,
 		engine:             engine,
 		signalFeatures:     signalFeatures,
 		conversationAccess: nil,
@@ -91,7 +91,7 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -104,11 +104,11 @@ func (s *Service) authorizeDataset(ctx context.Context, authCtx *contextvalues.A
 	if !ok {
 		return nil
 	}
-	check, restricted := ds.AccessCheck(authCtx.ActiveOrganizationID)
+	operation, restricted := ds.AccessOperation(authCtx.ActiveOrganizationID)
 	if !restricted {
 		return nil
 	}
-	return s.authz.Require(ctx, check)
+	return s.authz.Require(ctx, operation)
 }
 
 // readableDatasets splits the catalog's datasets, in declaration order, into
@@ -119,9 +119,9 @@ func (s *Service) readableDatasets(ctx context.Context, authCtx *contextvalues.A
 	readable := make([]*Dataset, 0, len(datasets))
 	restricted := make([]string, 0)
 	for _, ds := range datasets {
-		check, needsCheck := ds.AccessCheck(authCtx.ActiveOrganizationID)
+		operation, needsCheck := ds.AccessOperation(authCtx.ActiveOrganizationID)
 		if needsCheck {
-			allowed, err := s.authz.Evaluate(ctx, check)
+			allowed, err := s.authz.Evaluate(ctx, operation)
 			if err != nil {
 				return nil, nil, fmt.Errorf("evaluate dataset %s access: %w", ds.Name, err)
 			}

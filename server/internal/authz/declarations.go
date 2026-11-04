@@ -35,6 +35,7 @@ func DefaultRegistry() (*s.Registry, error) {
 // scope must reproduce its frozen scope table entry.
 func DefaultDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
+	riskPolicies := string(GrantSurfaceRiskPolicy)
 	return []s.TypeDecl{
 		s.NewType("organization", s.StoredKind(ResourceKindOrg), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeOrgRead)),
@@ -83,6 +84,9 @@ func DefaultDeclarations() []s.TypeDecl {
 			s.Alternatives("read_or_organization_read",
 				s.Alternative("organization", "read"),
 				s.Alternative("project", "read")),
+			s.Alternatives("write_or_administer",
+				s.Alternative("project", "write"),
+				s.Alternative("organization", "administer")),
 		),
 		s.NewType("mcp_server", s.Parent("project"), s.StoredKind(ResourceKindMCP), s.WrittenBy(access),
 			s.SelectorKeys(SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition),
@@ -110,6 +114,9 @@ func DefaultDeclarations() []s.TypeDecl {
 				s.Checks(string(ScopeMCPWrite)), s.ExcludedBy("write_blocked")),
 			s.Permission("connect", s.Union(s.Rel("connector"), s.Rel("viewer"), s.Rel("editor")),
 				s.Checks(string(ScopeMCPConnect)), s.ExcludedBy("connect_blocked")),
+			s.Alternatives("project_read_or_edit",
+				s.Alternative("project", "read"),
+				s.Alternative("mcp_server", "edit")),
 		),
 		s.NewType("mcp_auth_client", s.Parent("organization"), s.StoredKind(ResourceKindMCPAuthClient), s.WrittenBy(access),
 			s.SelectorKeys(SelectorKeyClientType, SelectorKeyConnectionOwner, SelectorKeyProjectID, SelectorKeyUpstreamClient),
@@ -136,6 +143,15 @@ func DefaultDeclarations() []s.TypeDecl {
 				s.Checks(string(ScopeEnvironmentRead)), s.ExcludedBy("read_blocked")),
 			s.Permission("write", s.Rel("writer"),
 				s.Checks(string(ScopeEnvironmentWrite)), s.ExcludedBy("write_blocked", "read_blocked")),
+		),
+		s.NewType("risk_policy", s.StoredKind(ResourceKindRiskPolicy), s.WrittenBy(riskPolicies),
+			s.SelectorKeys(SelectorKeyServerIdentity, SelectorKeyServerURL),
+			s.Grant("included", s.StoredAs(string(ScopeRiskPolicyEvaluate)), s.Describe("Apply the policy"), s.RuntimeSafeSince(1)),
+			s.Grant("bypassed", s.StoredAs(string(ScopeRiskPolicyBypass)), s.Describe("Skip the policy")),
+			s.Grant("blocker", s.StoredAs(string(ScopeRiskPolicyBlock)), s.Describe("Block with the policy")),
+			s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")), s.Checks(string(ScopeRiskPolicyEvaluate))),
+			s.Permission("bypass", s.Rel("bypassed"), s.Checks(string(ScopeRiskPolicyBypass))),
+			s.Permission("block", s.Rel("blocker"), s.Checks(string(ScopeRiskPolicyBlock))),
 		),
 		s.NewType("skill", s.Parent("project"), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeSkillRead)), s.AnchoredAt("organization", "project", s.Self),

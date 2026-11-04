@@ -51,6 +51,7 @@ func TestScanner_InferencePromptInjectionCompleteness(t *testing.T) {
 			})
 			scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, promptinjection.NewScanner(testenv.NewLogger(t), classifier), nil, &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 			require.NoError(t, err)
+			scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "untrusted tool output", message.ToolResponse, "read_file")
 			result, err := scanner.ScanForEnforcement(ctx, req)
@@ -104,6 +105,7 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 			}
 			scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, detector, flags, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 			require.NoError(t, err)
+			scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "read a file", message.ToolRequest, "read_file")
 			result, err := scanner.ScanForEnforcement(ctx, req)

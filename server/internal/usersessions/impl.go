@@ -56,7 +56,7 @@ type Service struct {
 	db                *pgxpool.Pool
 	auth              *auth.Auth
 	sessions          *sessions.Manager
-	authz             *authz.Engine
+	authz             *authz.Client
 	chatSessions      TokenRevoker
 	audit             *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
@@ -122,7 +122,7 @@ var (
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface). sharedHosts must match the hosts the MCP service serves
 // shared authorization servers on.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, authorization *authz.Client, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -132,7 +132,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		db:                db,
 		auth:              auth.New(logger, db, sessionManager, authzEngine),
 		sessions:          sessionManager,
-		authz:             authzEngine,
+		authz:             authorization,
 		chatSessions:      chatSessionsManager,
 		audit:             auditLogger,
 		signer:            signer,

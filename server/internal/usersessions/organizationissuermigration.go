@@ -149,7 +149,7 @@ func userSessionIssuerSlugConflict(err error) bool {
 // whose tenancy is owned by the issuer is normalized in the same transaction;
 // project-scoped consumers remain in their own projects.
 func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +396,7 @@ func userSessionMigrationPreflightView(preflight userSessionMigrationPreflight) 
 }
 
 func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen.GetIssuerMigratePreflightPayload) (*orggen.OrganizationUserSessionIssuerMigratePreflight, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +420,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen
 }
 
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

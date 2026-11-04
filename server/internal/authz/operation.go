@@ -166,6 +166,12 @@ func (p ProjectRef) Write() Operation {
 	return newOperation("project", "write", p.id, nil)
 }
 
+// ReadToolLogs asks to read the project's individual tool calls and raw log
+// records, which carry every member's tool arguments, results and prompts.
+func (p ProjectRef) ReadToolLogs() Operation {
+	return newOperation("project", "read_logs", p.id, nil)
+}
+
 // PublishPlugin asks to publish a plugin from the project: either project
 // plugin publication or administration of its organization, with a block on
 // either alternative vetoing both.
@@ -375,6 +381,25 @@ func (p ProjectRef) ReadChats() Operation {
 	return newOperation("chat", "read_grant", p.id, nil)
 }
 
+// WriteOrAdminister asks to change the project or to administer its
+// organization. A block on one alternative does not stop the other.
+func (p ProjectRef) WriteOrAdminister() Operation {
+	return newAlternatives("project", "write_or_administer",
+		p.Write(),
+		Organization(p.organizationID).Administer(),
+	)
+}
+
+// ReadOrEditMCPServer asks to read the project or to change one of its MCP
+// servers. serverID may be the project ID to name every server of the
+// project. A block on one alternative does not stop the other.
+func (p ProjectRef) ReadOrEditMCPServer(serverID string) Operation {
+	return newAlternatives("mcp_server", "project_read_or_edit",
+		p.Read(),
+		MCPServer(p.id, serverID).Edit(),
+	)
+}
+
 // ChatRef names one chat session in its project for typed operations.
 type ChatRef struct {
 	id string
@@ -413,6 +438,10 @@ func typedOperations() []Operation {
 		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
+		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
+		project.ReadToolLogs(),
+		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(),
+		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Bypass(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
 		Inference("project").Execute(),

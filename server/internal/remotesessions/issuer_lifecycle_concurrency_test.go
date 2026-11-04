@@ -96,8 +96,9 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	tracer := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracer, []string{})
 	require.NoError(t, err)
+	engine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	service := usersessions.NewService(logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
-		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		engine, authztest.NewParityClient(t, engine),
 		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", authserver.Hosts{}, nil, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

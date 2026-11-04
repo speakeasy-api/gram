@@ -104,7 +104,7 @@ func clientCorpusFixtures(t *testing.T) []foundationFixture {
 		}
 	}
 	require.Equal(t, len(clientCorpusSkips), skipped, "a listed skip no longer applies")
-	require.Len(t, selected, 101, "the selected frozen corpus changed; check every new case runs, then update the count")
+	require.Len(t, selected, 102, "the selected frozen corpus changed; check every new case runs, then update the count")
 	return selected
 }
 

@@ -81,7 +81,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/plugins/assignments":  ownerPL1,
 	"internal/plugins/roledelivery": ownerM6,
 	"internal/productfeatures":      ownerO1,
-	"internal/remotesessions":       ownerG1,
 	"internal/risk":                 ownerR1,
 	"internal/risk/approval":        ownerR1,
 	"internal/risk/policybypass":    ownerR1,
@@ -89,9 +88,7 @@ var foundationPackageOwners = map[string]string{
 	"internal/risk/policylifecycle": ownerR1,
 	"internal/shadowmcp/admission":  ownerR1,
 	"internal/skills":               ownerS1,
-	"internal/telemetry":            ownerL1,
 	"internal/telemetry/analytics":  ownerL1,
-	"internal/usersessions":         ownerG2,
 	"internal/variations":           ownerP3,
 	"internal/workloadpolicy":       ownerW1,
 }
@@ -109,6 +106,11 @@ var foundationFileOwners = map[string]string{
 	"internal/mcp/serve_platform.go":                ownerX3,
 	"internal/plugins/delivery_principals.go":       ownerS2,
 	"internal/plugins/role_matches.go":              ownerS2,
+	"internal/skillefficacy":                        ownerO7,
+	// The dataset access check outlives the analytics service's migration
+	// until the dashboards, widgets and Platform MCP callers move to
+	// AccessOperation.
+	"internal/telemetry/analytics/catalog.go": ownerP4,
 }
 
 var foundationFunctionOwners = map[string]string{

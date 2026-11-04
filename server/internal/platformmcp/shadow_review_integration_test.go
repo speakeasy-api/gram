@@ -94,7 +94,7 @@ func newShadowApprovalDistribution(t *testing.T, conn *pgxpool.Pool, suffix stri
 	require.NoError(t, err)
 	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("shadow-approval-"+suffix), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, nil)
-	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, engine, new(feature.InMemory), audit.NewLogger(), nil, nil)
+	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, engine, authztest.NewParityClient(t, engine), new(feature.InMemory), audit.NewLogger(), nil, nil)
 	dashboard, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	organizations := NewPostgresOrganizationSlugResolver(conn)

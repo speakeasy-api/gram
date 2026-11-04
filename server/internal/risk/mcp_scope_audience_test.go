@@ -32,7 +32,7 @@ func TestListEnabledForMCP_FiltersByPrincipalAudience(t *testing.T) {
 	}
 	_, agentID := agentRequestContextWithID(t, ctx, ti, "Roleless agent", "")
 
-	core := policycore.New(ti.conn)
+	core := policycore.New(ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn))
 	list := func(principal *policycore.MCPPrincipal) []string {
 		t.Helper()
 		policies, err := core.ListEnabledForMCP(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, policycore.MCPTarget{
