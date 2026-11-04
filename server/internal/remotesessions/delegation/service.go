@@ -786,7 +786,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	retained := configurationFailureRetained(c)
 	kind := failure.Kind
 	// A token refused this long may be dead. A client rejection or a local setup fault says nothing about it.
-	if kind == RefreshConfiguration && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
+	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
 	switch kind {
@@ -816,7 +816,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		next = clearDelegationSecrets(next)
 		next.status = "configuration_failure"
 		outcome = ErrReauthentication
-	case RefreshRetryable:
+	case RefreshRetryable, RefreshSetupRetryable:
 		next.retryAfter = s.now().Add(time.Minute)
 		if retained {
 			next.observedAt = c.observedAt
