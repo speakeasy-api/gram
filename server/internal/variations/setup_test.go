@@ -68,9 +68,10 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, authzEngine)
 	auditLogger := audit.NewLogger()
 
-	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
+	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

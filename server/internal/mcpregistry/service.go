@@ -58,7 +58,7 @@ type Service struct {
 	assetBaseURL *url.URL
 	logger       *slog.Logger
 	auth         *auth.Auth
-	authz        *authz.Engine
+	authz        *authz.Client
 	db           *pgxpool.Pool
 	validator    *Validator
 }

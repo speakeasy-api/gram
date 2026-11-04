@@ -293,9 +293,6 @@ internal/environments/impl.go,*Service.requireProjectEnvironmentRead,check,Check
 internal/environments/impl.go,*Service.requireProjectEnvironmentWrite,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
 internal/externalcredentials/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
 internal/externalkeys/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
-internal/externalmcp/impl.go,*Service.GetServerDetails,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
-internal/externalmcp/impl.go,*Service.GetSetupDocs,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
-internal/externalmcp/impl.go,*Service.ListCatalog,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/hiddenmcpservers/impl.go,*Service.canConnect,check,MCPCheck,ScopeMCPConnect,Require,1,M2 AIS-865
 internal/hooks/agent_actor.go,*Service.requireAgentHooksIngest,check,HooksIngestCheck,,Require,1,O8 AIS-845
 internal/hooks/server_names_impl.go,*Service.Delete,check,Check,ScopeProjectWrite,Require,1,O8 AIS-845
@@ -395,7 +392,6 @@ internal/mcpendpoints/impl.go,*Service.GetMcpEndpoint,check,Check,ScopeMCPRead,R
 internal/mcpendpoints/impl.go,*Service.ListMcpEndpoints,check,Check,ScopeMCPRead,Require,1,M2 AIS-865
 internal/mcpendpoints/impl.go,*Service.UpdateMcpEndpoint,check,Check,ScopeMCPWrite,Require,1,M2 AIS-865
 internal/mcpmetadata/impl.go,*Service.ServeInstallPage,check,Check,ScopeOrgAdmin,Require,1,M2 AIS-865
-internal/mcpregistry/http.go,*Service.authorizeDiscovery,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/mcpservers/impl.go,*Service.CreateMcpServer,check,MCPCheck,ScopeMCPWrite,Require,1,M2 AIS-865
 internal/mcpservers/impl.go,*Service.DeleteMcpServer,check,MCPCheck,ScopeMCPWrite,Require,1,M2 AIS-865
 internal/mcpservers/impl.go,*Service.GetMcpServer,check,MCPCheck,ScopeMCPRead,Require,1,M2 AIS-865
@@ -674,7 +670,6 @@ internal/remotesessions/sessionhandlers.go,*Service.ListRemoteSessions,check,Che
 internal/remotesessions/sessionhandlers.go,*Service.RevokeRemoteSession,check,Check,ScopeProjectWrite,Require,1,G1 AIS-850
 internal/remotesessions/tokenservice_resolver.go,*ChallengeManager.workloadCredentialOwner,check,Check,ScopeProjectRead,GrantsAuthorize,1,G1 AIS-850
 internal/remotesessions/tokenservice_resolver.go,*ChallengeManager.workloadCredentialOwner,evaluator,GrantsAuthorize,,,1,G1 AIS-850
-internal/resources/impl.go,*Service.ListResources,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/risk/analysis_status.go,*Service.GetRiskAnalysisStatus,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
 internal/risk/approval/service.go,*Service.ApproverPrincipals,loader,ResolveUserPrincipals,,,1,R1 AIS-868
 internal/risk/approvals.go,*Service.enforcedOrgAdmin,check,Check,ScopeOrgAdmin,Evaluate,1,R1 AIS-868
@@ -825,7 +820,6 @@ internal/telemetry/mcp_network_traffic.go,*Service.GetMcpNetworkTraffic,check,Ch
 internal/telemetry/mcp_network_traffic.go,*Service.GetMcpNetworkTraffic,check,MCPCheck,ScopeMCPRead,Require,1,L1 AIS-867
 internal/telemetry/query.go,*Service.ListSessions,check,Check,ScopeOrgRead,Require,1,L1 AIS-867
 internal/telemetry/query.go,*Service.resolveOrgQueryScope,check,Check,ScopeOrgRead,Require,1,L1 AIS-867
-internal/tools/impl.go,*Service.ListTools,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/toolsets/hosted_server_update.go,*Service.writeHostedServer,check,MCPCheck,ScopeMCPWrite,Require,1,M1 AIS-859
 internal/toolsets/impl.go,*Service.AddExternalOAuthServer,check,MCPCheck,ScopeMCPWrite,Require,1,M1 AIS-859
 internal/toolsets/impl.go,*Service.CloneToolset,check,Check,ScopeMCPRead,Require,1,M1 AIS-859
@@ -902,10 +896,6 @@ internal/usersessions/sessionhandlers.go,*Service.ListFacets,check,Check,ScopePr
 internal/usersessions/sessionhandlers.go,*Service.ListUserSessions,check,Check,ScopeProjectRead,Require,1,G2 AIS-849
 internal/usersessions/sessionhandlers.go,*Service.RevokeUserSession,check,Check,ScopeProjectWrite,Require,1,G2 AIS-849
 internal/variations/impl.go,*Service.CreateGlobal,check,MCPCheck,ScopeMCPWrite,Require,1,P3 AIS-847
-internal/variations/impl.go,*Service.DeleteGlobal,check,Check,ScopeProjectWrite,Require,1,P3 AIS-847
-internal/variations/impl.go,*Service.ListGlobal,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
-internal/variations/impl.go,*Service.ListGroups,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
-internal/variations/impl.go,*Service.UpsertGlobal,check,Check,ScopeProjectWrite,Require,1,P3 AIS-847
 internal/widgets/impl.go,*Service.authorize,check,Check,scope,Require,1,P4 AIS-846
 internal/widgets/impl.go,*Service.requireOwnerOrWrite,check,Check,ScopeProjectWrite,Require,1,P4 AIS-846
 internal/workloadpolicy/devices.go,*Service.CreateDeviceJoinToken,check,Check,ScopeAgentAuthorize,Require,1,W1 AIS-858
