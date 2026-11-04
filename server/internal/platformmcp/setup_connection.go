@@ -61,7 +61,7 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	if reconnect {
 		return setupConnectionResult("authorization_required", "upstream_authorization_required"), nil
 	}
-	authorization, err := p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(organizationID, projectID, mcpconnectionattempts.AppFirstParty)), projectID, organizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
+	authorization, err := p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(organizationID, projectID, mcpServerID, mcpconnectionattempts.AppFirstParty)), projectID, organizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding):
 		return setupConnectionResult("configuration_required", "upstream_identity_provider_not_configured"), nil

@@ -386,7 +386,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-partial")
 	clientA, remoteIssuerA := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-a")
-	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-b")
+	clientB, remoteIssuerB := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-b")
 
 	subject := urn.NewUserSubject("resolve-partial-subject")
 	accessEnc, err := enc.Encrypt([]byte("token-a"))
@@ -402,11 +402,15 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	skipped := new(remotesessions.SkippedClients)
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}.NotingSkips(skipped), *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
 		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientA},
 	}, tokenCredentials(tokens))
+
+	require.ErrorIs(t, skipped.Reason(*authCtx.ProjectID, remoteIssuerB, uuid.NullUUID{UUID: clientB, Valid: true}), remotesessions.ErrNoValidToken)
+	require.NoError(t, skipped.Reason(*authCtx.ProjectID, remoteIssuerA, uuid.NullUUID{UUID: clientA, Valid: true}))
 
 	// The strict variant still refuses the same shape, pinning that partial
 	// resolution changed nothing for direct-endpoint callers.

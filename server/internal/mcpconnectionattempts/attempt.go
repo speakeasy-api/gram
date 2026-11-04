@@ -65,7 +65,8 @@ var (
 )
 
 // AppOf returns the App of a validated client_id: the host of a catalog app's client
-// metadata URL, AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
+// metadata URL (or AppUnverified if that host matches a reserved app kind),
+// AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
 // the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept.
 func AppOf(clientID string) App {
 	if clientID == "" {
