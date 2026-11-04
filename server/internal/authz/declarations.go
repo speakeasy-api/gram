@@ -113,6 +113,10 @@ func projectType() s.TypeDecl {
 			DefaultFor:  adminOnly,
 			AnchoredAt:  orgAndSelf,
 		}, s.ExcludedBy(ScopePluginBlockedWrite)),
+		// log:read is not a default for any system role: raw tool-call logs
+		// carry tool arguments, results, prompt text and hook payloads from
+		// every member of a project, so viewing them is granted explicitly per
+		// project. Neither project:* nor org:admin implies it.
 		s.ScopePermission("read_logs", ScopeLogRead, s.GrantSpec{
 			Description: "Read tool-call logs",
 			AnchoredAt:  orgAndSelf,
@@ -148,6 +152,12 @@ func projectType() s.TypeDecl {
 
 // mcpServerType declares MCP servers. Every grant and block carries the tool
 // and disposition condition.
+//
+// The mcp:blocked_* scopes are deliberately independent of each other, unlike
+// the other block families. Connecting to a server and administering it are
+// different jobs, so "cannot connect" has to be expressible without also
+// meaning "cannot see or manage". Anything that takes a principal off a
+// server entirely writes all three.
 func mcpServerType() s.TypeDecl {
 	return s.NewType("mcp_server", s.Parent("project"), s.StoredKind(ResourceKindMCP), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition),
@@ -188,7 +198,9 @@ func mcpServerType() s.TypeDecl {
 	)
 }
 
-// mcpAuthClientType declares upstream MCP auth clients.
+// mcpAuthClientType declares upstream MCP auth clients. mcp:auth is
+// independent of every other scope: server access, authoring and
+// administration imply no use of an auth client.
 func mcpAuthClientType() s.TypeDecl {
 	return s.NewType("mcp_auth_client", s.Parent("organization"), s.StoredKind(ResourceKindMCPAuthClient), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyClientType, SelectorKeyConnectionOwner, SelectorKeyProjectID, SelectorKeyUpstreamClient),
@@ -203,7 +215,10 @@ func mcpAuthClientType() s.TypeDecl {
 	)
 }
 
-// environmentType declares project environments.
+// environmentType declares project environments. Environment values include
+// secrets, so environment:read is not a member default, and environment
+// scopes are independent of project:*: a project viewer does not gain access
+// to environment values.
 func environmentType() s.TypeDecl {
 	return s.NewType("environment", s.Parent("project"), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID),
@@ -318,6 +333,12 @@ func inferenceType() s.TypeDecl {
 
 // chatType declares session transcripts. The permissions answer the stored
 // grants only; the service decides ownership.
+//
+// chat:read and chat:write are not defaults for any system role: reading other
+// members' transcripts is sensitive and mutating them (rename, feedback,
+// delete) is destructive, so both are granted explicitly through a custom
+// role. Pinning follows chat:read, because a pin is a shared project bookmark.
+// Everyone reads and changes their own sessions through ownership.
 func chatType() s.TypeDecl {
 	return s.NewType("chat", s.Parent("project"), s.GrantSurface(accessSurface),
 		s.ScopePermission("read_grant", ScopeChatRead, s.GrantSpec{

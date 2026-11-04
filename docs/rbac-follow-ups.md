@@ -24,9 +24,9 @@ Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migratio
 
 ## Waiting on production shadow data (release gate)
 
-The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout.
+The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout, except the static half of X1 (item 12), which changes no decision and is already done.
 
-12. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1).
+12. **X1, catalogue, validation and seeding (AIS-873).** The static half is done ahead of the release gate: the engine's scope tables (visibility, satisfying scopes, exclusions, grant surfaces, system role defaults) are projected from the registry, with a hand-written remainder for the root, agent and workload scopes (`undeclaredScopes`). What still waits is storage: catalogue reads, grant validation and seeding switching to the registry API directly, and deleting `undeclaredScopes` once AG1, AG2 and W1 declare the agent and workload types.
 13. **X2, runtime and key policy projections (AIS-874).**
 14. **X4, demo seed and dashboard gates (AIS-876).** This includes the "blocked" label for shared sign-in that was deferred from the MCP stack.
 15. **Z-stage cleanup (Z1, Z2).** Remove what the migration kept alive on purpose:
@@ -37,6 +37,14 @@ The RFC lets the engine and scope tables go only after production shadow compari
     - the auth-client backfill planner (`authclientbackfill`), once X1 retires the tables it writes;
     - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
     - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
+
+## Readability follow-ups (2026-11-04)
+
+- ~~Hierarchical resource handles, `authz.Project(org, p).MCPServer(id)`.~~ Dropped (#8540 closed): the flat constructors already take the project as a required argument and are easier to find from `authz.` autocomplete.
+- Scope-keyed grants and the one-line `s.ScopePermission`: #8541.
+- Derive the old engine's scope tables from the registry: #8542 (the static half of item 12).
+- Chat ownership as the first attribute declaration: item 10, stacked on the union-permissions change that replaces `s.Alternatives`. If the rule cannot land as a declaration plus a short handler call, the unused attribute grammar is deleted instead.
+- Read the organization and project from the request context instead of passing them to every check (`authz.MCPServer(serverID)` rather than `authz.MCPServer(projectID, serverID)`), with an explicit `InProject(...)` form for the cases where the target project is not the request's, and failing closed when the context carries no project. Tiago chose to do this after the RBAC stack merges, as one sweep over the call sites.
 
 ## Keeping this current
 
