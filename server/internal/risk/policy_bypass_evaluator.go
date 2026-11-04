@@ -93,14 +93,14 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 // CanBypassWithGrants evaluates a bypass against an already-loaded caller grant
 // snapshot. Callers that also need policy-audience checks use this to keep both
 // decisions consistent under the same transaction snapshot.
-func CanBypassWithGrants(ctx context.Context, client *authz.Client, grants []authz.Grant, input PolicyBypassEvaluation) bool {
-	return CanBypassBatchWithGrants(ctx, client, grants, []PolicyBypassEvaluation{input})[input]
+func CanBypassWithGrants(ctx context.Context, logger *slog.Logger, client *authz.Client, grants []authz.Grant, input PolicyBypassEvaluation) bool {
+	return CanBypassBatchWithGrants(ctx, logger, client, grants, []PolicyBypassEvaluation{input})[input]
 }
 
 // CanBypassBatchWithGrants evaluates several bypasses against one already-loaded
 // caller grant snapshot, canonicalizing legacy selectors only once. A nil
-// client or an evaluation error denies.
-func CanBypassBatchWithGrants(ctx context.Context, client *authz.Client, grants []authz.Grant, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
+// client or an evaluation error denies, and the error is logged.
+func CanBypassBatchWithGrants(ctx context.Context, logger *slog.Logger, client *authz.Client, grants []authz.Grant, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
 	decisions := make(map[PolicyBypassEvaluation]bool, len(inputs))
 	grants = canonicalizeRiskPolicyBypassGrants(grants)
 	for _, input := range inputs {
@@ -110,7 +110,15 @@ func CanBypassBatchWithGrants(ctx context.Context, client *authz.Client, grants 
 			continue
 		}
 		allowed, err := client.EvaluateGrants(ctx, grants, authz.RiskPolicy(input.PolicyID, policyBypassCheckDimensions(input.Target)).Bypass())
-		decisions[input] = err == nil && allowed
+		if err != nil {
+			logger.WarnContext(ctx, "failed to evaluate risk policy bypass",
+				attr.SlogError(err),
+				attr.SlogRiskPolicyID(input.PolicyID),
+			)
+			decisions[input] = false
+			continue
+		}
+		decisions[input] = allowed
 	}
 	return decisions
 }
@@ -139,7 +147,7 @@ func (e *PolicyBypassEvaluator) CanBypassBatch(ctx context.Context, inputs []Pol
 		if !ok {
 			continue
 		}
-		maps.Copy(results, CanBypassBatchWithGrants(ctx, e.authorization, grants, evaluations))
+		maps.Copy(results, CanBypassBatchWithGrants(ctx, e.logger, e.authorization, grants, evaluations))
 	}
 
 	return results

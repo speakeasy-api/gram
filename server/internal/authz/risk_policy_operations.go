@@ -64,7 +64,11 @@ func legacyGrantDecision(grants []Grant, op Operation) (allowed bool, ok bool, e
 		}
 		return result.Satisfied, true, nil
 	case "bypass":
-		return GrantsSatisfy(grants, RiskPolicyBypassCheck(op.instance.resourceID, dims)), true, nil
+		allowed, err := GrantsAuthorize(grants, RiskPolicyBypassCheck(op.instance.resourceID, dims))
+		if err != nil {
+			return false, true, fmt.Errorf("evaluate risk policy bypass: %w", err)
+		}
+		return allowed, true, nil
 	default:
 		return false, false, nil
 	}

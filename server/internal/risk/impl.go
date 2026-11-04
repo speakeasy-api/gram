@@ -111,8 +111,8 @@ type Service struct {
 	exclusions       *exclusioncore.Core
 	auth             *auth.Auth
 	authzClient      *authz.Client
-	// engine answers the enforcement profile and the chat transcript
-	// checks, which have no typed operation in this registry yet.
+	// engine answers the chat transcript checks, which have no typed
+	// operation in this registry yet.
 	engine                       *authz.Engine
 	signaler                     RiskAnalysisSignaler
 	reconciler                   RiskExclusionReconciler

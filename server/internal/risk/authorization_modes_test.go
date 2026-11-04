@@ -109,5 +109,5 @@ func TestPolicyCoreWithoutAuthorizationFailsClosed(t *testing.T) {
 		PlatformToolset: true,
 		Principal:       &policycore.MCPPrincipal{UserID: authCtx.UserID, AgentID: ""},
 	})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "no authorization client")
 }
