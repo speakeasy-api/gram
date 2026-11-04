@@ -96,7 +96,7 @@ func (q *Queries) ActivityInsertAnthropicInferenceConfig(ctx context.Context, ar
 
 const activityInsertAssistantThread = `-- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES ($1, $2, $3, $4, $5, 'dashboard', now() - interval '38 minutes')
+VALUES ($1, $2, $3, $4, $5, $6, now() - interval '38 minutes')
 `
 
 type ActivityInsertAssistantThreadParams struct {
@@ -105,6 +105,7 @@ type ActivityInsertAssistantThreadParams struct {
 	ProjectID     uuid.UUID
 	CorrelationID string
 	ChatID        uuid.UUID
+	SourceKind    string
 }
 
 func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg ActivityInsertAssistantThreadParams) error {
@@ -114,6 +115,7 @@ func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg Activit
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+		arg.SourceKind,
 	)
 	return err
 }

@@ -104,6 +104,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -168,6 +169,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/slackapp"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
@@ -315,8 +317,9 @@ func restoreLocalPluginRepositories(
 // (POST /mcp/{mcpSlug}).
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
-// terminationGracePeriodSeconds in Kubernetes, which must be set above this
-// value for the full window to be honored.
+// terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
+// this plus probeDrainTimeout plus its 15s upstream refresh drain, about 95s,
+// so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
 // relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
@@ -697,7 +700,6 @@ func serverFlags() []cli.Flag {
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, pluginsFlags()...)
-	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
@@ -1111,14 +1113,6 @@ func newStartCommand() *cli.Command {
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
-				pulseTenantID: c.String("pulse-registry-tenant"),
-				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
-				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create mcp registry client: %w", err)
-			}
 
 			principalCredentials := principalcredential.New(callerAssertions, db)
 			deviceAgentTokens := deviceagenttoken.New(callerAssertions, db)
@@ -1131,6 +1125,8 @@ func newStartCommand() *cli.Command {
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
+			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
+			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -1184,7 +1180,9 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
+			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
 				return err
 			}
@@ -1241,6 +1239,7 @@ func newStartCommand() *cli.Command {
 			tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
 			tunnelMetricsShutdown = stopTunnelMetrics
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
+				Connections:      connectionRecorder,
 				CallerAssertions: callerAssertions,
 				IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -1279,6 +1278,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
+			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsCore.SetSiteURL(siteURL)
 			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
@@ -1491,6 +1491,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
+			mux.Use(middleware.DenialHeaders())
 			// LiteLLM dispatch must run before canonical OTLP ingest because
 			// the metrics path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
@@ -1580,6 +1581,7 @@ func newStartCommand() *cli.Command {
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)
 			}
+			hooks.AttachTranscript(mux, hooksService)
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
@@ -1762,8 +1764,8 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)), featureFlags)
-			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
+			mcpCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)))
+			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
@@ -1896,7 +1898,7 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
-			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.Outbound)
+			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), mcpCatalog, authzEngine, callbackOrigins.Outbound)
 			externalMCPService.SetCallbackOrigins(callbackOrigins)
 			externalmcp.Attach(mux, externalMCPService)
 			riskSignaler := background.NewThrottledSignaler(
@@ -1948,7 +1950,6 @@ func newStartCommand() *cli.Command {
 				Encryption:                encryptionClient,
 				Identity:                  identityResolver,
 				Sessions:                  sessionManager,
-				Registry:                  mcpRegistryClient,
 				Catalog:                   mcpCatalog,
 				GuardianPolicy:            guardianPolicy,
 				RemoteChallengeManager:    remoteChallengeManager,
@@ -2015,7 +2016,13 @@ func newStartCommand() *cli.Command {
 			if secret := c.String("slack-signing-secret"); secret != "" && secret != "unset" {
 				approvalCards := slackapproval.NewCards(db, approvalService, orgHosts)
 				slackInteractions := slackapproval.NewInteractions(logger, approvalCards, slackapproval.NewHTTPResponder(guardianPolicy.PooledClient()), secret)
-				o11y.AttachHandler(mux, http.MethodPost, slackapproval.InteractionsPath, slackInteractions.ServeHTTP)
+				slackEvents := slackapp.NewEvents(logger, db, speakeasySlackDirectory, triggerApp, slackapi.NewClient("", guardianPolicy.PooledClient()), secret, assistantIdentities).
+					WithDashboardURL(siteURL.String()).
+					WithHome(slackapp.NewHomeSource(logger, db, featureFlags).WithServerURL(serverURL))
+				// Home tab approval clicks are handled by the Slack app; every
+				// other interaction goes on to the approval DM handler.
+				o11y.AttachHandler(mux, http.MethodPost, slackapproval.InteractionsPath, slackapp.NewHomeInteractions(slackEvents, approvalService, slackInteractions).ServeHTTP)
+				o11y.AttachHandler(mux, http.MethodPost, slackapp.EventsPath, slackEvents.ServeHTTP)
 			}
 
 			analyticsSvc.WithConversationAccess(chatService)
@@ -2162,6 +2169,7 @@ func newStartCommand() *cli.Command {
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
+				SpeakeasySlackTools:           platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can
@@ -2239,7 +2247,6 @@ func newStartCommand() *cli.Command {
 						FunctionsDeployer:              functionsOrchestrator,
 						FunctionsVersion:               runnerVersion,
 						RagService:                     ragService,
-						MCPRegistryClient:              mcpRegistryClient,
 						MCPCatalog:                     mcpCatalog,
 						TelemetryLogger:                telemLogger,
 						ClickhouseConn:                 chDB,

@@ -56,6 +56,10 @@ type Endpoints struct {
 	ListChallengeBuckets                 goa.Endpoint
 	ResolveChallenge                     goa.Endpoint
 	ListIdentityAccess                   goa.Endpoint
+	CreateTemporaryGrant                 goa.Endpoint
+	ListTemporaryGrants                  goa.Endpoint
+	RenewTemporaryGrant                  goa.Endpoint
+	RevokeTemporaryGrant                 goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -103,6 +107,10 @@ func NewEndpoints(s Service) *Endpoints {
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
 		ResolveChallenge:                     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
 		ListIdentityAccess:                   NewListIdentityAccessEndpoint(s, a.APIKeyAuth),
+		CreateTemporaryGrant:                 NewCreateTemporaryGrantEndpoint(s, a.APIKeyAuth),
+		ListTemporaryGrants:                  NewListTemporaryGrantsEndpoint(s, a.APIKeyAuth),
+		RenewTemporaryGrant:                  NewRenewTemporaryGrantEndpoint(s, a.APIKeyAuth),
+		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -148,6 +156,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
 	e.ResolveChallenge = m(e.ResolveChallenge)
 	e.ListIdentityAccess = m(e.ListIdentityAccess)
+	e.CreateTemporaryGrant = m(e.CreateTemporaryGrant)
+	e.ListTemporaryGrants = m(e.ListTemporaryGrants)
+	e.RenewTemporaryGrant = m(e.RenewTemporaryGrant)
+	e.RevokeTemporaryGrant = m(e.RevokeTemporaryGrant)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -1405,5 +1417,97 @@ func NewListIdentityAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.ListIdentityAccess(ctx, p)
+	}
+}
+
+// NewCreateTemporaryGrantEndpoint returns an endpoint function that calls the
+// method "createTemporaryGrant" of service "access".
+func NewCreateTemporaryGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateTemporaryGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateTemporaryGrant(ctx, p)
+	}
+}
+
+// NewListTemporaryGrantsEndpoint returns an endpoint function that calls the
+// method "listTemporaryGrants" of service "access".
+func NewListTemporaryGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTemporaryGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTemporaryGrants(ctx, p)
+	}
+}
+
+// NewRenewTemporaryGrantEndpoint returns an endpoint function that calls the
+// method "renewTemporaryGrant" of service "access".
+func NewRenewTemporaryGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RenewTemporaryGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RenewTemporaryGrant(ctx, p)
+	}
+}
+
+// NewRevokeTemporaryGrantEndpoint returns an endpoint function that calls the
+// method "revokeTemporaryGrant" of service "access".
+func NewRevokeTemporaryGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeTemporaryGrantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RevokeTemporaryGrant(ctx, p)
 	}
 }

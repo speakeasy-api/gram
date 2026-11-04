@@ -2787,6 +2787,11 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 	Attribute("via_meta_mcp_server_id", String, "Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself")
 	Attribute("via_meta_mcp_server_name", String, "Display name of the dispatching gateway; a deleted gateway keeps its last name")
+	Attribute("via_meta_mcp_server_kind", String, "Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization", func() {
+		Enum("project", "organization", "agent")
+	})
+	Attribute("via_meta_mcp_server_project_slug", String, "Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization")
+	Attribute("via_meta_mcp_server_agent_id", String, "Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted")
 	Attribute("client_key", String, "Stable MCP client identity used by filters; 'unattributed' when the caller never reported one")
 	Attribute("client_label", String, "User-facing MCP client label as the client reported it")
 	Attribute("client_version", String, "MCP client version when the client reported one alongside its name")

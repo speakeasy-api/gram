@@ -3282,6 +3282,7 @@ FROM principal_grants
 WHERE organization_id = $1
   AND scope = ANY($2::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id
 `
 
@@ -3298,6 +3299,8 @@ type ListServerAccessGrantsRow struct {
 
 // Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 // policies are provisioned separately. Like grant loading, effect is ignored.
+// Temporary grants are skipped: a permanent default must not be derived from
+// access that ends.
 func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
 	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
 	if err != nil {

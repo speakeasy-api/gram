@@ -290,17 +290,14 @@ export function useIdentityChats(
 }
 
 /**
- * Whether this viewer may list an agent's sessions: chat:read, or owning the
- * agent. An owner whose agent is waiting to be reassigned no longer answers
- * for it, and the server stops counting its sessions as theirs.
+ * Whether this viewer may list an agent's sessions: chat:read, or being able
+ * to edit the agent. The server reports edit rights per agent: its owner holds
+ * them (until the agent is waiting to be reassigned), and so does anyone
+ * granted agent:write on it. Both read the agent's sessions.
  */
 export function useCanReadAgentChats(agent: ManagedAgent): boolean {
-  const { user } = useSession();
   const hasChatRead = useCanReadOthersChats();
-  return (
-    hasChatRead ||
-    (agent.ownerUserId === user.id && !agent.ownerReassignmentRequiredAt)
-  );
+  return hasChatRead || agent.permissions.write;
 }
 
 /** The sessions an agent produced, read only by a viewer who may list them. */

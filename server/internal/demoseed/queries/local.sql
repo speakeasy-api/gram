@@ -151,13 +151,6 @@ DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp();
 UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid AND name = 'Python Code Gateway' AND deleted IS FALSE;
 
--- name: LocalEnsureMCPRegistry :exec
--- The default registry backing the Catalog page. Global, not tenant-scoped,
--- which is precisely why it cannot live in the tenant seed.
-INSERT INTO mcp_registries (name, url)
-VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
-ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;
-
 -- name: LocalUpsertMCPAppAsset :exec
 -- The assets row the archive is uploaded to.
 INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)

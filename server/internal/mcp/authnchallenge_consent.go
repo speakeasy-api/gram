@@ -142,9 +142,7 @@ type consentTemplateData struct {
 	RedirectURI        string
 	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
-	// ConsentEnabled gates the "Give Access" button. True when there are no
-	// remote-session challenges, or when at least one challenge has been
-	// completed (a card is Connected). Cancel is always available.
+	// ConsentEnabled gates the "Give Access" button; the service cards, a typed choice or a gateway's inventory decide it.
 	ConsentEnabled bool
 	// ApprovalError blocks approval while keeping Cancel available.
 	ApprovalError *consentApprovalError
@@ -339,6 +337,12 @@ type remoteSessionCard struct {
 	TokenExpiresAt string
 	TokenExpiresIn string
 
+	// Unavailable: an outage on record stops this connection's expired credential being renewed.
+	Unavailable bool
+
+	// UnavailableTunnel: the outage is on a tunnel, which reconnecting also goes through.
+	UnavailableTunnel bool
+
 	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
@@ -391,7 +395,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.Unavailable || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -622,10 +626,33 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if outage := r.URL.Query().Get("refresh_unavailable"); outage != "" {
+		for i := range cards {
+			if cards[i].ClientID == outage {
+				cards[i].ValidationNotice = refreshUnavailableNotice
+			}
+		}
+	}
+	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
+		for i := range cards {
+			// An Unavailable card already says so, from stored state.
+			if cards[i].ClientID == unfinished && !cards[i].Unavailable {
+				cards[i].ValidationNotice = validationUnfinishedNotice
+			}
+		}
+	}
 	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
 		for i := range cards {
 			if cards[i].ClientID == limited {
 				cards[i].ValidationNotice = validationLimitedNotice
+			}
+		}
+	}
+	if failed := r.URL.Query().Get("validate_failed"); failed != "" {
+		for i := range cards {
+			// An expired or unconnected card already names its action.
+			if cards[i].ClientID == failed && cards[i].Connected {
+				cards[i].ValidationNotice = noWorkingSignInMessage
 			}
 		}
 	}
@@ -673,18 +700,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	connectedCardCount := 0
-	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
-		if c.Connected || c.ChainCheck == chainCheckConnected {
+		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
+		if (c.Connected && !c.Unavailable) || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
-		}
-		if c.Chained {
-			chainedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -693,7 +716,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Gateway capture below decides whether any member can be approved.
-	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	consentEnabled := gateway != nil || consentCardsApprovable(cards)
 	if upstreamAuth != nil {
 		// The chosen credential decides, not whether some service card is
 		// connected: a shared credential needs no connection at all.
@@ -1183,7 +1206,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
+				}
+				return outage
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
@@ -1336,6 +1363,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
+		if errors.Is(err, errConsentNoUsableConnection) {
+			// Keeps the challenge, so the person can connect and approve.
+			logger.InfoContext(ctx, "consent approval refused", attr.SlogError(err))
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}
@@ -1440,6 +1473,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
+		Attempt:                     challengeState.connectionAttempt(endpoint),
 		UserSessionIssuerID:         endpoint.UserSessionIssuerID,
 		UserSessionClientID:         clientRow.ID,
 		ClientID:                    challengeState.ClientID,
@@ -1630,6 +1664,30 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
+func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (unavailable, tunnel bool) {
+	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutage(ctx, subject, clientID)
+	switch {
+	case !known:
+		// Can't tell, and a green card could auto-close the tab a reconnect link opened.
+		return true, tunnelID.Valid
+	case kind == remotesessions.RefreshOutageTunnel:
+		return true, true
+	case tunnelID.Valid && s.tunnelKnownDown(ctx, tunnelID.UUID):
+		return true, true
+	}
+	return kind == remotesessions.RefreshOutageProvider, false
+}
+
+// tunnelKnownDown reports a route table that answered with no route; a table that can't answer says nothing.
+func (s *Service) tunnelKnownDown(ctx context.Context, tunnelID uuid.UUID) bool {
+	if s.tunnelManager == nil || s.tunnelManager.routes == nil {
+		return false
+	}
+	candidates, err := s.tunnelManager.routes.Candidates(ctx, tunnelID.String())
+	return err == nil && len(candidates) == 0
+}
+
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
 // connected and each probe-capable connection is verified. The runtime gate
@@ -1644,7 +1702,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.Unavailable || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -2017,6 +2075,10 @@ func (s *Service) buildRemoteSessionCards(
 		if chained {
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
+		unavailable, unavailableTunnel := false, false
+		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
+			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		requested = slices.Clone(requested)
 		slices.Sort(requested)
@@ -2063,6 +2125,8 @@ func (s *Service) buildRemoteSessionCards(
 			TokenActive:            tokenActive,
 			TokenExpiresAt:         tokenExpiresAt,
 			TokenExpiresIn:         tokenExpiresIn,
+			Unavailable:            unavailable,
+			UnavailableTunnel:      unavailableTunnel,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
 			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,

@@ -39,6 +39,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -101,12 +102,28 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, grantedServer)
 
-	// Credential policy: the immutable ceiling on this one key.
+	token := mintAgentGatewayKey(t, ctx, ti, agent.ID, grantedServer)
+
+	return agentGatewayFixture{
+		agent: agent, token: token,
+		granted: grantedSlug, grantedProject: project.Slug,
+		denied: deniedSlug, open: publicSlug,
+	}
+}
+
+// mintAgentGatewayKey issues an agent key whose credential policy, the
+// immutable ceiling on this one key, admits only resourceID in the caller's
+// project.
+func mintAgentGatewayKey(t *testing.T, ctx context.Context, ti *testInstance, agentID, resourceID uuid.UUID) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
-			authz.SelectorKeyResourceID:   grantedServer.String(),
+			authz.SelectorKeyResourceID:   resourceID.String(),
 			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
 		},
 	}})
@@ -122,18 +139,13 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 		Name:                   "gateway key " + uuid.NewString()[:8],
 		KeyPrefix:              prefix,
 		KeyHash:                hash,
-		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agentID).String(), Valid: true},
 		DelegatedGrants:        delegated,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-
-	return agentGatewayFixture{
-		agent: agent, token: token,
-		granted: grantedSlug, grantedProject: project.Slug,
-		denied: deniedSlug, open: publicSlug,
-	}
+	return token
 }
 
 // serveAgentGatewayHTTP drives the handler the way the router does, including
@@ -616,4 +628,50 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// A platform tool runs in its server's project, but the agent gateway is
+// organization-wide: execute_tool must hand the platform runtime the member's
+// project instead of the gateway's none.
+func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "platform-member-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "user-sessions", "list")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	// Serve the granted wrapper from the toolset. Toolset-backed grants key on
+	// the toolset, so grant the owner, the agent and a new key on it.
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
+
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.granted + "--platform_list_user_sessions", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	require.NotContains(t, text, "platform tool requires project auth context")
 }

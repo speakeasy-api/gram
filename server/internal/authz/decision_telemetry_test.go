@@ -48,7 +48,9 @@ func TestRecordAuthorizationDecisionEmitsBoundedAttribution(t *testing.T) {
 	require.Equal(t, "agent", attrs["gram.authorization.actor.type"])
 	require.Equal(t, agent.ID, attrs["gram.authorization.actor.id"])
 	require.Equal(t, "key_123", attrs["gram.authorization.api_key_id"])
-	require.Equal(t, "user_authorizer", attrs["gram.authorization.authorizer_user_id"])
+	// An agent's API key is a shared credential, so its issuer is not recorded
+	// as someone the agent acts for.
+	require.Empty(t, attrs["gram.authorization.authorizer_user_id"])
 	require.Equal(t, "user_owner", attrs["gram.authorization.owner_user_id"])
 	require.NotContains(t, attrs, "gram.authorization.session_id")
 	require.NotContains(t, attrs, "gram.authorization.oauth_client_id")

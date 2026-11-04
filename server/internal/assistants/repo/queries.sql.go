@@ -2817,6 +2817,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.ended IS NOT TRUE
       AND r.state = $3
     )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT $4
@@ -2854,6 +2859,11 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 //     window. Collecting it frees the deprecated backend's resources so the
 //     next admit lands on the target backend. Active/starting/expiring rows
 //     are left to finish, so a live assistant is never disrupted mid-turn.
+//  3. Retired Kit runtimes: version 3 rows own every object and credential
+//     they name, and a new row never inherits their metadata, so collecting
+//     one cannot affect the assistant's current runtime. They skip the
+//     inactivity check, which a busy assistant would never satisfy. Rows still
+//     in switch_retiring belong to the pending switch retirement sweep.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
 		arg.InactiveBefore,
@@ -5322,11 +5332,14 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 }
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, $6::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id
 `
 
 type UpsertAssistantChatParams struct {
@@ -5335,6 +5348,7 @@ type UpsertAssistantChatParams struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	Title          pgtype.Text
+	SessionSurface pgtype.Text
 }
 
 // user_id is the conversation owner — stamped on first insert so reads can
@@ -5344,6 +5358,12 @@ type UpsertAssistantChatParams struct {
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the
 // legitimate owner.
+//
+// session_surface is the server-derived product surface for sources that the
+// inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+// the same assistants runtime as every other assistant). It is stamped from the
+// persisted thread source kind, never from a request header, and an existing
+// value is kept.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
@@ -5351,6 +5371,7 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.OrganizationID,
 		arg.UserID,
 		arg.Title,
+		arg.SessionSurface,
 	)
 	return err
 }
