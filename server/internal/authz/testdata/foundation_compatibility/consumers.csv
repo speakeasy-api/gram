@@ -106,14 +106,8 @@ internal/access/shadow_mcp_inventory.go,*Service.shadowMCPInventoryPolicyState,l
 internal/access/shadow_mcp_inventory.go,shadowMCPInventoryPolicyAudiencePrincipals,loader,ListGrantsForResource,,,1,O2 AIS-838
 internal/admin/impl.go,*Service.CreateOrganization,writer,SeedPersonalAuthClientDefaultTx,,,1,X1 AIS-873
 internal/admin/impl.go,*Service.CreateOrganization,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
-internal/agent/aiscantargets.go,*Service.requireOrganizationAdmin,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
 internal/agent/connections.go,*Service.GetMyConnections,loader,LoadGrants,,,1,M6 AIS-862
 internal/agent/connections.go,*Service.HideMcpServer,loader,LoadGrants,,,1,M6 AIS-862
-internal/agent/impl.go,*Service.APIKeyAuth,check,Check,ScopeOrgDeviceAgentSync,Require,1,O8 AIS-845
-internal/agent/impl.go,*Service.GetConfiguration,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
-internal/agent/impl.go,*Service.JWTAuth,check,Check,ScopeOrgDeviceAgentSync,Require,1,O8 AIS-845
-internal/agent/impl.go,*Service.ListSyncedUsers,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
-internal/agent/impl.go,*Service.UpdateConfiguration,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
 internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,check,Check,ScopeMCPRead,,1,M6 AIS-862
 internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,check,MCPCheck,ScopeMCPRead,,1,M6 AIS-862
 internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,evaluator,GrantsAuthorize,,,1,M6 AIS-862
@@ -201,7 +195,6 @@ internal/assistants/runtime_kit_workload.go,kitWorkloadInferenceAllowed,evaluato
 internal/auth/assistanttokens/manager.go,*Manager.Authorize,engine,PrepareContext,,,1,A1 AIS-879
 internal/auth/auth.go,*Auth.authorize,engine,PrepareContext,,,1,A1 AIS-879
 internal/auth/auth.go,*Auth.requireResolvedProjectAccess,check,Check,ScopeProjectRead,Require,1,A1 AIS-879
-internal/auth/deviceagenttoken/deviceagenttoken.go,*Issuer.Admit,engine,PrepareContext,,,1,O8 AIS-845
 internal/auth/enterprise_trial.go,*Service.armSelfServeTrialForExistingOrganization,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
 internal/auth/impl.go,*Service.APIKeyAuth,engine,PrepareContext,,,1,A1 AIS-879
 internal/auth/impl.go,*Service.Info,check,Check,ScopeProjectRead,,1,A1 AIS-879
@@ -262,11 +255,6 @@ internal/externalmcp/impl.go,*Service.GetServerDetails,check,Check,ScopeProjectR
 internal/externalmcp/impl.go,*Service.GetSetupDocs,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/externalmcp/impl.go,*Service.ListCatalog,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/hiddenmcpservers/impl.go,*Service.canConnect,check,MCPCheck,ScopeMCPConnect,Require,1,M2 AIS-865
-internal/hooks/agent_actor.go,*Service.requireAgentHooksIngest,check,HooksIngestCheck,,Require,1,O8 AIS-845
-internal/hooks/server_names_impl.go,*Service.Delete,check,Check,ScopeProjectWrite,Require,1,O8 AIS-845
-internal/hooks/server_names_impl.go,*Service.List,check,Check,ScopeProjectRead,Require,1,O8 AIS-845
-internal/hooks/server_names_impl.go,*Service.Upsert,check,Check,ScopeProjectWrite,Require,1,O8 AIS-845
-internal/hooks/status.go,*Service.GetStatus,check,Check,ScopeProjectRead,Require,1,O8 AIS-845
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,check,MCPCheck,ScopeMCPConnect,GrantsAuthorize,1,AG2 AIS-857
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,evaluator,GrantsAuthorize,,,1,AG2 AIS-857
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,projection,IsAgentKeyAuthClientType,,,1,X2 AIS-874

@@ -233,6 +233,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		audit.NewLogger(),
 		nil,
 		nil,

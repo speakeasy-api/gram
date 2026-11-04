@@ -132,7 +132,7 @@ func admitWorkloads(t *testing.T, ti *testInstance) {
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 	})
-	ti.service.authz = engine
+	ti.service.authzClient = authztest.NewParityClient(t, engine)
 	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
 }
 

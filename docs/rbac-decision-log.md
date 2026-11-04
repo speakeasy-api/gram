@@ -123,3 +123,11 @@ Review follow-ups adopted on #8442 (each fails closed):
    The organization slice cannot declare those types without colliding with the slices that own them. _If reversed:_ O7 waits for AS1 and C1 and moves all three together.
 
 2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. The e2e suite run is its evidence. _If reversed:_ add a service test before moving it.
+
+## O8 (AIS-845): device agents and hooks
+
+### Decided without reviewer input
+
+1. **Two organization operations join the typed constructors.** `Organization(id).SyncDeviceAgent()` and `Organization(id).IngestHooks(projectID)` name the `sync_device_agent` and `ingest_hooks` permissions, which the registry already declared. `IngestHooks` always carries the project, as `HooksIngestCheck` did, so a grant bounded to another project never matches. A client test checks both operations in old and new modes. _If reversed:_ keep both checks on the engine until X1.
+2. **Device-agent admission takes anything that prepares a context.** `deviceagenttoken.Issuer.Admit` now takes a `ContextPreparer` instead of the engine. The agent and hooks services pass the client, and the MCP slice's tests keep passing the engine until they migrate. _If reversed:_ make `Admit` take `*authz.Client` and update the MCP tests in the same change.
+3. **Hooks' project checks use the typed project operations.** Server names and status ask `Project(org, project).Read()` or `.Write()`, with the organization from the authenticated context. _If reversed:_ leave them for the project slices.

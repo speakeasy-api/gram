@@ -741,7 +741,7 @@ func (s *Service) authorizeWorkloadPluginRequest(ctx context.Context, token, pro
 	if s.deviceAgentTokens == nil {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
 	}
-	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authzClient)
 	if err != nil {
 		return ctx, fmt.Errorf("admit device-agent token: %w", err)
 	}

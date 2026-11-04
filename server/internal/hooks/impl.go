@@ -69,7 +69,7 @@ type Service struct {
 	// await them deterministically.
 	otelTeeDrains      sync.WaitGroup
 	auth               authorizer
-	authz              *authz.Engine
+	authzClient        *authz.Client
 	audit              *audit.Logger
 	cache              cache.Cache
 	ahpUploadLimiter   *ratelimit.Limiter
@@ -283,6 +283,7 @@ func NewService(
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
@@ -310,7 +311,7 @@ func NewService(
 		otelLogPublisher:   otelLogPublisher,
 		otelTeeDrains:      sync.WaitGroup{},
 		auth:               auth.New(logger, db, sessionsMgr, authz),
-		authz:              authz,
+		authzClient:        authzClient,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
 		ahpUploadLimiter:   ratelimit.New(uploadLimitStore, "ahp-upload", ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst}, ratelimit.WithMetrics(meterProvider)),
@@ -412,7 +413,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
-	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authzClient)
 	if err != nil {
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}

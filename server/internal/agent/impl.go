@@ -69,7 +69,7 @@ type Service struct {
 	db              *pgxpool.Pool
 	repo            *repo.Queries
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authzClient     *authz.Client
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
@@ -123,6 +123,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
@@ -139,7 +140,7 @@ func NewService(
 		db:                    db,
 		repo:                  repo.New(db),
 		auth:                  auth.New(logger, db, sessions, authzEngine),
-		authz:                 authzEngine,
+		authzClient:           authzClient,
 		audit:                 auditLogger,
 		productFeatures:       productFeatures,
 		serverURL:             serverURL,
@@ -202,7 +203,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).SyncDeviceAgent()); err != nil {
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
@@ -228,7 +229,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
-	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authzClient)
 	if err != nil {
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
@@ -236,7 +237,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(admitted, authz.Organization(authCtx.ActiveOrganizationID).SyncDeviceAgent()); err != nil {
 		err = fmt.Errorf("authorize workload device sync: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
@@ -659,7 +660,7 @@ func (s *Service) ListSyncedUsers(ctx context.Context, _ *gen.ListSyncedUsersPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -690,12 +691,7 @@ func (s *Service) GetConfiguration(ctx context.Context, _ *gen.GetConfigurationP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -719,12 +715,7 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 

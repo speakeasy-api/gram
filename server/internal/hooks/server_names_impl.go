@@ -43,7 +43,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +84,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.C(oops.CodeForbidden)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return err
 	}
 

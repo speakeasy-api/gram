@@ -100,7 +100,7 @@ func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	if authCtx.ProjectID == nil {
 		return oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
 	}
-	if err := s.authz.Require(ctx, authz.HooksIngestCheck(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).IngestHooks(authCtx.ProjectID.String())); err != nil {
 		return fmt.Errorf("authorize agent hooks ingest: %w", err)
 	}
 	return nil
