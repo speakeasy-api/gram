@@ -108,6 +108,7 @@ func DefaultMigrationUnits() []MigrationUnit {
 		{Name: "assistant", Types: []string{"assistant"}, DependsOn: []string{"project"}},
 		{Name: "environment", Types: []string{"environment"}, DependsOn: []string{"project"}},
 		{Name: "inference", Types: []string{"inference"}, DependsOn: []string{"project"}},
+		{Name: "chat", Types: []string{"chat"}, DependsOn: []string{"project"}},
 	}
 }
 
@@ -202,6 +203,10 @@ func (r *MigrationRouter) Units() []string {
 type route struct {
 	mode  MigrationMode
 	units []string
+	// organizationID is the organization the route was chosen for. It is
+	// set when a loaded decision routes by its own organization outside an
+	// admitted request; otherwise the request's organization applies.
+	organizationID string
 }
 
 // routeFor chooses the evaluator for a call. Every operation in the call
@@ -210,7 +215,7 @@ type route struct {
 // unit, a context with no pinned routes, or a missing router keeps the
 // engine deciding.
 func (r *MigrationRouter) routeFor(ctx context.Context, ops []Operation) route {
-	old := route{mode: MigrationModeOld, units: nil}
+	old := route{mode: MigrationModeOld, units: nil, organizationID: ""}
 	if r == nil || len(ops) == 0 {
 		return old
 	}
@@ -228,7 +233,7 @@ func (r *MigrationRouter) routeFor(ctx context.Context, ops []Operation) route {
 // admission still follows its organization's rollout.
 func (r *MigrationRouter) routeForLoaded(ctx context.Context, ops []Operation, organizationID string) route {
 	if r == nil || len(ops) == 0 {
-		return route{mode: MigrationModeOld, units: nil}
+		return route{mode: MigrationModeOld, units: nil, organizationID: ""}
 	}
 	pins := routePinsFromContext(ctx)
 	if pins == nil {
@@ -240,7 +245,7 @@ func (r *MigrationRouter) routeForLoaded(ctx context.Context, ops []Operation, o
 }
 
 func (r *MigrationRouter) routeWith(ctx context.Context, ops []Operation, pins *routePins, organizationID string) route {
-	old := route{mode: MigrationModeOld, units: nil}
+	old := route{mode: MigrationModeOld, units: nil, organizationID: ""}
 	var units []string
 	for _, op := range ops {
 		for _, typeName := range operationTypes(op) {
@@ -270,7 +275,7 @@ func (r *MigrationRouter) routeWith(ctx context.Context, ops []Operation, pins *
 			mode = min(mode, pinned)
 		}
 	}
-	return route{mode: mode, units: units}
+	return route{mode: mode, units: units, organizationID: organizationID}
 }
 
 // routeForOrganization chooses the evaluator for work that runs outside any

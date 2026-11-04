@@ -22,12 +22,6 @@ func evaluatorSliceDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
 	riskSurface := string(GrantSurfaceRiskPolicy)
 	return append(frozenSliceDeclarations(),
-		s.NewType("chat", s.Parent("project"), s.WrittenBy(access),
-			s.Grant("reader", s.StoredAs(string(ScopeChatRead)), s.Sensitive(), s.Describe("Read session transcripts")),
-			s.Grant("writer", s.StoredAs(string(ScopeChatWrite)), s.Describe("Change sessions")),
-			s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks(string(ScopeChatRead))),
-			s.Permission("write", s.Rel("writer"), s.Checks(string(ScopeChatWrite))),
-		),
 		s.NewType("agent", s.Parent("organization"), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeAgentRead)), s.Describe("Read agents"), s.DefaultFor(SystemRoleAdmin)),
 			s.Permission("read", s.Rel("reader"), s.Checks(string(ScopeAgentRead))),

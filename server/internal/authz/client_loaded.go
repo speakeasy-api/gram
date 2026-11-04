@@ -26,8 +26,10 @@ type LoadedPolicies struct {
 	Policies [][]Grant
 }
 
-// RequireLoaded enforces every operation against policies, recording a
-// challenge per policy as Engine.EvaluateLoadedGrants does. It ignores the
+// RequireLoaded enforces every operation against policies. While the engine
+// decides, it records a challenge per policy as Engine.EvaluateLoadedGrants
+// does; once the registry evaluator decides, it records one challenge for the
+// composed decision across every policy, as Require does. It ignores the
 // request's own grants and its enforcement profile: the decision is about the
 // loaded user, whatever transport carried the request.
 func (c *Client) RequireLoaded(ctx context.Context, policies LoadedPolicies, ops ...Operation) error {
@@ -199,9 +201,11 @@ func (c *Client) answerLoadedNew(policies LoadedPolicies, ops []Operation) shado
 }
 
 // loadedPolicySet composes loaded policies. The loaded user is the actor, so
-// ownership facts compare against the user whose authority was loaded.
+// ownership facts compare against the user whose authority was loaded. With
+// no user the actor is a system principal that no ownership fact names, as
+// in EvaluateGrants, so grant-only permissions still decide.
 func loadedPolicySet(policies LoadedPolicies) PolicySet {
-	actor := urn.Principal{Type: "", ID: ""}
+	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "loaded_grants")
 	if policies.User != "" {
 		actor = urn.NewPrincipal(urn.PrincipalTypeUser, policies.User)
 	}

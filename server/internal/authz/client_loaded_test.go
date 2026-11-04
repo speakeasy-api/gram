@@ -42,6 +42,7 @@ func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 		policies [][]Grant
 		ops      []Operation
 		allowed  bool
+		noUser   bool
 	}{
 		{name: "project-wide write reads an assistant", policies: [][]Grant{{projectWide}}, ops: []Operation{assistantRead}, allowed: true},
 		{name: "a grant in another project does not match", policies: [][]Grant{{otherProject}}, ops: []Operation{assistantRead}, allowed: false},
@@ -51,6 +52,7 @@ func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 		{name: "every policy must allow", policies: [][]Grant{{projectWide}, {projectReader}}, ops: []Operation{assistantRead}, allowed: false},
 		{name: "both policies allow", policies: [][]Grant{{projectWide, projectReader}, {projectReader, projectWide}}, ops: []Operation{assistantRead, projectRead}, allowed: true},
 		{name: "no policies deny", policies: nil, ops: []Operation{projectRead}, allowed: false},
+		{name: "grant-only operations need no loaded user", policies: [][]Grant{{projectWide, projectReader}}, ops: []Operation{assistantRead, projectRead}, allowed: true, noUser: true},
 	}
 
 	for _, mode := range []MigrationMode{MigrationModeOld, MigrationModeShadow, MigrationModeNew} {
@@ -60,6 +62,9 @@ func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 				recorder := &capturedComparisons{}
 				client, _ := newRoutedTestClient(t, nil, fixedModes(mode), recorder)
 				loaded := LoadedPolicies{OrganizationID: fixtureOrgID, User: fixtureUserID, Policies: tc.policies}
+				if tc.noUser {
+					loaded.User = ""
+				}
 				ctx := context.Background()
 
 				allowed, err := client.EvaluateLoaded(ctx, loaded, tc.ops...)
@@ -76,6 +81,9 @@ func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 
 				if mode == MigrationModeShadow {
 					require.Equal(t, []ShadowOutcome{ShadowMatch, ShadowMatch}, recorder.outcomes())
+					for _, comparison := range recorder.all() {
+						require.Equal(t, fixtureOrgID, comparison.OrganizationID, "an unadmitted loaded decision records its loaded organization")
+					}
 				} else {
 					require.Empty(t, recorder.outcomes())
 				}

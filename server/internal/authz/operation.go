@@ -368,6 +368,37 @@ func (i InferenceRef) Execute() Operation {
 	return newOperation("inference", "execute", i.projectID, map[string]string{SelectorKeyProjectID: i.projectID})
 }
 
+// ReadChats asks for a grant to read every chat session in the project, for
+// views that aggregate or list sessions beyond the caller's own. Chat grants
+// that name the project ID as their resource answer it.
+func (p ProjectRef) ReadChats() Operation {
+	return newOperation("chat", "read_grant", p.id, nil)
+}
+
+// ChatRef names one chat session in its project for typed operations.
+type ChatRef struct {
+	id string
+}
+
+// Chat names a chat session. The caller must have loaded the chat and
+// verified that it belongs to the request's project.
+func Chat(chatID string) ChatRef {
+	return ChatRef{id: chatID}
+}
+
+// Read asks for a grant to read the chat's transcript. Session owners and
+// the owners of an agent-only session read without one; the caller decides
+// ownership before asking.
+func (c ChatRef) Read() Operation {
+	return newOperation("chat", "read_grant", c.id, nil)
+}
+
+// Write asks for a grant to change or delete the chat. Session owners change
+// their own sessions without one; the caller decides ownership before asking.
+func (c ChatRef) Write() Operation {
+	return newOperation("chat", "write_grant", c.id, nil)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -380,12 +411,12 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(), org.SyncDeviceAgent(), org.IngestHooks("project"),
 		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
-		org.Read(), org.Administer(),
-		project.Read(), project.Write(), project.PublishPlugin(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
 		Inference("project").Execute(),
+		Chat("chat").Read(), Chat("chat").Write(),
+		project.ReadChats(),
 	}
 }

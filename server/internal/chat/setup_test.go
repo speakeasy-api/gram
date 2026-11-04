@@ -118,7 +118,7 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
+	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, authztest.NewParityClient(t, authzEngine), nil, billingClient, audit.NewLogger()).
 		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
 
 	return &chatTestInstance{

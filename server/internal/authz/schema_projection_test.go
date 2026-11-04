@@ -31,6 +31,7 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 
 	declared := []Scope{
 		ScopeAssistantBlockedRead, ScopeAssistantBlockedWrite, ScopeAssistantRead, ScopeAssistantWrite,
+		ScopeChatRead, ScopeChatWrite,
 		ScopeEnvironmentBlockedRead, ScopeEnvironmentBlockedWrite, ScopeEnvironmentRead, ScopeEnvironmentWrite, ScopeInferenceExecute,
 		ScopeLogRead,
 		ScopeMCPAuth, ScopeMCPBlockedAuth, ScopeMCPBlockedConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite,

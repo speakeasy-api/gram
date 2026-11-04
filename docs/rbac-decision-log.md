@@ -167,6 +167,29 @@ Review follow-ups adopted on #8442 (each fails closed):
 6. **`EvaluateLoaded` honours blocks while the engine decides.** Its old path uses `GrantsAuthorize`, the effective decision with exclusions, rather than `GrantsSatisfy`, which ignores blocks. That is what the registry evaluator answers, so shadow compares like with like. No current caller relied on block-blind answers for a blockable scope.
 7. **Agent selection moves to AG1.** `assistantidentity.(*Service).selectAgent` asks for `agent:authorize`, which the open owner-scoped agent PR (AIS-785) rewrites. The owner map now assigns it to AG1, which per the baseline waits for that PR.
 8. **Parity is proven by the service's own tests in shadow.** The assistants, assistant identity and Platform MCP assistant identity suites run with `authztest.NewParityClient`.
+9. **Loaded grants without a user decide with a system actor.** The registry evaluator refuses a policy set without an actor, so an empty `LoadedPolicies.User` would have failed in new mode for grant-only permissions while the engine allowed them. It now uses the same `loaded_grants` system principal as `EvaluateGrants`, which no ownership fact names. _If reversed:_ require a user on every loaded call and reject an empty one in all modes.
+
+## C1 (AIS-869): chat point reads, writes and the turn stream
+
+### Decided without reviewer input
+
+1. **The chat type declares its grant-backed permissions first; ownership stays in the service for now.** The RFC's `chat.read` is `read_grant ∪ Is(author) ∪ When(agent_only, Via(agent, is_owner))`. The agent type and its ownership facts belong to AG1, which waits for the open owner-scoped agent PR (AIS-785), and the inventory's dependency route says chat ownership switches together with agent ownership. This slice declares `read_grant` and `write_grant` with the RFC's names, and `Chat(...).Read()` and `.Write()` ask for them after the service has ruled out the owner and agent-owner cases exactly as before. _Follow-up:_ once AG1 declares `agent.is_owner`, declare the fact-reading `read` and `write`, load the chat's facts in `loadAuthorizedChat`, and point the constructors at them. _If reversed:_ wait for AG1 before migrating any chat call.
+2. **The constructors keep their names when the permission behind them changes.** `Chat(...).Read()` names what the handler asks, not how it is decided, so the follow-up changes no call site.
+3. **Chat grants are anchored at the organization, the project and the chat.** The stored selectors carry only `resource_kind` and `resource_id`, so a project-wide grant is expressed through the project-level operations C3 adds. Anchoring records where grants may be written; it changes no match.
+4. **The sensitive-content gate stays outside the registry.** `CheckSensitiveContentAccess` refuses impersonated sessions before any chat data is read. The migration inventory classes it as an independent gate with its own fixtures, so its row stays.
+5. **The chat service receives the client beside the engine.** The engine still builds `auth.Auth` and answers the collection checks C3 migrates.
+6. **`Chat(chatID)` takes only the chat ID.** Following M1's constructor shape, the organization and project are not arguments: chat grants never name them, and the per-chat gate has already checked the chat's project against the request.
+7. **The turn stream now runs the sensitive-content gate.** Review found that `HandleTurnStream` keeps its own chat lookup and so skipped the impersonation gate every other transcript read applies through `loadAuthorizedChat`. This was true before the migration. The fix is three lines, applies the same independent gate before the lookup, and cannot act as an existence oracle because it does not depend on the chat. _If reversed:_ drop the call and track the gap separately.
+
+## C3 (AIS-872): chat visibility, summaries and trends
+
+### Decided without reviewer input
+
+1. **C3 goes ahead of Q1 for its point checks.** Q1 owns the chat collection queries (the SQL that narrows listings to the caller's own and owned-agent sessions) and has no call site in the inventory. C3's call sites are point decisions: whether the caller may read every chat in the project, and project read for session summaries. They do not touch the SQL, so they migrate now and Q1 stays independent. _If reversed:_ hold C3 until Q1 has characterised the collection queries; nothing here would change.
+2. **"Read every chat in the project" is `Project(...).ReadChats()`.** Today it is `chat:read` with the project ID as the resource. The constructor reproduces that request exactly, on the chat type's `read_grant`. _Worth simplifying later:_ a project permission such as `project.read_chats` would name the meaning instead of overloading a chat ID with a project ID, but it changes which grants match.
+3. **`ShouldEnforce` goes through the client.** The trend and visibility paths branch on whether RBAC is enforced at all before deciding. They call `Client.ShouldEnforce`, which forwards to the engine, so the chat service's only remaining engine use is building `auth.Auth`. _If reversed:_ call the engine's `ShouldEnforce` again; nothing else changes.
+4. **The sensitive-content gate in `ReadableConversations` stays** as an independent gate, as in C1.
+5. **`ReadableConversations` uses `MatchMany`** and maps results by position, so a repeated ID keeps its own answer.
 
 ## S1 (AIS-853): skills
 

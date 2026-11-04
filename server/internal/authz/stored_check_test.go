@@ -11,7 +11,7 @@ func TestEvaluateGrantsForStoredCheckMatchesGrantsAuthorize(t *testing.T) {
 
 	owner := "role:organization:role_1"
 	declared := Check{Scope: ScopeProjectRead, ResourceKind: ResourceKindProject, ResourceID: "proj_1", Dimensions: nil}.WithStrictSelectorMatch()
-	undeclared := Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: "proj_1", Dimensions: nil}.WithStrictSelectorMatch()
+	undeclared := Check{Scope: ScopeAgentRead, ResourceKind: "", ResourceID: "org_1", Dimensions: nil}.WithStrictSelectorMatch()
 	cases := []struct {
 		name   string
 		grants []Grant
@@ -24,7 +24,7 @@ func TestEvaluateGrantsForStoredCheckMatchesGrantsAuthorize(t *testing.T) {
 			grantOf(owner, string(ScopeProjectBlockedRead), ResourceKindProject, "proj_1"),
 		}, check: declared},
 		{name: "declared without grants", grants: nil, check: declared},
-		{name: "undeclared and granted", grants: []Grant{grantOf(owner, string(ScopeChatRead), ResourceKindProject, "proj_1")}, check: undeclared},
+		{name: "undeclared and granted", grants: []Grant{grantOf(owner, string(ScopeAgentRead), "", "org_1")}, check: undeclared},
 		{name: "undeclared without grants", grants: nil, check: undeclared},
 	}
 
