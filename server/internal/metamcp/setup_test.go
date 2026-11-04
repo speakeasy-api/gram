@@ -225,8 +225,6 @@ func seedToolsetBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		ProjectID:      projectID,
 		Name:           slug,
 		Slug:           slug,
-		McpSlug:        conv.ToPGText(slug),
-		McpEnabled:     true,
 	})
 	require.NoError(t, err)
 

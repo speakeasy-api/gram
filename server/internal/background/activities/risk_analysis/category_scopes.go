@@ -50,7 +50,7 @@ type RecommendedSet struct {
 
 // CompileRecommended compiles the centrally maintained category scope registry.
 func CompileRecommended(eng *celenv.Engine) (RecommendedSet, error) {
-	out := RecommendedSet{scopes: map[categories.Category]CompiledScope{}}
+	out := RecommendedSet{scopes: make(map[categories.Category]CompiledScope)}
 	for _, rec := range recommendedscopes.All() {
 		if !rec.Applicable || (rec.ScopeInclude == "" && rec.ScopeExempt == "") {
 			continue
@@ -181,7 +181,7 @@ func (s CategoryScope) FilterFindings(view MessageView, findings []scanners.Find
 // for the batch. Identical CEL programs are evaluated once per message and
 // shared by every category using that program.
 func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) CategoryScopeMasks {
-	masks := CategoryScopeMasks{categoryOut: map[categories.Category][]bool{}}
+	masks := CategoryScopeMasks{categoryOut: make(map[categories.Category][]bool)}
 	if len(s.rec.scopes) == 0 && len(s.specified) == 0 {
 		return masks
 	}

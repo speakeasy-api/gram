@@ -152,6 +152,21 @@ func (q *Queries) BackdateAssistantRuntimeUpdatedAt(ctx context.Context, arg Bac
 	return err
 }
 
+const backdateMCPEndpointBySlugFixture = `-- name: BackdateMCPEndpointBySlugFixture :exec
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = $1 AND project_id = $2
+`
+
+type BackdateMCPEndpointBySlugFixtureParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: makes one endpoint a day older than when it was created.
+func (q *Queries) BackdateMCPEndpointBySlugFixture(ctx context.Context, arg BackdateMCPEndpointBySlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, backdateMCPEndpointBySlugFixture, arg.Slug, arg.ProjectID)
+	return err
+}
+
 const beginExpireAssistantRuntime = `-- name: BeginExpireAssistantRuntime :one
 UPDATE assistant_runtimes
 SET
@@ -1698,7 +1713,7 @@ func (q *Queries) GetKitRuntimeControlAuthority(ctx context.Context, arg GetKitR
 
 const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1729,6 +1744,8 @@ type GetKitRuntimeSessionBindingRow struct {
 }
 
 // Existence only: never load any previous transcript contents into the guest.
+// Pending user input is the current turn; only a non-user message shows the
+// assistant took part in earlier turns.
 func (q *Queries) GetKitRuntimeSessionBinding(ctx context.Context, arg GetKitRuntimeSessionBindingParams) (GetKitRuntimeSessionBindingRow, error) {
 	row := q.db.QueryRow(ctx, getKitRuntimeSessionBinding,
 		arg.RuntimeID,
@@ -2136,25 +2153,6 @@ func (q *Queries) KitInterruptPending(ctx context.Context, arg KitInterruptPendi
 	var pending bool
 	err := row.Scan(&pending)
 	return pending, err
-}
-
-const kitProtocolHasPriorMessages = `-- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= $1 AND chat_id= $2
-AND id <> ALL($3::uuid[])) AS has_prior
-`
-
-type KitProtocolHasPriorMessagesParams struct {
-	ProjectID         uuid.NullUUID
-	ChatID            uuid.UUID
-	CurrentMessageIds []uuid.UUID
-}
-
-func (q *Queries) KitProtocolHasPriorMessages(ctx context.Context, arg KitProtocolHasPriorMessagesParams) (bool, error) {
-	row := q.db.QueryRow(ctx, kitProtocolHasPriorMessages, arg.ProjectID, arg.ChatID, arg.CurrentMessageIds)
-	var has_prior bool
-	err := row.Scan(&has_prior)
-	return has_prior, err
 }
 
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
@@ -3154,7 +3152,9 @@ SELECT
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
-  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  -- legacyalias: drop with AIM-670.
+  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
@@ -3204,6 +3204,7 @@ type LoadAssistantMcpServersRow struct {
 	ToolsetSlug            pgtype.Text
 	Visibility             string
 	EndpointSlug           string
+	HostedToolset          bool
 	EndpointDomain         string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
@@ -3214,8 +3215,8 @@ type LoadAssistantMcpServersRow struct {
 // default environment, and sort first so they win runtime id
 // collisions. The address is the server's own endpoint: platform first, else
 // one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
-// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
-// toolset slug fallback is removed.
+// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
+// caller fills in from legacyalias until the toolset slug fallback is removed.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -3232,6 +3233,7 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.ToolsetSlug,
 			&i.Visibility,
 			&i.EndpointSlug,
+			&i.HostedToolset,
 			&i.EndpointDomain,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
@@ -3768,6 +3770,33 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.WarmUntil,
 	)
 	return i, err
+}
+
+const lockKitLocalWorkloadSubject = `-- name: LockKitLocalWorkloadSubject :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes kit workload provisioning for one external subject across
+// projects. The key is the caller's canonical JSON encoding of the subject.
+func (q *Queries) LockKitLocalWorkloadSubject(ctx context.Context, subjectKey string) error {
+	_, err := q.db.Exec(ctx, lockKitLocalWorkloadSubject, subjectKey)
+	return err
+}
+
+const lockProjectForKitWorkload = `-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockProjectForKitWorkloadParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForKitWorkload(ctx context.Context, arg LockProjectForKitWorkloadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForKitWorkload, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
@@ -4528,11 +4557,16 @@ SELECT t.id, t.slug, EXISTS (
     AND w.project_id = t.project_id
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
-    AND (
-      t.mcp_slug IS NOT NULL
-      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-    )
-)::bool AS enables_mcp
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+)::bool AS enables_mcp, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+)::bool AS disabled_wrapper
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -4559,13 +4593,16 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID         uuid.UUID
-	Slug       string
-	EnablesMcp bool
+	ID              uuid.UUID
+	Slug            string
+	EnablesMcp      bool
+	DisabledWrapper bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
 // attachments take the toolset lock before the server lock, as deletion does.
+// enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
+// legacyalias: drop disabled_wrapper with AIM-670.
 // Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 // locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
@@ -4577,7 +4614,12 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.EnablesMcp,
+			&i.DisabledWrapper,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4621,6 +4663,21 @@ type RetireAssistantRuntimesForSwitchParams struct {
 // Never rewrite a runtime's protocol. Authority checks must reject ended rows.
 func (q *Queries) RetireAssistantRuntimesForSwitch(ctx context.Context, arg RetireAssistantRuntimesForSwitchParams) error {
 	_, err := q.db.Exec(ctx, retireAssistantRuntimesForSwitch, arg.ProjectID, arg.AssistantID)
+	return err
+}
+
+const retireMCPServerEndpointsFixture = `-- name: RetireMCPServerEndpointsFixture :exec
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type RetireMCPServerEndpointsFixtureParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture: retires every endpoint of one MCP server.
+func (q *Queries) RetireMCPServerEndpointsFixture(ctx context.Context, arg RetireMCPServerEndpointsFixtureParams) error {
+	_, err := q.db.Exec(ctx, retireMCPServerEndpointsFixture, arg.McpServerID, arg.ProjectID)
 	return err
 }
 
@@ -4973,6 +5030,21 @@ type SoftDeleteAssistantThreadParams struct {
 
 func (q *Queries) SoftDeleteAssistantThread(ctx context.Context, arg SoftDeleteAssistantThreadParams) error {
 	_, err := q.db.Exec(ctx, softDeleteAssistantThread, arg.ID, arg.ProjectID)
+	return err
+}
+
+const softDeleteCustomDomainFixture = `-- name: SoftDeleteCustomDomainFixture :exec
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
+`
+
+type SoftDeleteCustomDomainFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: soft-deletes a custom domain under its endpoints.
+func (q *Queries) SoftDeleteCustomDomainFixture(ctx context.Context, arg SoftDeleteCustomDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteCustomDomainFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

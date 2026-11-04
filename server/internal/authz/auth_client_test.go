@@ -286,14 +286,22 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 	requireForbidden(t, engine.Require(workload, personalClientCheck("user_u"))) // no represented user resolves no connection
 }
 
-func TestSystemAndSupportGrantsExcludeMCPAuth(t *testing.T) {
+func TestSystemRolesGrantMCPAuthWithMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	for _, role := range []string{SystemRoleAdmin, SystemRoleMember} {
+		scopes := make([]string, 0, len(SystemRoleGrants[role]))
 		for _, grant := range SystemRoleGrants[role] {
-			require.NotEqual(t, string(ScopeMCPAuth), grant.Scope, role)
+			scopes = append(scopes, grant.Scope)
 		}
+		require.Contains(t, scopes, string(ScopeMCPConnect), role)
+		require.Contains(t, scopes, string(ScopeMCPAuth), role)
 	}
+}
+
+func TestSupportGrantsExcludeMCPAuth(t *testing.T) {
+	t.Parallel()
+
 	for _, grant := range allScopeGrants() {
 		require.NotEqual(t, ScopeMCPAuth, grant.Scope, "administering an organization implies no use of its auth clients")
 	}

@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -71,8 +71,8 @@ type MCPUpstreamAuthClient struct {
 // MCPUpstreamAuthentication says whether the server's upstream needs
 // authentication and which clients it offers.
 type MCPUpstreamAuthentication struct {
-	Status               string                  `json:"status" jsonschema:"configured, setup_incomplete (authentication required but no enabled client), no_auth_required, or undecided"`
-	RequiresUpstreamAuth *bool                   `json:"requires_upstream_auth,omitempty"`
+	Status               string                  `json:"status" jsonschema:"configured (at least one enabled client), setup_incomplete (no client was ever linked, but upstream credentials are configured that no client records yet), or no_auth_required"`
+	RequiresUpstreamAuth bool                    `json:"requires_upstream_auth" jsonschema:"true when the server offers at least one enabled client"`
 	Clients              []MCPUpstreamAuthClient `json:"clients"`
 }
 
@@ -222,15 +222,11 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 			return MCPConnectionSettings{}, err
 		}
 		settings.UpstreamAuthentication = upstream
-		legacy, err := mcpserversrepo.New(db).ListLegacyPlatformAliasSlugs(ctx, mcpserversrepo.ListLegacyPlatformAliasSlugsParams{
-			OrganizationID: principal.OrganizationID, ProjectIds: []uuid.UUID{projectID}, McpServerIds: []uuid.UUID{targetID},
-		})
+		legacy, err := legacyalias.PlatformServedSlugs(ctx, db, principal.OrganizationID, []uuid.UUID{projectID}, []uuid.UUID{targetID})
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("list legacy platform alias: %w", err)
 		}
-		if len(legacy) > 0 {
-			settings.LegacyPlatformSlug = legacy[0].Slug
-		}
+		settings.LegacyPlatformSlug = legacy[targetID]
 	}
 	if input.TargetKind == MCPConnectionSettingsGateway {
 		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -331,17 +332,16 @@ func TestUpdateIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 
 	// An issuer in another organization.
 	otherOrg := "org_" + uuid.NewString()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: another organization's rows are not reachable through the caller's API
-		ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'other', $1)`, otherOrg)
+	err := repo.New(ti.conn).CreateOrganizationFixture(ctx, repo.CreateOrganizationFixtureParams{ID: otherOrg, Name: "other", Slug: otherOrg})
 	require.NoError(t, err)
 
-	var otherIssuer uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri)
-		VALUES ($1, 'other-ci', 'https://other.example.com', 'https://other.example.com/jwks')
-		RETURNING id
-	`, otherOrg).Scan(&otherIssuer)
+	otherIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: otherOrg,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "other-ci",
+		Issuer:         "https://other.example.com",
+		JwksUri:        "https://other.example.com/jwks",
+	})
 	require.NoError(t, err)
 
 	for _, id := range []string{otherIssuer.String(), uuid.NewString()} {
@@ -352,9 +352,7 @@ func TestUpdateIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeNotFound)
 	}
 
-	var name string
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: asserting the row the API must not have touched
-		ctx, `SELECT name FROM workload_issuers WHERE id = $1`, otherIssuer).Scan(&name)
+	name, err := repo.New(ti.conn).GetWorkloadIssuerNameFixture(ctx, otherIssuer)
 	require.NoError(t, err)
 	require.Equal(t, "other-ci", name)
 }
@@ -366,20 +364,21 @@ func TestUpdateIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	siblingProject := uuid.New()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: registering under another project is not reachable through the API
-		ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1::uuid, $2, 'sibling', 'sibling-' || left($1::uuid::text, 8))
-	`, siblingProject, ti.orgID)
+	_, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             siblingProject,
+		Name:           "sibling",
+		Slug:           "sibling-" + siblingProject.String()[:8],
+		OrganizationID: ti.orgID,
+	})
 	require.NoError(t, err)
 
-	var siblingIssuer uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, 'sibling-ci', 'https://sibling.example.com', 'https://sibling.example.com/jwks')
-		RETURNING id
-	`, ti.orgID, siblingProject).Scan(&siblingIssuer)
+	siblingIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      uuid.NullUUID{UUID: siblingProject, Valid: true},
+		Name:           "sibling-ci",
+		Issuer:         "https://sibling.example.com",
+		JwksUri:        "https://sibling.example.com/jwks",
+	})
 	require.NoError(t, err)
 
 	payload := updatePayload(siblingIssuer.String())

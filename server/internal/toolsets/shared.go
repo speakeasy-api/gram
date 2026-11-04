@@ -106,6 +106,7 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 }
 
 func (t *Toolsets) extractPlatformToolCallPlan(ctx context.Context, projectID uuid.UUID, tool platformtools.ToolDescriptor) (*gateway.ToolCallPlan, error) {
+	tool = platformtools.DescriptorForContext(ctx, tool)
 	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)

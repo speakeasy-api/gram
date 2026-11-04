@@ -32,6 +32,11 @@ func GetOrganizationFeaturesAdminPath() string {
 	return "/admin/organization.features"
 }
 
+// SetOrganizationProviderSetupAdminPath returns the URL path to the admin service setOrganizationProviderSetup HTTP endpoint.
+func SetOrganizationProviderSetupAdminPath() string {
+	return "/admin/organization.providerSetup"
+}
+
 // SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
 func SetOrganizationFeatureAdminPath() string {
 	return "/admin/organization.features"
@@ -520,4 +525,9 @@ func EnableUpstreamAuthEnforcementAdminPath() string {
 // DisableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service disableUpstreamAuthEnforcement HTTP endpoint.
 func DisableUpstreamAuthEnforcementAdminPath() string {
 	return "/admin/upstreamOAuthMigration.disableEnforcement"
+}
+
+// BackfillMcpAuthGrantsAdminPath returns the URL path to the admin service backfillMcpAuthGrants HTTP endpoint.
+func BackfillMcpAuthGrantsAdminPath() string {
+	return "/admin/mcpAuthGrants.backfill"
 }

@@ -41,7 +41,7 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	const artifact = "cursor-plugins/setup-backfill-cursor/mcp.json"
-	require.NotContains(t, string(publisher.lastPushedFiles[artifact]), server.McpSlug.String)
+	require.NotContains(t, string(publisher.lastPushedFiles[artifact]), server.Slug)
 	fixtures := testrepo.New(ti.conn)
 	before, err := fixtures.ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -77,5 +77,5 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	require.NoError(t, err)
 	content, exists := publisher.lastPushedFiles[artifact]
 	require.True(t, exists, "setup role plugin must produce a client package")
-	require.Contains(t, string(content), server.McpSlug.String, "published package includes the existing granted server without manual content edits")
+	require.Contains(t, string(content), server.Slug, "published package includes the existing granted server without manual content edits")
 }

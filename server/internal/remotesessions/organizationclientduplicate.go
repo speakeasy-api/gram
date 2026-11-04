@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -113,7 +113,7 @@ func (s *Service) DuplicateClient(ctx context.Context, payload *orgclientsgen.Du
 
 	// A managed client's registration belongs to its identity provider
 	// connection, so a copy would be an unmanaged client holding its secret.
-	if err := managedrows.RequireUnmanaged(source.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(source.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 

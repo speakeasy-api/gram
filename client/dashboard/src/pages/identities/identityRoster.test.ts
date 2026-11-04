@@ -1,9 +1,10 @@
-import { Gram } from "@gram/client";
+import { Agents } from "@gram/client/sdk/agents.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { identityHasAccount, identityKindOf } from "./identityKind";
 import {
+  type AgentsClient,
   fetchRegisteredAgents,
   registeredAgentIdentity,
   registeredAgentHref,
@@ -51,7 +52,7 @@ describe("registeredAgentIdentity", () => {
 
 describe("fetchRegisteredAgents", () => {
   it("returns one server-decided page and forwards the abort signal", async () => {
-    const client = new Gram();
+    const client = agentsClient();
     const list = page(client, { items: [agent], nextCursor: "next" });
     const signal = new AbortController().signal;
 
@@ -72,7 +73,7 @@ describe("fetchRegisteredAgents", () => {
   });
 
   it("asks for the first page when given no request", async () => {
-    const client = new Gram();
+    const client = agentsClient();
     const list = page(client, { items: [] });
 
     await expect(fetchRegisteredAgents(client)).resolves.toEqual({ items: [] });
@@ -89,7 +90,7 @@ describe("fetchRegisteredAgents", () => {
   });
 
   it("sends no search when the caller's query is only whitespace", async () => {
-    const client = new Gram();
+    const client = agentsClient();
     const list = page(client, { items: [] });
 
     await fetchRegisteredAgents(client, { search: "   " });
@@ -101,14 +102,14 @@ describe("fetchRegisteredAgents", () => {
   });
 
   it("treats the backend rollout gate's SDK 404 as an empty inventory", async () => {
-    const client = new Gram();
+    const client = agentsClient();
     vi.spyOn(client.agents, "list").mockRejectedValue(httpError(404));
 
     await expect(fetchRegisteredAgents(client)).resolves.toEqual({ items: [] });
   });
 
   it.each([403, 500])("propagates genuine SDK %i failures", async (status) => {
-    const client = new Gram();
+    const client = agentsClient();
     const error = httpError(status);
     vi.spyOn(client.agents, "list").mockRejectedValue(error);
 
@@ -116,7 +117,7 @@ describe("fetchRegisteredAgents", () => {
   });
 
   it("does not mistake a non-SDK error for the rollout gate", async () => {
-    const client = new Gram();
+    const client = agentsClient();
     const error = Object.assign(new Error("Failed to list agents"), {
       statusCode: 404,
     });
@@ -126,9 +127,14 @@ describe("fetchRegisteredAgents", () => {
   });
 });
 
+/** Builds only the agents service, not the full SDK client. */
+function agentsClient(): AgentsClient {
+  return { agents: new Agents() };
+}
+
 /** The SDK hands back a page object, not the array it used to return. */
 function page(
-  client: Gram,
+  client: AgentsClient,
   result: { items: unknown[]; nextCursor?: string },
 ): ReturnType<typeof vi.spyOn> {
   return vi

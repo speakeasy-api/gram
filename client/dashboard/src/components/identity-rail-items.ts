@@ -18,8 +18,6 @@ export function identityRailItems(
    * resets the filters the reader just set.
    */
   search = "",
-  /** Whether the viewer may open Findings; the entry is left out otherwise. */
-  showFindings = false,
   /**
    * An agent is not a person, and three of the people tabs have nothing to
    * read for one: usage, cost and risk findings are all keyed by a human
@@ -101,17 +99,6 @@ export function identityRailItems(
       href: `${detail.security.href(encodedUrn)}${search}`,
       active: detail.security.active,
     },
-    ...(showFindings
-      ? [
-          {
-            key: "findings",
-            title: "Findings",
-            href: `${detail.findings.href(encodedUrn)}${search}`,
-            active: detail.findings.active,
-            nested: true,
-          },
-        ]
-      : []),
     {
       key: "cost",
       title: "Cost",

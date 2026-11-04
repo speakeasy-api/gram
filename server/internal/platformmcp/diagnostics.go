@@ -248,9 +248,9 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
 	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
-		GramProjectID: input.ProjectID,
-		TimeStart:     start,
-		TimeEnd:       end,
+		GramProjectIDs: []string{input.ProjectID},
+		TimeStart:      start,
+		TimeEnd:        end,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview summary: %w", err)

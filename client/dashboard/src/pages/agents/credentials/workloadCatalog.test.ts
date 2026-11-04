@@ -53,6 +53,7 @@ const gke: CatalogEntry = {
   subject: {
     template: "system:serviceaccount:{namespace}:{service_account}",
     wildcard: false,
+    alternatives: [],
   },
 };
 
@@ -80,6 +81,7 @@ const claudeTag: CatalogEntry = {
   subject: {
     template: "wimse://identity.anthropic.com/org/{org_id}/agent/",
     wildcard: true,
+    alternatives: [],
   },
 };
 
@@ -143,7 +145,10 @@ describe("catalogEntryForIssuer", () => {
       ),
     ).toBeUndefined();
     expect(
-      valuesFromSubject(gke, "system:serviceaccount:billing:invoice:worker"),
+      valuesFromSubject(gke, {
+        subject: "system:serviceaccount:billing:invoice:worker",
+        matchKind: "exact",
+      }),
     ).toEqual({});
   });
 
@@ -161,7 +166,10 @@ describe("reading values back for editing", () => {
   it("reads a cluster from its issuer and a workload from its subject", () => {
     expect({
       ...valuesFromIssuer(gke, prodIssuer),
-      ...valuesFromSubject(gke, "system:serviceaccount:billing:invoice-worker"),
+      ...valuesFromSubject(gke, {
+        subject: "system:serviceaccount:billing:invoice-worker",
+        matchKind: "exact",
+      }),
     }).toEqual({
       project: "acme-prod",
       location: "us-central1",
@@ -173,10 +181,19 @@ describe("reading values back for editing", () => {
 
   it("reads a wildcard rule's stem", () => {
     expect(
-      valuesFromSubject(
-        claudeTag,
-        "wimse://identity.anthropic.com/org/org-123/agent/*",
-      ),
+      valuesFromSubject(claudeTag, {
+        subject: "wimse://identity.anthropic.com/org/org-123/agent/*",
+        matchKind: "wildcard",
+      }),
     ).toEqual({ org_id: "org-123" });
+  });
+
+  it("reads a rule only as a template of its own match kind", () => {
+    expect(
+      valuesFromSubject(claudeTag, {
+        subject: "wimse://identity.anthropic.com/org/org-123/agent/",
+        matchKind: "exact",
+      }),
+    ).toEqual({});
   });
 });

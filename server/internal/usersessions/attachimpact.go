@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -139,7 +139,11 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !hostingstate.LegacyAlias(toolset).CustomDomainID.Valid}, nil
+			alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
+			if err != nil {
+				return none, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, logger)
+			}
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !alias.CustomDomainID.Valid}, nil
 		}
 		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:
@@ -174,7 +178,10 @@ func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger
 		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
 	}
 	// The frozen alias still serves on its own host while the server is enabled.
-	alias := hostingstate.LegacyAlias(toolset)
+	alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
+	if err != nil {
+		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, logger)
+	}
 	if alias.Slug.Valid && alias.Slug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
 		customDomainIDs = append(customDomainIDs, alias.CustomDomainID)
 	}

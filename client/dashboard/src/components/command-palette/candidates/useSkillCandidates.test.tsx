@@ -1,9 +1,13 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  renderHook as baseRenderHook,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   gramProject: "project-one",
-  goToOverview: vi.fn(),
   query: {
     data: undefined as
       | { pages: Array<{ result: { skills: Array<Record<string, unknown>> } }> }
@@ -18,13 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => mocks.gramProject,
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: {
-      detail: { overview: { goTo: mocks.goToOverview } },
-    },
-  }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: mocks.gramProject }),
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkillsInfinite: (...args: unknown[]) => {
@@ -34,6 +32,10 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 }));
 
 import { useSkillCandidates } from "./useSkillCandidates";
+
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
+}
 
 function skill(
   id: string,
@@ -52,7 +54,6 @@ function skill(
 describe("useSkillCandidates", () => {
   beforeEach(() => {
     mocks.gramProject = "project-one";
-    mocks.goToOverview.mockReset();
     mocks.calls.length = 0;
     mocks.query.data = undefined;
     mocks.query.hasNextPage = false;
@@ -88,20 +89,26 @@ describe("useSkillCandidates", () => {
       ],
     };
 
-    const { result } = renderHook(() => useSkillCandidates({ enabled: true }));
+    const { result } = renderHook(() => ({
+      candidates: useSkillCandidates({ enabled: true }),
+      location: useLocation(),
+    }));
 
-    expect(result.current.map((candidate) => candidate.title)).toEqual([
-      "Policy Review",
-      "Incident Response",
-    ]);
-    expect(result.current[1]).toMatchObject({
+    expect(
+      result.current.candidates.map((candidate) => candidate.title),
+    ).toEqual(["Policy Review", "Incident Response"]);
+    expect(result.current.candidates[1]).toMatchObject({
       id: "skill:last",
       kind: "skill",
       keywords: ["skill", "incident-response", "last", "security"],
       group: "Skills",
     });
-    void result.current[1]!.run("open");
-    expect(mocks.goToOverview).toHaveBeenCalledWith("last");
+    act(() => {
+      void result.current.candidates[1]!.run("open");
+    });
+    expect(result.current.location.pathname).toBe(
+      "/org/projects/project-one/skills/last/overview",
+    );
   });
 
   it("keeps fetching until all skill pages have loaded", async () => {

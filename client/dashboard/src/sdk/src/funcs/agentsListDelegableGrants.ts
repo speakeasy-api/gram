@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listDelegableGrants agents
  *
  * @remarks
- * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+ * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
  */
 export function agentsListDelegableGrants(
   client: GramCore,
@@ -108,6 +108,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "agent_id": payload.agent_id,
+    "carry_exclusions": payload.carry_exclusions,
     "toolset_id": payload.toolset_id,
     "toolset_ids": payload.toolset_ids,
   });

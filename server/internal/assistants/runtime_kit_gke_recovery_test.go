@@ -30,7 +30,7 @@ func TestKitGKEReapTombstoneDoesNotRequireLiveAdmission(t *testing.T) {
 	}
 	require.NoError(t, k.Reap(t.Context(), r))
 	require.Equal(t, 1, *fences)
-	_, err = client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	_, err = client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.True(t, apierrors.IsNotFound(err))
 	require.NoError(t, k.Reap(t.Context(), r), "permanent cleanup is retryable")
 	_, err = k.Ensure(t.Context(), r)
@@ -72,7 +72,7 @@ func TestKitGKEReapTombstoneFenceFailurePreservesResources(t *testing.T) {
 	failure := errors.New("revocation unavailable")
 	k.config.Fence = func(context.Context, assistantRuntimeRecord) error { return failure }
 	require.ErrorIs(t, k.Reap(t.Context(), r), failure)
-	_, err = client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	_, err = client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.NoError(t, err)
 }
 

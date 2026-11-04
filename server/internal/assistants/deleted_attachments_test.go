@@ -25,11 +25,10 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 			ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 			ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 				OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
-				McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 			})
 			require.NoError(t, err)
 			if kind == "toolset" {
-				syncCanonicalWrapper(t, conn, ts)
+				createCanonicalWrapper(t, conn, ts, "example-tools-endpoint", "private")
 			}
 			payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 			targetID := ts.ID

@@ -156,7 +156,6 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 func requireLiveAgentBindings(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID) {
 	t.Helper()
 	live, err := repo.New(ti.conn).HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
-		ProjectID:             projectIDFromContext(t, ctx),
 		OrganizationID:        activeOrganizationID(t, ctx),
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,

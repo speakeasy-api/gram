@@ -89,14 +89,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: {
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup?task=identity-provider">{children}</a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: undefined }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => mocks.features(),

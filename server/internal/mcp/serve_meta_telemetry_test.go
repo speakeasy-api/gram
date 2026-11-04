@@ -124,7 +124,7 @@ func TestServePublic_MetaEndpoint_HostedMemberCallStampsMemberBesideCanonical(t 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
-	canonical := createToolsetMcpEndpointWithID(t, ctx, ti.conn, member.toolsetID, *authCtx.ProjectID, member.toolsetID, slug+"-canonical", "public", uuid.NullUUID{}, uuid.Nil)
+	canonical := exposeCanonicalWrapper(t, ctx, ti, *authCtx.ProjectID, member.toolsetID, slug+"-canonical", "public")
 
 	callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
 		"name":      member.slug + "--alpha_tool",

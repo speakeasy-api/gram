@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -279,9 +281,10 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "site-url",
-			Usage:   "The URL of the dashboard site, used to link from notification emails",
-			EnvVars: []string{"GRAM_SITE_URL"},
+			Name:     "site-url",
+			Required: true,
+			Usage:    "The URL of the dashboard site, used to link from notification emails",
+			EnvVars:  []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -369,6 +372,10 @@ func newWorkerCommand() *cli.Command {
 		Usage: "Start the temporal worker",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
+			siteURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("worker site-url: %w", err)
+			}
 			customDomainARecords, err := customDomainARecordsFromCLI(c)
 			if err != nil {
 				return err
@@ -802,6 +809,9 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
+			// Turns this worker runs relay the connection links the MCP service
+			// issues on the dashboard origin, as the server's turns do.
+			assistantsCore.SetSiteURL(siteURL)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -811,13 +821,6 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 
-			var siteURL *url.URL
-			if raw := c.String("site-url"); raw != "" {
-				siteURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("failed to parse site url: %w", err)
-				}
-			}
 			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 			if err != nil {
 				return fmt.Errorf("invalid platform hosts: %w", err)
@@ -867,7 +870,8 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+				FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), telemetry.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
+				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 				CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 				GuardianPolicy:                 guardianPolicy,
 				TunnelHTTPClient:               tunnelHTTPClient,
@@ -908,7 +912,7 @@ func newWorkerCommand() *cli.Command {
 				IssuerMetadataRefresher:        issuerMetadataRefresher,
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
-				StartupSeeds:                   startupSeeds(logger, db),
+				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
 				PIScanner:                      piScanner,

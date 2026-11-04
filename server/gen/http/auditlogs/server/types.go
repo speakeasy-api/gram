@@ -412,7 +412,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -780,7 +786,7 @@ func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGat
 }
 
 // NewListPayload builds a auditlogs service list endpoint payload.
-func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, subjectIds []string, actingSurface *string, from *string, to *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, subjectIds []string, actingSurface *string, from *string, to *string, category string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
@@ -792,6 +798,7 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 	v.ActingSurface = actingSurface
 	v.From = from
 	v.To = to
+	v.Category = category
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -799,9 +806,10 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 }
 
 // NewListFacetsPayload builds a auditlogs service listFacets endpoint payload.
-func NewListFacetsPayload(projectSlug *string, apikeyToken *string, sessionToken *string) *auditlogs.ListFacetsPayload {
+func NewListFacetsPayload(projectSlug *string, category string, apikeyToken *string, sessionToken *string) *auditlogs.ListFacetsPayload {
 	v := &auditlogs.ListFacetsPayload{}
 	v.ProjectSlug = projectSlug
+	v.Category = category
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

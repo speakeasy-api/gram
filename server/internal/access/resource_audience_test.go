@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -519,6 +520,62 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	})
 
 	_, err := ti.service.ListResourceAudience(scopedCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// An organization admin whose read of this server is blocked (for example
+	// by a block on everyone) can still read the rules they are allowed to
+	// write.
+	adminCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(adminCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestService_ListResourceAudience_BlockedNonAdminForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// The org admin exemption must not weaken blocks for everyone else: a
+	// non-admin whose read of this server is blocked still cannot list its rules.
+	blockedCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, serverID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(blockedCtx, &gen.ListResourceAudiencePayload{
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		SessionToken: nil,
@@ -1112,14 +1169,16 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 			ID: uuid.MustParse(toolsetID), OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		require.NoError(t, err)
-		_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: toolset.Slug, ProjectID: toolset.ProjectID,
+		_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+			EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+			ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+			Visibility: "private", NetworkAccessMode: pgtype.Text{},
 		})
 		require.NoError(t, err)
 	}
-	var beforeSession, afterSession string
-	//nolint:glint // notestingrawsql: capture the shared credential without logging it
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)
+	// Capture the shared credential without logging it.
+	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp", ResourceID: serverID,
@@ -1135,8 +1194,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: otherServerID})
 	require.NoError(t, err)
 	require.True(t, allowed)
-	//nolint:glint // notestingrawsql: prove server-local policy removal leaves shared upstream authority intact
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&afterSession)
+	// Server-local policy removal leaves shared upstream authority intact.
+	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }

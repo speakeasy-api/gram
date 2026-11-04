@@ -154,11 +154,11 @@ func searchDocs(t *testing.T, reg *Registrar, query string) SearchGramDocsToolOu
 
 	var descriptor Descriptor
 	for _, candidate := range reg.Descriptors() {
-		if candidate.Name == "search_gram_docs" {
+		if candidate.Name == "search_speakeasy_docs" {
 			descriptor = candidate
 		}
 	}
-	require.NotEmpty(t, descriptor.Name, "search_gram_docs is registered")
+	require.NotEmpty(t, descriptor.Name, "search_speakeasy_docs is registered")
 
 	ctx := ContextWithPrincipal(t.Context(), Principal{OrganizationID: "organization", ConnectionID: "connection"})
 	arguments, err := json.Marshal(map[string]string{"query": query})
@@ -167,7 +167,7 @@ func searchDocs(t *testing.T, reg *Registrar, query string) SearchGramDocsToolOu
 	require.NoError(t, err)
 
 	output, ok := result.(SearchGramDocsToolOutput)
-	require.True(t, ok, "search_gram_docs returns its structured output")
+	require.True(t, ok, "search_speakeasy_docs returns its structured output")
 	return output
 }
 
@@ -295,7 +295,7 @@ func TestSearchDocsRefusesWhenRateLimited(t *testing.T) {
 
 	var descriptor Descriptor
 	for _, candidate := range reg.Descriptors() {
-		if candidate.Name == "search_gram_docs" {
+		if candidate.Name == "search_speakeasy_docs" {
 			descriptor = candidate
 		}
 	}

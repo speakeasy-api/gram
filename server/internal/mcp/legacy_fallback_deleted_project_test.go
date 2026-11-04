@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -33,7 +32,7 @@ func TestLegacyFallback_DeletedProjectAnswersAsUnknownSlug(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	public := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "deleted-proj-public-"+uuid.NewString()[:8])
+	public := createPublicMCPToolset(t, ctx, ti, authCtx, "deleted-proj-public-"+uuid.NewString()[:8])
 	gated, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	unknown := "deleted-proj-unknown-" + uuid.NewString()[:8]
 
@@ -108,7 +107,7 @@ func TestLegacyFallback_DeletedProjectSlugNotTakenOverByCustomDomainToolset(t *t
 	otherAuth.ProjectID = &other.ID
 	slug := "deleted-proj-shared-" + uuid.NewString()[:8]
 	live, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, &otherAuth, slug, slug+".example.com")
-	createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
@@ -118,6 +117,48 @@ func TestLegacyFallback_DeletedProjectSlugNotTakenOverByCustomDomainToolset(t *t
 
 	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{OrganizationID: authCtx.ActiveOrganizationID, Domain: domain.Domain, DomainID: domain.ID})
 	w, err := servePublicHTTP(t, customCtx, ti, live.McpSlug.String, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// Custom-domain aliases sharing a slug across tenants are ambiguous on the platform host, so neither is served there.
+func TestLegacyFallback_AmbiguousCustomDomainAliasNotServedOnPlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherOrgID := newLiveWorkloadOrganization(t, ti.conn)
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other tenant", Slug: "other-" + uuid.NewString()[:8], OrganizationID: otherOrgID})
+	require.NoError(t, err)
+	otherAuth := *authCtx
+	otherAuth.ActiveOrganizationID = otherOrgID
+	otherAuth.ProjectID = &other.ID
+
+	slug := "ambiguous-cd-" + uuid.NewString()[:8]
+	_, mine := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, authCtx, slug, slug+".a.example.com")
+	_, theirs := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, &otherAuth, slug, slug+".b.example.com")
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	for _, domain := range []struct {
+		orgID string
+		name  string
+		id    uuid.UUID
+	}{{authCtx.ActiveOrganizationID, mine.Domain, mine.ID}, {otherOrgID, theirs.Domain, theirs.ID}} {
+		customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{OrganizationID: domain.orgID, Domain: domain.name, DomainID: domain.id})
+		w, err := servePublicHTTP(t, customCtx, ti, slug, makeInitializeBody(), "", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// With the other tenant's project deleted, one candidate is left and the platform host serves it again.
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, other.ID)
+	require.NoError(t, err)
+	w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }

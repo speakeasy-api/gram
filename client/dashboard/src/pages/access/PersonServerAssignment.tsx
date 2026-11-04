@@ -2,7 +2,6 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { Ban } from "lucide-react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
-import { useOrganization } from "@/contexts/Auth";
 import { Text } from "@/components/ui/Text";
 import { RoleLink } from "@/components/role-link";
 import { cn } from "@/lib/utils";
@@ -11,7 +10,10 @@ import type { ExplainResourceAccessResult } from "@gram/client/models/components
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import { levelStatus } from "../mcp/access/explainAccess";
 import { narrowingLabel } from "../mcp/access/serverAudience";
-import { AssignmentServerIcon } from "./AssignmentServerIcon";
+import {
+  AssignmentProject,
+  AssignmentServerIcon,
+} from "./AssignmentServerIcon";
 
 export type PersonServerAccess = {
   server: AccessibleMCPServer;
@@ -57,11 +59,7 @@ export function ServerAssignment({
   server,
   explanation,
 }: PersonServerAccess): JSX.Element {
-  const organization = useOrganization();
   const routes = useRoutes({ projectSlug: server.projectSlug });
-  const project = organization.projects?.find(
-    (project) => project.id === server.projectId,
-  );
   const level = explanation.levels.find((level) => level.level === "use");
   if (!level)
     return (
@@ -96,11 +94,11 @@ export function ServerAssignment({
   return (
     <div
       className={cn(
-        "border-border flex items-start gap-3 border-b py-4",
+        "border-border flex items-start gap-3 border-b py-2.5",
         blocked && "bg-destructive/5",
       )}
     >
-      <span className="relative mt-0.5 shrink-0">
+      <span className="relative shrink-0">
         <AssignmentServerIcon server={server} />
         {blocked && (
           <Ban
@@ -109,26 +107,34 @@ export function ServerAssignment({
           />
         )}
       </span>
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <Link
-            className={cn(
-              "break-words text-sm font-medium hover:underline",
-              blocked && "text-destructive",
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              className={cn(
+                "truncate text-sm font-medium hover:underline",
+                blocked && "text-destructive",
+              )}
+              to={routes.mcp.details.overview.href(mcpServerRouteParam(server))}
+            >
+              {server.name || "Unnamed server"}
+            </Link>
+            {server.projectSlug !== "default" && (
+              <AssignmentProject
+                server={server}
+                className="text-muted-foreground text-sm"
+              />
             )}
-            to={routes.mcp.details.overview.href(mcpServerRouteParam(server))}
+          </div>
+          <Text
+            small
+            destructive={blocked}
+            muted={!blocked}
+            className="shrink-0"
           >
-            {server.name || "Unnamed server"}
-          </Link>
-          <Text small destructive={blocked} muted={!blocked}>
             {status.label}
           </Text>
         </div>
-        {server.projectSlug !== "default" && (
-          <Text small muted>
-            {project?.name || server.projectSlug}
-          </Text>
-        )}
         <p className="text-muted-foreground text-sm">
           {sources.length > 0 && (
             <>

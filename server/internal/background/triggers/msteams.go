@@ -431,7 +431,7 @@ func newMSTeamsDefinition() Definition {
 			return authenticator.authenticate(ctx, body, headers, appID)
 		},
 		SupportedEventTypes: supportedMSTeamsEventTypes,
-		PreVerify:           nil,
+		Handshake:           nil,
 		Ingest:              msteamsIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {

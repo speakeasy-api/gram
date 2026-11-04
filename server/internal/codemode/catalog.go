@@ -4,6 +4,7 @@ package codemode
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 const (
@@ -21,18 +22,24 @@ const (
 
 // Host performs discovery and invocation under the admitted gateway identity.
 type Host interface {
-	// Servers lists the currently permitted gateway members.
+	// Servers lists currently visible members, including those needing consent.
 	Servers(context.Context, PageArgs) (*ServerPage, error)
 	// Search loads and ranks current authorized catalogs.
 	Search(context.Context, SearchArgs) (*SearchPage, error)
 	// Describe returns the original definition of one exact qualified name.
 	Describe(context.Context, string) (*Description, error)
+	// Connect returns a browser handoff for one visible member.
+	Connect(context.Context, string) (*ConnectionAction, error)
 	// Call invokes one member tool without changing the execution's identity.
 	Call(context.Context, string, json.RawMessage) (*ToolResult, error)
 }
 
 // PageArgs bounds a discovery response; cursors never grant access.
 type PageArgs struct {
+	// Server restricts server discovery to one exact visible member.
+	Server string `json:"server,omitempty"`
+	// Verify requests a live connection probe for returned members.
+	Verify bool `json:"verify,omitempty"`
 	// Limit is the requested item count, or zero for the default.
 	Limit int `json:"limit,omitempty"`
 	// Cursor identifies an offset in an unchanged inventory.
@@ -51,12 +58,14 @@ type SearchArgs struct {
 	Cursor string `json:"cursor,omitempty"`
 }
 
-// Server is the public projection of a permitted gateway member.
+// Server is a discoverable gateway member; visibility does not grant tool access.
 type Server struct {
 	// Slug is the exact member prefix, without the qualification separator.
 	Slug string `json:"slug"`
 	// Name is the configured display name.
 	Name string `json:"name"`
+	// Connection reports known access state, or a live result when Verify is set.
+	Connection *ConnectionState `json:"connection,omitempty"`
 }
 
 // ServerPage is a bounded member inventory.
@@ -135,4 +144,25 @@ type ToolResult struct {
 	Content json.RawMessage `json:"content"`
 	// Error is a client-safe explanation when OK is false.
 	Error string `json:"error,omitempty"`
+}
+
+// ConnectionState never treats stored consent as proof of upstream access.
+type ConnectionState struct {
+	// CheckedAt identifies a live verification rather than historical consent.
+	CheckedAt      *time.Time `json:"checked_at,omitempty"`
+	Consent        string     `json:"consent"`
+	Authentication string     `json:"authentication"`
+	Instructions   string     `json:"instructions,omitempty"`
+}
+
+// ConnectionAction contains no credentials. The URL starts a browser login.
+type ConnectionAction struct {
+	Server string `json:"server"`
+	Status string `json:"status"`
+	// Reason is a machine-readable code: upstream_sign_in or consent_required.
+	Reason                  string     `json:"reason,omitempty"`
+	AuthorizationURL        string     `json:"authorization_url,omitempty"`
+	ExpiresAt               *time.Time `json:"expires_at,omitempty"`
+	ClientReconnectRequired bool       `json:"client_reconnect_required"`
+	Instructions            string     `json:"instructions"`
 }

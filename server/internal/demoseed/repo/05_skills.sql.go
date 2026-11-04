@@ -229,6 +229,70 @@ func (q *Queries) SkillsInsertInitialVersion(ctx context.Context, arg SkillsInse
 	return err
 }
 
+const skillsInsertMCPSkillLinks = `-- name: SkillsInsertMCPSkillLinks :execrows
+INSERT INTO mcp_skill_links (id, organization_id, project_id, skill_id,
+                             target_kind, mcp_server_id, meta_mcp_server_id,
+                             created_by_user_id, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::text, $3::uuid, $4::uuid,
+   'mcp_server', $5::uuid, NULL,
+   $6::text, now() - interval '6 days', now() - interval '6 days'),
+  ($7::uuid, $2::text, $3::uuid, $8::uuid,
+   'mcp_server', $5::uuid, NULL,
+   $6::text, now() - interval '6 days', now() - interval '6 days'),
+  ($9::uuid, $2::text, $3::uuid, $8::uuid,
+   'meta_mcp_server', NULL, $10::uuid,
+   $6::text, now() - interval '4 days', now() - interval '4 days'),
+  ($11::uuid, $2::text, $3::uuid, $12::uuid,
+   'meta_mcp_server', NULL, $10::uuid,
+   $6::text, now() - interval '4 days', now() - interval '4 days'),
+  ($13::uuid, $2::text, $3::uuid, $12::uuid,
+   'organization_gateway', NULL, NULL,
+   $6::text, now() - interval '2 days', now() - interval '2 days')
+`
+
+type SkillsInsertMCPSkillLinksParams struct {
+	ServerRefundsID     uuid.UUID
+	OrgID               string
+	ProjectID           uuid.UUID
+	RefundsSkillID      uuid.UUID
+	SupportServerID     uuid.UUID
+	CreatedByUserID     string
+	ServerTriageID      uuid.UUID
+	TriageSkillID       uuid.UUID
+	GatewayTriageID     uuid.UUID
+	GatewayID           uuid.UUID
+	GatewayRunbookID    uuid.UUID
+	RunbookSkillID      uuid.UUID
+	OrgGatewayRunbookID uuid.UUID
+}
+
+// Skills served over MCP: the refunds and triage skills on Acme Support
+// Tools' own server (its id is the toolset id), triage and the runbook on the
+// Acme Agent Gateway, and the runbook on the organization gateway. Links
+// cascade with the project and with the gateway, which both clear every run.
+func (q *Queries) SkillsInsertMCPSkillLinks(ctx context.Context, arg SkillsInsertMCPSkillLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, skillsInsertMCPSkillLinks,
+		arg.ServerRefundsID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.RefundsSkillID,
+		arg.SupportServerID,
+		arg.CreatedByUserID,
+		arg.ServerTriageID,
+		arg.TriageSkillID,
+		arg.GatewayTriageID,
+		arg.GatewayID,
+		arg.GatewayRunbookID,
+		arg.RunbookSkillID,
+		arg.OrgGatewayRunbookID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const skillsInsertPromptTemplates = `-- name: SkillsInsertPromptTemplates :exec
 INSERT INTO prompt_templates (id, tool_urn, project_id, history_id, name, description, prompt, engine, kind)
 VALUES
@@ -276,14 +340,14 @@ SELECT $1::uuid, $2::uuid, c,
        encode(sha256(convert_to(c, 'UTF8')), 'hex'),
        'Add on-call paging step', TRUE, $3::text,
        now() - interval '3 days', now() - interval '3 days'
-FROM (SELECT $4::text || E'- page the on-call before any manual failover.\n' AS c) s
+FROM (SELECT $4::text AS c) s
 `
 
 type SkillsInsertRunbookV2Params struct {
 	ID              uuid.UUID
 	SkillID         uuid.UUID
 	CreatedByUserID string
-	BaseContent     string
+	Content         string
 }
 
 // Runbook v2: the base runbook content plus an on-call paging step.
@@ -292,7 +356,7 @@ func (q *Queries) SkillsInsertRunbookV2(ctx context.Context, arg SkillsInsertRun
 		arg.ID,
 		arg.SkillID,
 		arg.CreatedByUserID,
-		arg.BaseContent,
+		arg.Content,
 	)
 	return err
 }

@@ -4267,7 +4267,13 @@ type DeleteGatewayErrorResponseBody struct {
 
 // AgentSessionResponseBody is used to define fields on response body types.
 type AgentSessionResponseBody struct {
-	ID               string  `form:"id" json:"id" xml:"id"`
+	ID string `form:"id" json:"id" xml:"id"`
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind string `form:"subject_kind" json:"subject_kind" xml:"subject_kind"`
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	IssuerID         string  `form:"issuer_id" json:"issuer_id" xml:"issuer_id"`
 	IssuerSlug       string  `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
@@ -7913,11 +7919,12 @@ func NewRenamePayload(body *RenameRequestBody, sessionToken *string) *agents.Ren
 
 // NewListDelegableGrantsPayload builds a agents service listDelegableGrants
 // endpoint payload.
-func NewListDelegableGrantsPayload(agentID string, toolsetID *string, toolsetIds []string, sessionToken *string) *agents.ListDelegableGrantsPayload {
+func NewListDelegableGrantsPayload(agentID string, toolsetID *string, toolsetIds []string, carryExclusions bool, sessionToken *string) *agents.ListDelegableGrantsPayload {
 	v := &agents.ListDelegableGrantsPayload{}
 	v.AgentID = agentID
 	v.ToolsetID = toolsetID
 	v.ToolsetIds = toolsetIds
+	v.CarryExclusions = carryExclusions
 	v.SessionToken = sessionToken
 
 	return v

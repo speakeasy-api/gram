@@ -236,12 +236,21 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		require.Contains(t, memberErr.message, "issued for a different resource")
 	})
 
-	t.Run("unavailable self credential asks for a retry", func(t *testing.T) {
+	// The request resolved its token map once, so discovery records the
+	// outage without retrying it within the listing.
+	t.Run("unavailable self credential asks for a later retry", func(t *testing.T) {
 		t.Parallel()
-		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, remoteMember, "https://a.example.com/mcp")
-		memberErr, ok := errors.AsType[*metaMemberError](err)
-		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "retry shortly")
+		tunnelMember := metaMember{slug: "m", tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+		for _, route := range []struct {
+			member   metaMember
+			upstream string
+		}{{member: remoteMember, upstream: "https://a.example.com/mcp"}, {member: tunnelMember, upstream: ""}} {
+			_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, route.member, route.upstream)
+			failure, ok := errors.AsType[memberDiscoveryError](err)
+			require.True(t, ok, "error: %v", err)
+			require.Contains(t, failure.message, "retry shortly")
+			require.False(t, failure.retryable)
+		}
 	})
 }
 

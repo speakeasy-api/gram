@@ -547,12 +547,15 @@ ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;
 
 -- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
 -- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
--- matching unless a live endpoint or toolset now holds the slug in that namespace;
--- those existence checks mirror the global unique indexes, so they are not project-scoped.
+-- matching unless a live endpoint now holds the slug in that namespace (callers also
+-- drop ones a legacy toolset alias holds); the existence check mirrors the global
+-- unique index, so it is not project-scoped.
 SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
+    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
+    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -583,25 +586,6 @@ WHERE e.project_id = @project_id
           AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
           AND l.deleted IS FALSE
       )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM toolsets t
-        WHERE t.mcp_slug = e.slug
-          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
-          AND t.deleted IS FALSE
-      )
-      -- The platform host also serves a custom-domain alias in a live project.
-      AND (
-        e.custom_domain_id IS NOT NULL
-        OR NOT EXISTS (
-          SELECT 1
-          FROM toolsets t
-          JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
-          WHERE t.mcp_slug = e.slug
-            AND t.custom_domain_id IS NOT NULL
-            AND t.deleted IS FALSE
-        )
-      )
     )
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
@@ -612,3 +596,12 @@ SELECT id, name
 FROM meta_mcp_servers
 WHERE project_id = @project_id
 ORDER BY deleted ASC, created_at DESC;
+
+-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

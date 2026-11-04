@@ -164,7 +164,7 @@ async fn handle_http(
     if request.uri().path() == "/health" {
         return Ok(response(
             StatusCode::OK,
-            "{\"protocol\":1,\"runtime\":\"monty\"}",
+            "{\"protocol\":2,\"runtime\":\"monty\"}",
         ));
     }
     if request.uri().path() != "/v1/connect" {
@@ -193,14 +193,14 @@ async fn handle_http(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     if upgrade != Some(UPGRADE)
-        || version != Some("1")
+        || version != Some("2")
         || !connection
             .split(',')
             .any(|v| v.trim().eq_ignore_ascii_case("upgrade"))
     {
         return Ok(response(
             StatusCode::UPGRADE_REQUIRED,
-            "gram-code-yamux protocol 1 required",
+            "gram-code-yamux protocol 2 required",
         ));
     }
     let streams = state.streams;
@@ -256,7 +256,7 @@ async fn handle_http(
         .insert("upgrade", UPGRADE.parse().unwrap());
     accepted
         .headers_mut()
-        .insert("gram-code-protocol", "1".parse().unwrap());
+        .insert("gram-code-protocol", "2".parse().unwrap());
     accepted
         .headers_mut()
         .insert("gram-code-capacity", streams.into());

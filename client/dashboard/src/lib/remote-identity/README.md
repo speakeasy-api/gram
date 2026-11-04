@@ -4,10 +4,11 @@ Models, hooks, and components for one idea: **a remote identity provider is a
 complete, working configuration for signing into an upstream service** — not
 the two or three records we happen to store it in.
 
-It also owns the alternative to that: the static credential an administrator
-sets up when nobody is signing in as themselves (Service Account), and the
-absence of both (Manual). Those three are one choice, so they live
-together.
+It also owns the alternative to that: the shared credential an administrator
+sets up when nobody is signing in as themselves, either a static credential
+(stored headers such as an API key) or a service account (an OAuth client that
+gets its own token), and the absence of both (Manual). Those three are one
+choice, so they live together.
 
 ## The modelling claim
 
@@ -75,7 +76,7 @@ lib/remote-identity/
     useUpstreamProbe.ts     does this URL demand authentication
 
   components/               the shared UI of the concept
-    IdentityModeCards.tsx   User Identity / Service Account / Manual
+    IdentityModeCards.tsx   User Identity / Shared credential / Manual
     ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content, dialog, and inline callout
@@ -102,7 +103,7 @@ components stay free of query wiring.
 
 ## The rule the module exists to enforce
 
-The identity choice **owns** the `Authorization` header: Service Account writes
+The identity choice **owns** the `Authorization` header: a shared credential writes
 one, User Identity forbids one, Manual rejects the name outright. That
 ownership flows one direction only.
 

@@ -10,20 +10,21 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // mirroredAddress is a copy of the address part of the dual-write release's MirrorOf, which pods from that release
 // apply on every hosted write. It is the oracle the alias rule must agree with.
-func mirroredAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+func mirroredAddress(alias legacyalias.Alias, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
 		switch {
-		case toolset.McpSlug.Valid && candidate.Slug == toolset.McpSlug.String && candidate.CustomDomainID == toolset.CustomDomainID:
-			return toolset.McpSlug, toolset.CustomDomainID
+		case alias.Slug.Valid && candidate.Slug == alias.Slug.String && candidate.CustomDomainID == alias.CustomDomainID:
+			return alias.Slug, alias.CustomDomainID
 		case preferred == nil:
 			preferred = candidate
 		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
@@ -33,20 +34,20 @@ func mirroredAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.
 		}
 	}
 	if preferred == nil {
-		return toolset.McpSlug, toolset.CustomDomainID
+		return alias.Slug, alias.CustomDomainID
 	}
 	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
 }
 
 type aliasState struct {
-	toolset   toolsetsrepo.Toolset
+	alias     legacyalias.Alias
 	endpoints []mcpendpointsrepo.McpEndpoint
 }
 
 func (f *hostedAddressFixture) aliasState(t *testing.T, ctx context.Context) aliasState {
 	t.Helper()
 
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	require.NoError(t, err)
 	rows, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
 		OrganizationID: f.authCtx.ActiveOrganizationID, ProjectID: f.projectID, McpServerID: f.toolset.ID,
@@ -56,7 +57,7 @@ func (f *hostedAddressFixture) aliasState(t *testing.T, ctx context.Context) ali
 	for _, row := range rows {
 		endpoints = append(endpoints, row.McpEndpoint)
 	}
-	return aliasState{toolset: toolset, endpoints: endpoints}
+	return aliasState{alias: alias, endpoints: endpoints}
 }
 
 // requireAliasFollowed asserts the alias sits where the dual-write release would put it from before, and that a
@@ -64,24 +65,19 @@ func (f *hostedAddressFixture) aliasState(t *testing.T, ctx context.Context) ali
 func requireAliasFollowed(t *testing.T, before, after aliasState, wantSlug string) {
 	t.Helper()
 
-	slug, domainID := mirroredAddress(before.toolset, after.endpoints)
-	require.Equal(t, slug, after.toolset.McpSlug, "the alias matches the dual-write release's choice")
-	require.Equal(t, domainID, after.toolset.CustomDomainID)
-	require.Equal(t, wantSlug, after.toolset.McpSlug.String)
-	slug, domainID = mirroredAddress(after.toolset, after.endpoints)
-	require.Equal(t, after.toolset.McpSlug, slug, "a dual-write release write afterwards keeps the address")
-	require.Equal(t, after.toolset.CustomDomainID, domainID)
+	slug, domainID := mirroredAddress(before.alias, after.endpoints)
+	require.Equal(t, slug, after.alias.Slug, "the alias matches the dual-write release's choice")
+	require.Equal(t, domainID, after.alias.CustomDomainID)
+	require.Equal(t, wantSlug, after.alias.Slug.String)
+	slug, domainID = mirroredAddress(after.alias, after.endpoints)
+	require.Equal(t, after.alias.Slug, slug, "a dual-write release write afterwards keeps the address")
+	require.Equal(t, after.alias.CustomDomainID, domainID)
 }
 
 func TestHostedLegacyAliasFollowsItsEndpoint(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
-	_, err := toolsetsrepo.New(f.ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-		Name: f.toolset.Name, Description: f.toolset.Description, DefaultEnvironmentSlug: f.toolset.DefaultEnvironmentSlug,
-		McpSlug: pgtype.Text{String: f.endpoint.Slug, Valid: true}, McpIsPublic: false, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpEnabled: true, ToolSelectionMode: f.toolset.ToolSelectionMode, Slug: f.toolset.Slug, ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, f.ti.conn, f.projectID, f.toolset.ID, f.endpoint.Slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	org := f.authCtx.OrganizationSlug
 
 	// Adding an address keeps the alias on the endpoint that still holds it.
@@ -119,5 +115,5 @@ func TestHostedEndpointWritesLeaveToolsetWithoutAlias(t *testing.T) {
 	_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-extra")})
 	require.NoError(t, err)
 	require.NoError(t, f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()}))
-	require.False(t, f.aliasState(t, ctx).toolset.McpSlug.Valid)
+	require.False(t, f.aliasState(t, ctx).alias.Slug.Valid)
 }

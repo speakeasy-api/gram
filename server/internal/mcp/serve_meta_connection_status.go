@@ -6,11 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -25,8 +30,9 @@ func (s *Service) handleMetaConnectionStatusCall(
 	req *rawRequest,
 ) (json.RawMessage, error) {
 	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
+	requiresAuth := s.memberAuthRequirements(gate.organizationID, members)
 	for _, member := range members {
-		status, detail := s.memberSignInStatus(ctx, logger, gate, member)
+		status, detail := s.memberSignInStatus(ctx, logger, gate, member, requiresAuth)
 		servers = append(servers, metamcp.ConnectionStatusServer{
 			Slug:   member.slug,
 			Name:   member.name,
@@ -94,7 +100,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 // remote_session_issuer) needs no sign-in. A remote member can still receive
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
-func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
+func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string) {
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
@@ -133,10 +139,60 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	if !dial.anonymous {
 		return metamcp.SignInConnected, ""
 	}
-	if !member.remoteSessionIssuerID.Valid {
+	if member.remoteSessionIssuerID.Valid {
+		return metamcp.SignInNotConnected, ""
+	}
+	if member.upstreamNoAuth {
 		return metamcp.SignInNotRequired, ""
 	}
-	return metamcp.SignInNotConnected, ""
+	// A member with no derived provider can still require a credential
+	// through an enabled auth client, such as a static credential. A call
+	// that sends none is refused upstream, so it is not ready.
+	required, err := requiresAuth(ctx, member)
+	if err != nil {
+		logger.ErrorContext(ctx, "check member upstream authentication", attr.SlogError(err))
+		return metamcp.SignInError, "could not check this server"
+	}
+	if required {
+		return metamcp.SignInNotConnected, ""
+	}
+	return metamcp.SignInNotRequired, ""
+}
+
+// memberAuthRequirements reports whether a proxied member offers an enabled
+// auth client, so a call carrying no credential cannot succeed. The first
+// lookup reads every proxied member in one query; later lookups reuse it.
+func (s *Service) memberAuthRequirements(organizationID string, members []metaMember) func(context.Context, metaMember) (bool, error) {
+	var required map[uuid.UUID]bool
+	var loadErr error
+	loaded := false
+	return func(ctx context.Context, member metaMember) (bool, error) {
+		if member.backend != metaMemberBackendProxied {
+			return false, nil
+		}
+		if !loaded {
+			loaded = true
+			ids := make([]uuid.UUID, 0, len(members))
+			for _, m := range members {
+				if m.backend == metaMemberBackendProxied {
+					ids = append(ids, m.serverID)
+				}
+			}
+			rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: ids})
+			if err != nil {
+				loadErr = fmt.Errorf("list member auth clients: %w", err)
+			} else {
+				required = make(map[uuid.UUID]bool, len(ids))
+				for _, row := range rows {
+					required[row.McpServerID] = required[row.McpServerID] || row.RequiresUpstreamAuth
+				}
+			}
+		}
+		if loadErr != nil {
+			return false, loadErr
+		}
+		return required[member.serverID], nil
+	}
 }
 
 func memberErrorMessage(err error) string {

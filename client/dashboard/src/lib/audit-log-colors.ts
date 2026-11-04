@@ -8,6 +8,7 @@ export function getActionCategory(action: string): ActionCategory {
     verb?.includes("disable") ||
     verb?.includes("detach") ||
     verb?.includes("revoke") ||
+    verb?.includes("unlink") ||
     verb?.includes("remove") ||
     verb?.includes("demot")
   ) {

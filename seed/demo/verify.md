@@ -585,10 +585,26 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
-    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
-      Authorization section: `acme-workforce` does not trust Acme Identity,
-      on purpose, so interactive sign-in through it (GitHub, the organization
-      gateway) keeps working.
+    - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
+      Its sign-in client is unset on purpose, so interactive sign-in through
+      it (GitHub, the organization gateway) keeps working, and the trust
+      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
+      Enterprise Managed Authorization section, and Acme Identity is not
+      offered as a provider a service can accept on the strength of this
+      trust.
+    - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
+      - `acme-workforce` trusting Acme Identity: `issuer_url`
+        `https://login.acme-identity.example`, and a `key_set_url` that is a
+        full URL on that host ending in `/oauth2/v1/keys` (record the URL it
+        returns).
+      - `audience` set to the workforce shared authorization server's issuer
+        URL.
+      - `organization_gateway_url` on `acme-workforce`: the URL ending in
+        `/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy`
+        after `mise run seed` (enable the organization gateway first, as in
+        step 31).
+      - `directory.resolvable_directory_users` greater than zero and
+        `directory.synced` true.
     - Both servers are seeded disabled. Connect through the organization
       gateway: its consent page must not list Acme Tracker or Acme Wiki.
 
@@ -633,6 +649,23 @@ open their effective assignments; the dropdown always offers compact member sear
       servers from every project you can reach.
     - Command K: search "Python Code Gateway". It is listed under Gateways and
       opens the gateway's overview.
+
+34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+    organization)
+    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
+      value. As a writer, **Add skill** opens a picker without those two and
+      each row has a remove button.
+    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+      Runbook.
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+      Gateway (opens the gateway's Skills tab) and Organization gateway, and
+      there is no **Add to organization gateway** button. Support Refunds
+      lists only Acme Support Tools and offers the button to project writers.
+    - In the read-only demo org no add or remove control shows. With the flag
+      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
+      returns to the server or gateway overview, and the skill page has no
+      "Served over MCP" section.
 
 ## On failure
 

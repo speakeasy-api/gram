@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -47,6 +48,7 @@ func TestStandaloneIssuerLogo_SharedDashboardStorageAndReplacement(t *testing.T)
 	dashboardRoot, err := os.OpenRoot(directory)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, adminRoot.Close()); require.NoError(t, dashboardRoot.Close()) })
+	svc.dashboardURL, _ = url.Parse("https://public.example.test")
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assets.NewFSBlobStore(svc.logger, adminRoot)))
 	dashboardAssets := assets.NewPlatformService(svc.logger, tp, policy, db, assets.NewFSBlobStore(svc.logger, dashboardRoot))
 	adminMux, dashboardMux := goahttp.NewMuxer(), goahttp.NewMuxer()

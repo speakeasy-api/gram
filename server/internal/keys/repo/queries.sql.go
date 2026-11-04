@@ -377,6 +377,63 @@ func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg Exp
 	return items, nil
 }
 
+const extendAgentAPIKeyDelegatedGrants = `-- name: ExtendAgentAPIKeyDelegatedGrants :one
+UPDATE api_keys
+SET delegated_grants = $1::jsonb,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND subject_urn = $4
+  AND created_by_user_id = $5
+  AND delegated_grants = $6::jsonb
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type ExtendAgentAPIKeyDelegatedGrantsParams struct {
+	DelegatedGrants         []byte
+	ID                      uuid.UUID
+	OrganizationID          string
+	SubjectUrn              pgtype.Text
+	CreatedByUserID         string
+	PreviousDelegatedGrants []byte
+}
+
+// Matches the policy the caller read, so a concurrent change to the same key
+// is never overwritten with a policy built from the older one.
+func (q *Queries) ExtendAgentAPIKeyDelegatedGrants(ctx context.Context, arg ExtendAgentAPIKeyDelegatedGrantsParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, extendAgentAPIKeyDelegatedGrants,
+		arg.DelegatedGrants,
+		arg.ID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.CreatedByUserID,
+		arg.PreviousDelegatedGrants,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
 const getAPIKeyByID = `-- name: GetAPIKeyByID :one
 SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys

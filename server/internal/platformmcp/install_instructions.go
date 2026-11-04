@@ -2,9 +2,12 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,22 +16,29 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
 type GetMyInstallInstructionsInput struct {
-	ProjectID    string                 `json:"project_id,omitempty" jsonschema:"optional project ID that owns the target; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
-	Plugin       string                 `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name; mutually exclusive with mcp_id"`
-	MCPID        string                 `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID; mutually exclusive with plugin"`
-	ClientFamily OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional project ID that owns the target; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
+	Plugin    string `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name"`
+	MCPID     string `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID"`
+	// RegistrationID names a server added through setup without a find_mcp
+	// read, which the ChatGPT catalogue does not have.
+	RegistrationID string                 `json:"registration_id,omitempty" jsonschema:"or the registration ID setup returned"`
+	ClientFamily   OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
 }
 
 type InstallInstruction struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	URL         string `json:"url,omitempty"`
+	// Snippet is a command or config the user can paste as-is. It never
+	// carries a credential: sign-in happens in the browser.
+	Snippet string `json:"snippet,omitempty" jsonschema:"command or configuration to paste as-is, shown verbatim in a code block"`
 }
 
 type GetMyInstallInstructionsOutput struct {
@@ -46,10 +56,16 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
-	if (strings.TrimSpace(input.Plugin) == "") == (strings.TrimSpace(input.MCPID) == "") {
+	targets := 0
+	for _, target := range []string{input.Plugin, input.MCPID, input.RegistrationID} {
+		if strings.TrimSpace(target) != "" {
+			targets++
+		}
+	}
+	if targets != 1 {
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
 	}
-	projectID, err := s.installProjectID(ctx, principal, input.ProjectID)
+	projectID, err := s.installProjectID(ctx, principal, input)
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
@@ -61,11 +77,11 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		return s.pluginInstallInstructions(ctx, principal.OrganizationID, input.ClientFamily, plugin.Plugin.Name)
 	}
 
-	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
-	if err != nil {
-		return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetMyInstallInstructionsOutput{}, err
+	}
+	mcpID, err := s.installMCPID(ctx, principal.OrganizationID, projectID, input)
+	if err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
@@ -92,6 +108,37 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	return s.standaloneMCPInstallInstructions(ctx, principal.OrganizationID, input.ClientFamily, name, row.EndpointSlug)
 }
 
+// installMCPID returns the MCP server an install request names, either
+// directly or through the registration that added it.
+func (s *PluginsService) installMCPID(ctx context.Context, organizationID string, projectID uuid.UUID, input GetMyInstallInstructionsInput) (uuid.UUID, error) {
+	if strings.TrimSpace(input.RegistrationID) == "" {
+		mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
+		if err != nil {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		return mcpID, nil
+	}
+	registrationID, err := uuid.Parse(strings.TrimSpace(input.RegistrationID))
+	if err != nil {
+		return uuid.Nil, ErrInstallTargetNotFound
+	}
+	registration, err := platformrepo.New(s.db).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
+		ID:             registrationID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrInstallTargetNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get platform mcp registration for install: %w", err)
+	}
+	if !registration.McpServerID.Valid {
+		return uuid.Nil, ErrInstallTargetNotFound
+	}
+	return registration.McpServerID.UUID, nil
+}
+
 // memberLinkBases returns the server and dashboard base URLs of links given to
 // a member of organizationID, as organizationBaseURLs chooses them. The stored
 // default host is optional: when reading it fails, links fall back to the
@@ -111,14 +158,33 @@ func (s *PluginsService) memberLinkBases(ctx context.Context, organizationID str
 
 // installProjectID parses the named project ID, or resolves the organization's
 // default project when none is named.
-func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, projectID string) (uuid.UUID, error) {
-	projectID = strings.TrimSpace(projectID)
+func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (uuid.UUID, error) {
+	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID != "" {
 		parsed, err := uuid.Parse(projectID)
 		if err != nil {
 			return uuid.Nil, ErrPluginProjectNotFound
 		}
 		return parsed, nil
+	}
+	// A registration belongs to one project, so naming it is enough even in a
+	// project other than the default one.
+	if registrationID := strings.TrimSpace(input.RegistrationID); registrationID != "" {
+		parsed, err := uuid.Parse(registrationID)
+		if err != nil {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		project, err := platformrepo.New(s.db).GetPlatformMCPCatalogRegistrationProject(ctx, platformrepo.GetPlatformMCPCatalogRegistrationProjectParams{
+			ID:             parsed,
+			OrganizationID: principal.OrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("resolve platform mcp install registration project: %w", err)
+		}
+		return project, nil
 	}
 	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
 		OrganizationID: principal.OrganizationID,
@@ -143,8 +209,8 @@ func (s *PluginsService) pluginInstallInstructions(ctx context.Context, organiza
 	output := GetMyInstallInstructionsOutput{
 		TargetKind: "plugin", TargetName: name, ClientFamily: client,
 		Supported: true, Instructions: []InstallInstruction{
-			{Title: "Use the Speakeasy device agent", Description: "Assigned published plugins are delivered through the Speakeasy device agent. Installation never grants MCP access by itself.", URL: deviceAgentURL},
-			{Title: "Refresh your AI client", Description: "After the device agent syncs, restart or reload your AI client so it discovers the assigned plugin.", URL: ""},
+			{Title: "Use the Speakeasy device agent", Description: "Assigned published plugins are delivered through the Speakeasy device agent. Installation never grants MCP access by itself.", URL: deviceAgentURL, Snippet: ""},
+			{Title: "Refresh your AI client", Description: "After the device agent syncs, restart or reload your AI client so it discovers the assigned plugin.", URL: "", Snippet: ""},
 		},
 		Fallback: "",
 	}
@@ -161,7 +227,9 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 		TargetKind: "mcp", TargetName: name, ClientFamily: client,
 		Supported: false, Instructions: []InstallInstruction{}, Fallback: "",
 	}
-	if slug == "" || s.serverURL == nil {
+	// The slug goes into shell commands and config snippets. The API enforces
+	// this pattern, but the database does not, so check it again here.
+	if !installSlugPattern.MatchString(slug) || s.serverURL == nil {
 		output.Fallback = "This MCP server does not have a public installation endpoint. Use the dashboard or ask an organization administrator for the supported setup path."
 		return output, nil
 	}
@@ -170,12 +238,55 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 	switch client {
 	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
 		output.Supported = true
-		output.Instructions = []InstallInstruction{
-			{Title: "Add a remote Streamable HTTP MCP server", Description: "Add this endpoint in your client's MCP settings. The client will open browser sign-in when it first connects.", URL: endpoint},
-			{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: ""},
-		}
+		output.Instructions = append(clientInstallSteps(client, slug, endpoint),
+			InstallInstruction{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: "", Snippet: ""})
 	default:
 		output.Fallback = "This client does not have reviewed installation guidance. Add the server as a remote Streamable HTTP MCP only if the client supports browser OAuth."
 	}
 	return output, nil
+}
+
+var installSlugPattern = regexp.MustCompile(constants.SlugPattern)
+
+// clientInstallSteps returns the shortest working way to add one remote MCP
+// endpoint in a client: a one-click link where the client has one, and a
+// command or config to paste otherwise. key names the server in the client's
+// config and must be a URL-safe slug.
+func clientInstallSteps(client OnboardingClientFamily, key, endpoint string) []InstallInstruction {
+	addEndpoint := InstallInstruction{Title: "Add a remote Streamable HTTP MCP server", Description: "Add this endpoint in your client's MCP settings. The client will open browser sign-in when it first connects.", URL: endpoint, Snippet: ""}
+	switch client {
+	case OnboardingClientCursor:
+		config := base64.StdEncoding.EncodeToString(mustJSON(map[string]string{"url": endpoint}))
+		link := "cursor://anysphere.cursor-deeplink/mcp/install?" + url.Values{"name": {key}, "config": {config}}.Encode()
+		return []InstallInstruction{
+			{Title: "Install in Cursor", Description: "Open this link to add the server to Cursor in one step.", URL: link, Snippet: ""},
+			{Title: "Or add it to ~/.cursor/mcp.json", Description: "Merge this into the mcpServers object of your Cursor MCP config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))},
+		}
+	case OnboardingClientClaudeCode:
+		return []InstallInstruction{
+			{Title: "Add it with the Claude Code CLI", Description: "Run this in a terminal, then run /mcp in Claude Code to sign in.", URL: endpoint, Snippet: fmt.Sprintf("claude mcp add --transport http %s %s", key, endpoint)},
+		}
+	case OnboardingClientCodex:
+		return []InstallInstruction{
+			{Title: "Add it to ~/.codex/config.toml", Description: "Add this block, then run the login command to sign in.", URL: endpoint, Snippet: fmt.Sprintf("[mcp_servers.%s]\nurl = %q", key, endpoint)},
+			{Title: "Sign in from Codex", Description: "Run this in a terminal to open browser sign-in.", URL: "", Snippet: "codex mcp login " + key},
+		}
+	case OnboardingClientOpencode:
+		return []InstallInstruction{
+			{Title: "Add it to opencode.json", Description: "Merge this into the mcp object of your OpenCode config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcp": map[string]any{key: map[string]any{"type": "remote", "url": endpoint, "enabled": true}}}))},
+		}
+	case OnboardingClientOther:
+		addEndpoint.Snippet = string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))
+		addEndpoint.Description = "Add this endpoint in your client's MCP settings. Many clients accept this JSON shape. The client will open browser sign-in when it first connects."
+		return []InstallInstruction{addEndpoint}
+	default:
+		return []InstallInstruction{addEndpoint}
+	}
+}
+
+// mustJSONIndent encodes an install config built from strings and maps, which
+// cannot fail to encode.
+func mustJSONIndent(value any) []byte {
+	payload, _ := json.MarshalIndent(value, "", "  ")
+	return payload
 }

@@ -29,9 +29,6 @@
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
           {{if and .Gateway .Gateway.Focus}}
-          {{/* One server's connect page. Connecting a service is the whole
-          job here: the gateway is approved on its own page, so this page
-          has no approve step of its own. */}}
           <p class="text-eyebrow">Connect a server</p>
           <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
           <p class="text-sm text-muted-foreground">
@@ -250,6 +247,11 @@
               <p class="text-xs text-muted-foreground">
                 {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
               </p>
+              {{/* Changing a server's credential reloads the page so the
+              tools offered for approval are the ones it reaches. */}}
+              <form method="GET" action="{{$.ConsentPath}}" id="gateway-auth-form" class="hidden">
+                <input type="hidden" name="state" value="{{$.State}}" />
+              </form>
               <ul
                 class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0"
                 data-gateway-visible-list
@@ -283,6 +285,39 @@
           {{end}}
         </div>
         {{end}}
+
+        {{with .UpstreamAuth}}{{if .ShowPicker}}
+        {{/* Each option is a different upstream identity, so the choice is
+        part of the approval: the radios belong to the approve form. */}}
+        <fieldset class="m-0 flex flex-col gap-3 border-0 border-b px-6 py-6 sm:px-8" data-upstream-auth>
+          <legend class="text-eyebrow float-left mb-3 w-full p-0">Sign in to the service as</legend>
+          <ul class="m-0 flex list-none flex-col border p-0">
+            {{range .Options}}
+            <li class="flex items-start gap-3 px-4 py-3 not-first:border-t" data-upstream-auth-option="{{.ID}}">
+              <input
+                type="radio"
+                name="auth_client"
+                form="consent-approve-form"
+                value="{{.ID}}"
+                id="auth-client-{{.ID}}"
+                class="mt-1"
+                {{if .Selected}}checked{{end}}
+                {{if not .Usable}}disabled{{end}}
+              />
+              <label for="auth-client-{{.ID}}" class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span class="truncate text-sm">{{.Name}}</span>
+                <span class="text-xs text-muted-foreground">{{.TypeLabel}}{{if .Shared}} · the service records your actions as this shared identity{{end}}</span>
+                {{if eq .State "connect"}}<span class="text-xs text-muted-foreground">Connect your account below to choose this.</span>
+                {{else if eq .State "reconnect"}}<span class="text-xs text-default-warning">Reconnect your account below to choose this.</span>
+                {{else if eq .State "setup"}}<span class="text-xs text-muted-foreground">Not set up yet. Ask an administrator.</span>{{end}}
+              </label>
+            </li>
+            {{end}}
+          </ul>
+        </fieldset>
+        {{else}}{{with .Selected}}
+        <input type="hidden" name="auth_client" form="consent-approve-form" value="{{.ID}}" />
+        {{end}}{{end}}{{end}}
 
         {{if .RemoteSessionCards}}
         <div
@@ -623,8 +658,66 @@
         </div>
         {{end}}
 
+        {{with .CatalogChanges}}
+        {{if or .Added .Removed .Changed}}
+        <section class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8" data-catalog-changes aria-labelledby="catalog-changes-heading">
+          <h2 class="text-eyebrow" id="catalog-changes-heading">Review updated tools</h2>
+          <p class="text-sm text-muted-foreground">Changes apply only after you approve. Your current tool selection is preselected.</p>
+          <div class="divide-y border">
+            {{if .Added}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Added <span class="text-muted-foreground font-mono">{{len .Added}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Added}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Removed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Removed <span class="text-muted-foreground font-mono">{{len .Removed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Removed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Changed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Changed <span class="text-muted-foreground font-mono">{{len .Changed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Changed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+          </div>
+        </section>
+        {{end}}
+        {{end}}
         {{with .ApprovalError}}
         <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
+        {{with .SelfApprovalError}}
+        <div role="alert" data-agent-self-only data-self-approval-error class="border-b px-6 py-6 text-sm sm:px-8">
           <p>{{.Message}}</p>
           {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
         </div>
@@ -641,7 +734,7 @@
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
-            data-gateway="{{if .ShowDiscoveryMode}}true{{else}}false{{end}}"
+            data-gateway="{{if or .ShowDiscoveryMode .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -823,10 +916,11 @@
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .ApprovalError .Gateway .Gateway.Focus}}
+        <div class="px-6 py-6 sm:px-8">
+          <a href="{{.ConsentPath}}?state={{.State}}&server=" class="underline" data-gateway-back>Back to all servers</a>
+        </div>
         {{else if and .Gateway .Gateway.Focus}}
-        {{/* No approve button: connecting a service above is what makes the
-        server usable, so the page says that instead of offering an approval
-        that would do nothing. */}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
@@ -867,7 +961,7 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError)}}
+            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError) (not .SelfApprovalError)}}
             <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
               Connect a service above to enable access.
             </p>
@@ -901,6 +995,7 @@
   </body>
 </html>
 {{define "gatewayServerRow"}}
+{{$server := .}}
 <li
   class="group/server flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
   data-gateway-server="{{.Slug}}"
@@ -918,6 +1013,21 @@
       {{if .Hidden}}hidden{{end}}
       >{{.StatusLabel}}</span
     >
+                    {{with .Auth}}{{if .ShowPicker}}
+                    <select
+                      name="auth_client.{{$server.Slug}}"
+                      form="gateway-auth-form"
+                      aria-label="Sign in to {{$server.Name}} as"
+                      data-auto-submit
+                      class="bg-card mt-1 max-w-full border px-2 py-1 text-xs"
+                    >
+                      {{range .Options}}
+                      <option value="{{.ID}}" {{if .Selected}}selected{{end}} {{if not .Usable}}disabled{{end}}>
+                        {{.Name}} · {{.TypeLabel}}{{if eq .State "connect"}} (connect first){{else if eq .State "reconnect"}} (reconnect first){{else if eq .State "setup"}} (not set up){{end}}
+                      </option>
+                      {{end}}
+                    </select>
+                    {{end}}{{end}}
   </span>
   <span class="flex shrink-0 items-center gap-3">
     {{if .CanHide}}
@@ -989,5 +1099,31 @@
       {{end}}
     </span>
   </span>
+</li>
+{{end}}
+
+{{define "catalogToolDiff"}}
+<li>
+  <details>
+    <summary class="interact:bg-accent list-item list-inside cursor-pointer px-4 py-3 font-mono text-xs break-all">{{.Name}}</summary>
+    <dl class="divide-y border-t">
+      {{range .Fields}}
+      <div class="px-4 py-3">
+        <dt class="text-muted-foreground mb-2 font-mono text-xs">{{.Name}}</dt>
+        <dd class="grid min-w-0 gap-2 {{if and .HasBefore .HasAfter}}sm:grid-cols-2{{end}}">
+          {{if .HasBefore}}<div class="min-w-0 bg-red-50 px-3 py-2 text-red-700 dark:bg-red-950 dark:text-red-400">
+            <span class="mb-1 block text-xs font-medium">− Before</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.Before}}</pre>
+          </div>
+          {{end}}
+          {{if .HasAfter}}<div class="min-w-0 bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+            <span class="mb-1 block text-xs font-medium">+ After</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.After}}</pre>
+          </div>{{end}}
+        </dd>
+      </div>
+      {{end}}
+    </dl>
+  </details>
 </li>
 {{end}}

@@ -165,7 +165,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 		remoteIssuer = opts.remoteIssuer
 	}
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, remoteIssuer, resourceAS+"/token", devIDPClientID, "unused-secret")
-	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://mcp.docs.example"}
+	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: devIDPResource}
 	bindResource(t, db, req, resourceIssuer, resourceClient, devIDPResource, remotesessions.PreparationStateReady)
 
 	if opts.confirmAudience {

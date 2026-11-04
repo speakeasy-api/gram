@@ -30,7 +30,8 @@ type Service interface {
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
 	// List safe allow-only credential grant candidates shared by the live agent,
 	// owner, and current authorizer. Candidates with unrepresentable exclusions
-	// are conservatively omitted. Issuance revalidates every grant.
+	// are conservatively omitted unless carry_exclusions is set. Issuance
+	// revalidates every grant.
 	ListDelegableGrants(context.Context, *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error)
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
@@ -186,7 +187,13 @@ type AgentPolicySelector struct {
 }
 
 type AgentSession struct {
-	ID               string
+	ID string
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind string
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string
 	ProjectID        *string
 	IssuerID         string
 	IssuerSlug       string
@@ -323,6 +330,11 @@ type ListDelegableGrantsPayload struct {
 	// Each narrows discovery like toolset_id; the result is the union of
 	// candidates across all of them.
 	ToolsetIds []string
+	// Keep a wildcard candidate that a narrower exclusion overlaps, and return
+	// that exclusion beside it as a blocklist-scope grant, instead of omitting the
+	// candidate. Requesting both on a key needs delegated grants version 4 or
+	// later.
+	CarryExclusions bool
 	// First-class agent identifier
 	AgentID string
 }

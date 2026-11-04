@@ -1,0 +1,43 @@
+# Slack and GitHub setup integration
+
+The shared setup flow supports Slack and GitHub in the MCP server details shell. GitHub setup includes organization, OAuth-app and credential steps. Endpoint matching and catalog handoff recognize only the official Slack and GitHub MCP endpoints. The Identity modal remains; only User Identity enters setup. Service Account and Manual retain their paths. Other providers remain outside this integration.
+
+## Rollout visibility
+
+The organization's `providerSetupEnabled` product feature gates the Setup sidebar entry, direct route and catalog handoff. Missing or failed feature reads disable Setup. While the feature is loading, the sidebar and catalog handoff stay hidden and the direct route waits without mounting setup; a disabled route redirects to Overview. Existing installation completion remains available when setup is off.
+
+The backend owns the staff-controlled switch and independently refuses connection tests when disabled. Demo defaults remain off. This visibility change adds no API or Platform MCP operation; the existing Command K resource entry still opens Overview, and the route guard also protects remembered setup URLs.
+
+## Backend contract
+
+The GRW-324 parent supplies the backend and generated SDK contracts. Credential saving uses `remoteSessions.commitServerIdentityConfiguration` with `clientMode: "manual"` and `targetServerOnly: true`. Manual client mode encrypts the supplied secret; existing-client linking does not accept or replace it. Saved configuration exposes the Client ID, callback and scopes, never the secret. The saved form is disabled and uses placeholder dots; Update credentials requires a new secret.
+
+Sign-in opens the existing first-party OAuth endpoint. Returning from the provider tab triggers `remoteSessions.testServerConnection`; only `ready` with a tool count verifies sign-in. The explicit connection test remains a separate action and never executes tools. The generated request property is `testServerConnectionRequestBody`, serialized as `{ mcp_server_id }` with the ordinary dashboard session.
+
+Changing apps clears unsaved credentials and authorization/test results. Changing saved Slack permissions revokes every person's grants on the target issuer before updating scopes. Read-only verification rejects broader stored write grants and requires removing the app's existing Slack authorization before retrying. Shared app connections refuse the change and link to identity settings. Continue retries failed permission changes, and cancellation retains the mutation lock until preparation settles. Verification cannot accept a stale result.
+
+Backend failures stay in the relevant action row with retry or correction actions. Complete setup opens Overview. Reopening setup restores choices and saved configuration but requires fresh verification. Session progress contains only non-secret choices and step navigation; credentials, tokens, authorization, connection success and completion are not restored.
+
+## Verification
+
+Focused tests cover Slack and GitHub state invalidation, manifest/callback consistency, saved credential presentation, backend request serialization, inline recovery, cancellation, connection outcomes, GitHub organization validation, both app paths, issuer metadata, first-party sign-in, and exclusion of other providers from setup routing. Browser checks use the actual signed-in local dashboard; controlled API tests do not prove live provider failure recovery.
+
+## Surface assessments
+
+Platform MCP intentionally has no new tool: a signed-in person configures one installed server through interactive credential entry and first-party OAuth. Existing connection-status tools retain their own identity contracts; the GRW-324 live diagnostic requires a validated human browser session and excludes agents and API keys.
+
+Command K’s existing `useMcpServerCandidates`, registered in `useLauncherCandidates`, opens the canonical Overview for the named server. Setup is an intentionally excluded transient subtask. No new entity or data shape requires a demo seed change; existing GitHub catalog/server examples remain available. No OAuth secrets, grants or fake readiness are seeded. Setup-guide sidebar visibility remains deferred.
+
+## GitHub specifics
+
+The organization opens its organization-owned OAuth app settings. New and existing apps use the same credential form and backend save. Instructions use the real new-client callback, or the retained callback when credentials are already saved, and leave Device Flow off. GitHub’s published OAuth metadata advertises issuer response parameters; Slack does not. GitHub never enters the Slack permission-sync or grant-revocation paths.
+
+The backend exposes bounded connection failures rather than distinguishing GitHub organization policy and SSO responses. Inline failures therefore offer the approved organization-approval and SSO instructions as possible corrections without asserting either cause. Credential and app-setting corrections remain available beside them. No simulated success controls are included.
+
+Successful live GitHub authorization requires valid OAuth app credentials; controlled-response tests do not establish provider authorization or SSO success.
+
+## Setup entry and identity
+
+Catalog handoff is limited to installations that selected User Identity; Shared credential and Manual keep their existing installation completion paths. The optional Setup entry is a way to configure User Identity, so it is also available on unconfigured official Slack servers. `deriveIdentityMode` reports `none` until a client is linked; requiring `user` would prevent a new Slack installation from saving its first credentials. The installation choice is not stored as an enduring server mode.
+
+Opening Setup does not report a configured or verified connection. A stored Authorization header blocks the backend test with `authorization_header_conflict`, and shared issuer changes require the existing dedicated-issuer flow. These safeguards prevent an existing shared credential from being accepted as a successful User Identity connection.
