@@ -288,21 +288,21 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		result = append(result, scopeDefinition(entry))
 	}
 
-	workflows := authz.Workflows()
-	workflowModels := make([]*gen.ScopeWorkflow, 0, len(workflows))
-	for _, workflow := range workflows {
-		scopes := make([]string, 0, len(workflow.Scopes))
-		for _, scope := range workflow.Scopes {
+	tasks := authz.Tasks()
+	taskModels := make([]*gen.ScopeTask, 0, len(tasks))
+	for _, task := range tasks {
+		scopes := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
 			scopes = append(scopes, string(scope))
 		}
-		workflowModels = append(workflowModels, &gen.ScopeWorkflow{
-			Slug:   workflow.Slug,
-			Label:  workflow.Label,
+		taskModels = append(taskModels, &gen.ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
 			Scopes: scopes,
 		})
 	}
 
-	return &gen.ListScopesResult{Scopes: result, Workflows: workflowModels}, nil
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}, nil
 }
 
 func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {

@@ -60,7 +60,7 @@ export const Scopes = {
 } as const;
 export type Scopes = OpenEnum<typeof Scopes>;
 
-export type ScopeWorkflow = {
+export type ScopeTask = {
   /**
    * What a person is trying to do.
    */
@@ -80,21 +80,19 @@ export const Scopes$inboundSchema: z.ZodMiniType<Scopes, unknown> = openEnums
   .inboundSchema(Scopes);
 
 /** @internal */
-export const ScopeWorkflow$inboundSchema: z.ZodMiniType<
-  ScopeWorkflow,
-  unknown
-> = z.object({
-  label: z.string(),
-  scopes: z.array(Scopes$inboundSchema),
-  slug: z.string(),
-});
+export const ScopeTask$inboundSchema: z.ZodMiniType<ScopeTask, unknown> = z
+  .object({
+    label: z.string(),
+    scopes: z.array(Scopes$inboundSchema),
+    slug: z.string(),
+  });
 
-export function scopeWorkflowFromJSON(
+export function scopeTaskFromJSON(
   jsonString: string,
-): SafeParseResult<ScopeWorkflow, SDKValidationError> {
+): SafeParseResult<ScopeTask, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ScopeWorkflow$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ScopeWorkflow' from JSON`,
+    (x) => ScopeTask$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ScopeTask' from JSON`,
   );
 }

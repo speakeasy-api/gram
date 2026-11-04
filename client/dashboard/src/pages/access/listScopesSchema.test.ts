@@ -29,7 +29,7 @@ describe("listScopes response schema", () => {
           sub_scopes: [],
         },
       ],
-      workflows: [],
+      tasks: [],
     });
 
     expect(result.scopes[0]).toMatchObject({
@@ -75,7 +75,7 @@ describe("listScopes response schema", () => {
           sub_scopes: [],
         },
       ],
-      workflows: [
+      tasks: [
         {
           slug: "session_review",
           label: "Review other members' sessions",
@@ -90,7 +90,7 @@ describe("listScopes response schema", () => {
       subScopes: ["chat:read"],
     });
     expect(result.scopes).toHaveLength(2);
-    expect(result.workflows).toEqual([
+    expect(result.tasks).toEqual([
       {
         slug: "session_review",
         label: "Review other members' sessions",

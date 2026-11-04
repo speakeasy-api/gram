@@ -108,7 +108,7 @@ vi.mock("@/pages/access/useServerTools", () => ({
 vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
     catalogue: new Map(),
-    workflows: [],
+    tasks: [],
     isLoading: false,
     isError: false,
     refetch: () => {},

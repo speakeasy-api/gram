@@ -10949,10 +10949,10 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 	return res
 }
 
-// unmarshalScopeWorkflowResponseBodyToAccessScopeWorkflow builds a value of
-// type *access.ScopeWorkflow from a value of type *ScopeWorkflowResponseBody.
-func unmarshalScopeWorkflowResponseBodyToAccessScopeWorkflow(v *ScopeWorkflowResponseBody) *access.ScopeWorkflow {
-	res := &access.ScopeWorkflow{
+// unmarshalScopeTaskResponseBodyToAccessScopeTask builds a value of type
+// *access.ScopeTask from a value of type *ScopeTaskResponseBody.
+func unmarshalScopeTaskResponseBodyToAccessScopeTask(v *ScopeTaskResponseBody) *access.ScopeTask {
+	res := &access.ScopeTask{
 		Slug:  *v.Slug,
 		Label: *v.Label,
 	}

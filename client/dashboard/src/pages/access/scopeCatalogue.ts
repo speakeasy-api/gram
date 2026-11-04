@@ -5,7 +5,7 @@
  */
 
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
-import type { ScopeWorkflow } from "@gram/client/models/components/scopeworkflow.js";
+import type { ScopeTask } from "@gram/client/models/components/scopetask.js";
 
 export type ScopeCatalogue = ReadonlyMap<string, ScopeDefinition>;
 
@@ -72,27 +72,23 @@ export function isSensitiveScope(
 }
 
 /**
- * True when the workflow needs the scope: it lists the scope itself or one
+ * True when the task needs the scope: it lists the scope itself or one
  * whose grant includes it, so a denied mcp:read is part of a task that lists
  * mcp:write.
  */
-export function workflowNeeds(
+export function taskNeeds(
   catalogue: ScopeCatalogue,
-  workflow: ScopeWorkflow,
+  task: ScopeTask,
   scope: string,
 ): boolean {
-  return workflow.scopes.some((listed) =>
-    scopeCovers(catalogue, listed, scope),
-  );
+  return task.scopes.some((listed) => scopeCovers(catalogue, listed, scope));
 }
 
-/** Workflows that need the scope, so a denial can say what task it is part of. */
-export function workflowsNeeding(
+/** Tasks that need the scope, so a denial can say what task it is part of. */
+export function tasksNeeding(
   catalogue: ScopeCatalogue,
-  workflows: readonly ScopeWorkflow[],
+  tasks: readonly ScopeTask[],
   scope: string,
-): ScopeWorkflow[] {
-  return workflows.filter((workflow) =>
-    workflowNeeds(catalogue, workflow, scope),
-  );
+): ScopeTask[] {
+  return tasks.filter((task) => taskNeeds(catalogue, task, scope));
 }

@@ -2,21 +2,21 @@ package authz
 
 import "slices"
 
-// Workflow is a task a person does in the product and every scope the task
+// ScopeTask is a task a person does in the product and every scope the task
 // needs end to end. A single denied scope is explained better as "part of
 // setting up an agent" than as a bare slug, and a role built for the task
 // should hold all of its scopes, not just the one that happened to fail.
 //
-// The list is hand-written. TestWorkflows keeps it inside the catalogue; the
+// The list is hand-written. TestTasks keeps it inside the catalogue; the
 // handlers that enforce each scope are the source of truth for what a task
 // really needs.
-type Workflow struct {
+type ScopeTask struct {
 	Slug   string
 	Label  string
 	Scopes []Scope
 }
 
-var workflows = []Workflow{
+var scopeTasks = []ScopeTask{
 	{
 		Slug:   "agent_setup",
 		Label:  "Set up an agent",
@@ -39,25 +39,25 @@ var workflows = []Workflow{
 	},
 }
 
-// Workflows returns a copy of the workflow list.
-func Workflows() []Workflow {
-	out := make([]Workflow, 0, len(workflows))
-	for _, workflow := range workflows {
-		out = append(out, Workflow{
-			Slug:   workflow.Slug,
-			Label:  workflow.Label,
-			Scopes: slices.Clone(workflow.Scopes),
+// Tasks returns a copy of the task list.
+func Tasks() []ScopeTask {
+	out := make([]ScopeTask, 0, len(scopeTasks))
+	for _, task := range scopeTasks {
+		out = append(out, ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
+			Scopes: slices.Clone(task.Scopes),
 		})
 	}
 	return out
 }
 
-// WorkflowsNeeding returns the workflows that include scope.
-func WorkflowsNeeding(scope Scope) []Workflow {
-	var out []Workflow
-	for _, workflow := range Workflows() {
-		if slices.Contains(workflow.Scopes, scope) {
-			out = append(out, workflow)
+// TasksNeeding returns the tasks that include scope.
+func TasksNeeding(scope Scope) []ScopeTask {
+	var out []ScopeTask
+	for _, task := range Tasks() {
+		if slices.Contains(task.Scopes, scope) {
+			out = append(out, task)
 		}
 	}
 	return out

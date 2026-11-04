@@ -84,7 +84,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
     catalogue: new Map(),
-    workflows: [],
+    tasks: [],
     isLoading: false,
     isError: false,
     refetch: () => {},

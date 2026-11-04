@@ -10106,10 +10106,10 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 	return res
 }
 
-// marshalAccessScopeWorkflowToScopeWorkflowResponseBody builds a value of type
-// *ScopeWorkflowResponseBody from a value of type *access.ScopeWorkflow.
-func marshalAccessScopeWorkflowToScopeWorkflowResponseBody(v *access.ScopeWorkflow) *ScopeWorkflowResponseBody {
-	res := &ScopeWorkflowResponseBody{
+// marshalAccessScopeTaskToScopeTaskResponseBody builds a value of type
+// *ScopeTaskResponseBody from a value of type *access.ScopeTask.
+func marshalAccessScopeTaskToScopeTaskResponseBody(v *access.ScopeTask) *ScopeTaskResponseBody {
+	res := &ScopeTaskResponseBody{
 		Slug:  v.Slug,
 		Label: v.Label,
 	}

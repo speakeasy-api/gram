@@ -14,7 +14,7 @@ import {
 import {
   scopeLabel,
   scopeTitle,
-  workflowNeeds,
+  taskNeeds,
   type ScopeCatalogue,
 } from "@/pages/access/scopeCatalogue";
 import React from "react";
@@ -229,7 +229,7 @@ function Unauthorized({
   >("idle");
 
   const { hasScope } = useRBAC();
-  const { catalogue, workflows } = useScopeCatalogue();
+  const { catalogue, tasks } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
@@ -381,10 +381,10 @@ function Unauthorized({
                       );
                     })}
                   </ul>
-                  <WorkflowHint
+                  <TaskHint
                     scopes={scopes}
                     catalogue={catalogue}
-                    workflows={workflows}
+                    tasks={tasks}
                     held={(s) => hasScope(s, resourceId, projectId)}
                   />
                   {scopes.length === 1 && (
@@ -409,30 +409,30 @@ function Unauthorized({
  * Names the task the missing permission is part of, and what else it needs
  * that the person does not hold yet.
  */
-function WorkflowHint({
+function TaskHint({
   scopes,
   catalogue,
-  workflows,
+  tasks,
   held,
 }: {
   scopes: Scope[];
   catalogue: ScopeCatalogue;
-  workflows: ReturnType<typeof useScopeCatalogue>["workflows"];
+  tasks: ReturnType<typeof useScopeCatalogue>["tasks"];
   held: (scope: Scope) => boolean;
 }): React.JSX.Element | null {
-  const partOf = workflows.filter((workflow) =>
-    scopes.some((s) => workflowNeeds(catalogue, workflow, s)),
+  const partOf = tasks.filter((task) =>
+    scopes.some((s) => taskNeeds(catalogue, task, s)),
   );
   if (partOf.length === 0) return null;
   return (
     <ul className="text-muted-foreground mt-3 space-y-1 text-xs">
-      {partOf.map((workflow) => {
-        const alsoNeeds = workflow.scopes.filter(
+      {partOf.map((task) => {
+        const alsoNeeds = task.scopes.filter(
           (s) => !scopes.includes(s as Scope) && !held(s as Scope),
         );
         return (
-          <li key={workflow.slug}>
-            Part of <span className="font-medium">{workflow.label}</span>
+          <li key={task.slug}>
+            Part of <span className="font-medium">{task.label}</span>
             {alsoNeeds.length > 0 &&
               `, which also needs ${alsoNeeds
                 .map((s) => scopeLabel(catalogue, s))

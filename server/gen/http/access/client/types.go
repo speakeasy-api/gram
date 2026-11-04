@@ -453,7 +453,7 @@ type ListScopesResponseBody struct {
 	Scopes []*ScopeDefinitionResponseBody `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// Tasks that need more than one scope, so a missing scope can be explained in
 	// context.
-	Workflows []*ScopeWorkflowResponseBody `form:"workflows,omitempty" json:"workflows,omitempty" xml:"workflows,omitempty"`
+	Tasks []*ScopeTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 }
 
 // ListMembersResponseBody is the type of the "access" service "listMembers"
@@ -9375,8 +9375,8 @@ type ScopeDefinitionResponseBody struct {
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
-// ScopeWorkflowResponseBody is used to define fields on response body types.
-type ScopeWorkflowResponseBody struct {
+// ScopeTaskResponseBody is used to define fields on response body types.
+type ScopeTaskResponseBody struct {
 	// Stable identifier of the task.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// What a person is trying to do.
@@ -13201,13 +13201,13 @@ func NewListScopesResultOK(body *ListScopesResponseBody) *access.ListScopesResul
 		}
 		v.Scopes[i] = unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(val)
 	}
-	v.Workflows = make([]*access.ScopeWorkflow, len(body.Workflows))
-	for i, val := range body.Workflows {
+	v.Tasks = make([]*access.ScopeTask, len(body.Tasks))
+	for i, val := range body.Tasks {
 		if val == nil {
-			v.Workflows[i] = nil
+			v.Tasks[i] = nil
 			continue
 		}
-		v.Workflows[i] = unmarshalScopeWorkflowResponseBodyToAccessScopeWorkflow(val)
+		v.Tasks[i] = unmarshalScopeTaskResponseBodyToAccessScopeTask(val)
 	}
 
 	return v
@@ -18221,8 +18221,8 @@ func ValidateListScopesResponseBody(body *ListScopesResponseBody) (err error) {
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 	}
-	if body.Workflows == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("workflows", "body"))
+	if body.Tasks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tasks", "body"))
 	}
 	for _, e := range body.Scopes {
 		if e != nil {
@@ -18231,9 +18231,9 @@ func ValidateListScopesResponseBody(body *ListScopesResponseBody) (err error) {
 			}
 		}
 	}
-	for _, e := range body.Workflows {
+	for _, e := range body.Tasks {
 		if e != nil {
-			if err2 := ValidateScopeWorkflowResponseBody(e); err2 != nil {
+			if err2 := ValidateScopeTaskResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -30157,9 +30157,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	return
 }
 
-// ValidateScopeWorkflowResponseBody runs the validations defined on
-// ScopeWorkflowResponseBody
-func ValidateScopeWorkflowResponseBody(body *ScopeWorkflowResponseBody) (err error) {
+// ValidateScopeTaskResponseBody runs the validations defined on
+// ScopeTaskResponseBody
+func ValidateScopeTaskResponseBody(body *ScopeTaskResponseBody) (err error) {
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}

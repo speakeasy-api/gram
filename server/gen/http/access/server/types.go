@@ -457,7 +457,7 @@ type ListScopesResponseBody struct {
 	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
 	// Tasks that need more than one scope, so a missing scope can be explained in
 	// context.
-	Workflows []*ScopeWorkflowResponseBody `form:"workflows" json:"workflows" xml:"workflows"`
+	Tasks []*ScopeTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
 // ListMembersResponseBody is the type of the "access" service "listMembers"
@@ -9307,8 +9307,8 @@ type ScopeDefinitionResponseBody struct {
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
-// ScopeWorkflowResponseBody is used to define fields on response body types.
-type ScopeWorkflowResponseBody struct {
+// ScopeTaskResponseBody is used to define fields on response body types.
+type ScopeTaskResponseBody struct {
 	// Stable identifier of the task.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// What a person is trying to do.
@@ -10386,17 +10386,17 @@ func NewListScopesResponseBody(res *access.ListScopesResult) *ListScopesResponse
 	} else {
 		body.Scopes = []*ScopeDefinitionResponseBody{}
 	}
-	if res.Workflows != nil {
-		body.Workflows = make([]*ScopeWorkflowResponseBody, len(res.Workflows))
-		for i, val := range res.Workflows {
+	if res.Tasks != nil {
+		body.Tasks = make([]*ScopeTaskResponseBody, len(res.Tasks))
+		for i, val := range res.Tasks {
 			if val == nil {
-				body.Workflows[i] = nil
+				body.Tasks[i] = nil
 				continue
 			}
-			body.Workflows[i] = marshalAccessScopeWorkflowToScopeWorkflowResponseBody(val)
+			body.Tasks[i] = marshalAccessScopeTaskToScopeTaskResponseBody(val)
 		}
 	} else {
-		body.Workflows = []*ScopeWorkflowResponseBody{}
+		body.Tasks = []*ScopeTaskResponseBody{}
 	}
 	return body
 }

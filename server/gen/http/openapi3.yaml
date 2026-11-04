@@ -115287,14 +115287,14 @@ components:
                     items:
                         $ref: '#/components/schemas/ScopeDefinition'
                     description: The scopes available in access control.
-                workflows:
+                tasks:
                     type: array
                     items:
-                        $ref: '#/components/schemas/ScopeWorkflow'
+                        $ref: '#/components/schemas/ScopeTask'
                     description: Tasks that need more than one scope, so a missing scope can be explained in context.
             required:
                 - scopes
-                - workflows
+                - tasks
         ListServerClientAssociationsResult:
             type: object
             properties:
@@ -125554,7 +125554,7 @@ components:
                 - agent_eligible
                 - sensitive
                 - sub_scopes
-        ScopeWorkflow:
+        ScopeTask:
             type: object
             properties:
                 label:

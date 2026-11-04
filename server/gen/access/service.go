@@ -1163,7 +1163,7 @@ type ListScopesResult struct {
 	Scopes []*ScopeDefinition
 	// Tasks that need more than one scope, so a missing scope can be explained in
 	// context.
-	Workflows []*ScopeWorkflow
+	Tasks []*ScopeTask
 }
 
 // ListShadowMCPInventoryPayload is the payload type of the access service
@@ -1485,7 +1485,7 @@ type ScopeDefinition struct {
 	ExclusionScope *string
 }
 
-type ScopeWorkflow struct {
+type ScopeTask struct {
 	// Stable identifier of the task.
 	Slug string
 	// What a person is trying to do.

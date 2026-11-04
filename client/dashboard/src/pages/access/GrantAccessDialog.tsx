@@ -28,7 +28,7 @@ import {
   type RoleSuggestions,
   type SuggestedRole,
 } from "./roleSuggestions";
-import { scopeLabel, workflowsNeeding } from "./scopeCatalogue";
+import { scopeLabel, tasksNeeding } from "./scopeCatalogue";
 
 interface GrantAccessDialogProps {
   /** User id of the member who requested access (from the email deep link). */
@@ -83,7 +83,7 @@ export function GrantAccessDialog({
   } = useRoles();
   const {
     catalogue,
-    workflows,
+    tasks,
     isLoading: scopesLoading,
     isError: scopesError,
     refetch: refetchScopes,
@@ -139,7 +139,7 @@ export function GrantAccessDialog({
   const granted = assignedRoleId !== null && updateMemberRoles.isSuccess;
   const label = scopeLabel(catalogue, scope);
   const entry = catalogue.get(scope);
-  const partOf = workflowsNeeding(catalogue, workflows, scope);
+  const partOf = tasksNeeding(catalogue, tasks, scope);
 
   return (
     <Dialog
@@ -163,12 +163,12 @@ export function GrantAccessDialog({
 
         {partOf.length > 0 && (
           <ul className="space-y-1">
-            {partOf.map((workflow) => {
-              const alsoNeeds = workflow.scopes.filter((s) => s !== scope);
+            {partOf.map((task) => {
+              const alsoNeeds = task.scopes.filter((s) => s !== scope);
               return (
-                <li key={workflow.slug}>
+                <li key={task.slug}>
                   <Text muted small>
-                    Part of <strong>{workflow.label}</strong>
+                    Part of <strong>{task.label}</strong>
                     {alsoNeeds.length > 0 && (
                       <>
                         , which also needs{" "}

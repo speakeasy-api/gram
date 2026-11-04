@@ -1896,7 +1896,7 @@ trackedFiles:
   src/models/components/savedashboardlayoutrequestbody.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
   src/models/components/scopedefinition.ts: {}
-  src/models/components/scopeworkflow.ts: {}
+  src/models/components/scopetask.ts: {}
   src/models/components/searchbusinessmemoriesrequestbody.ts: {}
   src/models/components/searchbusinessmemoriesresponsebody.ts: {}
   src/models/components/searchchatsfilter.ts: {}
@@ -10893,7 +10893,7 @@ examples:
     speakeasy-default-list-scopes:
       responses:
         "200":
-          application/json: {"scopes": [], "workflows": []}
+          application/json: {"scopes": [], "tasks": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
