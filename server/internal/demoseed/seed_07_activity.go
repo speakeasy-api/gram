@@ -223,14 +223,14 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return fmt.Errorf("insert demo claude tag session link: %w", err)
 	}
 
-	// One dashboard session per assistant: the bound one names its agent and the
-	// member it acted for; the legacy one links to the assistant itself.
-	sessions := []struct{ fixture, title string }{
-		{"bound", "Weekly project activity summary"},
-		{"legacy", "Open risk findings recap"},
+	// The Slackbot session names its agent and the member it acted for; the
+	// legacy dashboard session links to the assistant itself.
+	sessions := []struct{ fixture, title, surface string }{
+		{"bound", "Weekly project activity summary from Slack", "speakeasy-slack"},
+		{"legacy", "Open risk findings recap", ""},
 	}
 	for _, sess := range sessions {
-		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, activityNull, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
+		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, pgtype.Text{String: sess.surface, Valid: sess.surface != ""}, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
 			return err
 		}
 	}
@@ -252,11 +252,16 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}
 	}
 	for _, fixture := range []string{"bound", "legacy"} {
+		sourceKind := "dashboard"
+		if fixture == "bound" {
+			sourceKind = "speakeasy_slack"
+		}
 		if err := s.q.ActivityInsertAssistantThread(ctx, repo.ActivityInsertAssistantThreadParams{
 			ID:            s.det("assistant-thread-" + fixture),
 			AssistantID:   s.det("assistant-" + fixture),
 			ProjectID:     proj,
-			CorrelationID: "demo-dashboard-" + fixture,
+			CorrelationID: "demo-" + sourceKind + "-" + fixture,
+			SourceKind:    sourceKind,
 			ChatID:        s.det("assistant-session-" + fixture),
 		}); err != nil {
 			return fmt.Errorf("insert demo assistant thread %s: %w", fixture, err)

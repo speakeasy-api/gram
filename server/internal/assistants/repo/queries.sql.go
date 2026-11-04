@@ -5332,11 +5332,14 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 }
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, $6::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id
 `
 
 type UpsertAssistantChatParams struct {
@@ -5345,6 +5348,7 @@ type UpsertAssistantChatParams struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	Title          pgtype.Text
+	SessionSurface pgtype.Text
 }
 
 // user_id is the conversation owner — stamped on first insert so reads can
@@ -5354,6 +5358,12 @@ type UpsertAssistantChatParams struct {
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the
 // legitimate owner.
+//
+// session_surface is the server-derived product surface for sources that the
+// inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+// the same assistants runtime as every other assistant). It is stamped from the
+// persisted thread source kind, never from a request header, and an existing
+// value is kept.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
@@ -5361,6 +5371,7 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.OrganizationID,
 		arg.UserID,
 		arg.Title,
+		arg.SessionSurface,
 	)
 	return err
 }
