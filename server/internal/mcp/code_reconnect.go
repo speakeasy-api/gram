@@ -103,7 +103,7 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 	}
 	b := state.CodeReconnect
 	if b == nil || !b.Ticket || b.UserID == "" || b.Server == "" || b.ServerID == uuid.Nil || !time.Now().Before(b.ExpiresAt) {
-		if b != nil && !claim {
+		if b != nil && b.Ticket && b.expired(time.Now()) && !claim {
 			s.recordTicketExpired(r, endpoint, state, mcpconnectionattempts.AppCodeMode)
 		}
 		return nil, oops.E(oops.CodeBadRequest, errCodeReconnectTicketInvalid, "invalid or expired connection request")

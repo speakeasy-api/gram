@@ -327,6 +327,40 @@ func TestConnectionOutcome_CodeModeTicketClaim(t *testing.T) {
 	}
 }
 
+func TestConnectionOutcome_CodeModeTicketExpiryRequiresExpiredTicket(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"expired", "not a ticket", "malformed live ticket"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			rec := recordConnections(t, ti)
+			toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
+			require.NoError(t, err)
+			ref, err := endpoint.EndpointRef(ctx, ti.conn, ti.serverURL.String())
+			require.NoError(t, err)
+			binding := &mcp.CodeReconnectBinding{UserID: "test-user", Server: "tracker", ServerID: uuid.New(), Ticket: true, ExpiresAt: time.Now().Add(time.Hour)}
+			switch kind {
+			case "expired":
+				binding.ExpiresAt = time.Now().Add(-time.Minute)
+			case "not a ticket":
+				binding.Ticket = false
+			case "malformed live ticket":
+				binding.UserID = ""
+			}
+			ticket := mcp.AuthnChallengeState{ID: uuid.NewString(), FirstParty: true, CreatedAt: time.Now(), Endpoint: ref, UserSessionIssuerID: issuer.ID, CodeReconnect: binding}
+			require.NoError(t, ti.authnChallengeCache.Store(ctx, ticket))
+			req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/"+endpoint.Slug+"/connect/first-party?code_reconnect="+ticket.ID, nil)
+			require.Error(t, ti.service.ServeFirstPartyConnect(httptest.NewRecorder(), req, endpoint))
+			if kind == "expired" {
+				rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
+			} else {
+				rec.RequireNothing()
+			}
+		})
+	}
+}
+
 // Building the sign-in link is local work, so failing it can't mean the service is down.
 func TestConnectionOutcome_FirstPartySignInLinkFailureIsOurs(t *testing.T) {
 	t.Parallel()
@@ -573,6 +607,36 @@ func TestConnectionOutcome_TokenConsumeOutageIsNotLostRace(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, w.Code)
 			rec.RequireStep(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
 			rec.RequireNotEnded()
+		})
+	}
+}
+
+func TestConnectionOutcome_ConsentConsumeOutageIsNotLostRace(t *testing.T) {
+	t.Parallel()
+	for _, action := range []string{"approve", "deny"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+			var failing *claimFailureCache
+			ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, func(delegate cache.Cache) cache.Cache {
+				failing = &claimFailureCache{Cache: delegate}
+				return failing
+			})
+			rec := recordConnections(t, ti)
+			toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "verifier-"+uuid.NewString())
+			outage := errors.New("cache connection unavailable")
+			failing.fail.Store(&outage)
+			form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {action}}
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			err := ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(routedTo(ctx, toolset.McpSlug.String)))
+			var failure *oops.ShareableError
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, oops.CodeUnavailable, failure.Code)
+			rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+			rec.RequireNotEnded()
+			failing.fail.Store(nil)
+			postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, action)
 		})
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -1204,7 +1205,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// and chose "no" — a decline, not an errant config. A lost consume
 		// race (double submit) reads as expired state.
 		if _, err := s.consumeChallenge(ctx, stateID, attempt); err != nil {
-			t.Continue()
+			if errors.Is(err, redisCache.ErrCacheMiss) {
+				t.Continue()
+			} else {
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			}
 			return consentChallengeCacheError(ctx, logger, err)
 		}
 		t.Consumed()
@@ -1515,8 +1520,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// the guards against it in case the preflighted copy went stale.
 	challengeState, err = s.consumeChallenge(ctx, stateID, attempt)
 	if err != nil {
-		// Lost the race to a double submit: the winner records the attempt.
-		t.Continue()
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			// Lost the race to a double submit: the winner records the attempt.
+			t.Continue()
+		} else {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	t.Consumed()
