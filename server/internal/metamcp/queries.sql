@@ -594,8 +594,9 @@ ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
 -- Gateway names for telemetry labels across every project of the
 -- organization, deleted gateways included: a member's calls are logged in the
 -- member's project, which need not be the gateway's. Projects select the rows
--- so the lookup rides the project_id index.
-SELECT ms.id, ms.name
+-- so the lookup rides the project_id index. The project and deleted flag let
+-- a label link to the gateway's page while it still has one.
+SELECT ms.id, ms.name, ms.project_id, ms.deleted
 FROM meta_mcp_servers ms
 WHERE ms.project_id IN (
     SELECT p.id

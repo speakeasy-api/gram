@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
@@ -211,7 +212,8 @@ func TestListToolUsageTraces_ClassifiesHookObservedGateway(t *testing.T) {
 // A member's calls are logged in the member's project, whichever gateway
 // routed them, so a gateway in another project of the organization, an agent
 // gateway, and the organization gateway are all named; an id no gateway of the
-// organization derives reads as unknown rather than as the raw id.
+// organization derives reads as unknown rather than as the raw id. Each named
+// gateway also says where its page is, so the dashboard can link to it.
 func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
 	t.Parallel()
 
@@ -242,11 +244,12 @@ func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member", slug: "member-" + uuid.NewString()[:8]})
-	want := map[string]string{
-		otherGateway.ID.String():                  "Other Project Gateway",
-		agentgateway.GatewayID(agent.ID).String(): "Support bot gateway",
-		orggateway.GatewayID(ti.orgID).String():   organization.Name,
-		uuid.NewString():                          "Unknown gateway",
+	want := map[string]gatewayRef{
+		otherGateway.ID.String():                                        {name: "Other Project Gateway", kind: "project", projectSlug: otherProject.Slug},
+		agentgateway.GatewayID(agent.ID).String():                       {name: "Support bot gateway", kind: "agent", agentID: agent.ID.String()},
+		orggateway.GatewayID(ti.orgID).String():                         {name: organization.Name, kind: "organization"},
+		orggateway.ProjectGatewayID(ti.orgID, otherProject.ID).String(): {name: "Other project", kind: "organization", projectSlug: otherProject.Slug},
+		uuid.NewString():                                                {name: "Unknown gateway"},
 	}
 	for gatewayID := range want {
 		logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-time.Minute)})
@@ -257,11 +260,16 @@ func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
 	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10}, func(result *gen.ListToolUsageTracesResult) bool {
 		return len(result.Traces) == len(want)
 	})
-	got := map[string]string{}
+	got := map[string]gatewayRef{}
 	for _, trace := range result.Traces {
 		require.NotNil(t, trace.ViaMetaMcpServerID)
 		require.NotNil(t, trace.ViaMetaMcpServerName)
-		got[*trace.ViaMetaMcpServerID] = *trace.ViaMetaMcpServerName
+		got[*trace.ViaMetaMcpServerID] = gatewayRef{
+			name:        *trace.ViaMetaMcpServerName,
+			kind:        conv.PtrValOr(trace.ViaMetaMcpServerKind, ""),
+			projectSlug: conv.PtrValOr(trace.ViaMetaMcpServerProjectSlug, ""),
+			agentID:     conv.PtrValOr(trace.ViaMetaMcpServerAgentID, ""),
+		}
 	}
 	require.Equal(t, want, got)
 
@@ -273,13 +281,21 @@ func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
 	for _, option := range options.Gateways {
 		offered[option.MetaMcpServerID] = option.Name
 	}
-	for gatewayID, name := range want {
-		if name == "Unknown gateway" {
+	for gatewayID, gateway := range want {
+		if gateway.kind == "" {
 			require.NotContains(t, offered, gatewayID)
 			continue
 		}
-		require.Equal(t, name, offered[gatewayID])
+		require.Equal(t, gateway.name, offered[gatewayID])
 	}
+}
+
+// gatewayRef is what a trace says about the gateway that dispatched it.
+type gatewayRef struct {
+	name        string
+	kind        string
+	projectSlug string
+	agentID     string
 }
 
 func TestGetToolUsageSummary_ClassifiesAndFiltersGateway(t *testing.T) {

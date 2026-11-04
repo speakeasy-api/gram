@@ -968,7 +968,7 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 }
 
 const listMetaMCPServerNamesForTelemetryByOrganizationID = `-- name: ListMetaMCPServerNamesForTelemetryByOrganizationID :many
-SELECT ms.id, ms.name
+SELECT ms.id, ms.name, ms.project_id, ms.deleted
 FROM meta_mcp_servers ms
 WHERE ms.project_id IN (
     SELECT p.id
@@ -980,14 +980,17 @@ ORDER BY ms.deleted ASC, ms.created_at DESC
 `
 
 type ListMetaMCPServerNamesForTelemetryByOrganizationIDRow struct {
-	ID   uuid.UUID
-	Name string
+	ID        uuid.UUID
+	Name      string
+	ProjectID uuid.UUID
+	Deleted   bool
 }
 
 // Gateway names for telemetry labels across every project of the
 // organization, deleted gateways included: a member's calls are logged in the
 // member's project, which need not be the gateway's. Projects select the rows
-// so the lookup rides the project_id index.
+// so the lookup rides the project_id index. The project and deleted flag let
+// a label link to the gateway's page while it still has one.
 func (q *Queries) ListMetaMCPServerNamesForTelemetryByOrganizationID(ctx context.Context, organizationID string) ([]ListMetaMCPServerNamesForTelemetryByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByOrganizationID, organizationID)
 	if err != nil {
@@ -997,7 +1000,12 @@ func (q *Queries) ListMetaMCPServerNamesForTelemetryByOrganizationID(ctx context
 	var items []ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
 	for rows.Next() {
 		var i ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.Deleted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -772,19 +772,21 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 }
 
 const listAgentNamesIncludingDeleted = `-- name: ListAgentNamesIncludingDeleted :many
-SELECT id, name
+SELECT id, name, deleted
 FROM agents
 WHERE organization_id = $1
 ORDER BY deleted ASC, created_at DESC
 `
 
 type ListAgentNamesIncludingDeletedRow struct {
-	ID   uuid.UUID
-	Name string
+	ID      uuid.UUID
+	Name    string
+	Deleted bool
 }
 
 // Reads every agent's name in an organization, deleted agents included, for
-// labelling records written while they existed.
+// labelling records written while they existed. The deleted flag lets a
+// label link to the agent only while it exists.
 func (q *Queries) ListAgentNamesIncludingDeleted(ctx context.Context, organizationID string) ([]ListAgentNamesIncludingDeletedRow, error) {
 	rows, err := q.db.Query(ctx, listAgentNamesIncludingDeleted, organizationID)
 	if err != nil {
@@ -794,7 +796,7 @@ func (q *Queries) ListAgentNamesIncludingDeleted(ctx context.Context, organizati
 	var items []ListAgentNamesIncludingDeletedRow
 	for rows.Next() {
 		var i ListAgentNamesIncludingDeletedRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Deleted); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

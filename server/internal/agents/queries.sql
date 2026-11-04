@@ -50,8 +50,9 @@ LIMIT 1;
 
 -- name: ListAgentNamesIncludingDeleted :many
 -- Reads every agent's name in an organization, deleted agents included, for
--- labelling records written while they existed.
-SELECT id, name
+-- labelling records written while they existed. The deleted flag lets a
+-- label link to the agent only while it exists.
+SELECT id, name, deleted
 FROM agents
 WHERE organization_id = @organization_id
 ORDER BY deleted ASC, created_at DESC;
