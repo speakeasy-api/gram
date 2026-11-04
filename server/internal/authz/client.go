@@ -153,6 +153,14 @@ func (c *Client) RefreshContext(ctx context.Context) (context.Context, error) {
 	return c.engine.RefreshContext(ctx)
 }
 
+// ShouldEnforce reports whether the request's authorization is enforced, as
+// Engine.ShouldEnforce does. Callers that skip work an unenforced request
+// would not be denied, such as building a filter, ask this instead of the
+// engine.
+func (c *Client) ShouldEnforce(ctx context.Context) (bool, error) {
+	return c.engine.ShouldEnforce(ctx)
+}
+
 // CaptureAdmissionBoundary captures the prepared policies for a job, so later
 // refreshes can narrow its authority but never widen it.
 func (c *Client) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundary, error) {
