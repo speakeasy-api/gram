@@ -753,22 +753,22 @@ func (c *compiler) anyOfBranch(t *TypeDecl, m members, where string, branch Expr
 		if a, ok := m.attrs[branch.name]; ok {
 			if _, declared := c.byName[a.factType]; !declared {
 				c.problemf("%s: Via attr %q has type %q, which is not a declared type", where, branch.name, a.factType)
-				return PermissionRef{}, false
+				return PermissionRef{Type: "", Permission: ""}, false
 			}
 			return PermissionRef{Type: a.factType, Permission: branch.permission}, true
 		}
 		if branch.name != "" && branch.name == t.parent {
 			if _, declared := c.byName[t.parent]; !declared {
 				c.problemf("%s: Via names parent type %q, which is not declared", where, t.parent)
-				return PermissionRef{}, false
+				return PermissionRef{Type: "", Permission: ""}, false
 			}
 			return PermissionRef{Type: t.parent, Permission: branch.permission}, true
 		}
 		c.problemf("%s: Via names %q, which is neither the parent type nor an Attr", where, branch.name)
-		return PermissionRef{}, false
+		return PermissionRef{Type: "", Permission: ""}, false
 	default:
 		c.problemf("%s: an AnyOf branch must be Perm or Via, not %s", where, branch.op)
-		return PermissionRef{}, false
+		return PermissionRef{Type: "", Permission: ""}, false
 	}
 }
 

@@ -540,6 +540,9 @@ func (c *compiler) resolve(t *TypeDecl, m members, e Expr) Expr {
 			out.operands[i] = c.resolve(t, m, op)
 		}
 	case OpIs, OpPerm:
+	case OpAnyOf:
+		// Validation keeps AnyOf out of ordinary permissions; it compiles to
+		// an AlternativeSet instead.
 	}
 	return out
 }
@@ -589,6 +592,8 @@ func (w *prerequisiteWalker) walk(e Expr) {
 		for _, op := range e.operands {
 			w.walk(op)
 		}
+	case OpAnyOf:
+		// Validation keeps AnyOf out of ordinary permissions.
 	}
 }
 
