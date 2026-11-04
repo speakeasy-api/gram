@@ -116,7 +116,7 @@ type ProxyManager struct {
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
 	guardianPolicy *guardian.Policy
-	authz          *authz.Engine
+	authz          *authz.Client
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
 	scanEvaluator  *mcpriskscan.Evaluator
@@ -168,7 +168,7 @@ func NewProxyManager(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
-	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	posthogClient *posthog.Posthog,
 	telemLogger *tm.Logger,
 	billingRepo billing.Repository,
@@ -193,7 +193,7 @@ func NewProxyManager(
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
 		guardianPolicy:                        guardianPolicy,
-		authz:                                 authzEngine,
+		authz:                                 authzClient,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
 		scanEvaluator:                         scanEvaluator,

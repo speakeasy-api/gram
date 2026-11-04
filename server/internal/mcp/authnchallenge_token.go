@@ -626,9 +626,9 @@ func (s *Service) handleTokenJWTBearerGrant(
 		}
 	} else if err == nil {
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
-		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
+		authorizationCtx, err = s.authzClient.PrepareContext(authorizationCtx)
 		if err == nil {
-			err = s.authz.Require(authorizationCtx, connect)
+			err = s.authzClient.Require(authorizationCtx, authz.MCPServer(endpoint.ProjectID.String(), endpoint.connectResourceID().String()).Connect())
 		}
 		s.newMandatoryShadow(authorizationCtx, endpoint.OrganizationID).shadowRequire(authorizationCtx, mandatorySurfaceTokenIssuance, err, connect)
 	}

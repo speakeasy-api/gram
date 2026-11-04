@@ -272,6 +272,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
 		})
+	authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
+	if err != nil {
+		return err
+	}
 
 	_, psbroker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {
@@ -382,7 +386,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 		ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
-		RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
+		RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AuthzClient: authzClient, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
@@ -434,7 +438,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// reconciler is a Temporal worker this tier does not run. Observation and
 	// containment still resolve through the same admission checks.
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
-	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
+	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, authzClient, auditLogger, admission.CheckExpansion)
 	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return fmt.Errorf("build MCP server runtime: %w", err)

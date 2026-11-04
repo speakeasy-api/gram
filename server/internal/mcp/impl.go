@@ -241,6 +241,7 @@ type Service struct {
 	deploymentsRepo        *deployments_repo.Queries
 	enc                    *encryption.Client
 	authz                  *authz.Engine
+	authzClient            *authz.Client
 	shadowMCPClient        *shadowmcp.Client
 	auditLogger            *audit.Logger
 	platformExtras         []platformtools.ExternalTool
@@ -528,6 +529,7 @@ func NewService(
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	assistantTokens *assistanttokens.Manager,
 	principalCredentials *principalcredential.Issuer,
 	shadowMCPClient *shadowmcp.Client,
@@ -659,6 +661,7 @@ func NewService(
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
 		authz:                  authzEngine,
+		authzClient:            authzClient,
 		shadowMCPClient:        shadowMCPClient,
 		auditLogger:            auditLogger,
 		platformExtras:         platformExtras,
@@ -1732,7 +1735,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 			// Ensure grants are loaded — not all auth strategies in authenticateToken
 			// go through auth.Authorize (which calls PrepareContext). Principal
 			// credentials repeat live admission even when grants are already loaded.
-			prepared, err := s.authz.PrepareContext(ctx)
+			prepared, err := s.authzClient.PrepareContext(ctx)
 			if err != nil {
 				var shareable *oops.ShareableError
 				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
@@ -1741,7 +1744,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 				return ctx, false, oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			ctx = prepared
-			if err := s.authz.Require(ctx, connect); err != nil {
+			if err := s.authzClient.Require(ctx, authz.MCPServer(toolset.ProjectID.String(), cfg.rbacResourceID.String()).Connect()); err != nil {
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
 			}
 		}
@@ -2091,10 +2094,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authzClient, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authzClient, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case mcpversions.MethodPromptsGet:
@@ -2305,7 +2308,7 @@ func (s *Service) HandleToolsList(
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
-		s.authz,
+		s.authzClient,
 		s.guardianPolicy,
 		s.db,
 		s.env,
@@ -2378,7 +2381,7 @@ func (s *Service) HandleToolsCall(
 		s.logger,
 		s.metrics,
 		s.identityCoverage,
-		s.authz,
+		s.authzClient,
 		s.guardianPolicy,
 		s.db,
 		s.env,

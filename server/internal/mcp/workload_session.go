@@ -217,7 +217,7 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 	if err != nil {
 		return ctx, err
 	}
-	ctx, err = s.authz.PrepareContext(ctx)
+	ctx, err = s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		// A denial means the workload is no longer admitted, which its token
 		// cannot fix. Anything else — including a shareable error carrying an
@@ -247,7 +247,7 @@ func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpo
 		}
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, target.connectCheck()); err != nil {
+	if err := s.authzClient.Require(ctx, target.connectOperation()); err != nil {
 		// A denial is the assigned agent's authority being gone or withdrawn;
 		// an engine failure reached no decision and stays unmarked.
 		if !isCredentialDenial(err) {

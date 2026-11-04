@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -67,6 +68,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 		ti.siteURL,
 		ti.cacheAdapter,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
+		authztest.NewParityClient(t, authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient())),
 		ti.audit,
 		nil,
 	)

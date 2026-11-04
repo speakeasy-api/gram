@@ -311,6 +311,20 @@ func (e EnvironmentRef) Write() Operation {
 	return newOperation("environment", "write", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
 }
 
+// CallTool asks to connect to the server for one tool, and for one of the
+// tool's dispositions when disposition is not empty. A grant or block limited
+// to other tools or dispositions does not decide it.
+func (m MCPServerRef) CallTool(tool, disposition string) Operation {
+	dimensions := m.dimensions()
+	if tool != "" {
+		dimensions[SelectorKeyTool] = tool
+	}
+	if disposition != "" {
+		dimensions[SelectorKeyDisposition] = disposition
+	}
+	return newOperation("mcp_server", "connect", m.id, dimensions)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -323,7 +337,7 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
-		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
+		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),

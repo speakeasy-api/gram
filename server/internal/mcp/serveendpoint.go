@@ -1145,7 +1145,7 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	authorized, err := s.requireProxyBackendAccess(ctx, logger, connect, mcpServer)
+	authorized, err := s.requireProxyBackendAccess(ctx, logger, authz.MCPServer(projectID.String(), mcpServer.ID.String()).Connect(), mcpServer)
 	shadowCtx := ctx
 	if authorized != nil {
 		shadowCtx = authorized
@@ -1160,13 +1160,13 @@ func (s *Service) authorizeProxyBackendAccess(
 func (s *Service) requireProxyBackendAccess(
 	ctx context.Context,
 	logger *slog.Logger,
-	connect authz.Check,
+	connect authz.Operation,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		var prepErr error
-		ctx, prepErr = s.authz.PrepareContext(ctx)
+		ctx, prepErr = s.authzClient.PrepareContext(ctx)
 		if prepErr != nil {
 			var shareable *oops.ShareableError
 			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
@@ -1174,7 +1174,7 @@ func (s *Service) requireProxyBackendAccess(
 			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, connect); err != nil {
+		if err := s.authzClient.Require(ctx, connect); err != nil {
 			serverName := ""
 			if mcpServer.Name.Valid {
 				serverName = mcpServer.Name.String
