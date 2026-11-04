@@ -46,9 +46,9 @@ func (s *Service) gatewayReportedClient(ctx context.Context, gate *metaGateConte
 	return s.reportedClient(ctx, gate.request, uuid.Nil, metaClientInfoScope(gate.metaServerID))
 }
 
-// recordGateRejection records only a bearer that proves a real flow on this server.
+// recordGateRejection attributes invalid bearers only when their signature proves a subject.
 func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
-	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) || errors.Is(ctx.Err(), context.Canceled) {
+	if valErr == nil || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	code := gateHappened(valErr)
@@ -71,7 +71,8 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 	if shareable, ok := errors.AsType[*oops.ShareableError](valErr); ok && shareable.Code == oops.CodeForbidden {
 		return mcpconnectionattempts.CodeNoServerAccess
 	}
-	if errors.Is(valErr, errSessionPolicyGone) || errors.Is(valErr, errCredentialRejected) || errors.Is(valErr, errToolSelectionResourceMismatch) ||
+	if errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) ||
+		errors.Is(valErr, errSessionPolicyGone) || errors.Is(valErr, errCredentialRejected) || errors.Is(valErr, errToolSelectionResourceMismatch) ||
 		errors.Is(valErr, errTokenHostMismatch) || errors.Is(valErr, errSharedTokenIssuerMismatch) || isCredentialDenial(valErr) {
 		return mcpconnectionattempts.CodeInvalidBearerToken
 	}

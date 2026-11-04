@@ -32,7 +32,7 @@ const sessionPolicyTTL = 5 * time.Minute
 // caller must 401 into reauth rather than reinterpret the policy.
 var errToolSelectionResourceMismatch = errors.New("session tool selection is bound to a different endpoint")
 
-// errSessionPolicyGone marks a bearer whose session row is gone or unreadable: the token is no good, nothing is down.
+// errSessionPolicyGone marks a bearer whose session row is gone: the token is no good, nothing is down.
 var errSessionPolicyGone = errors.New("session policy gone")
 
 // errToolSelectionLoad marks a post-validation policy-store failure. The
@@ -167,7 +167,7 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 
 	sel, err := toolfilter.ParseSessionPolicy(entry.Selection)
 	if err != nil {
-		return sessionPolicy{}, fmt.Errorf("parse stored tool selection: %w: %w", errSessionPolicyGone, err)
+		return sessionPolicy{}, fmt.Errorf("parse stored tool selection: %w", err)
 	}
 	return sessionPolicy{selection: sel, refreshable: entry.Refreshable, credentialID: entry.CredentialID}, nil
 }

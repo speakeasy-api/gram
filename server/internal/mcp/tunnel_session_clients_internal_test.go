@@ -126,6 +126,10 @@ func TestSessionClientForRow(t *testing.T) {
 		require.Empty(t, name)
 	}
 	require.Equal(t, 3, store.loads, "a failed read pauses further reads")
+	name, version := families.forRow(logger, project, "scope", "session")
+	require.Equal(t, "claude-code", name, "a paused shared store does not discard remembered attribution")
+	require.Equal(t, "2.4.0", version)
+	require.Equal(t, 3, store.loads, "remembered attribution requires no shared-store read")
 }
 
 // Building a row's option reads nothing: healthy requests must cost no Redis.

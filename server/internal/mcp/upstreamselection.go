@@ -871,26 +871,27 @@ func connectionNotCheckedMessage(slug string) string {
 }
 
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
+// Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
 func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
 	authentication := gate.authentication
 	choices := gate.memberChoices
 	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
 		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
 	if !person {
-		return fmt.Sprintf("Server %q's sign-in setup changed. Ask whoever set this up to update this connection.", member.slug), false
+		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", false
 	}
 	if !authentication.refreshableUserSession {
-		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", member.slug), false
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", false
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return connectionNotCheckedMessage(member.slug), false
+		return "This server's connection could not be checked. Try again in a few minutes.", false
 	case fixable:
-		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", member.slug), true
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
 	}
-	return fmt.Sprintf("Server %q needs your administrator to finish setup or give you access.", member.slug), false
+	return "This server needs your administrator to finish setup or give you access.", false
 }
 
 // consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.
@@ -948,7 +949,8 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 				}
 				// An existing connection needs no Connect.
 				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
-					ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
+					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
+					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
 					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
 				})
 				if err != nil {
@@ -1144,7 +1146,7 @@ func memberNeedsSignIn(member metaMember) bool {
 // up with a credential for through that credential, where typed auth client
 // resolution is enforced. It is nil for any other caller, before enforcement,
 // and for a key with no choices, so the gateway keeps its path.
-func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID) (*memberChoices, error) {
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, scope mcpconnectionattempts.Scope) (*memberChoices, error) {
 	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
@@ -1197,7 +1199,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				OrganizationID:            organizationID,
 				UserSessionIssuerID:       issuerID,
 			}
-			tokens, err := s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))), endpoint, subject, true, member)
+			tokens, err := s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(scope), endpoint, subject, true, member)
 			if err != nil {
 				return nil, err
 			}

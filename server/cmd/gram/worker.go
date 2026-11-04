@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -83,10 +82,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
-
-// connectionRecorderDrainTimeout bounds flushing queued connection attempts at
-// shutdown: a full queue is nine batches, each bounded by a 3s insert timeout.
-const connectionRecorderDrainTimeout = 30 * time.Second
 
 func workerRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
@@ -955,10 +950,9 @@ func newWorkerCommand() *cli.Command {
 				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
 				}
-				// Before the After hook, which closes the ClickHouse client this drains to.
-				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), connectionRecorderDrainTimeout)
-				defer cancelDrain()
-				if ferr := connectionRecorder.Shutdown(drainCtx); ferr != nil {
+				// Join the writer before After closes ClickHouse. Each logs check and
+				// insert is bounded, but the total depends on the queued organizations.
+				if ferr := connectionRecorder.Shutdown(context.WithoutCancel(ctx)); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending connection attempts", attr.SlogError(ferr))
 				}
 			}()
