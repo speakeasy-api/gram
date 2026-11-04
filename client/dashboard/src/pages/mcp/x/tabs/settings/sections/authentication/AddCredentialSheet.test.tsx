@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   registrations: [] as unknown[],
   issuers: [] as unknown[],
   issuersLoading: false,
+  issuersFailed: false,
   authorizationServers: undefined as string[] | undefined,
 }));
 
@@ -68,7 +69,7 @@ vi.mock("@/lib/remote-identity", async (importOriginal) => ({
   useRemoteSessionIssuersByIds: () => ({
     items: mocks.issuers,
     isLoading: mocks.issuersLoading,
-    isError: false,
+    isError: mocks.issuersFailed,
     refetch: vi.fn(),
   }),
   useProtectedResourceMetadata: () => ({
@@ -129,6 +130,7 @@ afterEach(() => {
   mocks.registrations = [];
   mocks.issuers = [];
   mocks.issuersLoading = false;
+  mocks.issuersFailed = false;
   mocks.authorizationServers = undefined;
 });
 
@@ -320,10 +322,13 @@ describe("AddCredentialSheet", () => {
         },
       ];
     };
-    const openPicker = () => {
+    const chooseOwnAccount = () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^Each person's own account/ }),
       );
+    };
+    const openPicker = () => {
+      chooseOwnAccount();
       fireEvent.click(screen.getByRole("combobox"));
     };
 
@@ -342,9 +347,7 @@ describe("AddCredentialSheet", () => {
       signInMocks();
       mocks.authorizationServers = ["https://mcp.linear.app"];
       renderSheet();
-      fireEvent.click(
-        screen.getByRole("radio", { name: /^Each person's own account/ }),
-      );
+      chooseOwnAccount();
       fireEvent.click(screen.getByRole("button", { name: "Show all" }));
       fireEvent.click(screen.getByRole("combobox"));
 
@@ -355,14 +358,14 @@ describe("AddCredentialSheet", () => {
       signInMocks();
       mocks.authorizationServers = ["https://auth.example.com"];
       renderSheet();
-      fireEvent.click(
-        screen.getByRole("radio", { name: /^Each person's own account/ }),
-      );
+      chooseOwnAccount();
 
       expect(
         screen.getByText(/registered with auth\.example\.com yet/),
       ).toBeTruthy();
       expect(screen.queryByRole("combobox")).toBeNull();
+      expect(screen.queryByText(/Showing sign-ins for/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Show all" })).toBeTruthy();
     });
 
     it("tells issuers apart by query and fragment", () => {
@@ -421,16 +424,76 @@ describe("AddCredentialSheet", () => {
       ).toBeTruthy();
     });
 
-    it("keeps a sign-in whose authorization server could not be looked up", () => {
+    it("shows matches after a failed lookup, the rest behind Show all", () => {
       signInMocks();
       mocks.issuers = [mocks.issuers[0]];
+      mocks.issuersFailed = true;
       mocks.authorizationServers = ["https://mcp.linear.app"];
       renderSheet();
       openPicker();
 
-      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
-      expect(screen.getByRole("option", { name: /oacli_notion/ })).toBeTruthy();
       expect(screen.queryByText(/Sign-ins could not be loaded/)).toBeNull();
+      expect(screen.queryByRole("option", { name: /oacli_notion/ })).toBeNull();
+      fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+      fireEvent.click(screen.getByRole("combobox"));
+      expect(screen.getByRole("option", { name: /oacli_notion/ })).toBeTruthy();
+    });
+
+    it("says a failed lookup failed when nothing matches", () => {
+      signInMocks();
+      mocks.issuers = [];
+      mocks.issuersFailed = true;
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      chooseOwnAccount();
+
+      expect(screen.getByText(/Sign-ins could not be loaded/)).toBeTruthy();
+      expect(screen.queryByText(/is registered with/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
+    });
+
+    it("lets no hidden selection through when a lookup then fails", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://auth.example.com"];
+      renderSheet();
+      chooseOwnAccount();
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+      fireEvent.click(screen.getByRole("combobox"));
+      fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Team sign-in" },
+      });
+      expect(
+        screen
+          .getByRole("button", { name: "Add credential" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+
+      mocks.issuersFailed = true;
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Team sign-ins" },
+      });
+
+      expect(screen.getByText(/Sign-ins could not be loaded/)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "Add credential" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+    });
+
+    it("lists everything after a failed lookup when the upstream names none", () => {
+      signInMocks();
+      mocks.issuers = [];
+      mocks.issuersFailed = true;
+      renderSheet();
+      openPicker();
+
+      expect(screen.queryByText(/Sign-ins could not be loaded/)).toBeNull();
+      expect(screen.getByRole("option", { name: /01a1a312/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /oacli_notion/ })).toBeTruthy();
     });
 
     it("hides the narrowing note until the sign-ins are shown", () => {
@@ -438,9 +501,7 @@ describe("AddCredentialSheet", () => {
       mocks.issuersLoading = true;
       mocks.authorizationServers = ["https://mcp.linear.app"];
       renderSheet();
-      fireEvent.click(
-        screen.getByRole("radio", { name: /^Each person's own account/ }),
-      );
+      chooseOwnAccount();
 
       expect(screen.getByText("Loading sign-ins…")).toBeTruthy();
       expect(screen.queryByText(/Showing sign-ins for/)).toBeNull();
@@ -458,24 +519,54 @@ describe("AddCredentialSheet", () => {
       );
     });
 
-    it("drops a choice the narrower list leaves out", () => {
+    describe("Show only", () => {
+      const pickFromAll = (option: RegExp) => {
+        signInMocks();
+        mocks.authorizationServers = ["https://mcp.linear.app"];
+        renderSheet();
+        chooseOwnAccount();
+        fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+        fireEvent.click(screen.getByRole("combobox"));
+        fireEvent.click(screen.getByRole("option", { name: option }));
+        fireEvent.click(
+          screen.getByRole("button", { name: "Show only mcp.linear.app" }),
+        );
+      };
+
+      it("keeps a selection in the narrowed list", () => {
+        pickFromAll(/Linear/);
+
+        expect(screen.getByRole("combobox").textContent).toContain("Linear");
+      });
+
+      it("clears a selection outside the narrowed list for good", () => {
+        pickFromAll(/Notion/);
+        expect(screen.getByRole("combobox").textContent).toContain(
+          "Choose a sign-in",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+        expect(screen.getByRole("combobox").textContent).toContain(
+          "Choose a sign-in",
+        );
+      });
+    });
+
+    it("offers no toggle once the upstream names nothing", () => {
       signInMocks();
       mocks.authorizationServers = ["https://mcp.linear.app"];
       renderSheet();
-      fireEvent.click(
-        screen.getByRole("radio", { name: /^Each person's own account/ }),
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
-      fireEvent.click(screen.getByRole("combobox"));
-      fireEvent.click(screen.getByRole("option", { name: /Notion/ }));
-      fireEvent.click(
-        screen.getByRole("button", { name: "Show only mcp.linear.app" }),
-      );
+      chooseOwnAccount();
       fireEvent.click(screen.getByRole("button", { name: "Show all" }));
 
-      expect(screen.getByRole("combobox").textContent).toContain(
-        "Choose a sign-in",
-      );
+      mocks.authorizationServers = undefined;
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Rerender" },
+      });
+
+      expect(screen.getByRole("combobox")).toBeTruthy();
+      expect(screen.queryByText(/Showing/)).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Show / })).toBeNull();
     });
 
     it("treats a blank-only list as naming no server", () => {

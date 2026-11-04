@@ -146,7 +146,9 @@ export function AddCredentialSheet({
 
   // A choice the narrower list leaves out must not come back later unseen.
   const toggleShowAll = () => {
-    if (signIns.showAll) setRegistrationId("");
+    if (signIns.showAll && !signIns.matching.some((c) => c === signIn)) {
+      setRegistrationId("");
+    }
     signIns.setShowAll(!signIns.showAll);
   };
 
@@ -384,11 +386,14 @@ export function AddCredentialSheet({
                   )}
                   {!signIns.isLoading &&
                   !signIns.isError &&
+                  signIns.upstreamIssuers &&
                   (signIns.hiddenCount > 0 || signIns.showAll) ? (
                     <Text muted small className="block">
                       {signIns.showAll
                         ? "Showing every sign-in, including ones for other services. "
-                        : `Showing sign-ins for ${signIns.upstreamIssuers}, as named by the upstream. `}
+                        : signIns.choices.length > 0
+                          ? `Showing sign-ins for ${signIns.upstreamIssuers}, as named by the upstream. `
+                          : ""}
                       <button
                         type="button"
                         className="font-medium underline underline-offset-2"

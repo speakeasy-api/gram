@@ -21,6 +21,8 @@ type SignInChoice = {
 
 type SignInChoices = {
   choices: SignInChoice[];
+  /** The narrowed list, whichever one is showing. */
+  matching: SignInChoice[];
   /** Registrations left out because they belong to another server. */
   hiddenCount: number;
   /** The upstream's authorization servers as shown, or "" when it names none. */
@@ -74,8 +76,9 @@ function toChoice(
 
 /**
  * Pairs each registration with its authorization server and keeps the ones of
- * the servers the upstream names. Naming none leaves every registration in, as
- * does an authorization server that could not be looked up.
+ * the servers the upstream names. Naming none leaves every registration in.
+ * One whose authorization server could not be looked up can't be shown to match,
+ * so it stays out of the narrowed list.
  */
 function signInChoices(
   registrations: RemoteSessionClient[],
@@ -107,7 +110,8 @@ function signInChoices(
   return {
     matching: all.filter(
       (choice) =>
-        !choice.issuer || advertised.has(canonicalIssuer(choice.issuer.issuer)),
+        !!choice.issuer &&
+        advertised.has(canonicalIssuer(choice.issuer.issuer)),
     ),
     all,
   };
@@ -142,8 +146,14 @@ export function useSignInChoices(
     authorizationServers,
   );
 
+  const isError =
+    registrations.isError ||
+    (issuers.isError && authorizationServers.length > 0 && !matching.length);
+
   return {
-    choices: showAll ? all : matching,
+    // Nothing is offered while the error shows, so no selection can stand.
+    choices: isError ? [] : showAll ? all : matching,
+    matching,
     hiddenCount: all.length - matching.length,
     upstreamIssuers: issuersLabel(authorizationServers),
     showAll,
@@ -152,6 +162,6 @@ export function useSignInChoices(
       registrations.isLoading ||
       issuers.isLoading ||
       resource.status === "loading",
-    isError: registrations.isError,
+    isError,
   };
 }
