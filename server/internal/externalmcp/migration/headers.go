@@ -188,7 +188,7 @@ func checkHeader(header plannedHeader) error {
 			return fail("header %q cannot be passed through from %q: %s", header.name, header.fromRequest, err.Error())
 		}
 	}
-	configured := proxy.ConfiguredHeader{IsRequired: false, Name: header.name, StaticValue: header.value, ValueFromRequestHeader: header.fromRequest}
+	configured := proxy.ConfiguredHeader{IsSecret: false, IsRequired: false, Name: header.name, StaticValue: header.value, ValueFromRequestHeader: header.fromRequest}
 	if err := proxy.CheckRemoteHeader(configured); err != nil {
 		return fail("header %q cannot be copied: %s", header.name, err.Error())
 	}

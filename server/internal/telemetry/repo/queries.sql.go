@@ -2275,7 +2275,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	// correct boolean precedence. Multiple .Having() calls would create separate conditions
 	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
 	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
-	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
+	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '' AND (event_source != 'hook' OR " + hookToolNamePredicate("tool_name") + ")) OR startsWith(gram_urn, 'tools:'))"}
 	havingArgs := []any{}
 
 	// URN filter must use HAVING because it's an aggregate function in SELECT
@@ -5960,6 +5960,25 @@ const (
 	toolUsageSummaryMCPSkillLoad = "g_event_source = 'resource_read' AND g_skill_name != ''"
 )
 
+// hookNonToolEventNames lists, as a SQL tuple body, the hook event names that
+// unified ingest used to store as gram.tool.name on hook rows that are not
+// tool calls: prompts, session lifecycle, assistant output, notifications,
+// and canonical event types without a provider-style name (verbatim unknown
+// types, such as Kit's "prompt", included). Ingest now leaves the tool name
+// empty on those rows, and hookToolNamePredicate excludes these names so
+// rows stored before that still do not count as tool calls.
+const hookNonToolEventNames = "'UserPromptSubmit', 'BeforeSubmitPrompt', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', " +
+	"'Notification', 'ConfigChange', 'PreCompact', 'PostCompact', 'AfterAgentResponse', 'AfterAgentThought', " +
+	"'session.started', 'session.updated', 'session.ended', 'prompt.submitted', 'assistant.responded', " +
+	"'assistant.thought', 'usage.reported', 'notification.reported', 'mcp.inventory', 'client.delivery_failed', " +
+	"'skill.activated', 'prompt'"
+
+// hookToolNamePredicate matches a hook row, or a trace's aggregated tool
+// name, that names a tool call. column is the tool name column or alias.
+func hookToolNamePredicate(column string) string {
+	return "(" + column + " != '' AND " + column + " NOT IN (" + hookNonToolEventNames + "))"
+}
+
 func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	groupedSB := sq.Select(
 		"toString(trace_id) AS g_trace_id",
@@ -5996,7 +6015,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
@@ -6279,7 +6298,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (" + hookToolNamePredicate("tool_name") + " OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -6759,7 +6778,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) = 'hook'").
-		Having("(g_tool_name != '' OR g_skill_name != '')")
+		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
@@ -8207,7 +8226,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 		// the two readers then agree, and someone seen through both lanes
 		// counts once whenever both rows name the same email.
 		userKey = chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
-		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != ''))"
+		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND " + hookToolNamePredicate("tool_name") + "))"
 	default:
 		// Count users with tool calls
 		eventPredicate = "startsWith(gram_urn, 'tools:')"

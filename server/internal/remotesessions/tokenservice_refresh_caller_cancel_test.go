@@ -77,7 +77,7 @@ func TestResolveAccessToken_CallerCancelDuringRefreshKeepsRotatedToken(t *testin
 	cancelRequest()
 	select {
 	case got := <-returned:
-		require.NoError(t, got.err)
+		require.ErrorIs(t, got.err, context.Canceled, "the caller leaving is not an outage")
 		require.Empty(t, got.token)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the caller must stop waiting when its context ends")
@@ -132,7 +132,7 @@ func TestDrainRefreshes_WaitsForARefreshThatOutlivedItsCaller(t *testing.T) {
 		cancelRequest()
 	}()
 	_, err := env.mgr.ResolveAccessToken(requestCtx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 
 	expired, cancelExpired := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancelExpired()
@@ -326,7 +326,7 @@ func TestResolveAccessToken_CallerCancelStillClearsARefusedGrant(t *testing.T) {
 		cancelRequest()
 	}()
 	token, err := env.mgr.ResolveAccessToken(requestCtx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, token)
 	close(release)
 
