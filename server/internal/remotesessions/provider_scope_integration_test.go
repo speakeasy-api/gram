@@ -69,7 +69,7 @@ func TestProviderScopesPersistThroughCallbackAndRefresh(t *testing.T) {
 			}, func(o *syntheticLoginOptions) { o.tokenResponseIssuer = tc.issuer })
 			require.Equal(t, tc.want, env.session.Scopes)
 			require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{ID: env.session.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour))}))
-			token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 			require.NoError(t, err)
 			require.Equal(t, "scope-access", token)
 			refreshed, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})

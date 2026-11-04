@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -150,6 +151,8 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+	// Connections records scheduled refresh outcomes. Optional.
+	Connections *mcpconnectionattempts.Recorder
 	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
 	IssuerKeySweeper InternalSessionIssuerKeySweeper
 
@@ -222,6 +225,7 @@ func ForDeploymentProcessing(
 		MCPCatalog:                     externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
 		AuditLogger:                    auditLogger,
 		RemoteSessionAssertionSigner:   nil,
+		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
@@ -347,6 +351,7 @@ func NewTemporalWorker(
 		CacheAdapter:                   nil,
 		IssuerMetadataRefresher:        nil,
 		RemoteSessionAssertionSigner:   nil,
+		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
@@ -407,6 +412,7 @@ func NewTemporalWorker(
 			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:        conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
@@ -538,6 +544,7 @@ func NewTemporalWorker(
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
+		opts.Connections,
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)

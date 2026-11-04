@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -138,6 +139,7 @@ type Service struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	refreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+	connections     *mcpconnectionattempts.Recorder
 	refreshPaused   func(context.Context, Provider) bool
 }
 
@@ -146,7 +148,7 @@ func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *S
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused}
+	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused, connections: dependencies.Connections}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -414,6 +416,7 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 			return ErrTemporary
 		}
 		if ok {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRefused)
 			return nil
 		}
 	}
@@ -516,11 +519,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	now := s.now()
@@ -535,9 +540,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, now) {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, configurationFailureError(c)
 	}
 	if c.claim != uuid.Nil {
@@ -718,17 +725,21 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeInternalError)
 		return Assertion{}, ErrTemporary
 	}
 	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
 		return Assertion{}, ErrStaleRegistration
 	}
 	if next.status == "configuration_failure" {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
+	s.recordRenewal(persistCtx, b, mcpconnectionattempts.ResultRenewed)
 	return s.assertion(next)
 }
 
@@ -796,6 +807,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !c.observedAt.IsZero() && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
+	s.recordRenewal(ctx, b, renewalHappened(kind))
 	switch kind {
 	case RefreshInvalidGrant:
 		next.refresh = ""
@@ -852,6 +864,29 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		return ErrTemporary
 	}
 	return outcome
+}
+
+// recordRenewal records a renewal's outcome, or a setup that stops one. A tool call served from the held assertion writes nothing.
+func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnectionattempts.Happened) {
+	human := urn.NewUserSubject(b.HumanID)
+	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
+		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
+	switch kind {
+	case RefreshInvalidGrant:
+		return mcpconnectionattempts.CodeReauthenticationRequired
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
+		return mcpconnectionattempts.CodeRenewalMisconfigured
+	case RefreshInvalidIdentity:
+		return mcpconnectionattempts.CodeInvalidIdentity
+	case RefreshRetryable, RefreshSetupRetryable:
+		return mcpconnectionattempts.CodeRenewalRetryable
+	case RefreshAmbiguous:
+		return mcpconnectionattempts.CodeRenewalAmbiguous
+	}
+	return mcpconnectionattempts.CodeRenewalAmbiguous
 }
 
 // Revoke explicitly erases secrets. The caller must authorize administrative

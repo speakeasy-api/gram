@@ -135,7 +135,7 @@ func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
 	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 
-	err := service.probeRemoteSession(t.Context(), testenv.NewLogger(t), endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	err := service.probeRemoteSession(t.Context(), nil, testenv.NewLogger(t), endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)

@@ -51,7 +51,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "callers that only ask for a usable token still read it as absent")
 
@@ -63,7 +63,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, active.RefreshTokenEncrypted.Valid)
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 2, refreshAttempts.Load())
 }
@@ -75,7 +75,7 @@ func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	})
 
-	token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err, "the single-client primitive reports every unusable token as empty")
 	require.Empty(t, token)
 }
@@ -87,7 +87,7 @@ func TestResolveAvailableAccessTokens_UpstreamServerErrorSkipsClient(t *testing.
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.Empty(t, tokens)
 }
@@ -106,7 +106,7 @@ func TestResolveAccessTokens_UnauthorizedClientStaysMisconfigured(t *testing.T) 
 	// The upstream refused the client's request, not the grant, so the grant
 	// stays stored and every request reports the same administrator remedy.
 	for range 2 {
-		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	}
 	require.EqualValues(t, 2, refreshAttempts.Load())
@@ -127,7 +127,7 @@ func TestResolveAccessTokens_InvalidClientNeedsReconnect(t *testing.T) {
 
 	// invalid_client marks the client for re-registration at the next login
 	// and clears the grant, so re-linking is the repair.
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -146,7 +146,7 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -184,7 +184,7 @@ func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -235,7 +235,7 @@ func TestResolveAccessTokens_ReconnectOutranksUnavailableWithOneRefresh(t *testi
 	// A second upstream bound to the same issuer that the subject never linked.
 	seedActiveClient(t, ctx, env.db, env.projectID, env.session.UserSessionIssuerID, env.organizationID, "rank-unlinked-"+uuid.NewString()[:8])
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "the user can repair the unlinked upstream, so it must win")
 	require.LessOrEqual(t, refreshAttempts.Load(), int32(1))
