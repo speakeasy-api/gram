@@ -4,6 +4,7 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"log/slog"
 	"strings"
 	"unicode/utf8"
@@ -102,8 +103,8 @@ func ToolsetSlugFromName(name string) string {
 //
 // It returns oops errors with the same codes the management API has always
 // returned, so that handler passes them straight through.
-func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, input ToolsetCreateInput) (ToolsetCreateResult, error) {
-	if tx == nil || logger == nil || auditLogger == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
+func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authzClient *authz.Client, input ToolsetCreateInput) (ToolsetCreateResult, error) {
+	if tx == nil || logger == nil || auditLogger == nil || authzClient == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, nil, "invalid toolset creation input")
 	}
 	// Checked here rather than left to the column CHECKs, which would turn an
@@ -228,7 +229,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	if joinsDefaultPlugin {
 		projectID := input.ProjectID
 		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
-		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
+		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, authzClient, actor, created.ID, created.Name)
 		if err != nil {
 			return ToolsetCreateResult{}, err
 		}
@@ -282,19 +283,19 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 // plugin (project predates this feature) — callers should enqueue an initial
 // publish for it, but only after their own transaction commits, since this
 // runs pre-commit and the DB writes could still roll back.
-func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authCtx, toolsetID, displayName)
+func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authzClient *authz.Client, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
+	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authzClient, authCtx, toolsetID, displayName)
 	return outcome.PluginCreated, err
 }
 
-func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
+func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authzClient *authz.Client, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		DisplayName:    displayName,
-	}, nil)
+	}, nil, authzClient)
 	if err != nil {
 		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
 	}

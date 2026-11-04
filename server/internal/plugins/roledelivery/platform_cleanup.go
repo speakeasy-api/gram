@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"slices"
 
 	"github.com/google/uuid"
@@ -93,7 +94,7 @@ func ApplyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 // semantics. The result contains ONLY plugins with removed memberships.
 // Callers hold project admission and enqueue publication in this transaction on
 // every content change, including ordinary-content additions with no removals.
-func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, toolsetID uuid.UUID, guard *admission.Guard) ([]uuid.UUID, error) {
+func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, toolsetID uuid.UUID, guard *admission.Guard, client *authz.Client) ([]uuid.UUID, error) {
 	if err := validateCleanupScope(org, projectID); err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 			if candidate.LegacyToolsetID != target {
 				continue
 			}
-			if _, err := Eligible(ctx, tx, org, projectID, candidate.ID, guard); err != nil {
+			if _, err := Eligible(ctx, tx, org, projectID, candidate.ID, guard, client); err != nil {
 				return nil, err
 			}
 		}

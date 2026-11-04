@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -437,14 +438,14 @@ func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, t
 // Default plugin and matching role-audience plugins in the caller's transaction.
 // Callers enqueue publication only after commit; the returned bool reports
 // whether the Default plugin was lazily created.
-func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (bool, error) {
-	outcome, err := AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params, guard)
+func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard, authzClient *authz.Client) (bool, error) {
+	outcome, err := AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params, guard, authzClient)
 	return outcome.PluginCreated, err
 }
 
 // AttachToDefaultAndRolePluginsAuditedWithOutcome also reports whether the
 // server joined the Default plugin, independently of role-audience delivery.
-func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
+func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard, authzClient *authz.Client) (DefaultPluginAttachOutcome, error) {
 	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
 		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
 	}
@@ -467,7 +468,7 @@ func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx p
 	if err != nil {
 		return DefaultPluginAttachOutcome{}, err
 	}
-	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, mcpServerID.UUID, guard); err != nil {
+	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, mcpServerID.UUID, guard, authzClient); err != nil {
 		return DefaultPluginAttachOutcome{}, fmt.Errorf("deliver newly eligible server: %w", err)
 	}
 	return outcome, nil

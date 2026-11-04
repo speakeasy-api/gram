@@ -395,7 +395,7 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 	// The authorization engine reads the live database, so the call clears
 	// authorization and fails on the service's own first query instead.
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service, err := NewMCPToolExposureService(logger, broken, audit.NewLogger(), engine, stubAuthorizer{err: nil}, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
+	service, err := NewMCPToolExposureService(logger, broken, audit.NewLogger(), engine, newDeliveryAuthz(t), stubAuthorizer{err: nil}, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
 	require.NoError(t, err)
 	// Every query on a closed pool fails with a driver error, which is what a
 	// database outage looks like from here.

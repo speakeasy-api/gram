@@ -57,7 +57,8 @@ func newOrganizationHostPluginsService(t *testing.T, ti *testInstance) *plugins.
 		NewOrganizationDefaultHost: nil,
 	})
 
-	return plugins.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), audit.NewLogger(), nil, "local", testConfiguredServerURL, nil, nil).
+	pluginsEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return plugins.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, cache.NewRedisCacheAdapter(redisClient), pluginsEngine, authztest.NewParityClient(t, pluginsEngine), audit.NewLogger(), nil, "local", testConfiguredServerURL, nil, nil).
 		WithOrganizationHosts(resolver)
 }
 

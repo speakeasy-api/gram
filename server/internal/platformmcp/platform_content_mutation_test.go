@@ -38,7 +38,7 @@ func seedExposureMutationMemberships(t *testing.T, ctx context.Context, fixture 
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(tx).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: role.RoleUrn, PluginID: automatic.ID})
 	require.NoError(t, err)
-	changed, err := roledelivery.AudienceChanged(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, automatic.ID, nil, []string{role.RoleUrn}, nil)
+	changed, err := roledelivery.AudienceChanged(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, automatic.ID, nil, []string{role.RoleUrn}, nil, newDeliveryAuthz(t))
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.NoError(t, tx.Commit(ctx))

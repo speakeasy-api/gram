@@ -1413,7 +1413,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission, DeliveryAuthz: s.authz})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):

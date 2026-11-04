@@ -4,6 +4,7 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"log/slog"
 	"slices"
 
@@ -56,7 +57,7 @@ type ToolExposureResult struct {
 // caller's separate claim about which list it was reasoning over: a mismatch
 // refuses instead of appending to a list the caller never read. The caller must
 // authorize the target first.
-func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, expectedVersion int64, change ToolExposureChange) (ToolExposureResult, error) {
+func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authzClient *authz.Client, actor *contextvalues.AuthContext, toolsetID uuid.UUID, expectedVersion int64, change ToolExposureChange) (ToolExposureResult, error) {
 	if actor == nil || actor.ProjectID == nil || auditLogger == nil || logger == nil {
 		return ToolExposureResult{}, oops.E(oops.CodeUnauthorized, nil, "missing toolset tool exposure actor")
 	}
@@ -148,7 +149,7 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "failed to record the toolset tool change")
 	}
 
-	removed, err := roledelivery.ContentChanged(ctx, tx, actor.ActiveOrganizationID, *actor.ProjectID, toolsetID, nil)
+	removed, err := roledelivery.ContentChanged(ctx, tx, actor.ActiveOrganizationID, *actor.ProjectID, toolsetID, nil, authzClient)
 	if err != nil {
 		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution")
 	}

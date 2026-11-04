@@ -347,7 +347,7 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 	if s.authz != nil && !private {
 		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).recordServer(authzCtx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
 	}
-	if s.authz != nil && private {
+	if s.authzClient != nil && private {
 		if authzCtx, cerr = s.authzClient.PrepareContext(authzCtx); cerr != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 		}

@@ -58,6 +58,7 @@ func TestPluginAssignmentAdmissionRejectionLeavesNoMutationOrReceipt(t *testing.
 			PrincipalURNs: []string{urn.PrincipalWildcard}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil, ActorSlug: nil,
 		}, pluginassignments.Dependencies{
+			DeliveryAuthz: newDeliveryAuthz(t),
 			Guard: func(_ context.Context, _ pgx.Tx, _ pluginsrepo.Plugin, current, desired []string) error {
 				require.Empty(t, current)
 				require.Equal(t, []string{urn.PrincipalWildcard}, desired)
@@ -704,7 +705,7 @@ func TestSetPluginAssignmentsReplacesAtomicallyAndReplaysSafely(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	_, err = service.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
 		ProjectID:                 project.ID.String(),
 		Plugin:                    uuid.Nil.String(),
@@ -856,7 +857,8 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 			OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: plugin.ID,
 			PrincipalURNs: []string{principalURN}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		}, pluginassignments.Dependencies{
-			Guard: pluginassignments.LegacyGuard,
+			DeliveryAuthz: newDeliveryAuthz(t),
+			Guard:         pluginassignments.LegacyGuard,
 			BeforeReplace: func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string, currentModes map[string]installmode.Mode) error {
 				if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current, currentModes) != expected {
 					return ErrPluginAssignmentMutationConflict
@@ -911,7 +913,7 @@ func TestSetPluginAssignmentsRefusesHiddenCurrentAssignments(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Hidden Audience", "hidden-audience")
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 		PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: "user:private-user-id",
@@ -942,7 +944,7 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
@@ -964,7 +966,7 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			localService := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+			localService := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 			localService.now = func() time.Time { return test.at }
 			_, err := localService.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
 				ProjectID: project.ID.String(), Plugin: plugin.ID.String(), AssignmentReferences: []string{test.reference},

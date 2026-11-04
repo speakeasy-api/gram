@@ -56,7 +56,7 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 	}
 
 	for _, row := range serverRows {
-		dashboardURL, err := s.pluginServerDashboardURL(grants, row)
+		dashboardURL, err := s.pluginServerDashboardURL(ctx, grants, row)
 		if err != nil {
 			return nil, err
 		}
@@ -70,13 +70,13 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 }
 
 // pluginServerDashboardURL returns the server's dashboard page when grants
-// allow mcp:read on it, and nil otherwise. Each backend uses the same check
+// allow reading it, and nil otherwise. Each backend uses the same operation
 // and route its own dashboard page does.
-func (s *Service) pluginServerDashboardURL(grants []authz.Grant, row repo.ListAgentPluginServersRow) (*string, error) {
+func (s *Service) pluginServerDashboardURL(ctx context.Context, grants []authz.Grant, row repo.ListAgentPluginServersRow) (*string, error) {
 	projectID := row.ProjectID.String()
 
 	var (
-		check authz.Check
+		read  authz.Operation
 		route []string
 	)
 	switch {
@@ -85,16 +85,16 @@ func (s *Service) pluginServerDashboardURL(grants []authz.Grant, row repo.ListAg
 		if row.McpServerToolsetID.Valid {
 			resourceID = row.McpServerToolsetID.UUID.String()
 		}
-		check = authz.MCPCheck(authz.ScopeMCPRead, resourceID, projectID)
+		read = authz.MCPServer(projectID, resourceID).Read()
 		route = []string{mcpservers.DashboardRouteParam(row.McpServerSlug.String, row.McpServerID.UUID)}
 	case row.GatewayID.Valid:
-		check = authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID, Dimensions: nil}
+		read = authz.MCPServersInProject(projectID).Read()
 		route = []string{"gateway", row.GatewayID.UUID.String()}
 	default:
 		return nil, nil
 	}
 
-	allowed, err := authz.GrantsAuthorize(grants, check)
+	allowed, err := s.authzClient.EvaluateGrants(ctx, grants, read)
 	if err != nil {
 		return nil, fmt.Errorf("authorize plugin server dashboard link: %w", err)
 	}

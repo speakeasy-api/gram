@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"

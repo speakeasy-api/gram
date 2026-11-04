@@ -117,9 +117,9 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 						require.NoError(t, err)
 						defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 						if entrypoint == "role_grant" {
-							_, err = roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, nil, nil)
+							_, err = roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, nil, nil, newDeliveryAuthz(t))
 						} else {
-							_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, params, nil)
+							_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, params, nil, newDeliveryAuthz(t))
 						}
 						require.NoError(t, err)
 						require.NoError(t, tx.Commit(ctx))

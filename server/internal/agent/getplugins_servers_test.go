@@ -289,3 +289,54 @@ func TestGetPlugins_ETagTracksPluginServersAndDashboardAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, added.Etag, granted.Etag, "gaining a dashboard link changes the ETag")
 }
+
+func grantUserProjectBoundMCPRead(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, userID, projectID string) {
+	t.Helper()
+	selector := authz.NewSelector(authz.ScopeMCPRead, "*")
+	selector[authz.SelectorKeyProjectID] = projectID
+	selectors, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+		Scope:          string(authz.ScopeMCPRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+}
+
+func TestGetPlugins_GatewayDashboardLinkFollowsProjectBoundGrant(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		project  func(ti *testInstance) string
+		wantLink bool
+	}{
+		{name: "grant bounded to the gateway's project", project: func(ti *testInstance) string { return ti.projectID.String() }, wantLink: true},
+		{name: "grant bounded to another project", project: func(*testInstance) string { return uuid.NewString() }, wantLink: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAgentService(t)
+
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+			pluginID := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering")
+			assignPlugin(t, ctx, ti.conn, pluginID, ti.orgID, "*")
+			seedPluginGateway(t, ctx, ti.conn, ti.orgID, ti.projectID, pluginID, "Gateway", 0)
+			grantUserProjectBoundMCPRead(t, ctx, ti.conn, ti.orgID, mockidp.MockUserID, tc.project(ti))
+
+			res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+			require.NoError(t, err)
+
+			servers := pluginBySlug(t, res, "engineering").Servers
+			require.Len(t, servers, 1)
+			if tc.wantLink {
+				require.NotNil(t, servers[0].DashboardURL, "a project-wide read grant in the gateway's project links its page")
+			} else {
+				require.Nil(t, servers[0].DashboardURL, "a read grant bounded to another project does not link this project's gateway")
+			}
+		})
+	}
+}

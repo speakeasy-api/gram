@@ -116,7 +116,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	encryption := testenv.NewEncryptionClient(t)
 	publication := plugins.PublicationRequests{}
 
-	toolExposure, err := NewMCPToolExposureService(logger, pool, auditLogger, liveEngine, authorizer, key, publication, nil, budget, budget)
+	toolExposure, err := NewMCPToolExposureService(logger, pool, auditLogger, liveEngine, newDeliveryAuthz(t), authorizer, key, publication, nil, budget, budget)
 	require.NoError(t, err)
 	projectLifecycle, err := NewProjectLifecycleService(logger, pool, projects.NewCore(logger, auditLogger, nil, false), liveEngine, authorizer, budget)
 	require.NoError(t, err)
@@ -170,7 +170,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	pluginInventory := NewPluginsService(pool, budget, key).
 		WithAuthorization(liveEngine).
 		WithInstallLinks(dashboardURL, dashboardURL).
-		WithAssignmentMutations(flags, slugs, auditLogger, budget).
+		WithAssignmentMutations(flags, slugs, auditLogger, budget, newDeliveryAuthz(t)).
 		WithMetadataMutations(logger, plugins.NewPluginMetadataCore(auditLogger, publication), budget).
 		WithPublicationRequests(publication).
 		WithRepublish(publication, nil, budget)
@@ -183,7 +183,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	skills := NewSkillsService(&registrySkillsManagement{}, NewPostgresSkillTargets(pool), store, liveEngine, stubSkillsGate{enabled: true, err: nil}, budget)
 	diagnostics := NewDiagnosticsService(pool, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return true, nil }, reader, readiness, budget)
 	accessReads := NewAccessReadService(logger, pool, budget, key)
-	accessRoleMutations, err := NewAccessRoleMutationService(accessReads, flags, budget, key, access.NewRoleManager(logger, pool, workos.NewStubClient(), auditLogger, publication, nil))
+	accessRoleMutations, err := NewAccessRoleMutationService(accessReads, flags, budget, key, access.NewRoleManager(logger, pool, workos.NewStubClient(), auditLogger, publication, nil, newDeliveryAuthz(t)))
 	require.NoError(t, err)
 	sessionRecall := NewSessionRecallService(logger, pool, platformrepo.New(pool), auditLogger, func(context.Context, string) (bool, error) { return true, nil }, findings, budget)
 	controls, err := NewRiskMutationControls(pool, flags, slugs, budget, key)

@@ -334,9 +334,12 @@ func (e EnvironmentRef) Write() Operation {
 	return newOperation("environment", "write", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
 }
 
-// CallTool asks to connect to the server for one tool, and for one of the
-// tool's dispositions when disposition is not empty. A grant or block limited
-// to other tools or dispositions does not decide it.
+// CallTool asks to connect to the server for one tool. A grant or block
+// limited to other tools does not decide it. When disposition is not empty the
+// request also names that disposition, so a grant or block limited to other
+// dispositions does not decide it either. With an empty disposition, ordinary
+// allows limited to a disposition still match, while blocks and direct
+// exceptions limited to one match strictly and do not apply.
 func (m MCPServerRef) CallTool(tool, disposition string) Operation {
 	dimensions := m.dimensions()
 	if tool != "" {

@@ -40,7 +40,7 @@ func TestInferenceAccessRoleConfiguration(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(), newDeliveryAuthz(t))
 	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
 	require.NoError(t, err)
 

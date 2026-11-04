@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -50,13 +51,15 @@ func newShadowHarness(t *testing.T, enabled bool) shadowHarness {
 	flags.SetFlag(feature.FlagMandatoryAuthzShadow, shadowOrg, enabled)
 	reader := sdkmetric.NewManualReader()
 	var logs bytes.Buffer
+	engine := authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	return shadowHarness{
 		service: &Service{
 			logger:             slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 			metrics:            mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t)),
 			features:           flags,
 			mandatoryShadowLog: newMandatoryShadowLog(),
-			authz:              authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient()),
+			authz:              engine,
+			authzClient:        authztest.NewParityClient(t, engine),
 		},
 		reader: reader,
 		logs:   &logs,

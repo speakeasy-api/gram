@@ -400,7 +400,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 
 	changedProjects := map[uuid.UUID]struct{}{}
 	for _, role := range roleURNs {
-		projects, err := roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, before[role], s.roleMgr.roleDeliveryGuard)
+		projects, err := roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, before[role], s.roleMgr.roleDeliveryGuard, s.roleMgr.roleDeliveryAuthz)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, s.logger)
 		}

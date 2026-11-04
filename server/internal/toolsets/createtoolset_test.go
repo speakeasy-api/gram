@@ -301,7 +301,7 @@ func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t
 	// transaction holding a pooled connection open past the test.
 	failing, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction the shared create core runs in.
 	require.NoError(t, err)
-	_, err = toolsets.CreateToolsetInTransaction(ctx, failingEnabledCountTx{failing}, testenv.NewLogger(t), audit.NewLogger(), input)
+	_, err = toolsets.CreateToolsetInTransaction(ctx, failingEnabledCountTx{failing}, testenv.NewLogger(t), audit.NewLogger(), newDeliveryAuthz(t), input)
 	require.NoError(t, failing.Rollback(ctx))
 	require.Error(t, err)
 
@@ -316,7 +316,7 @@ func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t
 	// Default plugin.
 	readable, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction the shared create core runs in.
 	require.NoError(t, err)
-	created, err := toolsets.CreateToolsetInTransaction(ctx, readable, testenv.NewLogger(t), audit.NewLogger(), input)
+	created, err := toolsets.CreateToolsetInTransaction(ctx, readable, testenv.NewLogger(t), audit.NewLogger(), newDeliveryAuthz(t), input)
 	require.NoError(t, readable.Rollback(ctx))
 	require.NoError(t, err)
 	require.True(t, created.AddedToDefaultPlugin)

@@ -208,6 +208,8 @@ type MCPToolExposureService struct {
 	// engine checks the resource-scoped mcp:write grant, exactly as the
 	// dashboard's own toolset update does.
 	engine *authz.Engine
+	// authzClient decides which servers a role delivers when tools change.
+	authzClient *authz.Client
 	// admin re-checks org:admin live through the shared authorizer, so a
 	// denial keeps the challenge and audit behavior every other
 	// admin-gated Platform MCP path records.
@@ -248,8 +250,8 @@ type MCPToolExposureService struct {
 // tools, and an agent that just added a tool needs to be able to say so.
 type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID) error
 
-func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
-	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || !reads.valid() || !changes.valid() {
+func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, authzClient *authz.Client, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
+	if logger == nil || db == nil || auditLogger == nil || engine == nil || authzClient == nil || admin == nil || !reads.valid() || !changes.valid() {
 		return nil, ErrMCPToolExposureInvalid
 	}
 	cursors, err := newToolInventoryCursorCodec(cursorKeyMaterial)
@@ -257,7 +259,7 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 		return nil, err
 	}
 	return &MCPToolExposureService{
-		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
+		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, authzClient: authzClient, admin: admin,
 		cursors: cursors, exposureCursors: newSignedCursorKey("platform-mcp-tool-exposure-cursor", cursorKeyMaterial), exposurePageSize: maxExposedToolURNs,
 		publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
 	}, nil
@@ -654,7 +656,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 				change = toolsets.ToolExposureChange{Remove: requested}
 			}
 			actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
-			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, actor, row.ToolsetID, row.ToolsetVersion, change)
+			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, s.authzClient, actor, row.ToolsetID, row.ToolsetVersion, change)
 			if err != nil {
 				return toolExposureReceipt{}, classifyToolExposureError(err)
 			}

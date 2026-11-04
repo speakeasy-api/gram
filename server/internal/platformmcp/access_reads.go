@@ -257,7 +257,7 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
-		roles:      access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
+		roles:      access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil, nil),
 		budget:     budget,
 		references: references,
 		now:        time.Now,

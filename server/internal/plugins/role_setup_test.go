@@ -497,7 +497,7 @@ func processDirectRoleSetup(ctx context.Context, ti *testInstance, role string, 
 	if !ok {
 		return fmt.Errorf("missing fixture auth context")
 	}
-	_, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, role, ac.ActiveOrganizationID)
+	_, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, ti.deliveryAuthz, role, ac.ActiveOrganizationID)
 	if err != nil {
 		return fmt.Errorf("process fixture role distribution: %w", err)
 	}

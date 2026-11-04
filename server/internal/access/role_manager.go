@@ -63,14 +63,16 @@ type RoleManager struct {
 	audit                   *audit.Logger
 	roleDeliveryPublication plugins.PublicationRequests
 	roleDeliveryGuard       *admission.Guard
+	roleDeliveryAuthz       *authz.Client
 	publisher               plugins.PluginPublishSignaler
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
-func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger, publication plugins.PublicationRequests, guard *admission.Guard) *RoleManager {
+func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger, publication plugins.PublicationRequests, guard *admission.Guard, authzClient *authz.Client) *RoleManager {
 	return &RoleManager{
 		roleDeliveryPublication: publication,
 		roleDeliveryGuard:       guard,
+		roleDeliveryAuthz:       authzClient,
 		db:                      db,
 		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
 		roles:                   roles,
@@ -636,7 +638,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
 		}
-		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard)
+		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard, r.roleDeliveryAuthz)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, r.logger)
 		}
