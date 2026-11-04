@@ -369,6 +369,12 @@ func TestFleetQueriesShareTheirClassification(t *testing.T) {
 	bucket := normalizeSQL(between(t, listFleetCTE, "-- bucket:begin", "-- bucket:end"))
 	require.Contains(t, normalizedCoverage, bucket, "the fleet's bucket CASE differs from GetCoverageCounts")
 
+	// The guard that keeps the email fallback off another machine's report.
+	match := normalizeSQL(between(t, coverage, "-- report-match:begin", "-- report-match:end"))
+	for _, name := range []string{"ListManagedDevices", "ListFleetDevices", "GetFleetCoverageCounts"} {
+		require.Equal(t, match, normalizeSQL(between(t, queries[name], "-- report-match:begin", "-- report-match:end")), "%s matches reports differently from GetCoverageCounts", name)
+	}
+
 	policies := strings.Split(listFleetCTE, "-- policy:begin")[1:]
 	require.Len(t, policies, 3, "one policy CASE per fleet arm")
 	for _, policy := range policies {

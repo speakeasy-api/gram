@@ -332,7 +332,21 @@ LEFT JOIN LATERAL (
   WHERE r.organization_id = d.organization_id
     AND (
       ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
-      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
+          -- report-match:begin
+          -- The email fallback never takes a report that came from another machine:
+          -- one naming a different serial, or a different OS family.
+          AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
+          -- An OS the MDM names but we don't classify matches anything.
+          AND (r.os IS NULL OR coalesce(
+            CASE
+              WHEN LOWER(d.os_name) LIKE 'mac%' OR LOWER(d.os_name) IN ('osx', 'os x') THEN 'darwin'
+              WHEN LOWER(d.os_name) LIKE 'windows%' THEN 'windows'
+              WHEN LOWER(d.os_name) LIKE '%linux%' THEN 'linux'
+              WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
+              WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
+            END, LOWER(r.os)) = LOWER(r.os)))
+          -- report-match:end
     )
   ORDER BY
       coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
@@ -466,6 +480,9 @@ type GetCoverageCountsRow struct {
 // daemon on a shared machine), otherwise the assigned user's latest from any
 // machine. A machine with its own heartbeat never borrows another machine's
 // report through the email fallback.
+// Nor does any machine take, through that fallback, a report that names a
+// different serial or comes from a different OS family: the user runs the
+// agent on another machine, and its policy state is not this one's.
 // Counts read the lateral's bucket rather than restating its predicates, so
 // the aggregate and the per-row list in ListManagedDevices cannot disagree.
 // The state report that answers for this device; see the header for which.
@@ -582,7 +599,21 @@ mdm AS (
     WHERE r.organization_id = d.organization_id
       AND (
         ($3::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
-        OR (NOT ($3::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+        OR (NOT ($3::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
+            -- report-match:begin
+            -- The email fallback never takes a report that came from another machine:
+            -- one naming a different serial, or a different OS family.
+            AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
+            -- An OS the MDM names but we don't classify matches anything.
+            AND (r.os IS NULL OR coalesce(
+              CASE
+                WHEN LOWER(d.os_name) LIKE 'mac%' OR LOWER(d.os_name) IN ('osx', 'os x') THEN 'darwin'
+                WHEN LOWER(d.os_name) LIKE 'windows%' THEN 'windows'
+                WHEN LOWER(d.os_name) LIKE '%linux%' THEN 'linux'
+                WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
+                WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
+              END, LOWER(r.os)) = LOWER(r.os)))
+            -- report-match:end
       )
     ORDER BY
         coalesce($3::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
@@ -1315,7 +1346,21 @@ mdm AS (
     WHERE r.organization_id = d.organization_id
       AND (
         ($9::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
-        OR (NOT ($9::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+        OR (NOT ($9::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
+            -- report-match:begin
+            -- The email fallback never takes a report that came from another machine:
+            -- one naming a different serial, or a different OS family.
+            AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
+            -- An OS the MDM names but we don't classify matches anything.
+            AND (r.os IS NULL OR coalesce(
+              CASE
+                WHEN LOWER(d.os_name) LIKE 'mac%' OR LOWER(d.os_name) IN ('osx', 'os x') THEN 'darwin'
+                WHEN LOWER(d.os_name) LIKE 'windows%' THEN 'windows'
+                WHEN LOWER(d.os_name) LIKE '%linux%' THEN 'linux'
+                WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
+                WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
+              END, LOWER(r.os)) = LOWER(r.os)))
+            -- report-match:end
       )
     ORDER BY
         coalesce($9::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
@@ -1910,7 +1955,21 @@ LEFT JOIN LATERAL (
   WHERE r.organization_id = d.organization_id
     AND (
       ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
-      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
+          -- report-match:begin
+          -- The email fallback never takes a report that came from another machine:
+          -- one naming a different serial, or a different OS family.
+          AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
+          -- An OS the MDM names but we don't classify matches anything.
+          AND (r.os IS NULL OR coalesce(
+            CASE
+              WHEN LOWER(d.os_name) LIKE 'mac%' OR LOWER(d.os_name) IN ('osx', 'os x') THEN 'darwin'
+              WHEN LOWER(d.os_name) LIKE 'windows%' THEN 'windows'
+              WHEN LOWER(d.os_name) LIKE '%linux%' THEN 'linux'
+              WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
+              WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
+            END, LOWER(r.os)) = LOWER(r.os)))
+          -- report-match:end
     )
   ORDER BY
       coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
