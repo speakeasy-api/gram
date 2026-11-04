@@ -132,8 +132,11 @@ func appendTranscript(t *testing.T, path, text string) {
 	require.NoError(t, f.Close())
 }
 
+// transcriptOnlyConfig configures the Cowork package as Claude's Cowork VM
+// runs it: transcript-only, with Claude Code's Cowork entrypoint.
 func transcriptOnlyConfig(t *testing.T, serverURL string) Config {
 	t.Helper()
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
 	cfg := authedConfig(t, serverURL)
 	cfg.TranscriptOnly = true
 	return cfg
@@ -195,7 +198,7 @@ func TestTranscriptOnlyShipsNewLinesOnEachStop(t *testing.T) {
 	first := uploads[0]
 	require.Equal(t, transcriptSchemaV1, first.SchemaVersion)
 	require.Equal(t, "sess-cowork-1", first.SessionID)
-	require.Equal(t, "claude", first.Adapter)
+	require.Equal(t, "cowork", first.Adapter)
 	require.Equal(t, "/work/repo", first.Cwd)
 	require.Equal(t, int64(0), first.OffsetStart)
 	require.Equal(t, int64(len(transcriptUser+transcriptBookkeep+transcriptAssistant)), first.OffsetEnd)
@@ -750,5 +753,44 @@ func TestWritePluginRejectsTranscriptOnlyForOtherProviders(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, entries)
 		})
+	}
+}
+
+// TestTranscriptOnlyNoOpsOutsideCowork: Claude's admin plugin settings install
+// the Cowork package in Claude Code too, where it must do nothing.
+func TestTranscriptOnlyNoOpsOutsideCowork(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, `{"type":"user","uuid":"u-1","entrypoint":"remote_cowork","message":{"role":"user","content":"hi"}}`+"\n")
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Equal(t, int32(0), ts.requests.Load(), "the hook environment names Claude Code, which wins over the transcript")
+}
+
+// TestTranscriptOnlyReadsEntrypointFromTranscript: without
+// CLAUDE_CODE_ENTRYPOINT in the hook environment, the transcript's own
+// entrypoint decides.
+func TestTranscriptOnlyReadsEntrypointFromTranscript(t *testing.T) {
+	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "cli": false, "": false} {
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+		ts := newTranscriptServer(t)
+		cfg := transcriptOnlyConfig(t, ts.URL)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "")
+		transcript := claudeTranscriptFile(t)
+		line := map[string]any{"type": "user", "uuid": "u-1", "message": map[string]any{"role": "user", "content": "hi"}}
+		if entrypoint != "" {
+			line["entrypoint"] = entrypoint
+		}
+		b, err := json.Marshal(line)
+		require.NoError(t, err)
+		appendTranscript(t, transcript, string(b)+"\n")
+
+		invokeClaude(t, cfg, claudeStop(transcript))
+		uploads, _ := ts.recorded()
+		require.Equal(t, ships, len(uploads) == 1, "entrypoint %q", entrypoint)
 	}
 }

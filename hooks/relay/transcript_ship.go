@@ -69,6 +69,10 @@ const (
 	// longer lines are assembled from buffer-sized fragments.
 	transcriptReadBufferBytes = 64 << 10
 
+	// transcriptEntrypointScanBytes (1 MiB) bounds how much of a transcript is
+	// read to find its entrypoint when the hook environment does not name it.
+	transcriptEntrypointScanBytes = 1 << 20
+
 	// transcriptResponseLimit (64 KiB) bounds how much of a response is read;
 	// the acknowledgement is a few bytes of JSON.
 	transcriptResponseLimit = 64 << 10
@@ -131,6 +135,12 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 		r.debugf("transcript skipped: %v", err)
 		return
 	}
+	// Claude's admin plugin settings install the package in Claude Code as
+	// well as Cowork, so everywhere but the Cowork VM the hook does nothing.
+	if !coworkRuntime(base, path) {
+		r.debugf("transcript skipped: not running in Claude Cowork")
+		return
+	}
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		r.debugf("transcript skipped: no credentials")
@@ -150,7 +160,7 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 	upload := transcriptUpload{
 		SchemaVersion: transcriptSchemaV1,
 		SessionID:     sessionID,
-		Adapter:       transcriptAdapter(base),
+		Adapter:       "cowork",
 		Cwd:           strings.TrimSpace(base.Session.CWD),
 		Hostname:      hostname(),
 		UserEmail:     resolveUserEmail(ctx, e),
@@ -227,13 +237,48 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 	withFileLock(marker, ship)
 }
 
-// transcriptAdapter reports the hook source slug the server stamps on the
-// session: cowork when agenthooks detected the Cowork runtime.
-func transcriptAdapter(base *agenthooks.Event) string {
+// coworkRuntime reports whether the hook runs in Claude's Cowork VM. Claude
+// Code names its surface in CLAUDE_CODE_ENTRYPOINT ("remote_cowork" in the
+// Cowork VM, "cli" in a terminal) and stamps the same value on each transcript
+// line as "entrypoint", which covers a hook environment without the variable.
+// agenthooks reports the Cowork VM as the remote variant, which Claude Code on
+// the web shares, so the variant alone cannot tell them apart.
+func coworkRuntime(base *agenthooks.Event, transcriptPath string) bool {
 	if base.Variant == agenthooks.VariantCowork {
-		return "cowork"
+		return true
 	}
-	return adapterSlug(base.Provider)
+	if entrypoint := strings.TrimSpace(os.Getenv("CLAUDE_CODE_ENTRYPOINT")); entrypoint != "" {
+		return coworkEntrypoint(entrypoint)
+	}
+	return coworkEntrypoint(transcriptEntrypoint(transcriptPath))
+}
+
+func coworkEntrypoint(entrypoint string) bool {
+	return strings.Contains(strings.ToLower(entrypoint), "cowork")
+}
+
+// transcriptEntrypoint returns the first "entrypoint" a transcript line
+// carries, reading at most transcriptEntrypointScanBytes, or "" when none is
+// found.
+func transcriptEntrypoint(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	reader := bufio.NewReaderSize(io.LimitReader(f, transcriptEntrypointScanBytes), transcriptReadBufferBytes)
+	for {
+		line, err := reader.ReadBytes('\n')
+		var entry struct {
+			Entrypoint string `json:"entrypoint"`
+		}
+		if json.Unmarshal(line, &entry) == nil && entry.Entrypoint != "" {
+			return entry.Entrypoint
+		}
+		if err != nil {
+			return ""
+		}
+	}
 }
 
 // transcriptUploadSettled reports whether the server has answered a chunk for

@@ -8,7 +8,7 @@
 #USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude, opencode or copilot" default="claude"
 #USAGE flag "--model <model>" help="Model to launch Claude Code with, e.g. haiku or opus (claude only)" default=""
 #USAGE flag "--prompt <text>" help="Run one headless turn with this prompt and exit, instead of an interactive session (claude only)" default=""
-#USAGE flag "--transcript-only" help="Install the Claude Cowork mode: ship the session transcript on Stop and relay nothing else (claude only, implies --local)"
+#USAGE flag "--transcript-only" help="Install the Claude Cowork mode (claude only, implies --local). It ships transcripts only inside the Cowork VM, so a terminal session checks that the hook stays a no-op"
 
 set -euo pipefail
 

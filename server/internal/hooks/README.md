@@ -80,6 +80,12 @@ session, the standard plugin as per-event rows and the Cowork package as
 `claude-transcript:` rows, so every turn would be stored twice. Device-agent
 distribution of the standard plugin still covers Claude Code.
 
+Claude's admin plugin settings install the package in Claude Code as well as
+Cowork. The binary ships transcripts only when Claude Code reports a Cowork
+entrypoint (`CLAUDE_CODE_ENTRYPOINT`, or the transcript's own `entrypoint`
+field, is `remote_cowork` in the Cowork VM); everywhere else the hook does
+nothing.
+
 `POST /transcript` uses the same hooks-scoped key and project selection as
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
