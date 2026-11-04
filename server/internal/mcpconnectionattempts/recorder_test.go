@@ -1117,3 +1117,23 @@ func TestShutdownAndWait_CancelsIOAndDiscardsBacklog(t *testing.T) {
 		})
 	}
 }
+
+func TestRecorderOnceReportsAdmission(t *testing.T) {
+	t.Parallel()
+	var absent *Recorder
+	require.False(t, absent.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	rec := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return true, nil })
+	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	require.False(t, rec.Once(t.Context(), Scope{}, StepProviderRefresh, CodeProviderServerError))
+	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, func(context.Context, string) (bool, error) { return false, nil })
+	require.False(t, disabled.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	panics := NewCapturing(func(Row) { panic("capture failed") }, func(context.Context, string) (bool, error) { return true, nil })
+	require.False(t, panics.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	rec.capture = nil
+	rec.queue = make(chan Row, 1)
+	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	<-rec.queue
+	rec.stopped = true
+	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+}

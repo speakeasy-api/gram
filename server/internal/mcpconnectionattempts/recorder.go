@@ -508,47 +508,49 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats count as rate_limited, and rows past its queue share as queue_reserved.
-func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
+// It reports capture/queue acceptance, not eventual persistence; rejected rows return false.
+func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
+	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) (accepted bool) {
 	if r == nil || attempt.IsZero() {
-		return
+		return false
 	}
 	// Recording must never panic a request.
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.drop(ctx, dropPanic, 1, fmt.Errorf("connection events record: %v", recovered))
+			accepted = false
 		}
 	}()
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
-		return
+		return false
 	}
 	switch {
 	case r.limiter == nil:
 	case held == limitStart:
 		if r.queueReserved() {
 			r.drop(ctx, dropQueueReserve, 1, nil)
-			return
+			return false
 		}
 		if !r.limiter.allowOrganization(row.OrganizationID, time.Now()) {
 			r.drop(ctx, dropRateLimited, 1, nil)
-			return
+			return false
 		}
 	case held == limitOnce:
 		if r.queueReserved() {
 			r.dropLostRepeats(ctx, r.limiter.holdBack(row))
 			r.drop(ctx, dropQueueReserve, 1, nil)
-			return
+			return false
 		}
 		decision := r.limiter.take(row, time.Now())
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
 			r.drop(ctx, dropRateLimited, 1, nil)
-			return
+			return false
 		}
 		row.Repeats = decision.repeats
 	}
@@ -560,13 +562,16 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
+			return true
 		}
-		return
+		return false
 	}
 
 	if reason := r.enqueue(row); reason != "" {
 		r.drop(ctx, reason, 1, nil)
+		return false
 	}
+	return true
 }
 
 // enqueue holds the lock only for a non-blocking send, and reports any drop after releasing it.
