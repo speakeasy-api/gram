@@ -412,7 +412,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			continue
 		}
 		// The probe logs its own refusals; only a dialled probe ends the search.
-		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+		err = s.probeRemoteSession(ctx, nil, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.

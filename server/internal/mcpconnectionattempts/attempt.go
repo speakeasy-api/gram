@@ -58,6 +58,8 @@ var (
 	// AppRecoveryLink is a sign-in started from a link an assistant was given.
 	AppRecoveryLink = App{"recovery_link"}
 
+	// AppBackground is work Speakeasy started with no app involved, such as a scheduled refresh.
+	AppBackground = App{"background"}
 	// AppOtherMetadataURL is an app with a client metadata URL that Speakeasy's catalog doesn't list.
 	AppOtherMetadataURL = App{"other_metadata_url"}
 )
@@ -76,7 +78,9 @@ func AppOf(clientID string) App {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	if host == "" {
+	switch (App{host}) {
+	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground, AppOtherMetadataURL:
+		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
 	return App{host}

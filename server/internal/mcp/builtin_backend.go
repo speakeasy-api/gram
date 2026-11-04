@@ -78,7 +78,7 @@ func (s *Service) serveBuiltinBackend(
 	if err != nil {
 		return err
 	}
-	signedIn, _, _, err := s.authenticateIssuerGate(ctx, w, token, s.BaseURLForRequest(r), resolved)
+	signedIn, _, _, err := s.authenticateIssuerGate(ctx, w, r, token, s.BaseURLForRequest(r), resolved)
 	if err != nil {
 		return fmt.Errorf("apply issuer gate: %w", err)
 	}

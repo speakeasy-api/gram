@@ -123,7 +123,7 @@ func TestAgentKeyUngatedChallengeHasResourceMetadata(t *testing.T) {
 	server := &mcpserversrepo.McpServer{ID: f.serverID, ProjectID: f.projectID, RemoteMcpServerID: validUUID(f.remoteID)}
 	for _, baseURL := range []string{"https://mcp.example.com", "https://private.example.com"} {
 		response := httptest.NewRecorder()
-		_, _, err := f.service.agentKeyUngatedUpstream(ctx, response, testenv.NewLogger(t), baseURL, endpoint, server, f.orgID, remotesessions.UpstreamToken{}, nil)
+		_, _, err := f.service.agentKeyUngatedUpstream(ctx, response, nil, testenv.NewLogger(t), baseURL, endpoint, server, f.orgID, remotesessions.UpstreamToken{}, nil)
 		require.Error(t, err)
 		var challenge *oops.ShareableError
 		require.ErrorAs(t, err, &challenge)
