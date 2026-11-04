@@ -349,3 +349,24 @@ func TestServerHeadersHaveCredential(t *testing.T) {
 		})
 	}
 }
+
+func TestChainMetaMember_OutageCarriesRequestOutcome(t *testing.T) {
+	t.Parallel()
+	routed := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	member := metaMember{slug: "fixture"}
+	original := metaMemberClientCredentialError(member, routed.ClientCredentialErr)
+	for _, chain := range []bool{false, true} {
+		gate := metaGateContext{}
+		if chain {
+			gate.chainUpstream = func(context.Context, metaMember, string) (string, error) { return "", nil }
+		}
+		_, token, err := chainMetaMember(t.Context(), gate, member, "resource", routed, original)
+		require.Empty(t, token)
+		failure, ok := errors.AsType[memberConnectionError](err)
+		require.True(t, ok, "outage must reach request recorder: %v", err)
+		require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, failure.code)
+		require.EqualError(t, err, original.Error())
+		_, unavailable := errors.AsType[memberUnavailableError](err)
+		require.True(t, unavailable, "preserve the member outage response")
+	}
+}
