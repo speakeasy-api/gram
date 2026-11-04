@@ -70,7 +70,7 @@ func newTestServiceWithInsights(t *testing.T, insights skillefficacy.InsightsRea
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
-		service:  skillefficacy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), insights),
+		service:  skillefficacy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), features, audit.NewLogger(), insights),
 		conn:     conn,
 		features: features,
 	}

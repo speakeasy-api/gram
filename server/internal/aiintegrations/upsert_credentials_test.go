@@ -29,7 +29,7 @@ func newUpsertTestService(t *testing.T, baseURL string) (context.Context, *pgxpo
 		logger:       logger,
 		db:           conn,
 		auth:         nil,
-		authz:        authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authzClient:  authztest.NewParityClient(t, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())),
 		audit:        audit.NewLogger(),
 		store:        store,
 		credentials:  newTestCredentialVerifier(t, baseURL),

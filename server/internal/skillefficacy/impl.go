@@ -44,14 +44,15 @@ import (
 const maxSamplingCap = 10000
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	auth     *auth.Auth
-	authz    *authz.Engine
-	features *productfeatures.Client
-	audit    *audit.Logger
-	insights InsightsReader
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	authzClient *authz.Client
+	features    *productfeatures.Client
+	audit       *audit.Logger
+	insights    InsightsReader
 }
 
 type InsightsReader interface {
@@ -68,20 +69,22 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	insights InsightsReader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skillefficacy.api"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skillefficacy"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		audit:    auditLogger,
-		insights: insights,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skillefficacy"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		authzClient: authzClient,
+		features:    features,
+		audit:       auditLogger,
+		insights:    insights,
 	}
 }
 
@@ -514,18 +517,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireAccess(ctx context.Context, operation func(authz.OrganizationRef) authz.Operation) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, operation(authz.Organization(authCtx.ActiveOrganizationID))); err != nil {
 		return nil, s.logger, err
 	}
 
@@ -545,7 +543,7 @@ func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contex
 }
 
 func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*gen.SkillEfficacySettings, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +560,7 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 }
 
 func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSettingsPayload) (*gen.SkillEfficacySettings, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

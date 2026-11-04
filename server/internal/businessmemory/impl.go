@@ -37,7 +37,7 @@ type Service struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	auth        *auth.Auth
-	authz       *authz.Engine
+	authzClient *authz.Client
 	completions openrouter.CompletionClient
 }
 
@@ -52,6 +52,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	completions openrouter.CompletionClient,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("business-memories-api"))
@@ -60,7 +61,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		auth:        auth.New(logger, db, sessionManager, authzEngine),
-		authz:       authzEngine,
+		authzClient: authzClient,
 		completions: completions,
 	}
 }
@@ -81,12 +82,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil

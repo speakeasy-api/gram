@@ -68,7 +68,7 @@ func (s *Service) authorizeOrgEventRead(ctx context.Context, from, to string) (o
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", 0, 0, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return "", 0, 0, err
 	}
 

@@ -40,7 +40,7 @@ type Service struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authzClient     *authz.Client
 	chRepo          *chrepo.Queries
 	logsEnabled     FeatureChecker
 	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
@@ -59,6 +59,7 @@ func NewService(
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	logsEnabled FeatureChecker,
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
 	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
@@ -68,7 +69,7 @@ func NewService(
 		logger:          logger,
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authzClient:     authzClient,
 		chRepo:          chrepo.New(chConn),
 		logsEnabled:     logsEnabled,
 		logPublisher:    logPublisher,
