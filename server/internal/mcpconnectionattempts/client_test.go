@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,6 +129,118 @@ func TestRecorder_StoresTheCodexMCPClientVersion(t *testing.T) {
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT client_family, client_version FROM mcp_connection_events WHERE attempt_id = ?`, attempt.ID()).Scan(&family, &version))
 	require.Equal(t, FamilyCodexCLI, family)
 	require.Equal(t, "0.146.0", version)
+}
+
+// Through the real writer, the client's own name beats the User-Agent and keeps the device key.
+func TestRecorder_StoresTheReportedClient(t *testing.T) {
+	t.Parallel()
+
+	conn := clickhouseConn(t)
+	keys := func(string, string) ([]byte, error) { return []byte("key"), nil }
+	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, WithDeviceKeys(keys))
+	attempt := Begin(testScope())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("User-Agent", "python-httpx/0.28.1")
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+
+	recorder.Once(t.Context(), testScope(), StepMCPRequest, CodeProviderServerError, FromRequest(req), ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }))
+	recorder.End(t.Context(), attempt, StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }), FromRequest(req))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	var family, version, device string
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT client_family, client_version, device_key FROM mcp_connection_events WHERE attempt_id = ?`, attempt.ID()).Scan(&family, &version, &device))
+	require.Equal(t, FamilyClaudeCode, family)
+	require.Equal(t, "2.4.0", version)
+	require.NotEmpty(t, device)
+}
+
+func TestReportedClient_ReadsFirstAndFallsBack(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("9", maxClientVersionBytes+1)
+	for _, tc := range []struct {
+		name, reported, reportedVersion, userAgent string
+		family, version                            string
+	}{
+		{name: "name beats user agent", reported: "codex-mcp-client", reportedVersion: "0.50.0", userAgent: "python-httpx/0.28.1", family: FamilyCodexCLI, version: "0.50.0"},
+		{name: "named client takes no version from the user agent", reported: "claude-code", userAgent: "claude-code/2.1.0", family: FamilyClaudeCode},
+		{name: "version inside the name", reported: "claude-code/2.2.0", userAgent: "x", family: FamilyClaudeCode, version: "2.2.0"},
+		{name: "junk version dropped", reported: "cursor", reportedVersion: "not a version", userAgent: "x", family: FamilyCursor},
+		{name: "long version dropped", reported: "cursor", reportedVersion: long, userAgent: "x", family: FamilyCursor},
+		{name: "no name uses user agent", userAgent: "claude-code/2.1.0", family: FamilyClaudeCode, version: "2.1.0"},
+		{name: "unknown name uses user agent", reported: "acme-agent", reportedVersion: "9.9", userAgent: "python-httpx/0.28.1", family: FamilyScript, version: "0.28.1"},
+		{name: "unknown everywhere", reported: "acme-agent", userAgent: "acme", family: FamilyOther},
+		{name: "oversized name stays bounded", reported: strings.Repeat("a ", 1<<16) + "cursor", userAgent: "python-httpx/0.28.1", family: FamilyScript, version: "0.28.1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("User-Agent", tc.userAgent)
+			row, err := RowAt(Begin(testScope()), StepMCPRequest, CodeProviderServerError, false, time.Now(), ReportedClient(func() (string, string) { return tc.reported, tc.reportedVersion }), FromRequest(req))
+			require.NoError(t, err)
+			require.Empty(t, row.ClientFamily, "nothing is read on the request path")
+			(&Recorder{}).stampClient(&row)
+			require.Equal(t, tc.family, row.ClientFamily)
+			require.Equal(t, tc.version, row.ClientVersion)
+		})
+	}
+}
+
+// A row with no request can still be named, and a nil reader is nothing.
+func TestReportedClient_WithoutARequest(t *testing.T) {
+	t.Parallel()
+
+	row, err := RowAt(Begin(testScope()), StepMCPRequest, CodeProviderServerError, false, time.Now(), ReportedClient(func() (string, string) { return "cursor", "" }))
+	require.NoError(t, err)
+	(&Recorder{}).stampClient(&row)
+	require.Equal(t, FamilyCursor, row.ClientFamily)
+	require.Empty(t, row.DeviceKey)
+
+	row, err = RowAt(Begin(testScope()), StepMCPRequest, CodeProviderServerError, false, time.Now(), ReportedClient(nil))
+	require.NoError(t, err)
+	(&Recorder{}).stampClient(&row)
+	require.Empty(t, row.ClientFamily)
+}
+
+// A burst the limiter holds back must not read anything on its way out.
+func TestReportedClient_HeldBackRowsReadNothing(t *testing.T) {
+	t.Parallel()
+
+	var reads atomic.Int32
+	var written atomic.Int32
+	recorder := NewCapturing(func(Row) { written.Add(1) }, logsOn)
+	recorder.limiter = newOnceLimiter()
+	for range 50 {
+		recorder.Once(t.Context(), testScope(), StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) {
+			reads.Add(1)
+			return "cursor", ""
+		}))
+	}
+	require.Equal(t, written.Load(), reads.Load())
+	require.Less(t, reads.Load(), int32(50))
+}
+
+// A row held back for its late count keeps its reader and is named when it is written.
+func TestReportedClient_LateRowIsNamed(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	row, err := RowAt(Begin(testScope()), StepMCPRequest, CodeProviderServerError, true, time.Now(), ReportedClient(func() (string, string) { return "cursor", "1.2" }))
+	require.NoError(t, err)
+	limiter.holdBack(row)
+	rows := limiter.pendingRows(time.Now(), true)
+	require.Len(t, rows, 1)
+	(&Recorder{}).stampClient(&rows[0])
+	require.Equal(t, FamilyCursor, rows[0].ClientFamily)
+	require.Equal(t, "1.2", rows[0].ClientVersion)
+}
+
+func BenchmarkReportedClientOption(b *testing.B) {
+	read := func() (string, string) { return "cursor", "" }
+	for b.Loop() {
+		_ = ReportedClient(read)
+	}
 }
 
 func TestFromRequest_SetsTheClient(t *testing.T) {
