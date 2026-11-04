@@ -30,29 +30,29 @@ func (s *ServiceCore) SetMCPAuthSessionVerifier(signer *sessiontokens.Signer, re
 	s.mcpAuthSessionRevocation = revocation
 }
 
-func (s *ServiceCore) adoptMCPAuthSelection(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, raw string) (uuid.UUID, error) {
+func (s *ServiceCore) adoptMCPAuthSelection(ctx context.Context, tx pgx.Tx, claims *assistanttokens.MCPAuthFlowClaims, raw string) (uuid.UUID, error) {
 	if s.mcpAuthSessionSigner == nil || s.mcpAuthSessionRevocation == nil {
 		return uuid.Nil, errors.New("OAuth session verification unavailable")
 	}
 	version, err := uuid.Parse(claims.SelectionProfileVersionID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse selection profile version ID: %w", err)
 	}
 	project, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse OAuth project ID: %w", err)
 	}
 	assistant, err := uuid.Parse(claims.AssistantID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse OAuth assistant ID: %w", err)
 	}
 	thread, err := uuid.Parse(claims.ThreadID)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse OAuth thread ID: %w", err)
 	}
 	u, err := url.Parse(claims.McpURL)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse OAuth MCP URL: %w", err)
 	}
 	slug, err := mcpSlugFromURL(u)
 	if err != nil {
@@ -84,10 +84,27 @@ func (s *ServiceCore) adoptMCPAuthSelection(ctx context.Context, claims *assista
 	if session.Issuer() != claims.OAuthServerIssuer || claims.OAuthServerIssuer == "" {
 		return uuid.Nil, errors.New("OAuth session issuer mismatch")
 	}
-	return executionprofiles.AdoptOAuthSelection(ctx, s.db, executionprofiles.OAuthResume{
+	triggerID, err := executionprofiles.AdoptOAuthSelection(ctx, mcpAuthSelectionTx{tx}, executionprofiles.OAuthResume{
 		Origin: executionprofiles.GetOAuthResumeOriginParams{VersionID: version, OrganizationID: claims.OrgID, ProjectID: project, AssistantID: assistant, ThreadID: thread},
 		UserID: claims.UserID, ClientID: claims.ClientID, IssuerID: server.UserSessionIssuerID.UUID, ServerID: server.ID,
 	}, session)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("adopt OAuth selection: %w", err)
+	}
+	return triggerID, nil
+}
+
+// mcpAuthSelectionTx makes profile publication a savepoint in the callback's
+// event transaction. A successful repair and its exact attempt receipt must
+// commit together; a failed event write must never leave a published repair.
+type mcpAuthSelectionTx struct{ pgx.Tx }
+
+func (tx mcpAuthSelectionTx) BeginTx(ctx context.Context, _ pgx.TxOptions) (pgx.Tx, error) {
+	nested, err := tx.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin OAuth selection savepoint: %w", err)
+	}
+	return nested, nil
 }
 
 // resolveOAuthDirectServer follows the serving address lookup: published
@@ -96,7 +113,7 @@ func (s *ServiceCore) adoptMCPAuthSelection(ctx context.Context, claims *assista
 func (s *ServiceCore) resolveOAuthDirectServer(ctx context.Context, org string, projectID uuid.UUID, u *url.URL, slug string) (*mcprepo.McpServer, error) {
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get OAuth project: %w", err)
 	}
 	if project.OrganizationID != org {
 		return nil, errors.New("OAuth endpoint organization mismatch")
@@ -109,7 +126,7 @@ func (s *ServiceCore) resolveOAuthDirectServer(ctx context.Context, org string, 
 		}
 		domainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+		return nil, fmt.Errorf("get OAuth custom domain: %w", err)
 	}
 	endpoint, err := mcpendpointsrepo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{Slug: slug, CustomDomainID: domainID})
 	var server mcprepo.McpServer
@@ -126,10 +143,10 @@ func (s *ServiceCore) resolveOAuthDirectServer(ctx context.Context, org string, 
 		}
 		server, err = mcprepo.New(s.db).GetMCPServerByToolsetID(ctx, mcprepo.GetMCPServerByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: projectID})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get OAuth legacy MCP server: %w", err)
 		}
 	case err != nil:
-		return nil, err
+		return nil, fmt.Errorf("get OAuth MCP endpoint: %w", err)
 	default:
 		if endpoint.ProjectID != projectID {
 			return nil, errors.New("OAuth endpoint project mismatch")
@@ -137,7 +154,7 @@ func (s *ServiceCore) resolveOAuthDirectServer(ctx context.Context, org string, 
 		if endpoint.MetaMcpServerID.Valid {
 			gateway, err := metamcprepo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: endpoint.MetaMcpServerID.UUID, ProjectID: projectID})
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("get OAuth gateway: %w", err)
 			}
 			mode, err := networkaccess.Effective(gateway.NetworkAccessMode)
 			if err != nil || gateway.OrganizationID != org || gateway.Visibility == "disabled" || !gateway.UserSessionIssuerID.Valid || !mode.Allows(networkaccess.SurfacePublic) {
@@ -147,7 +164,7 @@ func (s *ServiceCore) resolveOAuthDirectServer(ctx context.Context, org string, 
 		}
 		server, err = mcprepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcprepo.GetMCPServerByIDAndProjectIDParams{ID: endpoint.McpServerID.UUID, ProjectID: projectID})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get OAuth MCP server: %w", err)
 		}
 	}
 	mode, err := networkaccess.Effective(server.NetworkAccessMode)

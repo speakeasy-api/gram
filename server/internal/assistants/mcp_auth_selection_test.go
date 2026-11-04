@@ -31,15 +31,18 @@ type mcpAuthNotRevoked struct{}
 func (mcpAuthNotRevoked) IsTokenRevoked(context.Context, string) (bool, error) { return false, nil }
 
 func TestMCPAuthCallbackAdoptsSelectionBeforeResume(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
-		name                                                            string
-		badBearer, resourceAudience, wrongAudience, failSignal, gateway bool
+		name                                                                       string
+		badBearer, resourceAudience, wrongAudience, failSignal, gateway, failEvent bool
 	}{
 		{name: "published alias issuer audience"},
 		{name: "published alias exact resource audience", resourceAudience: true},
 		{name: "forged session", badBearer: true},
 		{name: "wrong audience", wrongAudience: true},
 		{name: "signal failure then retry", failSignal: true},
+		{name: "event failure rolls back repair", failEvent: true},
 		{name: "gateway preserves legacy continuation", gateway: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,7 +65,11 @@ func TestMCPAuthCallbackAdoptsSelectionBeforeResume(t *testing.T) {
 			require.NoError(t, q.SeedAssistantServerFixture(ctx, executionprofiles.SeedAssistantServerFixtureParams{ProjectID: project, AssistantID: assistant, McpServerID: server}))
 			selected := uuid.Nil
 			for range 2 {
-				selected, err = q.SeedAuthClientFixture(ctx, executionprofiles.SeedAuthClientFixtureParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, OrganizationID: org, ClientType: "static_credential"})
+				issuerID, clientID := uuid.New(), uuid.New()
+				require.NoError(t, q.SeedRemoteSessionIssuerFixture(ctx, executionprofiles.SeedRemoteSessionIssuerFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Slug: "issuer-" + issuerID.String(), Issuer: "https://auth.example.com/" + issuerID.String()}))
+				require.NoError(t, q.SeedRemoteSessionClientFixture(ctx, executionprofiles.SeedRemoteSessionClientFixtureParams{ID: clientID, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, OrganizationID: pgtype.Text{String: org, Valid: true}, RemoteSessionIssuerID: issuerID, ClientID: "client-" + clientID.String()}))
+				require.NoError(t, q.SeedAssociationFixture(ctx, executionprofiles.SeedAssociationFixtureParams{ProjectID: project, OrganizationID: org, McpServerID: server, RemoteSessionClientID: clientID}))
+				selected, err = q.SeedAuthClientFixture(ctx, executionprofiles.SeedAuthClientFixtureParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, OrganizationID: org, ClientType: "remote_session", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}})
 				require.NoError(t, err)
 				require.NoError(t, q.LinkAuthClientFixture(ctx, executionprofiles.LinkAuthClientFixtureParams{ProjectID: project, OrganizationID: org, McpServerID: server, AuthClientID: selected}))
 			}
@@ -122,7 +129,22 @@ func TestMCPAuthCallbackAdoptsSelectionBeforeResume(t *testing.T) {
 			// Two callbacks for one state must exchange once and enqueue only the
 			// winning result, never a losing invalid_grant ahead of a success.
 			responses := []*httptest.ResponseRecorder{httptest.NewRecorder(), httptest.NewRecorder()}
-			if tc.failSignal {
+			if tc.failEvent {
+				// Inject an event-write failure after the exchange and profile repair.
+				//nolint:glint // notestingrawsql: test-only DDL injects an event-write failure in an isolated database.
+				_, err := db.Exec(ctx, `ALTER TABLE assistant_thread_events ADD CONSTRAINT reject_oauth_fixture CHECK (event_id NOT LIKE 'assistant_mcp_auth:%')`)
+				require.NoError(t, err)
+				mux.ServeHTTP(responses[0], httptest.NewRequest(http.MethodGet, path, nil))
+				require.GreaterOrEqual(t, responses[0].Code, http.StatusInternalServerError)
+				afterFailure, err := executionprofiles.Bind(ctx, db, target, executionprofiles.SourceIssuance)
+				require.NoError(t, err)
+				require.Equal(t, old.VersionID, afterFailure.VersionID, "failed event write must roll back the profile repair")
+				//nolint:glint // notestingrawsql: remove the test-only DDL fault before retrying the consumed code.
+				_, err = db.Exec(ctx, `ALTER TABLE assistant_thread_events DROP CONSTRAINT reject_oauth_fixture`)
+				require.NoError(t, err)
+				mux.ServeHTTP(responses[1], httptest.NewRequest(http.MethodGet, path, nil))
+				require.GreaterOrEqual(t, responses[1].Code, http.StatusBadRequest)
+			} else if tc.failSignal {
 				mux.ServeHTTP(responses[0], httptest.NewRequest(http.MethodGet, path, nil))
 				require.GreaterOrEqual(t, responses[0].Code, 500)
 				mux.ServeHTTP(responses[1], httptest.NewRequest(http.MethodGet, path, nil))
@@ -134,16 +156,27 @@ func TestMCPAuthCallbackAdoptsSelectionBeforeResume(t *testing.T) {
 					wg.Go(func() { mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil)) })
 				}
 				wg.Wait()
+				for _, response := range responses {
+					if tc.badBearer || tc.wrongAudience {
+						require.GreaterOrEqual(t, response.Code, http.StatusBadRequest)
+					} else {
+						require.Equal(t, http.StatusOK, response.Code)
+					}
+				}
 			}
 
-			require.Equal(t, int32(1), exchanges.Load())
+			if tc.failEvent {
+				require.Equal(t, int32(2), exchanges.Load())
+			} else {
+				require.Equal(t, int32(1), exchanges.Load())
+			}
 			event, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(ctx, assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{ProjectID: project, AssistantThreadID: seeded.ThreadID})
 			require.NoError(t, err)
 			var payload mcpAuthEventPayload
 			require.NoError(t, json.Unmarshal(event.NormalizedPayloadJson, &payload))
 			next, err := executionprofiles.Bind(ctx, db, target, executionprofiles.SourceIssuance)
 			require.NoError(t, err)
-			if tc.badBearer || tc.wrongAudience {
+			if tc.badBearer || tc.wrongAudience || tc.failEvent {
 				require.Equal(t, mcpAuthStatusFailed, payload.Status)
 				require.Equal(t, old.VersionID, next.VersionID)
 			} else if tc.gateway {

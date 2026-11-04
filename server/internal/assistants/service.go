@@ -538,6 +538,8 @@ func NewServiceCore(
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
+		mcpAuthSessionSigner:        nil,
+		mcpAuthSessionRevocation:    nil,
 	}
 }
 

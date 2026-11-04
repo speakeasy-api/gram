@@ -298,18 +298,18 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	callbacks := assistantrepo.New(tx)
 	attempt := mcpAuthAttemptID(claims)
 	if err := callbacks.LockAssistantMCPAuthAttempt(ctx, assistantrepo.LockAssistantMCPAuthAttemptParams{ProjectID: projectID, AttemptID: attempt}); err != nil {
-		return err
+		return fmt.Errorf("lock OAuth attempt: %w", err)
 	}
 	persisted, err := callbacks.GetAssistantMCPAuthAttempt(ctx, assistantrepo.GetAssistantMCPAuthAttemptParams{ProjectID: projectID, ThreadID: threadID, EventID: mcpAuthEventKind + ":" + attempt})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return fmt.Errorf("get OAuth attempt: %w", err)
 	}
 	if err == nil {
 		if persisted.AssistantID != assistantID {
 			return oops.C(oops.CodeForbidden)
 		}
 		if err := tx.Commit(ctx); err != nil {
-			return err
+			return fmt.Errorf("commit OAuth continuation: %w", err)
 		}
 		// Event insertion is durable but the coordinator signal is not. Retry
 		// that signal from the persisted origin, never exchange the code or
@@ -319,7 +319,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		}
 		var previous mcpAuthEventPayload
 		if err := json.Unmarshal(persisted.NormalizedPayloadJson, &previous); err != nil {
-			return err
+			return fmt.Errorf("decode previous OAuth event: %w", err)
 		}
 		if previous.Status == mcpAuthStatusSuccess {
 			return writeMCPAuthSuccess(w)
@@ -328,6 +328,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := mcpAuthEventPayload{
+		ResumeTriggerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ResumeUserID:     claims.UserID,
 		GramEventKind:    mcpAuthEventKind,
 		Status:           mcpAuthStatusSuccess,
@@ -355,7 +356,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		payload.Error = "invalid_request"
 		payload.ErrorDescription = "authorization code missing from callback"
 	default:
-		if err := s.consumeMCPAuthGrantForResume(ctx, claims, code, &payload); err != nil {
+		if err := s.consumeMCPAuthGrantForResume(ctx, tx, claims, code, &payload); err != nil {
 			var tokenErr *mcpOAuthTokenError
 			if errors.As(err, &tokenErr) && tokenErr.Code == "invalid_client" {
 				s.invalidateMCPAuthClient(ctx, projectID, assistantID, claims.OAuthServerIssuer, claims.ClientID)
@@ -474,10 +475,6 @@ func mcpAuthAttemptID(claims *assistanttokens.MCPAuthFlowClaims) string {
 		return claims.ID
 	}
 	return claims.FlowID
-}
-
-func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
-	return s.enqueueMCPAuthEventWithQueries(ctx, assistantrepo.New(s.core.db), projectID, assistantID, threadID, flowID, payload)
 }
 
 func (s *Service) enqueueMCPAuthEventWithQueries(ctx context.Context, repo *assistantrepo.Queries, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
@@ -898,11 +895,12 @@ func newMCPAuthTokenRequest(ctx context.Context, endpoint string, form url.Value
 	return req, nil
 }
 
-func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, code string) error {
-	return s.consumeMCPAuthGrantForResume(ctx, claims, code, &mcpAuthEventPayload{})
-}
-
-func (s *Service) consumeMCPAuthGrantForResume(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, code string, payload *mcpAuthEventPayload) error {
+func (s *Service) consumeMCPAuthGrantForResume(ctx context.Context, tx pgx.Tx, claims *assistanttokens.MCPAuthFlowClaims, code string, payload *mcpAuthEventPayload) error {
+	// Bound the exchange, including retries and response-body reads, while the
+	// callback holds its attempt lock. Keep the event transaction context alive
+	// so a timeout can still record a failed attempt.
+	exchangeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	verifier, err := s.core.encryptionClient.Decrypt(claims.CodeVerifier)
 	if err != nil {
 		return fmt.Errorf("decrypt pkce verifier: %w", err)
@@ -922,7 +920,7 @@ func (s *Service) consumeMCPAuthGrantForResume(ctx context.Context, claims *assi
 		clientSecret = decrypted
 	}
 
-	req, err := newMCPAuthTokenRequest(ctx, claims.TokenEndpoint, form, claims.ClientID, clientSecret)
+	req, err := newMCPAuthTokenRequest(exchangeCtx, claims.TokenEndpoint, form, claims.ClientID, clientSecret)
 	if err != nil {
 		return err
 	}
@@ -954,7 +952,7 @@ func (s *Service) consumeMCPAuthGrantForResume(ctx context.Context, claims *assi
 		if err := json.Unmarshal(body, &token); err != nil || token.AccessToken == "" {
 			return errors.New("authorization response missing access token")
 		}
-		trigger, err := s.core.adoptMCPAuthSelection(ctx, claims, token.AccessToken)
+		trigger, err := s.core.adoptMCPAuthSelection(ctx, tx, claims, token.AccessToken)
 		if err != nil {
 			return fmt.Errorf("adopt authenticated upstream choice: %w", err)
 		}

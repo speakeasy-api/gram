@@ -47,7 +47,7 @@ func AdoptOAuthSelection(ctx context.Context, db interface {
 		return uuid.Nil, errors.New("OAuth session has no typed upstream choice")
 	}
 	target := Target{OrganizationID: in.Origin.OrganizationID, ProjectID: in.Origin.ProjectID, AssistantID: in.Origin.AssistantID, TriggerID: origin.TriggerInstanceID, Context: ContextUserBacked}
-	err = setChoice(ctx, db, target, in.ServerID, ChoiceInput{AuthClientID: choice.AuthClientID, NoAuth: choice.NoAuth, ExpectedVersion: origin.Version}, SourceIssuance, func(ctx context.Context, tx pgx.Tx, _ *Choice) error {
+	err = setChoice(ctx, db, target, in.ServerID, ChoiceInput{Clear: false, AuthClientID: choice.AuthClientID, NoAuth: choice.NoAuth, ExpectedVersion: origin.Version}, SourceIssuance, func(ctx context.Context, tx pgx.Tx, _ *Choice) error {
 		// Recheck durable grant evidence in the transaction that publishes the
 		// version. A concurrent session revocation or selection edit fails closed.
 		current, err := New(tx).GetOAuthResumeSelection(ctx, params)

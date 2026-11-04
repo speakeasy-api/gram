@@ -464,7 +464,7 @@ SELECT sel.auth_client_id, sel.no_auth
 FROM user_sessions s
 JOIN user_session_issuers i ON i.id = s.user_session_issuer_id AND i.deleted IS FALSE
 JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.deleted IS FALSE
-JOIN upstream_client_selections sel ON sel.credential_id = s.id
+JOIN upstream_client_selections sel ON sel.credential_id = COALESCE(s.credential_id, s.id)
   AND sel.credential_kind = 'user_session' AND sel.deleted IS FALSE
 JOIN mcp_servers m ON m.id = sel.mcp_server_id AND m.deleted IS FALSE
 JOIN projects p ON p.id = m.project_id AND p.deleted IS FALSE
@@ -472,11 +472,31 @@ WHERE s.jti = @jti AND s.deleted IS FALSE AND s.expires_at > now()
   AND s.subject_urn = @subject_urn
   AND c.client_id = @client_id AND c.user_session_issuer_id = i.id
   AND i.id = @issuer_id AND m.user_session_issuer_id = i.id
-  AND (i.project_id = p.id OR (i.project_id IS NULL AND i.organization_id = p.organization_id))
+  AND (i.project_id = p.id
+       OR (i.project_id IS NULL AND i.organization_id = p.organization_id)
+       OR (i.project_id IS NULL AND i.organization_id IS NULL))
   AND m.id = @mcp_server_id AND m.project_id = @project_id
   AND p.organization_id = @organization_id
   AND s.organization_id = p.organization_id
   AND sel.organization_id = p.organization_id AND sel.project_id = p.id
+  -- Lock the live credential and its associations through version publication.
+  AND (sel.no_auth OR EXISTS (
+    SELECT 1
+    FROM mcp_auth_clients ac
+    JOIN mcp_server_auth_clients link ON link.auth_client_id = ac.id
+      AND link.mcp_server_id = m.id AND link.deleted IS FALSE
+    WHERE ac.id = sel.auth_client_id AND ac.organization_id = p.organization_id
+      AND ac.deleted IS FALSE AND ac.enabled
+      AND (ac.remote_session_client_id IS NULL OR EXISTS (
+        SELECT 1
+        FROM remote_session_clients reg
+        JOIN remote_session_client_user_session_issuers binding
+          ON binding.remote_session_client_id = reg.id AND binding.user_session_issuer_id = i.id
+        WHERE reg.id = ac.remote_session_client_id AND reg.deleted IS FALSE
+        FOR SHARE OF reg, binding
+      ))
+    FOR SHARE OF ac, link
+  ))
 FOR SHARE OF s, i, c, sel, m, p;
 
 -- name: SeedOAuthResumeFixture :one
@@ -497,6 +517,11 @@ WITH chat AS (
 ), endpoint AS (
   UPDATE mcp_servers SET user_session_issuer_id = (SELECT id FROM issuer)
   WHERE mcp_servers.id = @mcp_server_id AND mcp_servers.project_id = @project_id RETURNING mcp_servers.id
+), issuer_binding AS (
+  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+  SELECT ac.remote_session_client_id, issuer.id
+  FROM mcp_auth_clients ac, issuer
+  WHERE ac.id = @auth_client_id AND ac.project_id = @project_id AND ac.organization_id = @organization_id
 ), selection AS (
   INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, auth_client_id, auth_client_attachment_scope, no_auth, source)
   SELECT @project_id, @organization_id, 'user_session', session.id, @mcp_server_id, ac.id, ac.attachment_scope, false, 'issuance'
