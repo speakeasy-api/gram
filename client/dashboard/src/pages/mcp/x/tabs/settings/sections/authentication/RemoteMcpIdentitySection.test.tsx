@@ -81,6 +81,15 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
 }));
 
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));

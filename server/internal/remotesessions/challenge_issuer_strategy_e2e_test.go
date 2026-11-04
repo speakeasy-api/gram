@@ -504,7 +504,7 @@ func TestRemoteLoginCallback_DeniedEchoesOnlyRegisteredErrorCodes(t *testing.T) 
 	)
 	require.Error(t, err)
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
-	require.Contains(t, err.Error(), "remote authn challenge denied: server_error")
+	require.Contains(t, err.Error(), "The sign-in provider returned an error: server_error")
 
 	_, _, w, err = driveSyntheticLogin(t, "denied-unregistered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {

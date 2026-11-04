@@ -2306,11 +2306,14 @@ ORDER BY l.auth_client_id, l.project_id;
 -- name: ListServerAccessGrants :many
 -- Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 -- policies are provisioned separately. Like grant loading, effect is ignored.
+-- Temporary grants are skipped: a permanent default must not be derived from
+-- access that ends.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id;
 
 -- name: ListAgentRolePrincipals :many

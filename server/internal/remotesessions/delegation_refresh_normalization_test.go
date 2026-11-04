@@ -31,6 +31,9 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 				{name: "overflow ignored", field: `"refresh_expires_in":9223372036854775807`},
 				{name: "negative ignored", field: `"refresh_expires_in":-1`},
 				{name: "zero alias ignored", field: `"refresh_expires_in":0`},
+				{name: "zero standard ignored", field: `"refresh_token_timeout":0`},
+				{name: "negative standard ignored", field: `"refresh_token_timeout":-1`},
+				{name: "zero authorization ignored", field: `"authorization_expires_in":0`},
 				{name: "retained bound expires during request", field: `"refresh_expires_in":0`, expired: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

@@ -23,10 +23,10 @@ export function ChangeIssuerConfirmDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  target: AuthTarget;
+  target: Pick<AuthTarget, "attachImpactTarget" | "mcpServerId" | "slug">;
   /** Whether the server has an issuer now, which the candidate replaces. */
   replacing: boolean;
-  candidate: UserSessionIssuer;
+  candidate: Pick<UserSessionIssuer, "id" | "slug">;
   onConfirm: () => void;
   isPending: boolean;
   error: Error | null;

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -25,6 +27,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// SetConnectionRecorder replaces the connection attempt recorder.
+func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
+	s.connections = recorder
+}
+
+// ConnectionAttempt exposes the state's connection attempt.
+func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
+	return a.connectionAttempt(endpoint)
+}
 
 // SetCIMDResolver replaces the client metadata document resolver.
 func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
@@ -184,6 +196,35 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	return s.verifyConnectionRecoveryCompletion(r, remote)
 }
 
+// TagTunnelOutage and ErrTunnelNoRoute expose the answer every tunneled path shares.
+var (
+	TagTunnelOutage  = tagTunnelOutage
+	ErrTunnelNoRoute = errTunnelNoRoute
+)
+
+// SetDB swaps only the pool the service reads endpoints through, to fail that first read.
+func (s *Service) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
+// ConnectionRouteFailureForOutage is what Code Mode reports for a connection in an outage.
+func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool) (string, string) {
+	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
+}
+
+// RemoteSessionUnavailableError exposes the answer for a required connection in an outage.
+var RemoteSessionUnavailableError = remoteSessionUnavailableError
+
+// SetAuthzEngine swaps the authorization engine, to make it fail.
+func (s *Service) SetAuthzEngine(engine *authz.Engine) {
+	s.authz = engine
+}
+
+// SetChatSessionsManager swaps the store revocation checks read, to take it down.
+func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
+	s.chatSessionsManager = manager
+}
+
 // ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.
 const (
 	ConnectionRecoveryRoute    = connectionRecoveryRoute
@@ -260,4 +301,9 @@ func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotese
 // SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
 func (s *Service) SetIDJAGTrust(store idjag.Store) {
 	s.idJAGTrust = store
+}
+
+// StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
+func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
+	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
 }

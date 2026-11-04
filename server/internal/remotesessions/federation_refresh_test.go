@@ -224,6 +224,12 @@ func TestFederatedRefreshExpiry(t *testing.T) {
 		{name: "negative refresh expiry", body: `{"refresh_expires_in":-1}`},
 		{name: "finite refresh expiry", body: `{"refresh_expires_in":600}`, seconds: 600},
 		{name: "shortest provider lifetime", body: `{"refresh_token_timeout":600,"authorization_expires_in":300}`, seconds: 300},
+		{name: "zero timeout", body: `{"refresh_token_timeout":0}`},
+		{name: "negative timeout", body: `{"refresh_token_timeout":-1}`},
+		{name: "zero authorization", body: `{"authorization_expires_in":0}`},
+		{name: "negative authorization", body: `{"authorization_expires_in":-1}`},
+		{name: "overflowing authorization", body: `{"authorization_expires_in":9223372036854775807}`},
+		{name: "usable bound beside a zero one", body: `{"refresh_token_timeout":600,"authorization_expires_in":0}`, seconds: 600},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -238,14 +244,4 @@ func TestFederatedRefreshExpiry(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestFederatedRefreshExplicitZeroExpiry(t *testing.T) {
-	t.Parallel()
-	now := time.Unix(1700000000, 0)
-	var tok tokenResponse
-	require.NoError(t, json.Unmarshal([]byte(`{"refresh_token_timeout":0}`), &tok))
-	expiry := federatedRefreshCredentials(tok, now).RefreshExpiresAt()
-	require.NotNil(t, expiry)
-	require.Equal(t, now, *expiry)
 }

@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
@@ -33,6 +34,9 @@ type TokenRefreshError struct {
 	upstreamCode string
 	statusCode   int
 	remedy       refreshRemedy
+
+	// retryAfter is the upstream's Retry-After, zero when it sent none.
+	retryAfter time.Duration
 }
 
 // refreshRemedy names who can repair a refresh failure that Speakeasy raised
@@ -78,7 +82,7 @@ func (e *TokenRefreshError) Unwrap() error { return e.cause }
 func (e *TokenRefreshError) UpstreamCode() string { return e.upstreamCode }
 
 func newTokenRefreshError(reason string, cause error, remedy refreshRemedy) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, remedy: remedy}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, remedy: remedy, retryAfter: 0}
 }
 
 // invalidGrant reports whether the upstream answered with RFC 6749 §5.2
@@ -139,6 +143,7 @@ func newTokenRefreshErrorFromSuccessBody(statusCode int, status string, body []b
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
 		remedy:       refreshRemedyUnset,
+		retryAfter:   0,
 	}, true
 }
 
@@ -164,5 +169,6 @@ func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *T
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
 		remedy:       refreshRemedyUnset,
+		retryAfter:   0,
 	}
 }

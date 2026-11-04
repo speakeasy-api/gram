@@ -2377,6 +2377,48 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivit
 	require.Equal(t, runtimeStateStopped, oldRuntime.State)
 }
 
+func TestServiceCoreReapInactiveAssistantRuntimesCollectsRetiredKitRuntimeOnBusyAssistant(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_retired_kit")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	queries := assistantsrepo.New(conn)
+	now := time.Now().UTC()
+	insertKitRow := func(state string) uuid.UUID {
+		const metadata = `{"runtime_version":3}`
+		runtimeID := insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, metadata, now)
+		require.NoError(t, queries.SetKitRuntimeMetadataFixture(t.Context(), assistantsrepo.SetKitRuntimeMetadataFixtureParams{
+			RuntimeVersion: 3, Metadata: []byte(metadata), ProjectID: projectID, RuntimeID: runtimeID,
+		}))
+		return runtimeID
+	}
+	retiredID := insertKitRow(runtimeStateStopped)
+	switchingID := insertKitRow("switch_retiring")
+	liveID := insertKitRow(runtimeStateActive)
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	require.NoError(t, core.installKitRuntime(backend))
+
+	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+		OnRowProcessed:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	for id, want := range map[uuid.UUID]string{retiredID: runtimeStateReaped, switchingID: "switch_retiring", liveID: runtimeStateActive} {
+		row, err := queries.GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: id, ProjectID: projectID})
+		require.NoError(t, err)
+		require.Equal(t, want, row.State)
+	}
+}
+
 func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *testing.T) {
 	t.Parallel()
 

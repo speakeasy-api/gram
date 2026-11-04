@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -564,7 +565,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	baseURL string,
 	presentedAuthMethod string,
 	logger *slog.Logger,
-) error {
+) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
 	// Only a CIMD client the issuer's admission gate let through may exchange
@@ -609,10 +610,35 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
 	}
+	if idjag.IsOutage(err) {
+		// Not judged and unspent, so the same request can succeed later.
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request deferred", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeTemporarilyUnavailable, exchange.rejectAssertion(err)...)
+		if idjag.ReasonOf(err) == idjag.ReasonKeyUnresolvable {
+			// The customer's identity provider is down, so this doesn't alert on-call.
+			w.Header().Set(constants.HeaderProxiedResponse, "1")
+			return outageError(w, err, idJAGOutageLogMessage).LogWarn(ctx, logger)
+		}
+		return outageError(w, err, idJAGOutageLogMessage).LogError(ctx, logger)
+	}
+	if idjag.IsStoreFault(err) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request failed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeServerError, exchange.rejectAssertion(err)...)
+		return oops.E(oops.CodeUnexpected, err, "validate ID-JAG assertion").LogError(ctx, logger)
+	}
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant", exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 	}
+	// A failure here before commit delivers no token, so it gives the identifier back.
+	committed := false
+	defer func() {
+		if committed || retErr == nil || !idJAGServerFault(retErr) {
+			return
+		}
+		if rerr := s.idJAGValidator.Release(context.WithoutCancel(ctx), result); rerr != nil {
+			logger.ErrorContext(ctx, "release ID-JAG assertion after failed exchange", attr.SlogError(rerr))
+			s.metrics.RecordIDJAGReleaseFailed(ctx, endpoint.UserSessionIssuerID.String())
+		}
+	}()
 
 	// The session does not exist yet, but authz treats an AuthContext without a
 	// session as an internal call. A namespaced assertion JTI makes this context
@@ -690,6 +716,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
+	committed = true
 	exchange.accept()
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "", exchange.acceptedAttrs()...)
 
@@ -856,6 +883,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			authorizationCtx, cerr = s.admitAgentSession(authorizationCtx, endpoint, subject, credential)
 		}
 		if cerr != nil {
+			if credentialCheckFault(cerr) {
+				return oops.E(oops.CodeUnexpected, cerr, "admit agent session").LogError(ctx, logger)
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_admission_denied")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return rejectGrant("agent authorization is no longer valid")
@@ -1219,6 +1249,9 @@ func (s *Service) rotateRefreshToken(
 				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 					return true, admissionErr
 				}
+				if credentialCheckFault(admissionErr) {
+					return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
+				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
@@ -1229,7 +1262,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
 		s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required", attr.SlogUserSessionSubjectKind(string(refreshSession.SubjectUrn.Kind)))
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 	}
 
@@ -1422,6 +1455,9 @@ func (s *Service) rotateRefreshToken(
 			}
 		}
 		if admissionErr != nil {
+			if credentialCheckFault(admissionErr) {
+				return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}
@@ -1497,9 +1533,9 @@ func (s *Service) rotateRefreshToken(
 // A direct proxied server is served through the credential's choice, so
 // refresh judges that choice for every session the runtime holds to its
 // choices: a missing or unusable one is refused, as the runtime would refuse
-// it, and a no-auth one needs no upstream. For a user, a chosen client needs
+// it, and a no-auth one needs no upstream. For a person, a chosen client needs
 // reconnecting only when its own stored grant does; sibling clients on the
-// user session issuer never decide. Other endpoints keep the user's
+// user session issuer never decide. Other endpoints keep the person's
 // issuer-wide check.
 //
 // When identity chaining owns the upstream, refresh follows the runtime, which
@@ -1529,14 +1565,14 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	} else if decided {
 		return reconnect
 	}
-	user := subject.Kind == urn.SessionSubjectKindUser
+	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return false
 	}
 	if !proxied {
-		if !user {
+		if !reauthorizes {
 			return false
 		}
 		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
@@ -1554,7 +1590,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	case err != nil:
 		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
 		return false
-	case choice.noAuth(), !user:
+	case choice.noAuth(), !reauthorizes:
 		return false
 	}
 	routing.backend = consentBackendRemote
@@ -1566,7 +1602,8 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect || s.identityChainer == nil || subject.ID == "" {
+	// Identity chaining vouches for a known user, which an anonymous subject is not.
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return reconnect
 	}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
@@ -1724,6 +1761,9 @@ func (s *Service) writeRefreshTokenReplay(
 				var rolloutErr *oops.ShareableError
 				if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 					return cerr
+				}
+				if credentialCheckFault(cerr) {
+					return oops.E(oops.CodeUnexpected, cerr, "admit agent session").LogError(ctx, logger)
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")

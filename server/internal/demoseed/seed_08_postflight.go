@@ -490,17 +490,18 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountAgentOnlyDeviceSyncs),
 			fail:  postflightMustEqual(2, "expected 2 device agent syncs for serials no MDM device holds, found %d"),
 		},
-		// The policy states coverage refines agent_active into: two attested
-		// machines (one agent-only) and one behind, beside one with no report.
+		// The policy states coverage refines agent_active into: three attested
+		// machines (two agent-only) and one behind, beside the Macs with no
+		// report of their own.
 		{
 			what:  "device agent state reports",
 			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
-			fail:  postflightMustEqual(3, "expected 3 device agent state reports, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 device agent state reports, found %d"),
 		},
 		{
 			what:  "attested device agent state reports",
 			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
-			fail:  postflightMustEqual(2, "expected 2 state reports applying their served etag, found %d"),
+			fail:  postflightMustEqual(3, "expected 3 state reports applying their served etag, found %d"),
 		},
 		{
 			what:  "outdated device agent state reports",
