@@ -142,13 +142,15 @@ jobs:
 
       # Names, URLs and connection status only, no tokens: the entry names fill
       # in the allowlist below.
-      # When Datadog needs authentication, speakeasyd says why on stderr; its
-      # stdout (the token header) is discarded.
+      # The Datadog token check prints a fixed status only: the token and
+      # speakeasyd's refusal detail stay out of the public log.
       - name: List the job's MCP servers
         run: |
           claude mcp list
-          if ! speakeasyd mcp-token --server https://chat.speakeasy.com/mcp/datadog >/dev/null 2>"$RUNNER_TEMP/mcp-token.err"; then
-            echo "::warning::Datadog token refused: $(tr -cd '[:alnum:] _().:/,=-' <"$RUNNER_TEMP/mcp-token.err" | head -c 300)"
+          if speakeasyd mcp-token --server https://chat.speakeasy.com/mcp/datadog >/dev/null 2>&1; then
+            echo "Speakeasy issued a Datadog token for this job."
+          else
+            echo "::warning::Speakeasy refused a Datadog token for this job."
           fi
 
       - name: Review for performance
