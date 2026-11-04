@@ -225,11 +225,11 @@ func (s *Service) searchPlatformGatewayTools(ctx context.Context, logger *slog.L
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable", Message: ""})
 				return nil
 			}
 			if catalog.incomplete {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete", Message: ""})
 			}
 			for _, entry := range catalog.entries {
 				definition, err := json.Marshal(entry)
