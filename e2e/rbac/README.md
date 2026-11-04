@@ -69,8 +69,9 @@ three things per persona in `platform-mcp.baseline.json`:
 - which tools `tools/list` offers it, reported as tools added or removed
 - the outcome of a fixed set of tool calls
 
-The calls are organization reads, access and risk reads, and project reads
-asked of both projects. There is also one write: `rename_project` on a project
+The calls are organization reads, access and risk reads, and project reads.
+`get_project_overview` and `find_mcp` are asked of both projects, so a persona
+bounded to one project shows the difference. There is also one write: `rename_project` on a project
 made for that call. Organization API keys and no credential are tried as bearer
 tokens and must be turned away. A call is classed as `ok`, `denied` (the tool
 error's code is `permission_denied` or `forbidden`), or `error:<code>`, which
