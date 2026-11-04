@@ -71,6 +71,7 @@ func (l *Logger) LogWorkloadIssuerCreate(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -123,6 +124,7 @@ func (l *Logger) LogWorkloadIssuerUpdate(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -169,6 +171,7 @@ func (l *Logger) LogWorkloadIssuerDelete(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

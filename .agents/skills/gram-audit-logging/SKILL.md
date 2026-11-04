@@ -1,14 +1,9 @@
 ---
 name: gram-audit-logging
-description: Concepts, external interfaces, and conventions for Speakeasy's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
-metadata:
-  relevant_files:
-    - "server/internal/audit/**/*.go"
-    - "server/internal/audit/**/*.sql"
-    - "server/design/auditlogs/**"
+description: Use when recording or exposing audit events, changing audit coverage, introducing an audited subject or action, classifying internal staff activity, asserting audit events in tests, or changing audit display, filtering, or outbox publication.
 ---
 
-Audit logging is how Speakeasy records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Speakeasy users through the `auditlogs` management API.
+Audit logging is how Speakeasy records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Non-internal entries are exposed to Speakeasy users through the `auditlogs` management API; staff activity includes both classifications.
 
 ## Concepts and terminology
 
@@ -26,15 +21,37 @@ Audit logging is how Speakeasy records _who did what to which resource_. Every m
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are returned by the staff admin activity view and readable by customers, and entries written through either package publish webhooks (the payload's `category` says which log). Rows written directly, such as demo seed rows and backfills, publish none. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
+**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are returned by the staff admin activity view; only non-internal entries are readable by customers. Non-internal entries written through either package normally publish webhooks (the payload's `category` says which log). Rows written directly, such as demo seed rows and backfills, publish none. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
 
 - **Configuration** (`audit` package, `audit_logs`): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
-- **Security** (`audit/securityevent` package, `security_audit_logs`): machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it, which is why it has its own table. Customers still need it when auditing what their users and automated processes did, so it is kept and delivered rather than dropped.
+- **Security** (`audit/securityevent` package, `security_audit_logs`): machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it, which is why it has its own table. Customer-relevant security activity is kept and delivered rather than dropped; explicit internal classification still suppresses customer visibility and publication.
 - An event written by a system actor must still name what acted. Prefer attributing it to the agent or person it acts for; a bare system principal with no display name renders as "Speakeasy" in the dashboard.
 
 The same action can belong in either log depending on who caused it: a person admitting a workload is a configuration change (`audit.Logger.LogWorkloadAdmissionAdmit`), while the Kit runtime admitting its own workload is a security event (`securityevent.LogWorkloadAdmissionAdmit`). Both take the same event struct. Once customers have seen an action in the configuration log, moving it is a visible change, so choose before shipping rather than after.
 
-**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Security events publish the same event types with `category: "security"`, so subscribers separate the two logs by that field.
+**Outbox event.** A non-internal audit entry written through the logger normally publishes a typed webhook event to the outbox (same transaction), unless `WithoutOutbox` is set. Internal entries never publish to ANY outbox consumer, including internal growth signals. The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Non-internal security events publish the same event types with `category: "security"`, so subscribers separate the two logs by that field.
+
+## Internal activity classification
+
+`is_internal BOOLEAN NOT NULL DEFAULT false` is persisted in **both** `audit_logs` and `security_audit_logs`; classification is independent of log category. Set `IsInternal: true` in the writer's insert params for staff-only operational activity. Keep ordinary writers explicitly false (including complete struct literals required by `exhaustruct`). Never infer this flag from staff identity, actor type, or subject type in live reads/writes: staff changes to customer resources usually remain customer-relevant and non-internal.
+
+The initial internal actions are `catalog-promotion:archive`, `catalog-promotion:reject`, `catalog-promotion:restore`, `catalog-promotion:retry-docs`, and `mcp-server:promote-catalogue`. The last has subject `mcp_server`, not `catalog_promotion`; ordinary MCP-server create/update/delete remain non-internal. Keep existing outbox event definitions intact.
+
+| Classification / option    | Durable row | Customer lists/facets | Any outbox consumer |
+| -------------------------- | ----------- | --------------------- | ------------------- |
+| Ordinary event             | Yes         | Eligible              | Normally published  |
+| `IsInternal: true`         | Yes         | Never                 | Never               |
+| Ordinary + `WithoutOutbox` | Yes         | Eligible              | Never               |
+
+Internal rows still commit atomically with the mutation. `Logger.log` skips publication and the shared exported `audit.PublishWebhook` guard also protects the direct security-event path. Do not replace this with special logger construction at service call sites. `WithoutOutbox` remains an independent option for operator writes; it neither sets classification nor changes visibility.
+
+Keep mirrored SQLc insert/read contracts aligned and preserve `is_internal` when moving rows between logs. Customer list and actor/action/surface facet predicates exclude internal rows even with explicit subject/action filters; no customer opt-in exists. Only authorized staff reads enable the server-side inclusion switch. The staff API exposes required `is_internal` (SDK `isInternal`); both Admin MCP read tools return an explicit boolean, including false. Staff Activity displays the **Internal** badge only for true, without a toggle or separate route.
+
+### Verification and historical rows
+
+Cover all five writers (persist true, zero outbox rows), ordinary publication, independent `WithoutOutbox`, direct security publication, and log-move preservation. Test both tables with mixed classifications sharing a subject, all customer facets/explicit filters, staff inclusion/pagination, required API/MCP true and false, and mixed/ordinary-only badge rendering. Do not test only subject exclusion.
+
+Ship generated schema DDL separately before application deployment. Historical rows stay visible until manually classified: after old writers drain, use `server/cmd/internal-audit-events-backfill/README.md` for bounded count-only dry-run, approved apply, and verification/rerun. Its predicate targets historical `catalog_promotion` subjects OR exact `mcp-server:promote-catalogue`, in both tables; it is not live classification inference. Preserve timestamps/data, emit nothing, and test rerun idempotence and unchanged unrelated rows/outbox counts. Never run this backfill automatically in migrations/startup or against a shared database as a test. Already-published outbox events and delivered webhooks are not retracted.
 
 ## Server
 
@@ -67,8 +84,8 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 | `server/internal/audit/audittest/helpers.go`                         | Test helpers other packages use to assert audit events.                                                                                                                                                                |
 | `server/internal/audit/audittest/queries.sql`                        | SQLc queries backing the test helpers. Regenerates `server/internal/audit/audittest/repo/` via `mise run gen:sqlc-server`.                                                                                             |
 | `server/internal/audit/events.go`                                    | Top-level declarations shared across every subject.                                                                                                                                                                    |
-| `server/internal/audit/logger.go`                                    | `Logger` type, the `WithoutOutbox` option, `auditEntry` struct, and the internal `l.log()` method that inserts the DB row then calls `appendToOutbox` unless the outbox is skipped.                                    |
-| `server/internal/audit/outbox.go`                                    | `appendToOutbox` — translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.                                                                |
+| `server/internal/audit/logger.go`                                    | `Logger` type, the `WithoutOutbox` option, `auditEntry` struct, and the internal `l.log()` method that inserts the DB row then calls `PublishWebhook` unless internal or `WithoutOutbox` is set.                       |
+| `server/internal/audit/outbox.go`                                    | `PublishWebhook` — rejects internal publication from either log, then translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.             |
 | `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
 | `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
 | `server/internal/audit/securityevent/`                               | Security log writers and readers over `security_audit_logs`, with their own `queries.sql` (regenerates `securityevent/repo/`).                                                                                         |
@@ -89,7 +106,7 @@ Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` h
 
 ## Server-client contract
 
-Audit entries are surfaced to Speakeasy users through a small, fixed set of endpoints. New actions and subject types appear automatically — facets are computed from the rows that exist, so there is no registration step outside the Go code.
+Non-internal audit entries are surfaced to Speakeasy users through a small, fixed set of endpoints. New visible actions and subject types appear automatically — facets are computed from eligible non-internal rows, so there is no registration step outside the Go code.
 
 **HTTP routes** (design: `server/design/auditlogs/design.go`):
 
@@ -144,7 +161,7 @@ Use this when the subject already has a file but you're introducing a new verb.
 3. Add a `Log<Subject><Verb>` function that translates the event into `repo.InsertAuditLogParams`, passes any snapshots through `marshalAuditPayload` (which handles nil internally), then calls `l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.<Subject>})`. Do not call `repo.New(dbtx).InsertAuditLog` directly — `l.log` does that and also handles the outbox publication.
 4. Call the new function from the handler as described under "How to audit a handler in a service".
 
-No schema change, no codegen step — facet queries pick up the new action automatically.
+No schema change, no codegen step — facet queries pick up new non-internal actions automatically. Internal actions must never appear in customer facets.
 
 ### How to add a new audited subject
 

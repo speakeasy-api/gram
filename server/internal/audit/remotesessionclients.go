@@ -56,6 +56,7 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -141,6 +142,7 @@ func (l *Logger) LogRemoteSessionClientDuplicate(ctx context.Context, dbtx repo.
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -193,6 +195,7 @@ func (l *Logger) LogRemoteSessionClientUpdate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -231,6 +234,7 @@ type LogRemoteSessionClientDeleteEvent struct {
 func (l *Logger) LogRemoteSessionClientDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDeleteEvent) error {
 	action := ActionRemoteSessionClientDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -285,6 +289,7 @@ func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -446,6 +451,7 @@ func (l *Logger) LogRemoteSessionClientRevokeSessions(ctx context.Context, dbtx 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -490,6 +496,7 @@ type remoteSessionClientAttachment struct {
 // and JSON Web Key Set writers cannot drift apart as the row shape changes.
 func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: a.organizationID,
 		ProjectID:      uuid.NullUUID{UUID: a.projectID, Valid: a.projectID != uuid.Nil},
 

@@ -66,6 +66,7 @@ func (l *Logger) LogLiteLLMInstanceRotateKey(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID:            event.Actor.ID,
@@ -90,6 +91,7 @@ func (l *Logger) LogLiteLLMInstanceRevoke(ctx context.Context, dbtx repo.DBTX, e
 
 func (l *Logger) logLiteLLMInstance(ctx context.Context, dbtx repo.DBTX, event LogLiteLLMInstanceCreateEvent, action Action) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID:            event.Actor.ID,
