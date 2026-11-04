@@ -110,7 +110,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 ### Decided without reviewer input
 
 1. **Shared access helpers take an operation.** `requireOrgAccess`, `authorize` and `access` now take `func(authz.OrganizationRef) authz.Operation`, and callers pass `authz.OrganizationRef.Administer` or `.Read`, as identity-provider connections do in O3. _If reversed:_ map scopes locally, as product features does.
-2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only change outside O4's packages.
+2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only test change outside O4's packages.
 
 ## O5 (AIS-840): custom domains, network ingress, assets and LiteLLM
 
@@ -123,7 +123,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 ### Decided without reviewer input
 
-1. **Billing recipients take the client explicitly.** `billingnotifications.ResolveRecipients` now takes the client, and `billingnotifications.OrganizationAdministratorEmails` holds the missing-client fallback for billing paths. Usage's Stripe customer identity and the two billing activities (credit alerts and the weekly usage summary) resolve through it. A second fallback helper exists here, alongside the activities one from O5, because the activities package already depends on this package and usage does not depend on activities. X1 deletes both fallbacks together. _If reversed:_ move one shared fallback into the authorization package and point both at it.
+1. **Billing recipients take the client explicitly.** `billingnotifications.ResolveRecipients` now takes the client, and `billingnotifications.OrganizationAdministratorEmails` holds the missing-client fallback for billing paths. Usage's Stripe customer identity and the two billing activities (credit alerts and the weekly usage summary) resolve through it. The activities helper from O5 now delegates to it, so the fallback lives in one place; the activities package already depends on this package, and usage does not depend on activities. X1 deletes the fallback. _If reversed:_ move the fallback into the authorization package and point both callers at it.
 2. **Stripe checkout status keeps two separate checks.** `GetStripeCheckoutStatus` requires both administer and read, and it still makes two `Require` calls instead of one call with two operations. While the engine decides, this records the same two challenges as before. _If reversed:_ make it a single call, which records one challenge.
 3. **The narrow billing operations service has no client.** `NewBillingOperations` serves trusted server surfaces that authorize on their own. It leaves the client nil, so any administrator lookup there takes the engine fallback, as it did before. _If reversed:_ thread a client into `NewBillingOperations`.
 
