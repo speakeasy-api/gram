@@ -86,7 +86,7 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolPermissionDenied},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeMCPToolCallsPaused},
-	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRejectedByMember},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant},
@@ -117,7 +117,8 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 			}
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
-			if ending.what == mcpconnectionattempts.CodeRejectedByMember {
+			// These request refusals come from a selected member, never the gateway itself.
+			if ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
 				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
 			}

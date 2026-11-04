@@ -14,6 +14,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	scopes := []mcpconnectionattempts.Scope{
 		mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR),
 		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
+		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR),
 	}
 	rows, err := s.connectionRequestRows(scopes)
 	require.NoError(t, err)
@@ -40,7 +41,8 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 			require.NotEmpty(t, row.ClientVersion)
 			require.Regexp(t, `^[0-9a-f]{32}$`, row.DeviceKey)
 		}
-		if row.Reason == "rejected_by_member" {
+		require.NotEqual(t, "rejected_by_member", row.Reason, "request outcomes must match a live request producer")
+		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused") {
 			require.Equal(t, "meta", row.ServerKind)
 			require.Equal(t, s.projectID(), row.ProjectID)
 			require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
@@ -63,7 +65,9 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	}
 	for _, outcome := range []string{
 		"mcp_request/mcp_tool_calls_paused",
-		"mcp_request/rejected_by_member",
+		"mcp_request/provider_server_error",
+		"mcp_request/provider_rejected",
+		"mcp_request/tool_permission_denied",
 		"inbound_token/refresh_token_expired",
 		"inbound_token/refresh_replayed",
 		"inbound_token/refresh_token_revoked",
