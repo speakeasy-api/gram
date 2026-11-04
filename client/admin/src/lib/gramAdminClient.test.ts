@@ -127,6 +127,7 @@ describe("generated admin boundary", () => {
                 actor_type: "user",
                 created_at: "2026-03-12T15:30:00Z",
                 id: "log_1",
+                is_internal: false,
                 subject_id: "org_1",
                 subject_type: "organization",
               },

@@ -130,3 +130,14 @@ func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
 	_, body, _ = callStaffReadTool(t, &recordingOrganizationReader{}, "get_admin_context", `{}`)
 	require.NotContains(t, body, "inspect paginated organization activity")
 }
+
+func TestOrganizationActivityInternalClassification(t *testing.T) {
+	t.Parallel()
+	reads := testActivityReads()
+	reads.result.Logs = []*gen.AuditLog{{ID: "ordinary", IsInternal: false}, {ID: "internal", IsInternal: true}}
+	status, body, data := callStaffReadTool(t, reads, "list_organization_activity", `{"organization_id":"org-a"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, `"isError":true`)
+	require.Contains(t, string(data), `"is_internal":false`)
+	require.Contains(t, string(data), `"is_internal":true`)
+}

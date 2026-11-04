@@ -74,7 +74,8 @@ var _ = Service("auditlogs", func() {
 })
 
 var AuditLog = Type("AuditLog", func() {
-	Required("id", "actor_id", "actor_type", "action", "subject_id", "subject_type", "acting_surface", "created_at")
+	Attribute("is_internal", Boolean, "Internal staff-only audit activity; persisted but never published to the outbox.")
+	Required("is_internal", "id", "actor_id", "actor_type", "action", "subject_id", "subject_type", "acting_surface", "created_at")
 
 	Attribute("id", String)
 	Attribute("project_id", String)

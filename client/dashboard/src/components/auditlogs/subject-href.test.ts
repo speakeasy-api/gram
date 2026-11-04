@@ -5,6 +5,7 @@ import { subjectHref } from "./subject-href";
 function log(subjectType: string, subjectId = "prescription-1"): AuditLog {
   return {
     id: "audit-1",
+    isInternal: false,
     actingSurface: "dashboard",
     action: "killswitch:activate",
     category: "configuration",
