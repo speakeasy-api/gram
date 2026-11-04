@@ -232,3 +232,48 @@ it("renders one policy control per issuer while preserving every subject row", (
     screen.getAllByRole("button", { name: /Remove .* access/ }),
   ).toHaveLength(3);
 });
+
+it("counts an assistant's running sandboxes on one row instead of listing each", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_kit",
+    name: "kit-runtime-122e3a27241b5dded18087937b188cbe",
+    issuer: "https://container.googleapis.com/v1/example",
+    jwksUri: "https://container.googleapis.com/v1/example/openid/jwks",
+    description: "",
+    tags: ["kit-runtime"],
+    allowAssertionReuse: true,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "proj_example",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [issuer];
+  mocks.admissions = [
+    admission(),
+    ...["a", "b", "c"].map((n) =>
+      admission({
+        id: `adm_kit_${n}`,
+        workloadIssuerId: issuer.id,
+        issuerName: issuer.name,
+        matchKind: "exact",
+        subject: `system:serviceaccount:assistants:kit-${n}`,
+        tags: ["kit-runtime"],
+      }),
+    ),
+  ];
+  renderPanel();
+  expect(screen.getAllByText("Assistant runtime")).toHaveLength(1);
+  expect(screen.getByText("3 running sandboxes")).toBeTruthy();
+  expect(screen.queryByText(issuer.name)).toBeNull();
+  expect(
+    screen.getAllByRole("button", {
+      name: `Edit ${issuer.name} issuer policy`,
+    }),
+  ).toHaveLength(1);
+  // Removing one sandbox's sign-in only breaks that sandbox, so only the
+  // platform's own row offers it.
+  expect(
+    screen.getAllByRole("button", { name: /Remove .* access/ }),
+  ).toHaveLength(1);
+});

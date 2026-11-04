@@ -53,7 +53,7 @@ func latestPayload(t *testing.T, conn *pgxpool.Pool, orgID string) events.AuditL
 
 // A security event lands in security_audit_logs only and publishes the same
 // webhook event as a configuration change, with its category.
-func TestLogWorkloadAdmissionAdmit(t *testing.T) {
+func TestLogWorkloadAdmissionWithdraw(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -63,30 +63,30 @@ func TestLogWorkloadAdmissionAdmit(t *testing.T) {
 	agentID := uuid.NewString()
 	admission := uuid.New()
 
-	err = securityevent.LogWorkloadAdmissionAdmit(ctx, conn, audit.LogWorkloadAdmissionAdmitEvent{
-		OrganizationID:         orgID,
-		ProjectID:              uuid.NullUUID{},
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
-		ActorDisplayName:       nil,
-		ActorSlug:              nil,
-		AdmissionURN:           urn.NewWorkloadAdmission(admission),
-		AdmissionDisplayName:   "system:serviceaccount:ns:kit-test",
-		AdmissionSnapshotAfter: &audit.WorkloadAdmissionSnapshot{Subject: "system:serviceaccount:ns:kit-test", AssignedAgentID: agentID},
+	err = securityevent.LogWorkloadAdmissionWithdraw(ctx, conn, audit.LogWorkloadAdmissionWithdrawEvent{
+		OrganizationID:          orgID,
+		ProjectID:               uuid.NullUUID{},
+		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"),
+		ActorDisplayName:        nil,
+		ActorSlug:               nil,
+		AdmissionURN:            urn.NewWorkloadAdmission(admission),
+		AdmissionDisplayName:    "system:serviceaccount:ns:kit-test",
+		AdmissionSnapshotBefore: &audit.WorkloadAdmissionSnapshot{Subject: "system:serviceaccount:ns:kit-test", AssignedAgentID: agentID},
 	})
 	require.NoError(t, err)
 
-	record, err := audittest.LatestSecurityAuditLogByAction(ctx, conn, audit.ActionWorkloadAdmissionAdmit)
+	record, err := audittest.LatestSecurityAuditLogByAction(ctx, conn, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.Equal(t, admission.String(), record.SubjectID)
 	require.Equal(t, "workload_admission", record.SubjectType)
-	require.Equal(t, agentID, record.ActorID)
-	require.Equal(t, "agent", record.ActorType)
+	require.Equal(t, "user-1", record.ActorID)
+	require.Equal(t, "user", record.ActorType)
 	require.NotNil(t, record.ActingSurface, "the acting surface is stamped as on the configuration log")
-	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 	require.NoError(t, err)
-	require.Equal(t, agentID, after["assigned_agent_id"])
+	require.Equal(t, agentID, before["assigned_agent_id"])
 
-	configuration, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionWorkloadAdmissionAdmit)
+	configuration, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.Zero(t, configuration, "nothing is written to the configuration log")
 

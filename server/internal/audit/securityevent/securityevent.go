@@ -1,14 +1,13 @@
 // Package securityevent records security activity that is not a configuration
-// decision, such as a runtime admitting its own workload identity on every
-// start, in security_audit_logs.
+// decision in security_audit_logs, and reads it back.
 //
 // Configuration changes made by an organization's members or the Speakeasy
 // team belong in the audit package and its audit_logs table, which customers
 // read as their configuration history. Security activity happens far more
-// often, so it is kept in its own table. The same action can belong to either
-// log: an admin admitting a workload is a configuration change, a runtime
-// admitting itself is a security event. The caller decides by choosing the
-// package.
+// often, so it is kept in its own table. The caller decides by choosing the
+// package. Activity that only tracks runtime churn, such as a Kit runtime
+// admitting and withdrawing its own workload on every start and teardown, is
+// not recorded in either log.
 //
 // Entries carry the same columns as audit_logs, are stamped with the same
 // acting surface and client, and publish the same webhook events with category
