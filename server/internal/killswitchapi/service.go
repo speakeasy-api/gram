@@ -84,7 +84,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitchapi"), logger: logger,
-		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized,
+		auth: gramauth.New(logger, db, sessionManager, authzClient), db: db, authorized: authorized,
 		user: user, server: server,
 	}, nil
 }

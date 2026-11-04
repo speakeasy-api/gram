@@ -48,7 +48,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	require.NoError(t, err)
 	chatID := threadRow.ChatID
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
-	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), nil)
+	manager := assistanttokens.New("test-secret", db, authztest.NewParityClient(t, engine), newTestPrincipalCredentials(t, db), nil)
 	issuerID := uuid.New()
 	subject := "runtime-generation-one"
 	persist := func(subject string) {

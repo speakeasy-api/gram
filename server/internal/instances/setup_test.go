@@ -54,6 +54,6 @@ func newTestInstanceService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	policy, err := guardian.NewUnsafePolicy(tracer, nil)
 	require.NoError(t, err)
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracer, meter, conn, sessions, nil, env, enc, testenv.NewMemoryCache(), policy, nil, nil, billingClient, telemetry.NewStub(logger), nil, testenv.DefaultSiteURL(t), engine, mcpriskscan.NewNoop(tracer, meter, logger))
+	svc := NewService(logger, tracer, meter, conn, sessions, nil, env, enc, testenv.NewMemoryCache(), policy, nil, nil, billingClient, telemetry.NewStub(logger), nil, testenv.DefaultSiteURL(t), engine, authztest.NewParityClient(t, engine), mcpriskscan.NewNoop(tracer, meter, logger))
 	return ctx, svc, conn
 }

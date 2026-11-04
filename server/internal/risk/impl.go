@@ -279,7 +279,7 @@ func NewService(
 			AfterCommit: newExclusionAfterCommit(logger, reconciler),
 			Redactor:    exclusioncore.NewRedactor(jwtSecret),
 		}),
-		auth:                         auth.New(logger, db, sessions, authzEngine),
+		auth:                         auth.New(logger, db, sessions, authorization),
 		authzClient:                  authorization,
 		signaler:                     signaler,
 		reconciler:                   reconciler,

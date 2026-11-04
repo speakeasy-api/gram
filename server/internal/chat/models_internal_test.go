@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func TestHandleModelsRejectsInvalidRuntimeCredentialWithoutFallback(t *testing.T
 	// The runtime verifier requires RS256. No session/API-key fallback is wired:
 	// attempting that path instead of refusing the credential would panic.
 	svc := &Service{
-		assistantTokens: assistanttokens.New("", nil, nil, principalcredential.New(&mcpauthz.Issuer{}, nil), nil),
+		assistantTokens: assistanttokens.New("", nil, nil, principalcredential.New(&mcpauthz.Issuer{}, nil, authztest.NewLoadedGrantsClient()), nil),
 	}
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/chat/models", nil)
 	req.Header.Set("Authorization", "Bearer "+raw)

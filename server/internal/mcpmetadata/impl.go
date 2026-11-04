@@ -281,7 +281,7 @@ func NewService(
 		projectsRepo:   projects_repo.New(db),
 		orgsRepo:       organizations_repo.New(db),
 		domainsRepo:    customdomains_repo.New(db),
-		auth:           auth.New(logger, db, sessions, authzEngine),
+		auth:           auth.New(logger, db, sessions, authzClient),
 		authz:          authzClient,
 		serverURL:      serverURL,
 		siteURL:        siteURL,

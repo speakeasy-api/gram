@@ -399,7 +399,7 @@ func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options
 	}
 
 	return ctx, &testInstance{
-		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc, coordinator, options...),
+		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), provisioner, enc, coordinator, options...),
 		conn:        conn,
 		enc:         enc,
 		provisioner: stub,

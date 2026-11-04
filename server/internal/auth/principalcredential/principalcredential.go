@@ -96,10 +96,13 @@ type claims struct {
 type Issuer struct {
 	signer *mcpauthz.Issuer
 	db     *pgxpool.Pool
+	// authz decides whether the authorizer's own loaded grants still allow
+	// reading the credential's project.
+	authz *authz.Client
 }
 
-func New(signer *mcpauthz.Issuer, db *pgxpool.Pool) *Issuer {
-	return &Issuer{signer: signer, db: db}
+func New(signer *mcpauthz.Issuer, db *pgxpool.Pool, authzClient *authz.Client) *Issuer {
+	return &Issuer{signer: signer, db: db, authz: authzClient}
 }
 
 func checkShape(c Credential) error {
@@ -263,8 +266,7 @@ func (i *Issuer) checkAuthorizer(ctx context.Context, c Credential) error {
 	if err != nil {
 		return fmt.Errorf("load principal credential authorizer grants: %w", err)
 	}
-	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: c.ProjectID.String(), Dimensions: nil}
-	allowed, err := authz.GrantsAuthorize(grants, check)
+	allowed, err := i.authz.EvaluateGrants(ctx, grants, authz.Project(c.OrganizationID, c.ProjectID.String()).Read())
 	if err != nil {
 		return fmt.Errorf("check principal credential authorizer: %w", err)
 	}

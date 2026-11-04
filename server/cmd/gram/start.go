@@ -1124,10 +1124,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			principalCredentials := principalcredential.New(callerAssertions, db)
+			principalCredentials := principalcredential.New(callerAssertions, db, authzClient)
 			deviceAgentTokens := deviceagenttoken.New(callerAssertions, db)
 
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzClient, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -1523,7 +1523,7 @@ func newStartCommand() *cli.Command {
 			agentService.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
-			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
+			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1615,7 +1615,7 @@ func newStartCommand() *cli.Command {
 					NewOrganizationDefaultHost:   orgHosts.NewOrganizationDefaultHost(),
 					OrgHosts:                     orgHosts,
 				},
-				authzEngine,
+				authzEngine, authzClient,
 				billingRepo,
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
@@ -1724,7 +1724,7 @@ func newStartCommand() *cli.Command {
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, authzClient, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
-			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
+			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, authzClient, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, authzClient, auditLogger))
 			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, productFeatures)
 			sigint.Attach(mux, sigintSvc)
@@ -1732,16 +1732,16 @@ func newStartCommand() *cli.Command {
 			// The manual trigger bypasses the write-throttled signaler on purpose:
 			// an admin pressing "run now" wants the coordinator woken immediately,
 			// not coalesced into the chat-write cooldown.
-			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
+			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
 			openRouterAdminCoordinator := &background.TemporalOpenRouterAdminCoordinator{TemporalEnv: temporalEnv}
-			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient, openRouterAdminCoordinator))
+			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, openRouter, encryptionClient, openRouterAdminCoordinator))
 			// Platform break-glass remains separately unavailable; this composition is
 			// intentionally customer-only and enforces ordinary live admin sessions.
 			// DNO-979 owns production definitions and authoritative validators. Keep
 			// this break-glass transport mounted but explicitly unavailable until
 			// that safe lifecycle composition exists.
-			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
+			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, nil))
 			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
 			if err != nil {
 				return fmt.Errorf("build customer killswitch service: %w", err)
@@ -1755,7 +1755,7 @@ func newStartCommand() *cli.Command {
 				WithPublicationRequests(publicationEmit)
 			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler)
 			toolsets.Attach(mux, toolsetsSvc)
-			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, authzClient, auditLogger))
 			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, authzClient, auditLogger)
 			assets.Attach(mux, assetsService)
@@ -1769,7 +1769,7 @@ func newStartCommand() *cli.Command {
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)), featureFlags)
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, authzClient, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
-			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
+			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, authzClient, auditLogger))
 			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, encryptionClient))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
@@ -1790,8 +1790,8 @@ func newStartCommand() *cli.Command {
 			}
 			hiddenmcpservers.Attach(mux, hiddenmcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient))
 			oktaserversuggestions.Attach(mux, oktaserversuggestions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, featureFlags, registryValidator))
-			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
-			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
+			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, redisClient, c.String("environment")))
+			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, authzClient))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, authzClient, auditLogger))
 
 			networkIngressQueue := c.String(networkIngressQueueFlag)
@@ -1818,7 +1818,7 @@ func newStartCommand() *cli.Command {
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, authzClient, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures, protectedResources)
 			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, authzClient, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
 			usersessions.Attach(mux, userSessionsService)
-			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
+			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, c.String("environment")))
 			remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService.SetFeatureFlags(featureFlags)
 			remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
@@ -1891,11 +1891,11 @@ func newStartCommand() *cli.Command {
 					return nil
 				})
 			mcpapproval.Attach(mux, mcpApprovalService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, authzClient, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			if c.Bool("registry-discovery-enabled") {
 				registry := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
-				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzClient); err != nil {
+				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzClient), authzClient); err != nil {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
@@ -1921,7 +1921,7 @@ func newStartCommand() *cli.Command {
 			riskFindings := riskchrepo.New(chDB)
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
-			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
+			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
 			platformMCPCfg := platformMCPConfig{
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,

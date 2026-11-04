@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"sync"
 	"testing"
 	"time"
@@ -221,7 +222,7 @@ func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 	require.NoError(t, err)
 	signer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
 	require.NoError(t, err)
-	credentials := principalcredential.New(signer, f.db)
+	credentials := principalcredential.New(signer, f.db, authztest.NewLoadedGrantsClient())
 	raw, _, err := credentials.Mint(principalcredential.Credential{
 		OrganizationID: "org-trigger-test", ProjectID: f.projectID, AuthorizerUserID: "",
 		Principal: urn.NewWorkloadPrincipal(resolved.Identity.IssuerID, resolved.Identity.Subject),

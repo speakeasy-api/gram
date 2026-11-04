@@ -51,7 +51,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions, authzEngine),
+		auth:   auth.New(logger, db, sessions, authzClient),
 		authz:  authzClient,
 	}
 }

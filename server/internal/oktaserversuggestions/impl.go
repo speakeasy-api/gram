@@ -84,7 +84,7 @@ func NewService(
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaserversuggestions"),
 		logger:    logger,
 		db:        db,
-		auth:      auth.New(logger, db, sessionManager, authzEngine),
+		auth:      auth.New(logger, db, sessionManager, authzClient),
 		authz:     authzClient,
 		audit:     auditLogger,
 		features:  features,

@@ -133,15 +133,8 @@ internal/assistantidentity/provision.go,*Service.selectAgent,evaluator,GrantsSat
 internal/assistantidentity/provision.go,*Service.selectAgent,loader,LoadGrants,,,1,AG1 AIS-856
 internal/assistantidentity/provision.go,*Service.selectAgent,loader,ResolveUserPrincipals,,,1,AG1 AIS-856
 internal/assistants/runtime_kit_workload.go,*ServiceCore.provisionKitWorkload,loader,LoadGrants,,,1,AS1 AIS-860
-internal/auth/assistanttokens/manager.go,*Manager.Authorize,engine,PrepareContext,,,1,A1 AIS-879
-internal/auth/auth.go,*Auth.authorize,engine,PrepareContext,,,1,A1 AIS-879
-internal/auth/auth.go,*Auth.requireResolvedProjectAccess,check,Check,ScopeProjectRead,Require,1,A1 AIS-879
 internal/auth/enterprise_trial.go,*Service.armSelfServeTrialForExistingOrganization,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
-internal/auth/impl.go,*Service.APIKeyAuth,engine,PrepareContext,,,1,A1 AIS-879
-internal/auth/impl.go,*Service.Info,check,Check,ScopeProjectRead,,1,A1 AIS-879
-internal/auth/principalcredential/principalcredential.go,*Issuer.checkAuthorizer,check,Check,ScopeProjectRead,,1,A1 AIS-879
-internal/auth/principalcredential/principalcredential.go,*Issuer.checkAuthorizer,evaluator,GrantsAuthorize,,,1,A1 AIS-879
-internal/auth/principalcredential/principalcredential.go,*Issuer.checkAuthorizer,loader,LoadGrants,,,1,A1 AIS-879
+internal/auth/principalcredential/principalcredential.go,*Issuer.checkAuthorizer,loader,LoadGrants,,,1,X1 AIS-873
 internal/authclients/audience.go,*Service.SetAuthClientAudience,writer,ValidatePrincipal,,,1,M5 AIS-863
 internal/authclients/audience.go,SetPrincipalLevel,writer,ValidatePrincipal,,,1,M5 AIS-863
 internal/authclients/audience.go,clientGrants,loader,ListGrantsForResource,,,1,M5 AIS-863

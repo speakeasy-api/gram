@@ -110,7 +110,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		chConn:      chConn,
-		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		auth:        auth.New(logger, db, sessionManager, authzClient),
 		authzClient: authzClient,
 		audit:       auditLogger,
 		celEng:      celEng,

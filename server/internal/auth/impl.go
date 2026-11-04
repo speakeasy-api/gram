@@ -146,7 +146,7 @@ type Service struct {
 	sessions             *authsessions.Manager
 	identity             *identity.Resolver
 	cfg                  AuthConfigurations
-	authz                *authz.Engine
+	authzClient          *authz.Client
 	billing              billing.Repository
 	cancelSubsScheduler  AssistantsSubscriptionCancelScheduler
 	posthog              *posthog.Posthog
@@ -182,6 +182,7 @@ func NewService(
 	identityResolver *identity.Resolver,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
@@ -209,7 +210,7 @@ func NewService(
 		sessions:             sessions,
 		identity:             identityResolver,
 		cfg:                  cfg,
-		authz:                authzEngine,
+		authzClient:          authzClient,
 		billing:              billingRepo,
 		cancelSubsScheduler:  cancelSubsScheduler,
 		posthog:              posthogClient,
@@ -322,7 +323,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if err != nil {
 		return ctx, err
 	}
-	ctx, err = s.authz.PrepareContext(ctx)
+	ctx, err = s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
 	}
@@ -1237,13 +1238,19 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 
 		allowedIDs := projectIDs
 		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			checks := make([]authz.Check, len(projectIDs))
+			ops := make([]authz.Operation, len(projectIDs))
 			for i, id := range projectIDs {
-				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+				ops[i] = authz.Project(org.ID, id).Read()
 			}
-			allowedIDs, err = s.authz.Filter(ctx, checks)
+			matched, err := s.authzClient.MatchMany(ctx, ops)
 			if err != nil {
 				return nil, err
+			}
+			allowedIDs = make([]string, 0, len(projectIDs))
+			for i, id := range projectIDs {
+				if matched[i] {
+					allowedIDs = append(allowedIDs, id)
+				}
 			}
 		}
 

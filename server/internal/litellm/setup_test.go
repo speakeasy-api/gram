@@ -202,7 +202,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chConn:    chConn,
 		telemetry: telemetryLogger,
 		observer:  observer,
-		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
+		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger),
 	}
 }
 

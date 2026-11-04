@@ -154,7 +154,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
 		db:                db,
-		auth:              auth.New(logger, db, sessionMgr, authzEngine),
+		auth:              auth.New(logger, db, sessionMgr, authzClient),
 		authzClient:       authzClient,
 		sessions:          sessionMgr,
 		orgs:              orgs,

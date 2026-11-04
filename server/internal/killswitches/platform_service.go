@@ -50,12 +50,13 @@ func NewPlatformService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	generic GenericService,
 ) *PlatformService {
 	return &PlatformService{
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitches/platform"),
 		logger:   logger,
-		auth:     gramauth.New(logger, db, sessionManager, authzEngine),
+		auth:     gramauth.New(logger, db, sessionManager, authzClient),
 		sessions: sessionManager,
 		generic:  generic,
 	}

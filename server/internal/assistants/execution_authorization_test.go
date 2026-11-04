@@ -55,7 +55,7 @@ func newTestPrincipalCredentials(t *testing.T, db *pgxpool.Pool) *principalcrede
 	require.NoError(t, err)
 	signer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
 	require.NoError(t, err)
-	return principalcredential.New(signer, db)
+	return principalcredential.New(signer, db, authztest.NewLoadedGrantsClient())
 }
 
 func seedMCPConnect(t *testing.T, db *pgxpool.Pool, user string, project uuid.UUID) {
@@ -86,7 +86,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
-	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+	manager := assistanttokens.New("test-secret", db, authztest.NewParityClient(t, engine), newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
 	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}

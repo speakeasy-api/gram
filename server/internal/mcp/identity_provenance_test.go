@@ -4,6 +4,7 @@
 package mcp_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -82,7 +83,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, authztest.NewParityClient(t, ti.authzEngine), nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,
@@ -149,7 +150,7 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 
 	t.Run("chat-scope API key stamps api_key", func(t *testing.T) {
 		t.Parallel()
-		keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit)
+		keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit)
 		key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 			Name:   "chat-scope-key",
 			Scopes: []string{"chat"},

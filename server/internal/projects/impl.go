@@ -68,7 +68,7 @@ func NewService(
 		repo:     repo.New(db),
 		core:     NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
 		sessions: sessions,
-		auth:     auth.New(logger, db, sessions, authzEngine),
+		auth:     auth.New(logger, db, sessions, authzClient),
 		authz:    authzClient,
 		audit:    auditLogger,
 	}

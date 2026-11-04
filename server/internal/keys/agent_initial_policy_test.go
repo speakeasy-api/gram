@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -40,7 +41,7 @@ func TestKeysService_InitialAgentPolicyCannotElevateCredentialAuthority(t *testi
 			upsertGrant(t, ctx, ti, owner, authz.ScopeMCPConnect, "*")
 			logger := testenv.NewLogger(t)
 			engine := authz.NewEngine(logger, ti.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-			management := agentmanagement.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, engine, audit.NewLogger(), nil, nil)
+			management := agentmanagement.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, nil)
 			agent, err := management.Create(ctx, &agentgen.CreatePayload{Name: "Initial policy agent", OwnerUserID: &ownerID, PolicyGrants: []*agentgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &agentgen.AgentPolicySelector{ResourceKind: "mcp", ResourceID: "*"}}}})
 			require.NoError(t, err)
 			agentID, err := uuid.Parse(agent.ID)

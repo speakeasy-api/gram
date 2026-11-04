@@ -101,6 +101,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	redisClient *redis.Client,
 	env string,
 ) *Service {
@@ -109,7 +110,7 @@ func NewService(
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/cliauth"),
 		logger:      logger,
 		db:          db,
-		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		auth:        auth.New(logger, db, sessionManager, authzClient),
 		sessions:    sessionManager,
 		pkce:        oauth.NewPKCEService(logger),
 		redis:       redisClient,

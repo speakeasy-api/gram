@@ -60,7 +60,7 @@ func NewService(
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/businessmemory"),
 		logger:      logger,
 		db:          db,
-		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		auth:        auth.New(logger, db, sessionManager, authzClient),
 		authzClient: authzClient,
 		completions: completions,
 	}

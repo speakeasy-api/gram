@@ -133,7 +133,7 @@ func admitWorkloads(t *testing.T, ti *testInstance) {
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 	})
 	ti.service.authzClient = authztest.NewParityClient(t, engine)
-	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
+	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, ti.service.authzClient)
 }
 
 // authenticateWorkload runs the device-agent token requirement Goa runs for

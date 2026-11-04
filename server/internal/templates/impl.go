@@ -71,7 +71,7 @@ func NewService(
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
 		logger:     logger,
 		db:         db,
-		auth:       auth.New(logger, db, sessions, authzEngine),
+		auth:       auth.New(logger, db, sessions, authzClient),
 		repo:       repo.New(db),
 		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, authzClient, auditLogger),
 		toolsets:   toolsets,

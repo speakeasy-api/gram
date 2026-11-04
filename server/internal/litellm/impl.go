@@ -72,7 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
 		logger:      logger.With(attr.SlogComponent("litellm")),
-		auth:        auth.New(logger, db, sessionsManager, authzEngine),
+		auth:        auth.New(logger, db, sessionsManager, authzClient),
 		hooks:       hookIngester,
 		calls:       calls,
 		traces:      traces,
