@@ -32,7 +32,7 @@ import {
   isNotableActingSurface,
 } from "@/lib/audit-surfaces";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
-import { scopeLabel } from "@/pages/access/scopeCatalogue";
+import { scopeLabel, type ScopeCatalogue } from "@/pages/access/scopeCatalogue";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -243,6 +243,7 @@ function AuditLogRow({
   isHighlighted,
   rowRef,
   highlightMatch,
+  catalogue,
 }: {
   log: AuditLog;
   identities: ReturnType<typeof useAuditPrincipals>;
@@ -252,10 +253,11 @@ function AuditLogRow({
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
+  /** Read once by the list, so every row shares the one subscription. */
+  catalogue: ScopeCatalogue;
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
-  const { catalogue } = useScopeCatalogue();
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
@@ -548,6 +550,7 @@ export default function OrgAuditLogs(): React.JSX.Element {
 function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
+  const { catalogue } = useScopeCatalogue();
   const {
     values: rawFilterValues,
     setValue: setFilterValue,
@@ -1172,6 +1175,7 @@ function OrgAuditLogsInner() {
                             }
                             orgSlug={orgSlug ?? ""}
                             timestampMode={tsMode}
+                            catalogue={catalogue}
                             isHighlighted={idx === currentLogIndex}
                             rowRef={(el) => {
                               if (el) logRefs.current.set(idx, el);

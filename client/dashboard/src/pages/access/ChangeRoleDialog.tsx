@@ -55,7 +55,12 @@ export function ChangeRoleDialog({
   const [confirmed, setConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
-  const { catalogue } = useScopeCatalogue();
+  const {
+    catalogue,
+    isLoading: scopesLoading,
+    isError: scopesError,
+    refetch: refetchScopes,
+  } = useScopeCatalogue();
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
 
@@ -111,7 +116,11 @@ export function ChangeRoleDialog({
   }, [originalRoleIds, selectedRoleIds, roleById, catalogue]);
   const needsConfirmation = added.sensitive.length > 0;
 
+  // Sensitivity is read off the catalogue, so until it has loaded without
+  // error nothing can be told apart from safe and the update waits.
   const updateDisabled =
+    scopesLoading ||
+    scopesError ||
     isUpdateDisabled({
       isPending: updateMemberRoles.isPending,
       selectedIds: selectedRoleIds,
@@ -243,6 +252,21 @@ export function ChangeRoleDialog({
               summary={added}
               labelFor={(scope) => scopeLabel(catalogue, scope)}
             />
+            {scopesLoading && (
+              <Text muted small>
+                Loading permissions…
+              </Text>
+            )}
+            {scopesError && (
+              <div className="flex items-center justify-between gap-3">
+                <Text variant="body" className="text-destructive text-sm">
+                  Failed to load permissions, so roles can't be changed yet.
+                </Text>
+                <Button variant="secondary" size="sm" onClick={refetchScopes}>
+                  Retry
+                </Button>
+              </div>
+            )}
             {needsConfirmation && (
               <label className="flex cursor-pointer items-start gap-3 text-left">
                 <Checkbox

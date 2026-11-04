@@ -659,6 +659,14 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		}
 	}
 
+	// What the members and agents this save assigns gain by holding the role,
+	// read before the assignments are written so a principal that already
+	// holds it adds nothing.
+	assignedSensitive, err := r.sensitiveScopesForNewHoldersTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, payload.MemberIds, payload.AgentIds)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, err
+	}
+
 	if payload.AgentIds != nil {
 		if err := r.assignAgentsToRoleTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, payload.AgentIds); err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, err
@@ -690,9 +698,9 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		RoleSlug:           updatedRole.Slug,
 		RoleSnapshotBefore: existingRole,
 		RoleSnapshotAfter:  updatedRoleView,
-		SensitiveScopesAdded: authz.SensitiveScopesAdded(
-			grantScopes(existingGrants),
-			grantScopes(updatedGrants),
+		SensitiveScopesAdded: mergeSensitiveScopes(
+			authz.SensitiveScopesAdded(grantScopes(existingGrants), grantScopes(updatedGrants)),
+			assignedSensitive,
 		),
 	}); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role update").LogError(ctx, r.logger)
@@ -1929,6 +1937,88 @@ func (r *RoleManager) sensitiveScopesAddedTx(ctx context.Context, tx pgx.Tx, org
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants after role change").LogError(ctx, r.logger)
 	}
 	return authz.SensitiveScopesAdded(beforeScopes, afterScopes), nil
+}
+
+// sensitiveScopesForNewHoldersTx names the sensitive scopes the members and
+// agents a role save assigns gain by holding it, merged across every principal
+// that did not already hold the role. It reads memberships before the save
+// writes them, so re-saving a role's existing holders reports nothing.
+func (r *RoleManager) sensitiveScopesForNewHoldersTx(ctx context.Context, tx pgx.Tx, orgID, roleURN string, memberIDs, agentIDs []string) ([]string, error) {
+	var heldBefore [][]string
+	if len(memberIDs) > 0 {
+		targets, err := r.memberAssignmentTargetsTx(ctx, tx, orgID, memberIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, target := range targets {
+			if target.WorkosUserID == "" {
+				continue
+			}
+			rows, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+				OrganizationID: orgID,
+				WorkosUserID:   target.WorkosUserID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list member roles before assignment").LogError(ctx, r.logger)
+			}
+			held := make([]string, 0, len(rows))
+			for _, row := range rows {
+				held = append(held, row.PrincipalUrn)
+			}
+			heldBefore = append(heldBefore, held)
+		}
+	}
+	if len(agentIDs) > 0 {
+		byRole, err := r.agentIDsByRoleTx(ctx, tx, orgID)
+		if err != nil {
+			return nil, err
+		}
+		rolesByAgent := make(map[string][]string, len(agentIDs))
+		for role, agents := range byRole {
+			for _, agent := range agents {
+				rolesByAgent[agent] = append(rolesByAgent[agent], role)
+			}
+		}
+		for _, raw := range agentIDs {
+			agentID, err := uuid.Parse(raw)
+			if err != nil {
+				// The assignment itself rejects the save.
+				continue
+			}
+			heldBefore = append(heldBefore, rolesByAgent[agentID.String()])
+		}
+	}
+
+	perHolder := make([][]string, 0, len(heldBefore))
+	for _, held := range heldBefore {
+		if slices.Contains(held, roleURN) {
+			continue
+		}
+		scopes, err := r.sensitiveScopesAddedTx(ctx, tx, orgID, held, append(slices.Clone(held), roleURN))
+		if err != nil {
+			return nil, err
+		}
+		perHolder = append(perHolder, scopes)
+	}
+	return mergeSensitiveScopes(perHolder...), nil
+}
+
+// mergeSensitiveScopes unions lists of sensitive scopes, in catalogue order
+// and without duplicates. Nil when every list is empty.
+func mergeSensitiveScopes(lists ...[]string) []string {
+	set := make(map[string]struct{})
+	for _, list := range lists {
+		for _, scope := range list {
+			set[scope] = struct{}{}
+		}
+	}
+	var merged []string
+	for _, scope := range authz.SensitiveScopes() {
+		if _, ok := set[string(scope)]; ok {
+			merged = append(merged, string(scope))
+		}
+	}
+	return merged
 }
 
 func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *gen.Role {

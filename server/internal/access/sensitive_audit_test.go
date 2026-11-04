@@ -110,6 +110,64 @@ func TestService_UpdateRole_AuditLog_SensitiveScopesAdded(t *testing.T) {
 	require.Nil(t, record.Metadata)
 }
 
+func TestService_UpdateRole_AuditLog_SensitiveScopesAdded_NewHolders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_builder", "Builder", "custom-builder", ""))
+	reviewerID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_reviewer", "Reviewer", "custom-reviewer", ""))
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+reviewerID), authz.ScopeLogRead, "project-1")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "custom-builder"))
+
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-reviewer", mock.Anything).Return(&thirdpartyworkos.Role{
+		ID:          "role_reviewer",
+		Name:        "Reviewer",
+		Slug:        "custom-reviewer",
+		Description: "",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Maybe()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlugs:      []string{"custom-builder", "custom-reviewer"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Maybe()
+
+	// The role's grants do not change, but the member it is given to did not
+	// hold log:read before, so the row names what they gain.
+	updated, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        reviewerID,
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
+	require.NoError(t, err)
+	require.Equal(t, reviewerID, record.SubjectID)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{string(authz.ScopeLogRead)}, metadata["sensitive_scopes_added"])
+
+	// Saving the same membership again gives nobody anything new.
+	updated, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        reviewerID,
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	record, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
+	require.NoError(t, err)
+	require.Nil(t, record.Metadata)
+}
+
 func TestService_UpdateMemberRoles_AuditLog_SensitiveScopesAdded(t *testing.T) {
 	t.Parallel()
 

@@ -1,8 +1,10 @@
+import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import { describe, expect, it } from "vitest";
 
 import {
   addedPermissions,
+  liftedExceptions,
   permissionsAddedByRoles,
   rolePermissionSummary,
 } from "./reviewGrants";
@@ -32,6 +34,7 @@ const catalogue = scopeCatalogue([
   def("org:admin", "Manage organization", {
     sensitive: true,
     subScopes: ["org:read", "chat:read"],
+    exclusionScope: "org:blocked_admin" as ScopeDefinition["exclusionScope"],
   }),
   def("org:blocked_read", "Blocked: view organization", {
     visibility: "internal" as ScopeDefinition["visibility"],
@@ -131,6 +134,34 @@ describe("rolePermissionSummary", () => {
       "chat:write",
     ]);
     expect(summary.sensitive).toEqual(["chat:read", "chat:write"]);
+  });
+});
+
+describe("liftedExceptions", () => {
+  const exception: SdkRoleGrant = {
+    scope: "org:blocked_admin" as never,
+    selectors: [{ resourceKind: "org", resourceId: "org-1" }],
+  };
+  const allowAdmin: SdkRoleGrant = {
+    scope: "org:admin" as never,
+    selectors: undefined,
+  };
+
+  it("reviews a lifted exception as a grant of the permission it withheld", () => {
+    expect(liftedExceptions([exception], [allowAdmin], catalogue)).toEqual([
+      {
+        scope: "org:admin",
+        selectors: [{ resourceKind: "org", resourceId: "org-1" }],
+      },
+    ]);
+  });
+
+  it("lifts nothing when the role no longer allows the permission", () => {
+    expect(liftedExceptions([exception], [], catalogue)).toEqual([]);
+  });
+
+  it("ignores removed allows", () => {
+    expect(liftedExceptions([allowAdmin], [allowAdmin], catalogue)).toEqual([]);
   });
 });
 

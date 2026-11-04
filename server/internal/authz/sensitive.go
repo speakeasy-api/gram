@@ -5,6 +5,13 @@ package authz
 // counts everything its scopes imply, so adding org:admin to a holder of
 // org:read reports org:admin, and adding chat:write to a holder of chat:read
 // reports chat:write alone. Nil when nothing sensitive was added.
+//
+// Exception scopes (*:blocked_*) are grants of nothing: they withdraw access
+// rather than give it, are never sensitive themselves, and imply no other
+// scope, so they are ignored on both sides. A side that holds org:admin
+// together with org:blocked_admin therefore counts as holding org:admin, and
+// lifting the exception alone is not reported here. The dashboard reviews
+// such a lift as an addition before the save is sent.
 func SensitiveScopesAdded(before, after []Scope) []string {
 	had := impliedScopes(before)
 	has := impliedScopes(after)

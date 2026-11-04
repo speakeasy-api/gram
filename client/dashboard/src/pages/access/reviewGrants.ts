@@ -65,6 +65,38 @@ export function addedPermissions(
   return [...byScope.values()];
 }
 
+/**
+ * Exceptions a save lifts, as grants of the permission they withheld. Removing
+ * a `*:blocked_*` grant from a role that still allows the scope gives the
+ * scope back wherever the exception applied, so it is reviewed as an
+ * addition. Exceptions on scopes the role no longer allows lift nothing.
+ */
+export function liftedExceptions(
+  removeGrants: readonly SdkRoleGrant[],
+  after: readonly SdkRoleGrant[],
+  catalogue: ScopeCatalogue,
+): SdkRoleGrant[] {
+  const allowed = new Set(after.map((grant) => grant.scope as string));
+  const lifted: SdkRoleGrant[] = [];
+  for (const grant of removeGrants) {
+    const base = baseScopeOfException(catalogue, grant.scope as string);
+    if (base && allowed.has(base)) {
+      lifted.push({ ...grant, scope: base as SdkRoleGrant["scope"] });
+    }
+  }
+  return lifted;
+}
+
+function baseScopeOfException(
+  catalogue: ScopeCatalogue,
+  exception: string,
+): string | undefined {
+  for (const entry of catalogue.values()) {
+    if (entry.exclusionScope === exception) return entry.slug as string;
+  }
+  return undefined;
+}
+
 /** The permissions a set of roles gives, in catalogue order, closed over inclusion. */
 function permissionsOfRoles(
   roles: readonly Pick<Role, "grants">[],

@@ -32,7 +32,11 @@ import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
 import { ReviewGrantsStep } from "./ReviewGrantsStep";
-import { addedPermissions, type AddedPermission } from "./reviewGrants";
+import {
+  addedPermissions,
+  liftedExceptions,
+  type AddedPermission,
+} from "./reviewGrants";
 import { scopeCatalogue } from "./scopeCatalogue";
 import {
   clientTypeGrantChanges,
@@ -309,7 +313,13 @@ export function CreateRoleDialog({
       (agent) => agent.lifecycle === "active" || selectedAgents.has(agent.id),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
-  const { data: scopesData } = useListScopes();
+  const {
+    data: scopesData,
+    isError: scopesError,
+    refetch: refetchScopes,
+  } = useListScopes();
+  // Everything below reads the catalogue, so the save stays disabled until it
+  // has loaded; a failed fetch says why rather than leaving the button dead.
   const scopeDefinitions = scopesData?.scopes;
   const catalogue = useMemo(
     () => scopeCatalogue(scopeDefinitions),
@@ -680,12 +690,19 @@ export function CreateRoleDialog({
 
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
     if (dialogStep !== "review") {
-      const addGrants = isEditing
-        ? diffGrants(
-            sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
-            sdkGrants,
-          ).addGrants
-        : sdkGrants;
+      let addGrants = sdkGrants;
+      if (isEditing) {
+        const changes = diffGrants(
+          sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+          sdkGrants,
+        );
+        // Lifting an exception gives the permission back where it applied,
+        // so it is reviewed like an addition.
+        addGrants = [
+          ...changes.addGrants,
+          ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
+        ];
+      }
       const added = addedPermissions(addGrants, catalogue);
       if (added.length > 0) {
         setReview({ added, confirmed: false });
@@ -1299,6 +1316,20 @@ export function CreateRoleDialog({
                 after creation. I reviewed all permissions configured above.
               </Text>
             </label>
+          )}
+          {scopesError && (
+            <div className="flex items-center justify-between gap-3 self-stretch">
+              <Text variant="body" className="text-destructive text-sm">
+                Failed to load permissions, so the role can't be saved yet.
+              </Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetchScopes()}
+              >
+                Retry
+              </Button>
+            </div>
           )}
           <div className="flex justify-end gap-2 self-stretch">
             <Button variant="secondary" onClick={handleClose}>

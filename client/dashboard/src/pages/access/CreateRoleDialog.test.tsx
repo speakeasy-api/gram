@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  refetchScopes: vi.fn(),
+  scopesState: "ready" as "ready" | "loading" | "error",
   scimEnabled: false,
   members: [] as {
     id: string;
@@ -64,46 +66,52 @@ vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
 }));
 vi.mock("@gram/client/react-query/listScopes.js", () => ({
   useListScopes: () => ({
-    data: {
-      scopes: [
-        {
-          slug: "org:read",
-          resourceType: "org",
-          visibility: "user_visible",
-          label: "Read organization",
-        },
-        {
-          slug: "project:read",
-          resourceType: "project",
-          visibility: "user_visible",
-          description: "Read projects",
-          exclusionScope: "project:blocked_read",
-        },
-        {
-          slug: "inference:execute",
-          resourceType: "inference",
-          visibility: "user_visible",
-          label: "Run inference",
-          description: "Call the inference API in the selected projects.",
-        },
-        {
-          slug: "log:read",
-          resourceType: "project",
-          category: "log",
-          visibility: "user_visible",
-          label: "View tool logs",
-          description: "Read tool arguments and results.",
-          sensitive: true,
-          subScopes: [],
-        },
-        ...(["connect", "read", "write"] as const).map((action) => ({
-          slug: `mcp:${action}`,
-          resourceType: "mcp",
-          visibility: "user_visible",
-          exclusionScope: `mcp:blocked_${action}`,
-        })),
-      ],
-    },
+    isLoading: mocks.scopesState === "loading",
+    isError: mocks.scopesState === "error",
+    refetch: mocks.refetchScopes,
+    data:
+      mocks.scopesState !== "ready"
+        ? undefined
+        : {
+            scopes: [
+              {
+                slug: "org:read",
+                resourceType: "org",
+                visibility: "user_visible",
+                label: "Read organization",
+              },
+              {
+                slug: "project:read",
+                resourceType: "project",
+                visibility: "user_visible",
+                description: "Read projects",
+                exclusionScope: "project:blocked_read",
+              },
+              {
+                slug: "inference:execute",
+                resourceType: "inference",
+                visibility: "user_visible",
+                label: "Run inference",
+                description: "Call the inference API in the selected projects.",
+              },
+              {
+                slug: "log:read",
+                resourceType: "project",
+                category: "log",
+                visibility: "user_visible",
+                label: "View tool logs",
+                description: "Read tool arguments and results.",
+                sensitive: true,
+                subScopes: [],
+              },
+              ...(["connect", "read", "write"] as const).map((action) => ({
+                slug: `mcp:${action}`,
+                resourceType: "mcp",
+                visibility: "user_visible",
+                exclusionScope: `mcp:blocked_${action}`,
+              })),
+            ],
+          },
   }),
 }));
 vi.mock("@gram/client/react-query/createRole.js", () => ({
@@ -208,6 +216,7 @@ function submit(label: "Save Changes" | "Create Role") {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.scopesState = "ready";
   mocks.scimEnabled = false;
   mocks.members = [];
   // agents.list is paginated: it resolves to pages, which the dialog drains.
@@ -325,6 +334,43 @@ describe("agent assignment", () => {
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
     ).not.toHaveProperty("agentIds");
+  });
+});
+
+describe("while the permission catalogue is unavailable", () => {
+  // The review step reads sensitivity off the catalogue, so a save sent
+  // before it loads could add a sensitive permission unreviewed.
+  function createButton(): HTMLButtonElement {
+    return screen.getByRole("button", {
+      name: "Create Role",
+    }) as HTMLButtonElement;
+  }
+
+  it("keeps the save disabled while the catalogue loads", () => {
+    mocks.scopesState = "loading";
+    renderEditor();
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    expect(createButton().disabled).toBe(true);
+    fireEvent.click(createButton());
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("says why the save is disabled after the catalogue failed to load", () => {
+    mocks.scopesState = "error";
+    renderEditor();
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    expect(createButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Failed to load permissions, so the role can't be saved yet.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.refetchScopes).toHaveBeenCalledOnce();
   });
 });
 

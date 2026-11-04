@@ -26,7 +26,7 @@ export function RolePermissionPreview({
       <Text muted small>
         {lead} {total} {noun}
         {sensitive > 0
-          ? `, ${sensitive} of ${total === 1 ? "it" : "them"} sensitive:`
+          ? `, ${sensitive} ${sensitive === 1 ? "is" : "are"} sensitive:`
           : "."}
       </Text>
       {summary.sensitive.map((scope) => (
