@@ -98,7 +98,7 @@ func newShadowApprovalDistribution(t *testing.T, conn *pgxpool.Pool, suffix stri
 	dashboard, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	organizations := NewPostgresOrganizationSlugResolver(conn)
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn)).
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn)).
 		WithDistributionAdmission(admission.NewGuard().WithApprover(core)).
 		WithShadowMCPStanding(NewShadowDistributionReadService(logger, conn), NewShadowMCPReviewLinkService(dashboard, organizations)).
 		WithAdministratorAuthorization(engine)

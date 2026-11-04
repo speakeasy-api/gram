@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -212,7 +211,7 @@ func TestToolExposureServiceRequiresBothOperationBudgets(t *testing.T) {
 
 	compose := func(reads, changes OperationBudget) error {
 		_, err := NewMCPToolExposureService(
-			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), &authz.Engine{}, newDeliveryAuthz(t),
+			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), newDeliveryAuthz(t),
 			allowExternalCallAuthorizer{}, "key", plugins.PublicationRequests{}, nil, reads, changes,
 		)
 		return err

@@ -67,7 +67,7 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
 		published++
 		return nil
-	}, testPluginTargets(conn))
+	}, testPluginTargets(t, conn))
 	_, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.ErrorIs(t, err, ErrDistributionNotReady)
 
@@ -173,7 +173,7 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	})
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn))
 
 	// A plugin nobody has is refused rather than redirected to the default,
 	// which is the whole point of naming a target.
@@ -225,7 +225,7 @@ func TestDistributionServiceReportsAPluginWhoseAutoSyncIsOff(t *testing.T) {
 	principal, project := seedReadyDistributionTarget(t, ctx, conn)
 	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held", pgtype.Bool{Bool: false, Valid: true})
 	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Live Tools", "live", pgtype.Bool{})
-	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+	inventory := testPluginTargets(t, conn).WithPublicationEvidence(slugPublicationEvidence{
 		fresh: map[string]*bool{"held": new(false), "live": new(true)}, paused: map[string]bool{"held": true},
 	})
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)
@@ -264,7 +264,7 @@ func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 
 	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
 	require.NoError(t, err)
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn))
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestDistributionServicePreservesPreexistingAttachmentOnRemoval(t *testing.T
 	})
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn))
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 	require.True(t, distributed.AttachmentLive)
@@ -346,7 +346,7 @@ func TestDistributionServicePreservesAttachmentWhenPublicationFails(t *testing.T
 	principal, project := seedReadyDistributionTarget(t, ctx, conn)
 	publishErr := errors.New("local fixture publication failure")
 	publish := func(context.Context, uuid.UUID, string, string) error { return publishErr }
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), publish, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), publish, testPluginTargets(t, conn))
 
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
@@ -417,9 +417,10 @@ func testExistingPluginAttacher() ExistingPluginAttacher {
 
 // testPluginTargets resolves named plugin targets against the same inventory
 // the plugin tools read.
-func testPluginTargets(conn *pgxpool.Pool) *PluginsService {
+func testPluginTargets(t *testing.T, conn *pgxpool.Pool) *PluginsService {
+	t.Helper()
 	limiter := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
-	return NewPluginsService(conn, OperationBudget{Connection: limiter(), Organization: limiter()}, "test-cursor-key")
+	return NewPluginsService(conn, OperationBudget{Connection: limiter(), Organization: limiter()}, "test-cursor-key").WithAuthorization(nil, newGrantsAuthz(t))
 }
 
 // Distribution resolves its target only from the caller's onboarding workflow,
@@ -469,7 +470,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
 		return nil
-	}, testPluginTargets(conn))
+	}, testPluginTargets(t, conn))
 	attached, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err, "a registration made through the catalog tool must be distributable")
 	require.True(t, attached.AttachmentLive)
@@ -555,7 +556,7 @@ func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) 
 	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{ProjectID: project.ID, RegistrationID: ready.ID, ProviderAuthorizationFingerprint: "fixture-readiness"}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn))
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerDistributionTools(reg, onboarding, service, nil)
 	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
@@ -662,7 +663,7 @@ func TestDistributeToolChecksTheNamedServerWhenNoCheckIsStored(t *testing.T) {
 	readiness := NewReadinessService(store, gate, NewProviderAdapters([]ProviderAdapter{adapter}), allowOperationLimiter{}, allowBudget())
 	registrations := NewRegistrationService(nil, gate, store).WithReadiness(readiness)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(t, conn))
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerDistributionTools(reg, NewOnboardingService(conn), service, registrations)
 	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
@@ -695,7 +696,7 @@ func TestDistributionServiceClearsManualSyncWaitWhenPausedPluginIsCurrent(t *tes
 	principal, project := seedReadyDistributionTarget(t, ctx, conn)
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held")
 	fresh := new(false)
-	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+	inventory := testPluginTargets(t, conn).WithPublicationEvidence(slugPublicationEvidence{
 		fresh: map[string]*bool{"held": fresh}, paused: map[string]bool{"held": true},
 	})
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)

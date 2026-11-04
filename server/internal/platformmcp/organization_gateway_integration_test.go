@@ -47,7 +47,7 @@ func newOrganizationGatewayFixture(t *testing.T) (context.Context, *pgxpool.Pool
 	serverURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	principal := Principal{UserID: "user-" + uuid.NewString()[:8], OrganizationID: organizationID}
-	return ctx, conn, NewOrganizationGatewayService(conn, serverURL), principal, slug
+	return ctx, conn, NewOrganizationGatewayService(conn, serverURL, newGrantsAuthz(t)), principal, slug
 }
 
 func createOrganizationIssuerForGateway(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

@@ -55,7 +55,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 func TestPluginInventoryAdminDetectionRequiresLoadedGrants(t *testing.T) {
 	t.Parallel()
 
-	service := &PluginsService{}
+	service := (&PluginsService{}).WithAuthorization(nil, newGrantsAuthz(t))
 	principal := Principal{OrganizationID: "org-1"}
 
 	_, err := service.IsOrganizationAdmin(context.Background(), principal)

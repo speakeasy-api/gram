@@ -32,7 +32,7 @@ const maxSignalProposalBytes = 64 << 10 // 64 KiB
 type SignalAuthoringService struct {
 	management signalAuthoringManagement
 	projects   *PostgresReader
-	engine     *authz.Engine
+	authz      *authz.Client
 	db         *pgxpool.Pool
 	key        []byte
 }
@@ -45,12 +45,12 @@ type signalAuthoringManagement interface {
 }
 
 // NewSignalAuthoringService retains the normal management authorization and audit path.
-func NewSignalAuthoringService(management *sigint.Service, projects *PostgresReader, engine *authz.Engine, key string) *SignalAuthoringService {
+func NewSignalAuthoringService(management *sigint.Service, projects *PostgresReader, client *authz.Client, key string) *SignalAuthoringService {
 	var authoring signalAuthoringManagement
 	if management != nil {
 		authoring = management
 	}
-	return &SignalAuthoringService{management: authoring, projects: projects, engine: engine, db: projects.db, key: []byte(key)}
+	return &SignalAuthoringService{management: authoring, projects: projects, authz: client, db: projects.db, key: []byte(key)}
 }
 
 type signalConfiguration struct {
@@ -121,7 +121,7 @@ type signalReceipt struct {
 func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal, projectID string, write bool) (context.Context, ResolvedProject, sigint.AuthoringState, error) {
 	var project ResolvedProject
 	var state sigint.AuthoringState
-	if s == nil || s.management == nil || s.projects == nil || s.engine == nil || len(s.key) == 0 {
+	if s == nil || s.management == nil || s.projects == nil || s.authz == nil || len(s.key) == 0 {
 		return ctx, project, state, ErrUnavailable
 	}
 
@@ -136,11 +136,11 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 	}
 
 	// Check exact selectors before looking up rows so denied callers cannot probe existence.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(principal.OrganizationID, id.String()).Read()); err != nil {
 		return ctx, project, state, ErrForbidden
 	}
 	if write {
-		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(principal.OrganizationID, id.String()).Write()); err != nil {
 			return ctx, project, state, ErrForbidden
 		}
 	}

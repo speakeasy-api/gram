@@ -107,7 +107,7 @@ type SkillTargetInventory interface {
 // got back.
 type SkillAuthorizer interface {
 	PrepareContext(ctx context.Context) (context.Context, error)
-	RequireAnyUnblocked(ctx context.Context, checks ...authz.Check) error
+	Require(ctx context.Context, ops ...authz.Operation) error
 }
 
 // SkillProjectResolver turns the project slug a caller names into the project
@@ -203,9 +203,9 @@ type SkillsService struct {
 	// it the link tools refuse as unavailable.
 	mcpTargets SkillMCPTargetInventory
 
-	grants SkillAuthorizer
-	gate   CatalogRegistrationGateChecker
-	budget OperationBudget
+	authzClient SkillAuthorizer
+	gate        CatalogRegistrationGateChecker
+	budget      OperationBudget
 
 	// insights and insightsBudget back the skill insight tools. Both are attached by
 	// WithInsights; a nil reader keeps those tools registered as stubs.
@@ -222,7 +222,7 @@ func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, pro
 		targets:        targets,
 		projects:       projects,
 		mcpTargets:     mcpTargets,
-		grants:         grants,
+		authzClient:    grants,
 		gate:           gate,
 		budget:         budget,
 		insights:       nil,
@@ -232,7 +232,7 @@ func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, pro
 }
 
 func (s *SkillsService) valid() bool {
-	return s != nil && s.skills != nil && s.targets != nil && s.projects != nil && s.grants != nil && s.gate != nil && s.budget.valid()
+	return s != nil && s.skills != nil && s.targets != nil && s.projects != nil && s.authzClient != nil && s.gate != nil && s.budget.valid()
 }
 
 // begin runs everything every skill call owes before it touches a skill: the
@@ -302,7 +302,7 @@ func (s *SkillsService) beginWith(ctx context.Context, principal Principal, proj
 	// Grants are loaded for the acting user, so a connection reaches exactly the
 	// projects that user's own role reaches. OAuth rechecks live membership;
 	// each operation's RBAC policy separately decides what the user may do.
-	ctx, err = s.grants.PrepareContext(ctx)
+	ctx, err = s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return ctx, ResolvedProject{}, err
 	}
@@ -1075,7 +1075,7 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 		// which is after the plugin name has been resolved. The same check runs
 		// here first, so a caller without skill read is refused the same way
 		// whether or not the plugin it named exists.
-		if err := s.requireSkillRead(ctx, project, skillID); err != nil {
+		if err := s.requireSkillRead(ctx, principal, project, skillID); err != nil {
 			return ListSkillDistributionsOutput{}, err
 		}
 		target, err := s.resolveTarget(ctx, principal, project, input.Plugin, "")
@@ -1140,12 +1140,11 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 
 // requireSkillRead is the skills service's own read policy: a skill grant
 // selects either the whole project or the one skill named.
-func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedProject, skillID string) error {
-	checks := []authz.Check{{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}}
-	if skillID != "" {
-		checks = append(checks, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: authz.ResourceKindSkill, ResourceID: skillID, Dimensions: nil})
+func (s *SkillsService) requireSkillRead(ctx context.Context, principal Principal, project ResolvedProject, skillID string) error {
+	if skillID == "" {
+		return s.authzClient.Require(ctx, authz.Project(principal.OrganizationID, project.ID.String()).ReadSkills())
 	}
-	return s.grants.RequireAnyUnblocked(ctx, checks...)
+	return s.authzClient.Require(ctx, authz.Skill(project.ID.String(), skillID).Read())
 }
 
 // UndistributeSkillInput names exactly one target on the same terms as

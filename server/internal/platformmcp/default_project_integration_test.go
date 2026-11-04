@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -246,7 +247,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	serverURL, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
 	service := NewPluginsService(conn, allowBudget(), "default-project-install-key").
-		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).
 		WithInstallLinks(serverURL, serverURL)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerPluginTools(reg, service)
@@ -325,7 +326,7 @@ func TestInstallInstructionsByRegistrationID(t *testing.T) {
 	serverURL, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
 	service := NewPluginsService(conn, allowBudget(), "install-by-registration-key").
-		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).
 		WithInstallLinks(serverURL, serverURL)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerPluginTools(reg, service)

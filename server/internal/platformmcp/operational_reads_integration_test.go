@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -377,7 +378,7 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	}}}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithAuthorization(engine).
+		WithAuthorization(authztest.NewParityClient(t, engine)).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	reader.recentToolCalls.now = func() time.Time { return fixedNow }
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
@@ -428,7 +429,7 @@ func TestListRecentToolCallsRequiresLogRead(t *testing.T) {
 	telemetry := &recordingRecentToolCallReader{rows: nil}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithAuthorization(engine).
+		WithAuthorization(authztest.NewParityClient(t, engine)).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
@@ -460,7 +461,7 @@ func TestListRecentToolCallsProjectsAgentIdentityAndFilters(t *testing.T) {
 	}}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithAuthorization(engine).
+		WithAuthorization(authztest.NewParityClient(t, engine)).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)

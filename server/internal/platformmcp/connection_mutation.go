@@ -59,7 +59,7 @@ type MCPConnectionMutationService struct {
 	settings    *MCPConnectionSettingsService
 	endpoints   MCPConnectionEndpointWriter
 	audit       *audit.Logger
-	authorizer  *authz.Engine
+	authorizer  *authz.Client
 	eligibility networkaccess.EligibilityChecker
 	publication plugins.PublicationRequests
 	publisher   plugins.PluginPublishSignaler
@@ -73,7 +73,7 @@ func (s *MCPConnectionMutationService) WithCustomDomainReconcile(reconcile func(
 	return s
 }
 
-func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSettingsService, endpoints MCPConnectionEndpointWriter, auditLogger *audit.Logger, authorizer *authz.Engine, eligibility networkaccess.EligibilityChecker, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPConnectionMutationService, error) {
+func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSettingsService, endpoints MCPConnectionEndpointWriter, auditLogger *audit.Logger, authorizer *authz.Client, eligibility networkaccess.EligibilityChecker, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPConnectionMutationService, error) {
 	if db == nil || settings == nil || endpoints == nil || auditLogger == nil || authorizer == nil || eligibility == nil {
 		return nil, ErrMCPConnectionMutationInvalid
 	}
@@ -360,10 +360,10 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	if err != nil {
 		return fail(fmt.Errorf("resolve live connection mutation project: %w", err))
 	}
-	if err := s.authorizer.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, project.ID.String(), project.ID.String())); err != nil {
+	if err := s.authorizer.Require(ctx, authz.MCPServersInProject(project.ID.String()).Edit()); err != nil {
 		return fail(connectionMutationAuthorizationError(err, authz.ScopeMCPWrite))
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorizer.Require(ctx, authz.Organization(principal.OrganizationID).Administer()); err != nil {
 		return fail(connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin))
 	}
 	settings, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()})

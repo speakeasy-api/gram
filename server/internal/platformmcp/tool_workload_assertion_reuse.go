@@ -51,8 +51,11 @@ type WorkloadAssertionReuseService struct {
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
 }
 
-func (r *PostgresReader) WithWorkloadAssertionReuse(management WorkloadAssertionReuseManagement) *PostgresReader {
-	r.workloadAssertionReuse = &WorkloadAssertionReuseService{management: management, authorization: r.authz, resolveProject: r.resolveInventoryProject}
+// WithWorkloadAssertionReuse composes the workload assertion reuse tools.
+// engine decides whether the caller administers the organization, which lets
+// their write record a Shadow MCP review.
+func (r *PostgresReader) WithWorkloadAssertionReuse(management WorkloadAssertionReuseManagement, engine *authz.Engine) *PostgresReader {
+	r.workloadAssertionReuse = &WorkloadAssertionReuseService{management: management, authorization: engine, resolveProject: r.resolveInventoryProject}
 	return r
 }
 

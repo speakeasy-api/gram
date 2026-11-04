@@ -438,7 +438,7 @@ func (s *MCPToolExposureService) resolveCreateTarget(ctx context.Context, princi
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return ResolvedProject{}, toolExposureAdminAuthorizationError(err)
 	}
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.MCPServersInProject(projectID.String()).Edit()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ResolvedProject{}, mcpFromFunctionsUnavailable(err)

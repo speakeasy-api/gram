@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -86,8 +87,8 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
-	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, authzEngine))
+	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, newGrantsAuthz(t), OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil)
 	require.NotNil(t, service)
 	reg := newRegistrar(newTestMCPServer())
 	registerAnalyticsTools(reg, service)
@@ -207,9 +208,9 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	require.NoError(t, err)
 	flags := &feature.InMemory{}
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, authzEngine))
 	reg := newRegistrar(newTestMCPServer())
-	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil))
+	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, newGrantsAuthz(t), OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil))
 
 	actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)

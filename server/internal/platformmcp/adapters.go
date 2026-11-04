@@ -99,7 +99,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 
 type LiveOrgAdminAuthorizer struct {
 	db           *pgxpool.Pool
-	engine       *authz.Engine
+	authzClient  *authz.Client
 	dashboardURL *url.URL
 	serverURL    *url.URL
 }
@@ -111,8 +111,8 @@ func jwtAuthenticationStoreError(err error) error {
 	return fmt.Errorf("%w: lookup active platform mcp session: %w", ErrUnavailable, err)
 }
 
-func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil, serverURL: nil}
+func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, client *authz.Client) *LiveOrgAdminAuthorizer {
+	return &LiveOrgAdminAuthorizer{db: db, authzClient: client, dashboardURL: nil, serverURL: nil}
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
@@ -195,7 +195,7 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveMembership(ctx context.Context, prin
 // denied access challenge. Use it only for capability-shaped presentation; an
 // attempted admin operation must still call RequireLiveOrgAdmin.
 func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal Principal) (bool, error) {
-	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if a == nil || a.db == nil || a.authzClient == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return false, ErrUnavailable
 	}
 	if err := a.RequireLiveMembership(ctx, principal); err != nil {
@@ -209,9 +209,12 @@ func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal 
 	if err != nil {
 		return false, fmt.Errorf("load live admin grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := a.authzClient.EvaluateLoaded(ctx, liveOrgAdminPolicies(principal, grants), authz.Organization(principal.OrganizationID).Administer())
+	if isAuthorizationDenied(err) {
+		// A caller whose own credential carries a policy is never shown
+		// administrator capabilities from loaded grants.
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("authorize live admin grants: %w", err)
 	}
@@ -219,7 +222,7 @@ func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal 
 }
 
 func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, principal Principal) error {
-	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if a == nil || a.db == nil || a.authzClient == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
 	if err := a.RequireLiveMembership(ctx, principal); err != nil {
@@ -234,15 +237,16 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	if err != nil {
 		return fmt.Errorf("load live admin grants: %w", err)
 	}
-	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   principal.OrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := a.authzClient.RequireLoaded(ctx, liveOrgAdminPolicies(principal, grants), authz.Organization(principal.OrganizationID).Administer()); err != nil {
 		return fmt.Errorf("require live org admin: %w", err)
 	}
 	return nil
+}
+
+// liveOrgAdminPolicies are the member's freshly loaded grants as the one
+// policy a live administrator decision reads.
+func liveOrgAdminPolicies(principal Principal, grants []authz.Grant) authz.LoadedPolicies {
+	return authz.LoadedPolicies{OrganizationID: principal.OrganizationID, User: principal.UserID, Policies: [][]authz.Grant{grants}}
 }
 
 type PostgresNewModelEligibility struct {
@@ -380,7 +384,7 @@ type PostgresReader struct {
 	networkTrafficLogsEnabled FeatureChecker
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
-	authz                     *authz.Engine
+	authz                     *authz.Client
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
@@ -458,9 +462,9 @@ func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *P
 	return r
 }
 
-func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
+func (r *PostgresReader) WithAuthorization(client *authz.Client) *PostgresReader {
 	if r != nil {
-		r.authz = engine
+		r.authz = client
 	}
 	return r
 }
@@ -514,12 +518,10 @@ func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Princ
 	if r.authz == nil || principal.OrganizationID == "" {
 		return false
 	}
-	// FindMatched asks which checks pass; Require asserts that they must. Asking
-	// records the org:admin check as a filter, where Require would record every
-	// ordinary member read as a denied requirement.
-	matched, err := r.authz.FindMatched(ctx, []authz.Check{{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	}})
+	// MatchMany asks which operations pass; Require asserts that they must.
+	// Asking records the administrator check as a filter, where Require would
+	// record every ordinary member read as a denied requirement.
+	matched, err := r.authz.MatchMany(ctx, []authz.Operation{authz.Organization(principal.OrganizationID).Administer()})
 	if err != nil || len(matched) == 0 {
 		return false
 	}
@@ -553,7 +555,7 @@ func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Pri
 	if err != nil {
 		return ResolvedProject{}, fmt.Errorf("resolve platform MCP review project: %w", err)
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Project(principal.OrganizationID, projectID.String()).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, oops.E(oops.CodeNotFound, err, "project not found")
 		}
@@ -728,11 +730,11 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 		candidatesRead += len(rows)
 		afterID = rows[len(rows)-1].ID
 
-		checks := make([]authz.Check, 0, len(rows))
+		ops := make([]authz.Operation, 0, len(rows))
 		for _, row := range rows {
-			checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
+			ops = append(ops, authz.Project(principal.OrganizationID, row.ID.String()).Read())
 		}
-		allowed, err := r.authz.FindMatched(ctx, checks)
+		allowed, err := r.authz.MatchMany(ctx, ops)
 		if err != nil {
 			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
 		}
@@ -874,7 +876,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(projectID.String(), mcpID.String()).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCP{}, ErrForbidden
 		}
@@ -1011,11 +1013,11 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	if len(servers) > maxInventoryAuthorizationCandidates {
 		return nil, fmt.Errorf("%w: inventory authorization candidate limit exceeded", ErrUnavailable)
 	}
-	checks := make([]authz.Check, 0, len(servers))
+	ops := make([]authz.Operation, 0, len(servers))
 	for _, server := range servers {
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String()))
+		ops = append(ops, authz.MCPServer(server.ProjectID.String(), server.ID.String()).Read())
 	}
-	matched, err := r.authz.FindMatched(ctx, checks)
+	matched, err := r.authz.MatchMany(ctx, ops)
 	if err != nil {
 		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
 	}
@@ -1032,17 +1034,17 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.Read)
 }
 
 // ResolveProjectLogRead resolves one exact project under the principal's
 // organization and enforces log:read before callers list that project's
 // individual tool calls. project:read alone does not satisfy it.
 func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.ReadToolLogs)
 }
 
-func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, operation func(authz.ProjectRef) authz.Operation) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -1050,7 +1052,7 @@ func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal 
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, operation(authz.Project(principal.OrganizationID, project.ID.String()))); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}

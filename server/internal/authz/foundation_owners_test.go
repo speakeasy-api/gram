@@ -71,7 +71,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/chat":                       ownerC1,
 	"internal/demoseed":                   ownerX4,
 	"internal/keys":                       ownerAG2,
-	"internal/launcher":                   ownerX3,
 	"internal/mcp":                        ownerM3,
 	"internal/mcpapproval":                ownerR1,
 	"internal/mcpservers/upstreamclients": ownerM5,
@@ -103,7 +102,6 @@ var foundationFileOwners = map[string]string{
 	"internal/mcp/authclientresolve.go":             ownerM5,
 	"internal/mcp/mandatory_shadow.go":              ownerM5,
 	"internal/billingnotifications/recipients.go":   ownerX1,
-	"internal/mcp/serve_platform.go":                ownerX3,
 	"internal/plugins/delivery_principals.go":       ownerS2,
 	"internal/plugins/role_matches.go":              ownerS2,
 	"internal/skillefficacy":                        ownerO7,
@@ -114,13 +112,18 @@ var foundationFileOwners = map[string]string{
 }
 
 var foundationFunctionOwners = map[string]string{
-	"internal/assistantidentity/actor.go canDelegateInference":     ownerI1,
-	"internal/access/impl.go *Service.ListGrants":                  ownerX4,
-	"internal/access/impl.go *Service.assignChallengeRole":         ownerX1,
-	"internal/access/impl.go listRoleGrantsFromGrants":             ownerX4,
-	"internal/skillefficacy/impl.go *Service.QueryInsights":        ownerC1,
-	"internal/skillefficacy/impl.go *Service.requireProjectAccess": ownerAS1,
-	"internal/skills/impl.go *Service.accessibleSkillIDs":          ownerS2,
+	"internal/assistantidentity/actor.go canDelegateInference": ownerI1,
+	"internal/access/impl.go *Service.ListGrants":              ownerX4,
+	"internal/access/impl.go *Service.assignChallengeRole":     ownerX1,
+	"internal/access/impl.go listRoleGrantsFromGrants":         ownerX4,
+	// Tool discovery asks whether any stored grant could reach a scope,
+	// which only the catalogue that replaces scopes can answer.
+	"internal/platformmcp/descriptor.go grantsAuthorizeAnyResource": ownerX1,
+	// Naming the block that refused a role is an explanation of stored grants.
+	"internal/platformmcp/access_reads.go *AccessReadService.roleSharedAuthClientAccess": ownerX4,
+	"internal/skillefficacy/impl.go *Service.QueryInsights":                              ownerC1,
+	"internal/skillefficacy/impl.go *Service.requireProjectAccess":                       ownerAS1,
+	"internal/skills/impl.go *Service.accessibleSkillIDs":                                ownerS2,
 	"internal/agent":                ownerO8,
 	"internal/billingnotifications": ownerO6,
 	"internal/skillefficacy":        ownerO7,
@@ -146,6 +149,8 @@ func foundationOwner(c inventoryConsumer) string {
 	case c.Category == categoryWriter && strings.HasPrefix(c.Entry, "Seed"):
 		return ownerX1
 	case dir == "internal/access" && (c.Category == categoryLoader || c.Category == categoryWriter):
+		return ownerX1
+	case dir == "internal/platformmcp" && (c.Category == categoryLoader || c.Category == categoryWriter):
 		return ownerX1
 	case c.File == "internal/background/activities/process_workos_org_events.go" && c.Category == categoryWriter:
 		return ownerX1

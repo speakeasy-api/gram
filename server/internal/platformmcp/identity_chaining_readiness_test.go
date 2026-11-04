@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -337,7 +338,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			}
 			governor := &recordingGovernor{issuer: remoteIssuer.ID, serves: test.serves, usable: test.usable}
 			service := NewPluginsService(conn, allowBudget(), "member-chained-status-key").
-				WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+				WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).
 				withMemberMCPConnectionReader(testMemberMCPConnectionReader{clients: readerClients, statuses: test.statuses}).
 				WithIdentityChaining(governor).
 				WithInstallLinks(serverURL, serverURL)

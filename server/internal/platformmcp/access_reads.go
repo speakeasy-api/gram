@@ -236,14 +236,16 @@ type AccessReadService struct {
 	// directoryReview backs the directory review tools; nil leaves them
 	// reporting unavailable.
 	directoryReview DirectoryReviewBackend
-	// pluginDisclosure decides whether matching role plugins may be shown.
-	// It has no migration router, so it always answers through the engine.
-	pluginDisclosure *authz.Client
+	// authz decides what a role's grants allow and whether matching role
+	// plugins may be shown. The constructor's client has no migration
+	// router, so it answers through the engine until WithAuthorization
+	// replaces it with the routed client.
+	authz *authz.Client
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil, pluginDisclosure: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil, authz: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
@@ -263,13 +265,23 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		now:        time.Now,
 		versionKey: versionKey[:],
 
-		directoryReview:  nil,
-		pluginDisclosure: pluginDisclosure,
+		directoryReview: nil,
+		authz:           pluginDisclosure,
 	}
 }
 
+// WithAuthorization replaces the engine-only client with the routed one, so
+// role grant questions follow the MCP migration unit like every other MCP
+// decision.
+func (s *AccessReadService) WithAuthorization(client *authz.Client) *AccessReadService {
+	if s != nil && client != nil {
+		s.authz = client
+	}
+	return s
+}
+
 func (s *AccessReadService) valid() bool {
-	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.pluginDisclosure != nil && s.now != nil && len(s.versionKey) == sha256.Size
+	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.authz != nil && s.now != nil && len(s.versionKey) == sha256.Size
 }
 
 func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) (ListAccessRolesOutput, error) {
@@ -615,7 +627,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	sharedRoles := make([]MCPRoleSharedAuthClients, 0)
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(authClientRole(role))
-		sharedClients, err := roleSharedAuthClientAccess(grants, upstream, projectID.String())
+		sharedClients, err := s.roleSharedAuthClientAccess(ctx, grants, upstream, projectID.String())
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate auth client access for role %q: %w", role.Name, err)
 		}
@@ -648,7 +660,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	for _, role := range roles.Roles {
 		principals = append(principals, role.PrincipalUrn)
 	}
-	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.pluginDisclosure, principal.OrganizationID, projectID, mcpID, principals)
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.authz, principal.OrganizationID, projectID, mcpID, principals)
 	if err != nil {
 		return GetMCPAccessOutput{}, fmt.Errorf("read MCP role plugins: %w", err)
 	}
@@ -670,16 +682,14 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	}
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(role)
-		serverCheck := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())
-		canEnter, err := authz.GrantsAuthorize(grants, serverCheck)
+		server := authz.MCPServer(projectID.String(), row.McpServerID.String())
+		canEnter, err := s.authz.EvaluateGrants(ctx, grants, server.Connect())
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate server access for role %q: %w", role.Name, err)
 		}
 		allowedTools := make([]string, 0, len(tools))
 		for _, tool := range tools {
-			allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(row.McpServerID.String(), authz.MCPToolCallDimensions{
-				Tool: tool.Name, Disposition: tool.Disposition, ProjectID: projectID.String(),
-			}))
+			allowed, err := s.authz.EvaluateGrants(ctx, grants, server.CallTool(tool.Name, tool.Disposition))
 			if err != nil {
 				return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool access for role %q: %w", role.Name, err)
 			}
@@ -1042,18 +1052,19 @@ func normalizeAccessQuery(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
 }
 
-func roleSharedAuthClientAccess(grants []authz.Grant, upstream *types.McpServerAuthentication, projectID string) ([]MCPRoleAuthClientAccess, error) {
+func (s *AccessReadService) roleSharedAuthClientAccess(ctx context.Context, grants []authz.Grant, upstream *types.McpServerAuthentication, projectID string) ([]MCPRoleAuthClientAccess, error) {
 	var access []MCPRoleAuthClientAccess
 	for _, client := range upstream.Clients {
 		if client.Personal {
 			continue
 		}
-		check := authz.MCPAuthClientCheck(client.ID, authz.MCPAuthClientDimensions{ClientType: client.ClientType, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
-		allowed, err := authz.GrantsAuthorize(grants, check)
+		allowed, err := s.authz.EvaluateGrants(ctx, grants, authz.MCPAuthClient(projectID, client.ID, client.ClientType).Use())
 		if err != nil {
 			return nil, fmt.Errorf("evaluate auth client %s: %w", client.ID, err)
 		}
-		blockCheck := check
+		// Naming the block that refused is an explanation of stored grants,
+		// not a decision, so it reads the grants directly.
+		blockCheck := authz.MCPAuthClientCheck(client.ID, authz.MCPAuthClientDimensions{ClientType: client.ClientType, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
 		blockCheck.Scope = authz.ScopeMCPBlockedAuth
 		state := "not_granted"
 		switch {

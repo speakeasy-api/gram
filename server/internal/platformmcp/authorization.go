@@ -74,7 +74,7 @@ func (e *ExternalAuthorizationError) Unwrap() error { return e.cause }
 // PrepareExternalContext verifies live membership, binds a trusted user
 // context, and resolves current grants once for this external request.
 func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
-	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if a == nil || a.db == nil || a.authzClient == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ctx, ErrUnavailable
 	}
 	if err := a.RequireLiveMembership(ctx, principal); err != nil {
@@ -123,7 +123,7 @@ func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, pri
 	// Platform MCP is a trusted session-less acting surface, so ShouldEnforce must
 	// be true. Treat any future regression as unavailable rather than allowing
 	// Require to become a no-op.
-	enforce, err := a.engine.ShouldEnforce(ctx)
+	enforce, err := a.authzClient.ShouldEnforce(ctx)
 	if err != nil || !enforce {
 		if err == nil {
 			err = errors.New("Platform MCP RBAC enforcement is inactive") //nolint:staticcheck // Platform MCP is a product name.
@@ -134,17 +134,20 @@ func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, pri
 }
 
 func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, principal Principal, policy ExternalAuthorization) error {
-	if a == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if a == nil || a.authzClient == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID != principal.UserID || authCtx.ActiveOrganizationID != principal.OrganizationID {
 		return ErrUnavailable
 	}
-	var check authz.Check
+	var (
+		op            authz.Operation
+		requiredScope authz.Scope
+	)
 	switch policy {
 	case ExternalAuthorizationMember:
-		enforce, err := a.engine.ShouldEnforce(ctx)
+		enforce, err := a.authzClient.ShouldEnforce(ctx)
 		if err != nil || !enforce {
 			return ErrUnavailable
 		}
@@ -153,29 +156,29 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 		}
 		return nil
 	case ExternalAuthorizationOrgAdmin:
-		check = authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}
+		op, requiredScope = authz.Organization(principal.OrganizationID).Administer(), authz.ScopeOrgAdmin
 	default:
 		return fmt.Errorf("%w: unsupported external authorization policy %q", ErrUnavailable, policy)
 	}
-	if err := a.engine.Require(ctx, check); err != nil {
+	if err := a.authzClient.Require(ctx, op); err != nil {
 		var shareable *oops.ShareableError
 		if !errors.As(err, &shareable) || shareable.Code != oops.CodeForbidden {
 			return fmt.Errorf("authorize Platform MCP call: %w", err)
 		}
 		return &ExternalAuthorizationError{
-			RequiredScope:    string(check.Scope),
-			RequestAccessURL: a.requestAccessURL(ctx, check),
+			RequiredScope:    string(requiredScope),
+			RequestAccessURL: a.requestAccessURL(ctx, requiredScope, principal.OrganizationID),
 			cause:            err,
 		}
 	}
 	return nil
 }
 
-func (a *LiveOrgAdminAuthorizer) requestAccessURL(ctx context.Context, check authz.Check) string {
+func (a *LiveOrgAdminAuthorizer) requestAccessURL(ctx context.Context, scope authz.Scope, resourceID string) string {
 	// The current policy is one exact, user-visible organization scope. Future
 	// compound or undisclosable checks must withhold a prefilled request rather
 	// than suggest an inaccurate grant.
-	if check.Scope != authz.ScopeOrgAdmin || check.ResourceID == "" || check.ResourceID == authz.WildcardResource {
+	if scope != authz.ScopeOrgAdmin || resourceID == "" || resourceID == authz.WildcardResource {
 		return ""
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -187,8 +190,8 @@ func (a *LiveOrgAdminAuthorizer) requestAccessURL(ctx context.Context, check aut
 		return ""
 	}
 	return mcpaccess.RequestAccessURL(requestDashboardURL(ctx, a.dashboardURL, a.serverURL), organizationSlug, mcpaccess.RequestAccessURLParams{
-		Scope:        string(check.Scope),
-		ResourceID:   check.ResourceID,
+		Scope:        string(scope),
+		ResourceID:   resourceID,
 		ResourceName: "",
 	})
 }

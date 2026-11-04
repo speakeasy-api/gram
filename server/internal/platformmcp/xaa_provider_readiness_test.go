@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -45,7 +46,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	// The Okta rollout is on but the organization has no Okta connection.
 	okta := &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}
-	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(engine).xaaReadiness
+	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(authztest.NewParityClient(t, engine)).xaaReadiness
 	require.NotNil(t, service)
 
 	user := "user-" + uuid.NewString()

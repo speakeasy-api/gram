@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -340,11 +341,11 @@ func TestGetMCPRefusesAToolCursorItCannotContinue(t *testing.T) {
 	input := GetMCPInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.toolsetID.String(), ToolCursor: first.NextToolCursor}
 	var refusal *MCPToolExposureError
 
-	withoutExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine)
+	withoutExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(authztest.NewParityClient(t, engine))
 	_, err = withoutExposure.GetMCP(ctx, fixture.principal, input)
 	require.ErrorIs(t, err, ErrUnavailable, "a reader with no exposure read reports the read unavailable, as ExposurePage does")
 
-	withExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine).WithToolExposure(fixture.service)
+	withExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(authztest.NewParityClient(t, engine)).WithToolExposure(fixture.service)
 	input.ToolCursor = "not-a-cursor"
 	_, err = withExposure.GetMCP(ctx, fixture.principal, input)
 	require.ErrorAs(t, err, &refusal)

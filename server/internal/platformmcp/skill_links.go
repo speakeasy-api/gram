@@ -243,7 +243,7 @@ func (s *SkillsService) LinkSkillToMCP(ctx context.Context, principal Principal,
 	// Skill read is checked before the target is resolved, so a caller
 	// without it is refused the same way whether or not the named server
 	// exists.
-	if err := s.requireSkillRead(ctx, project, input.SkillID); err != nil {
+	if err := s.requireSkillRead(ctx, principal, project, input.SkillID); err != nil {
 		return LinkSkillToMCPOutput{}, err
 	}
 	target, err := s.resolveMCPTarget(ctx, principal, project, input.TargetKind, input.MCPServer, input.Gateway)

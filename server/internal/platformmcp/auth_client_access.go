@@ -134,7 +134,7 @@ func (s *AccessRoleMutationService) SetRoleAuthClientAccess(ctx context.Context,
 		return SetMCPRoleAuthClientAccessOutput{}, fmt.Errorf("reload role after auth client change: %w", err)
 	}
 	grants, _ := roleAuthzGrants(updated)
-	access, err := roleSharedAuthClientAccess(grants, upstream, project.ID.String())
+	access, err := s.reads.roleSharedAuthClientAccess(ctx, grants, upstream, project.ID.String())
 	if err != nil {
 		return SetMCPRoleAuthClientAccessOutput{}, fmt.Errorf("evaluate auth client access after change: %w", err)
 	}

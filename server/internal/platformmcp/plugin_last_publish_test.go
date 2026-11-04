@@ -62,7 +62,7 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 	requestedAt := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	finishedAt := requestedAt.Add(16 * time.Minute)
 	fresh := false
-	service := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
+	service := testPluginTargets(t, conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 		PluginSlug: "release-tools", Fresh: &fresh,
 		Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
 	}}})
@@ -134,7 +134,7 @@ func TestGetPluginReportsLastPublishUnavailable(t *testing.T) {
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 	recordedAt := seedRecordedPublish(t, ctx, conn, project.ID)
-	service := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
+	service := testPluginTargets(t, conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 		PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{},
 	}}})
 
@@ -161,7 +161,7 @@ func TestGetPluginReportsLastPublishWhenEvidenceIsUnavailable(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
-	service := testPluginTargets(conn).
+	service := testPluginTargets(t, conn).
 		WithPublicationEvidence(stubPluginPublicationEvidence{err: errors.New("publication resolution failed")}).
 		WithPublishStatus(&stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}})
 
@@ -188,7 +188,7 @@ func TestGetPluginNeverDescribesPublishForNonAdmins(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	describer := &stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}}
-	service := testPluginTargets(conn).
+	service := testPluginTargets(t, conn).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{}}}}).
 		WithPublishStatus(describer)
 
@@ -216,7 +216,7 @@ func TestGetPluginFirstPublishFailureDoesNotOfferRepublish(t *testing.T) {
 	// A first publish that failed before its connection row was saved: the
 	// project has no marketplace yet, and republish_plugin would refuse it as
 	// not_configured.
-	service := testPluginTargets(conn).
+	service := testPluginTargets(t, conn).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "release-tools", NotConfigured: true, Packages: []plugindelivery.PublicationPackageAddress{},
 		}}})
@@ -255,7 +255,7 @@ func TestGetPluginUnreadablePublishHistoryDoesNotOfferRepublish(t *testing.T) {
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 	seedRecordedPublish(t, ctx, conn, project.ID)
-	service := testPluginTargets(conn).
+	service := testPluginTargets(t, conn).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{}}}}).
 		WithPublishStatus(&stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}})
 	service.recordedPublish = func(context.Context, uuid.UUID) (pluginsrepo.PluginGithubConnection, error) {

@@ -110,7 +110,7 @@ func TestPluginReadsReportAutoSyncAndChangesAwaitingAManualSync(t *testing.T) {
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Active", "active")
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Paused Stale", "paused-stale")
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Paused Current", "paused-current")
-	service := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+	service := testPluginTargets(t, conn).WithPublicationEvidence(slugPublicationEvidence{
 		fresh:  map[string]*bool{"active": new(false), "paused-stale": new(false), "paused-current": new(true)},
 		paused: map[string]bool{"paused-stale": true, "paused-current": true},
 	})
@@ -491,7 +491,7 @@ func TestRepublishPluginSyncsChangesWaitingOnPausedPlugins(t *testing.T) {
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Waiting", "waiting")
 	evidence := slugPublicationEvidence{fresh: map[string]*bool{"current": new(true), "waiting": new(false)}, paused: map[string]bool{"waiting": true}}
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(evidence).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(evidence).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 
 	got, err := service.RepublishPlugin(ctx, principal, RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "current", Confirmed: true, IdempotencyKey: "current-with-waiting"})

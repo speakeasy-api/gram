@@ -47,6 +47,7 @@ type AnalyticsService struct {
 	organizations OrganizationSlugResolver
 	// projects holds the caller to project:read on the exact project named.
 	projects           ProjectReadResolver
+	authz              *authz.Client
 	budget             OperationBudget
 	signalFeatures     analytics.SignalFeatures
 	conversationAccess analytics.ConversationAccess
@@ -54,11 +55,11 @@ type AnalyticsService struct {
 
 // NewAnalyticsService returns nil without a logger, an engine, an
 // organization resolver or a project reader, so the tools are served as stubs.
-func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget, signalFeatures analytics.SignalFeatures) *AnalyticsService {
-	if logger == nil || engine == nil || organizations == nil || projects == nil {
+func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, client *authz.Client, budget OperationBudget, signalFeatures analytics.SignalFeatures) *AnalyticsService {
+	if logger == nil || engine == nil || organizations == nil || projects == nil || client == nil {
 		return nil
 	}
-	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget, signalFeatures: signalFeatures, conversationAccess: nil}
+	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, authz: client, budget: budget, signalFeatures: signalFeatures, conversationAccess: nil}
 }
 
 // WithConversationAccess applies the underlying chat gate to requested evidence.
@@ -70,7 +71,7 @@ func (s *AnalyticsService) WithConversationAccess(access analytics.ConversationA
 }
 
 func (s *AnalyticsService) valid() bool {
-	return s != nil && s.logger != nil && s.engine != nil && s.organizations != nil && s.projects != nil && s.budget.valid()
+	return s != nil && s.logger != nil && s.engine != nil && s.organizations != nil && s.projects != nil && s.authz != nil && s.budget.valid()
 }
 
 // AnalyticsProject is the project a result was read for.
@@ -179,7 +180,7 @@ func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, in
 	datasets := make([]*analytics.Dataset, 0, len(catalog.Datasets()))
 	if explore {
 		for _, ds := range catalog.Datasets() {
-			readable, err := datasetReadable(ctx, principal, ds)
+			readable, err := s.datasetReadable(ctx, principal, ds)
 			if err != nil {
 				return DescribeAnalyticsCatalogOutput{}, err
 			}
@@ -204,8 +205,8 @@ func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, in
 // datasetReadable says whether the caller may read a dataset, beyond reading
 // its project, from the grants loaded for this call. Without loaded grants a
 // restricted dataset reads as unreadable, as an undiscoverable tool does.
-func datasetReadable(ctx context.Context, principal Principal, ds *analytics.Dataset) (bool, error) {
-	check, restricted := ds.AccessCheck(principal.OrganizationID)
+func (s *AnalyticsService) datasetReadable(ctx context.Context, principal Principal, ds *analytics.Dataset) (bool, error) {
+	operation, restricted := ds.AccessOperation(principal.OrganizationID)
 	if !restricted {
 		return true, nil
 	}
@@ -213,7 +214,7 @@ func datasetReadable(ctx context.Context, principal Principal, ds *analytics.Dat
 	if !ok {
 		return false, nil
 	}
-	allowed, err := authz.GrantsAuthorize(grants, check)
+	allowed, err := s.authz.EvaluateGrants(ctx, grants, operation)
 	if err != nil {
 		return false, fmt.Errorf("authorize dataset %s: %w", ds.Name, err)
 	}
@@ -227,7 +228,7 @@ func (s *AnalyticsService) requireDataset(ctx context.Context, principal Princip
 	if !ok {
 		return nil
 	}
-	readable, err := datasetReadable(ctx, principal, ds)
+	readable, err := s.datasetReadable(ctx, principal, ds)
 	if err != nil {
 		return err
 	}

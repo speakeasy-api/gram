@@ -45,7 +45,7 @@ func seedGatewayFixture(t *testing.T, name string) (context.Context, gatewayFixt
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, fixture.conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	endpoints := mcpendpoints.NewService(logger, tracerProvider, fixture.conn, sessionManager, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, false)
-	service, err := NewGatewayService(logger, fixture.conn, audit.NewLogger(), engine, NewLiveOrgAdminAuthorizer(fixture.conn, engine), admission.NewGuard(), endpoints, plugins.PublicationRequests{}, nil, testOperationBudget())
+	service, err := NewGatewayService(logger, fixture.conn, audit.NewLogger(), engine, authztest.NewParityClient(t, engine), NewLiveOrgAdminAuthorizer(fixture.conn, authztest.NewParityClient(t, engine)), admission.NewGuard(), endpoints, plugins.PublicationRequests{}, nil, testOperationBudget())
 	require.NoError(t, err)
 	return fixture.grantMCP(ctx, fixture.project.ID), gatewayFixture{toolExposureFixture: fixture, gateways: service}
 }

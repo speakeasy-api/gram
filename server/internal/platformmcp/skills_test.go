@@ -299,7 +299,7 @@ func (passthroughGrants) PrepareContext(ctx context.Context) (context.Context, e
 	return ctx, nil
 }
 
-func (passthroughGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+func (passthroughGrants) Require(context.Context, ...authz.Operation) error {
 	return nil
 }
 
@@ -310,7 +310,7 @@ func (denyingGrants) PrepareContext(ctx context.Context) (context.Context, error
 	return ctx, nil
 }
 
-func (denyingGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+func (denyingGrants) Require(context.Context, ...authz.Operation) error {
 	return oops.C(oops.CodeForbidden)
 }
 

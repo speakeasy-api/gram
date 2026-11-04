@@ -97,7 +97,7 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	out, err := service.Get(ctx, principal, GetOrganizationGatewayActivityInput{Window: "7d"})
 	require.NoError(t, err)
 
-	require.Equal(t, []authz.Check{{Scope: authz.ScopeOrgRead, ResourceID: organizationID}}, authorizer.checks)
+	require.Equal(t, []authz.Operation{authz.Organization(organizationID).Read()}, authorizer.ops)
 	gatewayID := orggateway.GatewayID(organizationID).String()
 	require.Equal(t, gatewayID, reader.summary.MetaMCPServerID)
 	require.Equal(t, gatewayID, reader.usage.MetaMCPServerID)

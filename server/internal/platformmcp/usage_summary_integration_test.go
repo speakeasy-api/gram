@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -49,7 +50,7 @@ func TestGetToolUsageSummaryAttributesToConfiguredServers(t *testing.T) {
 		},
 	}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, engine))
 	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
 		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
 		WithToolUsageBreakdown(toolUsage)
@@ -131,7 +132,7 @@ func TestGetToolUsageSummaryRequiresProjectRead(t *testing.T) {
 
 	toolUsage := &recordingToolUsageReader{}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, engine))
 	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
 		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
 		WithToolUsageBreakdown(toolUsage)
@@ -172,7 +173,7 @@ func TestGetToolUsageSummaryReportsTruncationOnlyWhenATargetWasOmitted(t *testin
 		usageRow(telemetryrepo.ToolUsageTargetTypeSkill, "skill-sentinel", "skill-sentinel", sentinelCalls, 0))
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, engine))
 
 	for _, test := range []struct {
 		name      string

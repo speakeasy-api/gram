@@ -65,7 +65,7 @@ func TestPlatformMCPReportsUpstreamAuthClients(t *testing.T) {
 		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
 		authz.NewGrant(authz.ScopeMCPRead, target.McpServerID.String()),
 	})
-	settings, err := NewMCPConnectionSettingsService(conn).Get(settingsCtx, principal, GetMCPConnectionSettingsInput{
+	settings, err := NewMCPConnectionSettingsService(conn, newGrantsAuthz(t)).Get(settingsCtx, principal, GetMCPConnectionSettingsInput{
 		ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: target.McpServerID.String(),
 	})
 	require.NoError(t, err)

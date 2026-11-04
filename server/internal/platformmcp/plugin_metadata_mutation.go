@@ -195,7 +195,7 @@ func (s *PluginsService) WithMetadataMutations(logger *slog.Logger, core *plugin
 }
 
 func (s *PluginsService) metadataMutationValid() bool {
-	return s.valid() && s.authorization != nil && s.metadataLogger != nil && s.metadataCore != nil && s.metadataBudget.valid()
+	return s.valid() && s.authzClient != nil && s.metadataLogger != nil && s.metadataCore != nil && s.metadataBudget.valid()
 }
 
 // pluginAutoSyncGuard refuses turning a plugin's auto sync off when the
@@ -522,7 +522,7 @@ func (s *PluginsService) authorizePluginMetadataProject(ctx context.Context, pri
 	if err != nil {
 		return ResolvedProject{}, ErrPluginProjectNotFound
 	}
-	if err := s.authorization.RequirePluginWrite(ctx, principal.OrganizationID, parsed.String()); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(principal.OrganizationID, parsed.String()).PublishPlugin()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopePluginWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ResolvedProject{}, pluginMetadataMutationUnavailable(err)

@@ -58,26 +58,26 @@ var (
 // explicit transcript grant. It never inherits the metadata listing's
 // org-admin bypass.
 type ChatSearchService struct {
-	db         *pgxpool.Pool
-	engine     *authz.Engine
-	audit      *audit.Logger
-	budget     OperationBudget
-	references *subjectReferenceCodec
-	scanner    *gitleaks.Scanner
+	db          *pgxpool.Pool
+	authzClient *authz.Client
+	audit       *audit.Logger
+	budget      OperationBudget
+	references  *subjectReferenceCodec
+	scanner     *gitleaks.Scanner
 }
 
 // NewChatSearchService composes the external-only transcript tools. Missing
 // dependencies leave stable unavailable tools registered on the server.
-func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, budget OperationBudget, keyMaterial string) *ChatSearchService {
+func NewChatSearchService(db *pgxpool.Pool, client *authz.Client, auditLogger *audit.Logger, budget OperationBudget, keyMaterial string) *ChatSearchService {
 	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
+	if db == nil || client == nil || auditLogger == nil || !budget.valid() || err != nil {
 		return nil
 	}
-	return &ChatSearchService{db: db, engine: engine, audit: auditLogger, budget: budget, references: codec, scanner: gitleaks.NewScanner()}
+	return &ChatSearchService{db: db, authzClient: client, audit: auditLogger, budget: budget, references: codec, scanner: gitleaks.NewScanner()}
 }
 
 func (s *ChatSearchService) valid() bool {
-	return s != nil && s.db != nil && s.engine != nil && s.audit != nil && s.budget.valid() && s.references != nil && s.scanner != nil
+	return s != nil && s.db != nil && s.authzClient != nil && s.audit != nil && s.budget.valid() && s.references != nil && s.scanner != nil
 }
 
 // SearchChatsInput selects an explicit project and date interval.
@@ -188,7 +188,7 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	if projectID == "" && projectSlug == "" {
 		return zero, errChatSearchInvalid
 	}
-	enforce, err := s.engine.ShouldEnforce(ctx)
+	enforce, err := s.authzClient.ShouldEnforce(ctx)
 	if err != nil || !enforce {
 		return zero, ErrUnavailable
 	}
@@ -197,7 +197,9 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	}
 	// Transcript grants are unrestricted. Refuse before project resolution so
 	// a caller without one cannot probe project existence through error codes.
-	if err := s.engine.Require(ctx, authz.ChatReadCheck(principal.OrganizationID)); err != nil {
+	// No chat has the organization's ID, so only a grant that covers every
+	// chat passes.
+	if err := s.authzClient.Require(ctx, authz.Chat(principal.OrganizationID).Read()); err != nil {
 		return zero, &ExternalAuthorizationError{RequiredScope: string(authz.ScopeChatRead), RequestAccessURL: "", cause: err}
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -207,7 +209,7 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
-	if err := s.engine.Require(ctx, authz.ChatReadCheck(project.ID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(principal.OrganizationID, project.ID.String()).ReadChats()); err != nil {
 		return zero, &ExternalAuthorizationError{RequiredScope: string(authz.ScopeChatRead), RequestAccessURL: "", cause: err}
 	}
 	return project, nil

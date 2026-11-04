@@ -57,7 +57,7 @@ type Service struct {
 	logger  *slog.Logger
 	db      *pgxpool.Pool
 	auth    *auth.Auth
-	authz   *authz.Engine
+	authz   *authz.Client
 	keys    keyLookup
 	client  *typesafe.Client
 	metrics *judgeMetrics
@@ -76,6 +76,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	keys openrouter.ExistingKeyLookup,
 	client *typesafe.Client,
 ) *Service {
@@ -85,7 +86,7 @@ func NewService(
 		logger:  logger,
 		db:      db,
 		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
+		authz:   authzClient,
 		keys:    keys,
 		client:  client,
 		metrics: newMetrics(logger, meterProvider),
@@ -122,7 +123,7 @@ func (s *Service) Judge(ctx context.Context, payload *gen.JudgePayload) (*gen.La
 
 	// Every judgement spends the organization's internal OpenRouter key, so
 	// it is gated like the list endpoints whose rows the candidates came from.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 

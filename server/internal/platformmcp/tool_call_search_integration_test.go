@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -42,7 +43,7 @@ func TestSearchToolCallsNarrowsToOneServerWithoutReportedNames(t *testing.T) {
 	codec, err := newSubjectReferenceCodec("tool-call-search-integration-key")
 	require.NoError(t, err)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))
+		WithAuthorization(authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)))
 	search := &recordingToolCallSearchReader{}
 	service := &DiagnosticsService{
 		db:              conn,

@@ -23,7 +23,7 @@ func TestGetPluginReadsHostedEntryThroughCanonicalServer(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_hosted_membership")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Hosted MCPs", "hosted-mcps")
 
 	newToolset := func(name string) toolsetsrepo.Toolset {
@@ -81,7 +81,7 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_endpointless_wrapper")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Endpointless", "endpointless")
 
 	newToolset := func(name string) toolsetsrepo.Toolset {

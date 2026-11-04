@@ -126,7 +126,7 @@ func newTestService(t *testing.T, jev *fakeJev, keys keyLookup) *Service {
 		logger:  testenv.NewLogger(t),
 		db:      nil,
 		auth:    nil,
-		authz:   authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz:   authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())),
 		keys:    keys,
 		client:  client,
 		metrics: newMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)),

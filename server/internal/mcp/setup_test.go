@@ -702,11 +702,11 @@ func buildTestMCPService(
 		// assistant audience, called directly by the adapter.
 		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
-				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, authzEngine)), "", "test-cursor-key",
+				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authztest.NewParityClient(t, authzEngine)), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
-			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
+			platformmcp.NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, authzEngine)),
 		)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{

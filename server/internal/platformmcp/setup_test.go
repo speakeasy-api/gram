@@ -47,5 +47,5 @@ func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFi
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String()), authz.NewGrant(authz.ScopeProjectWrite, project.ID.String())})
-	return ctx, signalAuthoringFixture{service: NewSignalAuthoringService(management, NewPostgresReader(logger, db), engine, "test-signal-authoring-key"), management: management, principal: principal, project: project, features: features}
+	return ctx, signalAuthoringFixture{service: NewSignalAuthoringService(management, NewPostgresReader(logger, db), authztest.NewParityClient(t, engine), "test-signal-authoring-key"), management: management, principal: principal, project: project, features: features}
 }

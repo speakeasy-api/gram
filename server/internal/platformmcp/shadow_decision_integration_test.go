@@ -60,7 +60,7 @@ func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	version, err := shadow.versions.Encode(review.DecisionVersionState)
 	require.NoError(t, err)
-	service := NewShadowDecisionService(conn, shadow, core, testPluginTargets(conn), flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget())
+	service := NewShadowDecisionService(conn, shadow, core, testPluginTargets(t, conn), flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget())
 
 	localRequest, err := approvalrepo.New(conn).UpsertApprovalRequest(ctx, approvalrepo.UpsertApprovalRequestParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
@@ -150,7 +150,7 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	version, err := shadow.versions.Encode(review.DecisionVersionState)
 	require.NoError(t, err)
-	plugins := testPluginTargets(conn)
+	plugins := testPluginTargets(t, conn)
 	choices, err := plugins.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	require.NotEmpty(t, choices.Assignments)

@@ -57,7 +57,7 @@ func TestGetMCPConnectionSettingsScopesExactTargetToProjectAndOrganization(t *te
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_connection_settings")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := NewMCPConnectionSettingsService(conn)
+	service := NewMCPConnectionSettingsService(conn, newGrantsAuthz(t))
 
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{
 		ProjectID: project.ID, OrganizationID: principal.OrganizationID, LimitValue: 10,
@@ -136,7 +136,7 @@ func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
 	gateway, err := q.CreateMetaMCPServer(ctx, metarepo.CreateMetaMCPServerParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: "Gateway", Visibility: "public", UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, NetworkAccessMode: conv.ToPGText("public_only")})
 	require.NoError(t, err)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeMCPRead, gateway.ID.String()), authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
-	service := NewMCPConnectionSettingsService(conn)
+	service := NewMCPConnectionSettingsService(conn, newGrantsAuthz(t))
 	input := GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsGateway, TargetID: gateway.ID.String()}
 	got, err := service.Get(ctx, principal, input)
 	require.NoError(t, err)

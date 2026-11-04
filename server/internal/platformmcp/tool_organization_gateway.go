@@ -66,6 +66,7 @@ type GetMyOrganizationGatewayOutput struct {
 type OrganizationGatewayService struct {
 	db        *pgxpool.Pool
 	serverURL *url.URL
+	authz     *authz.Client
 
 	// orgHosts resolves the platform host stored as an organization's default
 	// host. Nil URLs follow the request's platform origin.
@@ -74,8 +75,8 @@ type OrganizationGatewayService struct {
 
 // NewOrganizationGatewayService returns a service that builds gateway URLs
 // under serverURL.
-func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL) *OrganizationGatewayService {
-	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil}
+func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL, client *authz.Client) *OrganizationGatewayService {
+	return &OrganizationGatewayService{db: db, serverURL: serverURL, authz: client, orgHosts: nil}
 }
 
 // WithOrganizationHosts makes gateway URLs use the platform host stored as the
@@ -206,7 +207,7 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 		return GetMyOrganizationGatewayOutput{}, &ToolRefusalError{Code: "invalid_request", Payload: `{"code":"invalid_request","message":"project_slug is required"}`}
 	}
 	grants, ok := authz.GrantsFromContext(ctx)
-	if !ok {
+	if !ok || s.authz == nil {
 		return GetMyOrganizationGatewayOutput{}, ErrUnavailable
 	}
 	project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
@@ -220,7 +221,7 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 	}
 	// Match ResolveProjectRead's exact project:read check using the live grants
 	// loaded by external admission. Refuse hidden projects like absent projects.
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil})
+	allowed, err := s.authz.EvaluateGrants(ctx, grants, authz.Project(principal.OrganizationID, project.ID.String()).Read())
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("authorize project gateway discovery: %w", err)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -38,7 +39,7 @@ func newChatSearchFixture(t *testing.T) chatSearchFixture {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, t.Context(), db)
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	service := NewChatSearchService(db, engine, audit.NewLogger(), allowBudget(), "chat-search-test-key-material")
+	service := NewChatSearchService(db, authztest.NewParityClient(t, engine), audit.NewLogger(), allowBudget(), "chat-search-test-key-material")
 	require.NotNil(t, service)
 	return chatSearchFixture{db: db, principal: principal, project: project, service: service, base: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)}
 }

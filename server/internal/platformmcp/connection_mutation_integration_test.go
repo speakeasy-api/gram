@@ -68,14 +68,14 @@ func seedConnectionMutationFixture(t *testing.T, name string, eligibility networ
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, gateway.conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, gateway.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	writer := mcpendpoints.NewService(logger, tracerProvider, gateway.conn, sessionManager, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, false)
-	mutations, err := NewMCPConnectionMutationService(gateway.conn, NewMCPConnectionSettingsService(gateway.conn), writer, audit.NewLogger(), engine, eligibility, plugins.PublicationRequests{}, nil)
+	mutations, err := NewMCPConnectionMutationService(gateway.conn, NewMCPConnectionSettingsService(gateway.conn, newGrantsAuthz(t)), writer, audit.NewLogger(), authztest.NewParityClient(t, engine), eligibility, plugins.PublicationRequests{}, nil)
 	require.NoError(t, err)
 	return ctx, connectionMutationFixture{gatewayFixture: gateway, orgSlug: orgSlug, hostedID: gateway.toolsetID, hostedEndpoint: endpoint.ID, mutations: mutations}
 }
 
 func (f connectionMutationFixture) settings(t *testing.T, ctx context.Context, kind MCPConnectionSettingsTargetKind, target uuid.UUID) MCPConnectionSettings {
 	t.Helper()
-	settings, err := NewMCPConnectionSettingsService(f.conn).Get(ctx, f.principal, GetMCPConnectionSettingsInput{ProjectID: f.project.ID.String(), TargetKind: kind, TargetID: target.String()})
+	settings, err := NewMCPConnectionSettingsService(f.conn, newGrantsAuthz(t)).Get(ctx, f.principal, GetMCPConnectionSettingsInput{ProjectID: f.project.ID.String(), TargetKind: kind, TargetID: target.String()})
 	require.NoError(t, err)
 	return settings
 }

@@ -99,7 +99,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load gateway: %w", err)
 		}
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, resourceID, project.ID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(project.ID.String(), resourceID).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCPNetworkTrafficOutput{}, ErrMCPConnectionSettingsNotFound
 		}
