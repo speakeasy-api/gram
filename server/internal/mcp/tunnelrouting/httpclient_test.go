@@ -410,7 +410,8 @@ func TestHTTPClientLocalConfigurationFailure(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1")
+			resp, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
 			require.ErrorIs(t, err, ErrTransportConfiguration)
 			require.NotErrorIs(t, err, ErrNoTunnelRoute)
 		})
