@@ -80,6 +80,11 @@ const (
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.
-type RefreshError struct{ Kind RefreshFailure }
+type RefreshError struct {
+	Kind RefreshFailure
+
+	// RetryAfter is how long the provider asked to wait, zero when it didn't say.
+	RetryAfter time.Duration
+}
 
 func (e *RefreshError) Error() string { return "delegation refresh failed" }
