@@ -159,7 +159,7 @@ func TestUpstreamFailureHappened(t *testing.T) {
 		wire.TunnelErrorNoLiveSession:         mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorSubstreamFailed:       mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorNoRoute:               mcpconnectionattempts.CodeTunnelUnavailable,
-		wire.TunnelErrorTunnelBusy:            mcpconnectionattempts.CodeProviderUnavailable,
+		wire.TunnelErrorTunnelBusy:            mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorRouteLookupFailed:     mcpconnectionattempts.CodeInternalError,
 		wire.TunnelErrorRouteStoreUnavailable: mcpconnectionattempts.CodeInternalError,
 	} {
