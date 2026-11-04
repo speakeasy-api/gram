@@ -9,9 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -200,6 +206,80 @@ func TestListToolUsageTraces_ClassifiesHookObservedGateway(t *testing.T) {
 	rawFiltered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query, MetaMcpServerIds: []string{uuid.NewString()}})
 	require.NoError(t, err)
 	require.Empty(t, rawFiltered.Traces)
+}
+
+// A member's calls are logged in the member's project, whichever gateway
+// routed them, so a gateway in another project of the organization, an agent
+// gateway, and the organization gateway are all named; an id no gateway of the
+// organization derives reads as unknown rather than as the raw id.
+func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	otherGateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      ti.orgID,
+		ProjectID:           otherProject.ID,
+		Name:                "Other Project Gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
+	})
+	require.NoError(t, err)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support bot",
+	})
+	require.NoError(t, err)
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+
+	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member", slug: "member-" + uuid.NewString()[:8]})
+	want := map[string]string{
+		otherGateway.ID.String():                  "Other Project Gateway",
+		agentgateway.GatewayID(agent.ID).String(): "Support bot gateway",
+		orggateway.GatewayID(ti.orgID).String():   organization.Name,
+		uuid.NewString():                          "Unknown gateway",
+	}
+	for gatewayID := range want {
+		logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-time.Minute)})
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == len(want)
+	})
+	got := map[string]string{}
+	for _, trace := range result.Traces {
+		require.NotNil(t, trace.ViaMetaMcpServerID)
+		require.NotNil(t, trace.ViaMetaMcpServerName)
+		got[*trace.ViaMetaMcpServerID] = *trace.ViaMetaMcpServerName
+	}
+	require.Equal(t, want, got)
+
+	// The gateway filter offers every gateway that resolves, and not an id
+	// a client could have stamped on its own.
+	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"gateways"}})
+	require.NoError(t, err)
+	offered := map[string]string{}
+	for _, option := range options.Gateways {
+		offered[option.MetaMcpServerID] = option.Name
+	}
+	for gatewayID, name := range want {
+		if name == "Unknown gateway" {
+			require.NotContains(t, offered, gatewayID)
+			continue
+		}
+		require.Equal(t, name, offered[gatewayID])
+	}
 }
 
 func TestGetToolUsageSummary_ClassifiesAndFiltersGateway(t *testing.T) {
