@@ -55,6 +55,9 @@ func TestClassifyUserAgent(t *testing.T) {
 		{"Replit/2.0", FamilyReplit, "2.0"},
 		{"notion-mcp-client/1.4.0", FamilyNotion, "1.4.0"},
 
+		{"Visual Studio Code - Insiders/1.100.0-insider", FamilyVSCode, "1.100.0-insider"},
+		{"PerplexityBot/1.0; +https://perplexity.ai/perplexitybot", FamilyOther, ""},
+		{"SomeAgent/1.0 (+https://claude.ai/cursor)", FamilyOther, ""},
 		{"nodeflux-agent/1.0", FamilyOther, ""},
 		{"javascript-agent/1.0", FamilyOther, ""},
 		{"mycodexagent/1.0", FamilyOther, ""},

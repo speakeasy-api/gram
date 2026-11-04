@@ -52,7 +52,7 @@ var clientFamilies = []struct {
 	{FamilyKiro, []string{"kiro"}},
 	{FamilyReplit, []string{"replit-agent-mcp-client", "replit"}},
 	{FamilyNotion, []string{"notion-mcp-client"}},
-	{FamilyVSCode, []string{"vscode", "visual studio code"}},
+	{FamilyVSCode, []string{"vscode", "visual studio code - insiders", "visual studio code"}},
 	{FamilyPerplexity, []string{"perplexity"}},
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
@@ -66,6 +66,10 @@ var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.
 func classifyUserAgent(userAgent string) (family, version string) {
 	userAgent = userAgent[:min(len(userAgent), maxUserAgentBytes)]
 	lower := asciiLower(userAgent)
+	// A link in the User-Agent names its owner, not the client: PerplexityBot's points at perplexity.ai.
+	if link := strings.Index(lower, "://"); link >= 0 {
+		lower = lower[:link]
+	}
 	for _, candidate := range clientFamilies {
 		for _, marker := range candidate.markers {
 			at := markerIndex(lower, marker)
