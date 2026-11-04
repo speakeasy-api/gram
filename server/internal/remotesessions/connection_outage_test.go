@@ -21,6 +21,7 @@ func TestConnectionOutageHappened(t *testing.T) {
 		{RefreshOutageTunnel, mcpconnectionattempts.CodeTunnelUnavailable},
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
+			t.Parallel()
 			err := &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: tc.kind, err: errors.New("outage")}
 			require.Equal(t, tc.want, ConnectionOutageHappened(fmt.Errorf("check session: %w", &SessionOutageError{err: err})))
 		})
