@@ -439,7 +439,8 @@ func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) 
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.remedy == refreshRemedyAdministrator {
 			return false
 		}
-		return errors.Is(err, errRefreshUnusableAnswer)
+		// Preserve established missing-transport pacing; history classifies local setup separately.
+		return errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, errRefreshUnusableAnswer)
 	}
 }
 

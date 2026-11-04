@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -243,7 +244,11 @@ func TestRefreshNow_DetachedInvalidClientKeepsDynamicRemedy(t *testing.T) {
 		}
 		answer(w, r)
 	})
-	_, err := env.db.Exec(ctx, "UPDATE remote_session_issuers SET registration_endpoint = $1 WHERE id = $2", "https://idp.example.com/register", env.issuerID)
+	var update repo.UpdateRemoteSessionIssuerParams
+	update.ID = env.issuerID
+	update.ProjectID = conv.ToNullUUID(env.projectID)
+	update.RegistrationEndpoint = conv.ToPGText("https://idp.example.com/register")
+	_, err := env.q.UpdateRemoteSessionIssuer(ctx, update)
 	require.NoError(t, err)
 	rec := mcpconnectionattemptstest.New(t)
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
