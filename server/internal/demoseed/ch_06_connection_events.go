@@ -139,7 +139,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			msg:      "demo seed postflight: connection attempts must cover several clients and some repeats",
 		},
 		{
-			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
+			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(client_family != 'browser' AND step NOT IN ('inbound_token', 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
 			settings: "",
 			msg:      "demo seed postflight: sign-in rows come from a browser, and only one-row requests carry repeats",
 		},
