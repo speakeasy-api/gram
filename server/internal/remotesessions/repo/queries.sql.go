@@ -5169,11 +5169,7 @@ SELECT
     i.registration_endpoint                AS issuer_registration_endpoint,
     c.client_id_metadata_uri               AS client_id_metadata_uri,
     c.identity_provider_connection_id      AS identity_provider_connection_id,
-    c.credential_owner                     AS credential_owner,
-    EXISTS (
-      SELECT 1 FROM remote_session_ema_bindings AS b
-      WHERE b.remote_session_client_id = c.id AND b.state IS DISTINCT FROM 'unlinked'
-    )::boolean                             AS has_active_ema_binding
+    c.credential_owner                     AS credential_owner
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
@@ -5225,7 +5221,6 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientIDMetadataUri                       pgtype.Text
 	IdentityProviderConnectionID              uuid.NullUUID
 	CredentialOwner                           string
-	HasActiveEmaBinding                       bool
 }
 
 // Joined client + issuer view scoped to a single client_id. Used by
@@ -5281,7 +5276,6 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ClientIDMetadataUri,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
-		&i.HasActiveEmaBinding,
 	)
 	return i, err
 }
@@ -6914,6 +6908,33 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 	var i GetUserSessionIssuerForProjectRow
 	err := row.Scan(&i.ID, &i.ProjectID)
 	return i, err
+}
+
+const hasActiveEMABindingForRefresh = `-- name: HasActiveEMABindingForRefresh :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id
+  JOIN user_session_issuers AS u ON u.id = b.user_session_issuer_id
+    AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  WHERE b.remote_session_client_id = $1
+    AND b.user_session_issuer_id = $2
+    AND b.state IS DISTINCT FROM 'unlinked'
+)::boolean
+`
+
+type HasActiveEMABindingForRefreshParams struct {
+	RemoteSessionClientID uuid.NullUUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Resolve tenant ownership from the persisted session's identity issuer, not
+// from a remote client that may be shared globally.
+func (q *Queries) HasActiveEMABindingForRefresh(ctx context.Context, arg HasActiveEMABindingForRefreshParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveEMABindingForRefresh, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one

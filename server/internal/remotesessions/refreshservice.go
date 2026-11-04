@@ -558,6 +558,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 				err := fmt.Errorf("remote session refresh panicked: %v", recovered)
 				s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(err))
 				s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
+				s.recordRefresh(ctx, attribution, sess, client, trigger, remotesessionmetrics.RefreshOutcomeInternalError, err)
 				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: RefreshOutageNone, err: err}}
 			}
 		}()
