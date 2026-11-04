@@ -1317,11 +1317,12 @@ WITH disabled AS (
   WHERE id = $1 AND project_id = $2 AND $3::text = 'disabled'
 ), detached AS (
   UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
-  WHERE auth_client_id = $1 AND project_id = $2 AND $3::text = 'detached'
+  WHERE auth_client_id = $1 AND project_id = $2
+    AND mcp_server_id = $4 AND $3::text = 'detached'
 ), unbound AS (
   DELETE FROM remote_session_client_user_session_issuers
   WHERE remote_session_client_id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
-    AND $3::text = 'unbound issuer'
+    AND user_session_issuer_id = $5 AND $3::text = 'unbound issuer'
 )
 UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
@@ -1332,9 +1333,17 @@ type WithdrawOAuthChoiceFixtureParams struct {
 	AuthClientID uuid.UUID
 	ProjectID    uuid.NullUUID
 	Change       string
+	McpServerID  uuid.UUID
+	IssuerID     uuid.UUID
 }
 
 func (q *Queries) WithdrawOAuthChoiceFixture(ctx context.Context, arg WithdrawOAuthChoiceFixtureParams) error {
-	_, err := q.db.Exec(ctx, withdrawOAuthChoiceFixture, arg.AuthClientID, arg.ProjectID, arg.Change)
+	_, err := q.db.Exec(ctx, withdrawOAuthChoiceFixture,
+		arg.AuthClientID,
+		arg.ProjectID,
+		arg.Change,
+		arg.McpServerID,
+		arg.IssuerID,
+	)
 	return err
 }

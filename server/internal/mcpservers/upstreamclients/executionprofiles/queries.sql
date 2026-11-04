@@ -563,11 +563,12 @@ WITH disabled AS (
   WHERE id = @auth_client_id AND project_id = @project_id AND @change::text = 'disabled'
 ), detached AS (
   UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
-  WHERE auth_client_id = @auth_client_id AND project_id = @project_id AND @change::text = 'detached'
+  WHERE auth_client_id = @auth_client_id AND project_id = @project_id
+    AND mcp_server_id = @mcp_server_id AND @change::text = 'detached'
 ), unbound AS (
   DELETE FROM remote_session_client_user_session_issuers
   WHERE remote_session_client_id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.project_id = @project_id)
-    AND @change::text = 'unbound issuer'
+    AND user_session_issuer_id = @issuer_id AND @change::text = 'unbound issuer'
 )
 UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.project_id = @project_id)

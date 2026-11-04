@@ -155,7 +155,7 @@ func TestAdoptOAuthSelectionRejectsWithdrawnChoice(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			f, in, session, selected := oauthFixture(t, ContextUserBacked)
-			err := f.q.WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
+			err := f.q.WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, IssuerID: in.IssuerID, McpServerID: in.ServerID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
 			require.NoError(t, err)
 			_, err = AdoptOAuthSelection(t.Context(), f.pool, in, session)
 			require.Error(t, err)
@@ -182,7 +182,7 @@ func TestOAuthResumeSelectionLocksLiveChoice(t *testing.T) {
 	for _, change := range []string{"disabled", "detached", "unbound issuer", "deleted registration"} {
 		other := testenv.BeginTx(t, t.Context(), f.pool)
 		testenv.SetLockTimeout(t, t.Context(), other, 50*time.Millisecond)
-		err = New(other).WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
+		err = New(other).WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, IssuerID: in.IssuerID, McpServerID: in.ServerID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
 		var pgErr *pgconn.PgError
 		require.ErrorAs(t, err, &pgErr)
 		require.Equal(t, "55P03", pgErr.Code, "live evidence must stay locked until publication commits")
