@@ -103,7 +103,7 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 			}
 		}
 		return mcpconnectionattempts.CodeInternalError, true
-	case remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeCanceled:
+	case remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeDeferred:
 		return nil, false
 	}
 	return nil, false

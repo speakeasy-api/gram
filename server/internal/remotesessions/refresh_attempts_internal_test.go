@@ -122,7 +122,7 @@ func TestRefreshHappened_NoRow(t *testing.T) {
 	t.Parallel()
 
 	var client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow
-	for _, outcome := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeCanceled} {
+	for _, outcome := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeDeferred} {
 		_, ok := refreshHappened(outcome, client, context.Canceled)
 		require.False(t, ok, outcome)
 	}
