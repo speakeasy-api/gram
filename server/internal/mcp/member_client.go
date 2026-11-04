@@ -413,7 +413,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// attempt's time ran out or the token endpoint rate limited the
 		// client, which the credential source remembers longer than a
 		// listing lasts.
-		if outage, ok := errors.AsType[memberDiscoveryError](failure); ok {
+		if outage, ok := errors.AsType[memberUnavailableError](failure); ok {
 			tokenEndpoint, answered := errors.AsType[*remotesessions.TokenEndpointError](exchangeErr)
 			rateLimited := answered && tokenEndpoint.StatusCode == http.StatusTooManyRequests
 			outage.retryable = ctx.Err() == nil && !rateLimited && !errors.Is(exchangeErr, context.DeadlineExceeded) && !errors.Is(exchangeErr, context.Canceled)
@@ -449,10 +449,10 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
 		code := mcpconnectionattempts.CodeInternalError
-		if errors.Is(err, errTunnelNoLiveRoute) || errors.Is(exchangeErr, errTunnelNoLiveRoute) {
+		if errors.Is(err, errTunnelNoRoute) || errors.Is(exchangeErr, errTunnelNoRoute) {
 			code = mcpconnectionattempts.CodeTunnelUnavailable
 		}
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), false), code}
+		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q can't be reached right now", member.slug), false), code}
 	case exchangeErr != nil:
 		// A transport failure may clear on a retry, unless it timed out, which
 		// already spent the attempt's time, or no retry can change it: egress

@@ -81,14 +81,14 @@ func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
 	}
 }
 
-// A 502 the tunnel forwarded came from the provider, and a gateway's other statuses aren't an outage of the tunnel.
+// A 502 the tunnel forwarded came from the provider, and a busy tunnel is also a tunnel outage.
 func TestRefreshHappened_BadGatewayFollowsTheTunnelStatus(t *testing.T) {
 	t.Parallel()
 
 	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
 		"":                                mcpconnectionattempts.CodeProviderServerError,
-		wire.TunnelErrorTunnelBusy:        mcpconnectionattempts.CodeProviderUnavailable,
+		wire.TunnelErrorTunnelBusy:        mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorRouteLookupFailed: mcpconnectionattempts.CodeInternalError,
 	} {
 		what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeUpstreamError, client, &TokenRefreshError{statusCode: http.StatusBadGateway, tunnelError: tunnelError})

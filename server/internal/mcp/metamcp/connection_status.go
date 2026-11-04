@@ -62,6 +62,8 @@ const (
 	SignInNotRequired = "not_required"
 	// SignInError: a credential exists but cannot be used; Detail says why.
 	SignInError = "error"
+	// SignInUnavailable: an outage stops the sign-in being used; Detail names the fallback.
+	SignInUnavailable = "unavailable"
 	// SignInActionRequired: signing in here won't help; Detail says what to do.
 	SignInActionRequired = "action_required"
 	// SignInHidden: the caller hid the member, so its tools are not served.
@@ -74,6 +76,17 @@ type ConnectionStatusServer struct {
 	Name   string `json:"name,omitempty"`
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+
+	// Outage is what the view shows for SignInUnavailable; Detail stays the message for the AI app.
+	Outage *ConnectionStatusOutage `json:"outage,omitempty"`
+}
+
+// ConnectionStatusOutage is an outage in words for the person reading the view.
+type ConnectionStatusOutage struct {
+	Message string `json:"message"`
+
+	// ReconnectURL is set when reconnecting could get past the outage.
+	ReconnectURL string `json:"reconnectUrl,omitempty"`
 }
 
 // ConnectionStatusResult is the structuredContent payload of a
@@ -141,6 +154,8 @@ func (r ConnectionStatusResult) Text() string {
 		case SignInHidden:
 			hidden = true
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
+		case SignInUnavailable:
+			fmt.Fprintf(&b, "- %s: temporarily unavailable (%s)\n", label, s.Detail)
 		default:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)

@@ -8,8 +8,4 @@ import "context"
 type ToolsCallRefusalInterceptor interface {
 	// InterceptToolsCallRefusal is called with the refusing interceptor's own error.
 	InterceptToolsCallRefusal(ctx context.Context, err error)
-
-	// Name returns a stable identifier for this interceptor, used for tracing
-	// span attributes and log correlation.
-	Name() string
 }

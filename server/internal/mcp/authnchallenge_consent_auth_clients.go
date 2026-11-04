@@ -297,22 +297,23 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 		status := cardStatus(card)
 		if clientType == authz.AuthClientTypeEMA {
 			switch status {
-			case gatewayServerChained, gatewayServerChainPending:
+			case gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
 				return consentClientReady, ""
 			case gatewayServerReconnect:
 				return consentClientReconnect, card.ClientID
 			case gatewayServerNotConnected:
 				return consentClientConnect, card.ClientID
-			case gatewayServerConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
+			case gatewayServerConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNoAccess:
 			}
 			return consentClientSetup, ""
 		}
 		switch status {
-		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending:
+		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
+			// An outage leaves the connection in place: it can still be chosen.
 			return consentClientReady, ""
 		case gatewayServerReconnect:
 			return consentClientReconnect, card.ClientID
-		case gatewayServerNotConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
+		case gatewayServerNotConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNoAccess:
 		}
 		return consentClientConnect, card.ClientID
 	}
@@ -393,7 +394,7 @@ var errConsentNoUsableConnection = errors.New("no connection can serve this appr
 // consentCardsApprovable is the rule for approving through service cards.
 func consentCardsApprovable(cards []remoteSessionCard) bool {
 	return len(cards) == 0 || slices.ContainsFunc(cards, func(card remoteSessionCard) bool {
-		return card.Connected || card.Chained
+		return (card.Connected && !card.Unavailable) || card.Chained
 	})
 }
 

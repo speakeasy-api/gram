@@ -108,6 +108,7 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 					ClientID:       "",
 					ClientIDOrigin: "",
 					ServerName:     "",
+					ProviderName:   "",
 				})
 				return
 			}

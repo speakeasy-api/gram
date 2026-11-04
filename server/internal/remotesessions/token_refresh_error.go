@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
@@ -36,6 +37,9 @@ type TokenRefreshError struct {
 	// tunnelError is the tunnel gateway's error status when the gateway, not the provider, answered.
 	tunnelError string
 	remedy      refreshRemedy
+
+	// retryAfter is the upstream Retry-After, zero when absent.
+	retryAfter time.Duration
 }
 
 // refreshRemedy names who can repair a refresh failure that Speakeasy raised
@@ -81,7 +85,7 @@ func (e *TokenRefreshError) Unwrap() error { return e.cause }
 func (e *TokenRefreshError) UpstreamCode() string { return e.upstreamCode }
 
 func newTokenRefreshError(reason string, cause error, remedy refreshRemedy) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, tunnelError: "", remedy: remedy}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, tunnelError: "", remedy: remedy, retryAfter: 0}
 }
 
 // invalidGrant reports whether the upstream answered with RFC 6749 §5.2
@@ -138,6 +142,7 @@ func newTokenRefreshErrorFromSuccessBody(statusCode int, status string, body []b
 		statusCode:   statusCode,
 		tunnelError:  "",
 		remedy:       refreshRemedyUnset,
+		retryAfter:   0,
 	}, true
 }
 
@@ -164,5 +169,6 @@ func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *T
 		statusCode:   statusCode,
 		tunnelError:  "",
 		remedy:       refreshRemedyUnset,
+		retryAfter:   0,
 	}
 }

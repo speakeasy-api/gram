@@ -292,6 +292,7 @@ func (f *ProxyManager) Build(
 			StaticValue:            h.Value.String,
 			ValueFromRequestHeader: h.ValueFromRequestHeader.String,
 			IsRequired:             h.IsRequired,
+			IsSecret:               h.IsSecret,
 		})
 	}
 
@@ -489,8 +490,8 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
 		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
-		// Only the log row: a call that never got a reply has nothing to
-		// bill, scan, or record as a selected use.
+		// Log and connection-outcome rows only: a call with no reply has
+		// nothing to bill, scan, or record as a selected use.
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{

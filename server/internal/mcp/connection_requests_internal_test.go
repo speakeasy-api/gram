@@ -223,7 +223,7 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 		{name: "server behind the tunnel", outcome: stubMemberOutcome{code: http.StatusBadGateway}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeProviderServerError},
 		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeSharedCredentialRejected},
 		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, want: mcpconnectionattempts.CodeProviderUnreachable},
-		{name: "no route", outcome: stubMemberOutcome{err: fmt.Errorf("%w: %w", errMemberUnroutable, errTunnelNoLiveRoute)}, want: mcpconnectionattempts.CodeTunnelUnavailable},
+		{name: "no route", outcome: stubMemberOutcome{err: fmt.Errorf("%w: %w", errMemberUnroutable, errTunnelNoRoute)}, want: mcpconnectionattempts.CodeTunnelUnavailable},
 		{name: "route store down", outcome: stubMemberOutcome{err: fmt.Errorf("%w: store unavailable", errMemberUnroutable)}, want: mcpconnectionattempts.CodeInternalError},
 		{name: "rate limited", outcome: stubMemberOutcome{code: http.StatusTooManyRequests}, want: mcpconnectionattempts.CodeProviderRateLimited},
 		{name: "server error", outcome: stubMemberOutcome{code: http.StatusInternalServerError}, want: mcpconnectionattempts.CodeProviderServerError},
