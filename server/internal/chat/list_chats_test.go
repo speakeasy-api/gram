@@ -548,7 +548,7 @@ func TestListChats_ShowsStoredCronEnvelopesUnderTheJobName(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
-	envelope := "[cron:4a39cac2-54ab-4ef2-8c81-147832084a86 nightly-digest] Summarize the day"
+	envelope := "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 nightly-digest] Summarize the day"
 	derived := seedChat(t, ctx, ti, "", "ext-cron", envelope)
 	renamed := seedChat(t, ctx, ti, "", "ext-cron", "placeholder")
 	require.NoError(t, repo.New(ti.conn).RenameChat(ctx, repo.RenameChatParams{
