@@ -770,16 +770,18 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnreachedProxiedMemberLogsFailedRo
 	subject := createTestUser(t, ctx, ti, "meta-unreached-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
 
-	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
-	require.True(t, isError)
-	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
-	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
-	require.True(t, isError)
-
-	requireTelemetryRowCount(t, `gram_project_id = ?
+	failedRows := `gram_project_id = ?
 		   AND event_source = 'tool_call'
 		   AND tool_name = 'ping'
 		   AND meta_mcp_server_id = ?
-		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400`,
-		2, projectID.String(), meta.ID.String())
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400`
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	requireTelemetryRowCount(t, failedRows, 1, projectID.String(), meta.ID.String())
+
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
+	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	requireTelemetryRowCount(t, failedRows, 2, projectID.String(), meta.ID.String())
 }
