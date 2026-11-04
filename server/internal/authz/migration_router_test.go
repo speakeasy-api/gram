@@ -279,7 +279,7 @@ func brokenProjectRegistry(t *testing.T) *s.Registry {
 	access := string(GrantSurfaceAccess)
 	var decls []s.TypeDecl
 	for _, decl := range DefaultDeclarations() {
-		if decl.Name() == "organization" {
+		if decl.Name() != "project" {
 			decls = append(decls, decl)
 		}
 	}
@@ -297,6 +297,9 @@ func brokenProjectRegistry(t *testing.T) *s.Registry {
 			s.Alternative("project", "publish_plugin"),
 			s.Alternative("organization", "administer"),
 			s.VetoBlocks()),
+		s.Alternatives("write_or_administer",
+			s.Alternative("project", "write"),
+			s.Alternative("organization", "administer")),
 	))
 	registry, err := s.Compile(DefaultRegistryConfig(), decls...)
 	require.NoError(t, err)

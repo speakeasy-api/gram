@@ -109,6 +109,9 @@ type testServiceConfig struct {
 	// noProber builds the service without a protected resource prober, so
 	// scope resolution ignores resource rows.
 	noProber bool
+	// authzMode routes every authorization unit to one mode instead of
+	// comparing every decision in shadow mode.
+	authzMode *authz.MigrationMode
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -169,6 +172,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 	}
 
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authorization := authztest.NewParityClient(t, engine)
+	if cfg.authzMode != nil {
+		authorization = authztest.NewClientInMode(t, engine, *cfg.authzMode)
+	}
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
@@ -176,7 +183,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		conn,
 		sessionManager,
 		engine,
-		authztest.NewParityClient(t, engine),
+		authorization,
 		enc,
 		envEntries,
 		guardianPolicy,

@@ -1038,25 +1038,9 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
-			// The typed client must compile its registry and migration units at
-			// startup; a broken declaration stops the server instead of failing
-			// checks later. Each unit's flag routes it, and every unit starts
-			// with the engine deciding.
-			authzRegistry, err := authz.DefaultRegistry()
+			authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
 			if err != nil {
-				return fmt.Errorf("compile authorization registry: %w", err)
-			}
-			authzRouter, err := authz.NewMigrationRouter(authzRegistry, authz.FeatureFlagModes(featureFlags), authz.DefaultMigrationUnits()...)
-			if err != nil {
-				return fmt.Errorf("create authorization migration router: %w", err)
-			}
-			authzClient, err := authz.NewClient(authzEngine, authzRegistry,
-				authz.WithMigrationRouter(authzRouter),
-				authz.WithShadowRecorder(authz.NewShadowRecorder(logger, meterProvider)),
-				authz.WithBuildVersion(shortGitSHA()),
-			)
-			if err != nil {
-				return fmt.Errorf("create authorization client: %w", err)
+				return err
 			}
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
@@ -2231,6 +2215,7 @@ func newStartCommand() *cli.Command {
 						DB:                             db,
 						EncryptionClient:               encryptionClient,
 						FeatureProvider:                featureFlags,
+						AuthzClient:                    authzClient,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
 						SlackDirectoryTokenRefresher:   slackDirectoryRefresher,

@@ -10,16 +10,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
-// newAuthzClient builds the typed authorization client over engine the way
-// the main server does: the default registry, each migration unit routed by
-// its feature flag, shadow comparisons recorded as logs and metrics. A
-// registry that does not compile stops the binary at startup.
-func newAuthzClient(logger *slog.Logger, meterProvider metric.MeterProvider, engine *authz.Engine, featureFlags feature.Provider) (*authz.Client, error) {
+// newAuthzClient builds the typed authorization client over engine. It
+// compiles the default registry and migration units, so a broken declaration
+// stops the command at startup instead of failing checks later. Each unit's
+// feature flag routes it, and every unit starts with the engine deciding.
+func newAuthzClient(logger *slog.Logger, meterProvider metric.MeterProvider, engine *authz.Engine, flags feature.Provider) (*authz.Client, error) {
 	registry, err := authz.DefaultRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("compile authorization registry: %w", err)
 	}
-	router, err := authz.NewMigrationRouter(registry, authz.FeatureFlagModes(featureFlags), authz.DefaultMigrationUnits()...)
+	router, err := authz.NewMigrationRouter(registry, authz.FeatureFlagModes(flags), authz.DefaultMigrationUnits()...)
 	if err != nil {
 		return nil, fmt.Errorf("create authorization migration router: %w", err)
 	}
