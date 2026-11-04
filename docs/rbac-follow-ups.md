@@ -11,7 +11,7 @@ Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migratio
 
 3. **Chat list cutover onto the Q1 filter.** #8534 adds `Plan`/`AccessPlan`, but chat collections still list through the old queries. The cutover waits on the five list-versus-single-chat divergences characterized in #8533: a project-wide `chat:read` grant, a single-chat grant, legacy API keys, dashboard chat-session tokens, and a failing visibility check.
 4. **Member agent self-creation.** #7590 removed it, and #8524 flags it at the top. The recommended fix is a default Member grant `agent:write {owner: self}`. The alternative is restoring self-creation in #7590.
-5. **`EvaluateGrants` transport refusal.** Loaded-grant questions don't refuse disallowed transports (F6 decision 21). This affects #8465, #8487 and #8531.
+5. **Confirm `EvaluateGrants` keeps no transport refusal.** F6 decision 21 deliberately keeps `GrantsAuthorize`'s behaviour: the grants belong to another principal, so the request's own credential does not decide the answer, and adding the refusal would turn allows into denials. Only the loaded-policy entry points reject principal credentials. The review threads on #8465, #8487 and #8531 ask Tiago to confirm this. No change is planned unless he reverses it.
 6. **Expired grants.** `principal_grants` has no `expires_at`, so #8481 cannot honour expiry yet.
 7. **Two security threads on #8519.** The risk scanner runs with a nil authorization (no repro yet), and Platform MCP `connection_mutation` uses project-level `mcp:write`.
 
