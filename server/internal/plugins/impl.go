@@ -163,8 +163,7 @@ type Service struct {
 	repo   *repo.Queries
 	auth   *auth.Auth
 	authz  *authz.Client
-	// engine prepares administrator admission contexts and answers the
-	// skill-distribution checks that have no typed operation yet.
+	// engine prepares administrator admission contexts.
 	engine    *authz.Engine
 	audit     *audit.Logger
 	cache     cache.Cache

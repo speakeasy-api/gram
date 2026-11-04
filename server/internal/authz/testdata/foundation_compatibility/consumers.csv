@@ -426,9 +426,10 @@ internal/otel/events.go,*Service.authorizeOrgEventRead,check,Check,ScopeOrgRead,
 internal/platformmcp/access_reads.go,*AccessReadService.GetMCPAccess,check,MCPCheck,ScopeMCPConnect,,1,X3 AIS-875
 internal/platformmcp/access_reads.go,*AccessReadService.GetMCPAccess,check,MCPToolCallCheck,,GrantsAuthorize,1,X3 AIS-875
 internal/platformmcp/access_reads.go,*AccessReadService.GetMCPAccess,evaluator,GrantsAuthorize,,,2,X3 AIS-875
-internal/platformmcp/access_reads.go,*AccessReadService.GetMCPAccess,wiring,NewEngine,,,1,F5 AIS-835
 internal/platformmcp/access_reads.go,*AccessReadService.getMemberMCPAccess,loader,LoadGrants,,,1,X3 AIS-875
 internal/platformmcp/access_reads.go,*AccessReadService.getMemberMCPAccess,loader,ResolveUserPrincipals,,,1,X3 AIS-875
+internal/platformmcp/access_reads.go,NewAccessReadService,wiring,NewDefaultClient,,,1,F5 AIS-835
+internal/platformmcp/access_reads.go,NewAccessReadService,wiring,NewEngine,,,1,F5 AIS-835
 internal/platformmcp/access_reads.go,roleAuthzGrants,projection,ValidateSelector,,,1,X1 AIS-873
 internal/platformmcp/access_reads.go,roleSharedAuthClientAccess,check,MCPAuthClientCheck,,,1,X3 AIS-875
 internal/platformmcp/access_reads.go,roleSharedAuthClientAccess,evaluator,GrantAllows,,,1,X3 AIS-875
@@ -510,10 +511,6 @@ internal/platformmcp/whoami.go,*WhoamiService.roles,loader,ResolveUserPrincipals
 internal/platformmcp/widgets.go,*WidgetService.scope,check,Check,ScopeProjectRead,Require,1,X3 AIS-875
 internal/plugins/assignments/command.go,normalizePrincipal,writer,ValidatePrincipal,,,1,PL1 AIS-855
 internal/plugins/delivery_principals.go,ResolveDeliveryPrincipals,loader,ResolveUserPrincipals,,,1,S2 AIS-854
-internal/plugins/distribution_projection.go,*Service.distributionAuthContext,check,Check,ScopeSkillRead,RequireAnyUnblocked,2,S2 AIS-854
-internal/plugins/distribution_projection.go,*Service.distributionAuthContext,engine,RequireAnyUnblocked,,,1,S2 AIS-854
-internal/plugins/role_matches.go,RolePluginsForResource,check,Check,ScopeOrgAdmin,Evaluate,1,S2 AIS-854
-internal/plugins/role_matches.go,RolePluginsForResource,check,Check,ScopeOrgRead,Evaluate,1,S2 AIS-854
 internal/plugins/role_matches.go,RolePluginsForResource,loader,GrantsFromContext,,,1,S2 AIS-854
 internal/plugins/roledelivery/delivery.go,Snapshot,loader,LoadGrants,,,1,M6 AIS-862
 internal/plugins/roledelivery/delivery.go,allowed,check,MCPCheck,ScopeMCPConnect,GrantsAuthorize,1,M6 AIS-862

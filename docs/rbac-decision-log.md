@@ -165,3 +165,14 @@ Review follow-ups adopted on #8442 (each fails closed):
 6. **Distribution mutations use `Project.PublishPlugin()` or `Project.Write()`,** closing two more of the `RequirePluginWrite` call sites PL1 found outside the inventory.
 7. **Remaining skills row:** `accessibleSkillIDs` resolves user principals for the distribution projection, which S2 owns; its owner override stays.
 8. **Parity:** the skills and Platform MCP suites made 1,469 comparisons, all matching.
+
+## S2 (AIS-854): skill and plugin projections
+
+### Decided without reviewer input
+
+1. **Distribution reads use `Skill(projectID, skillID).Read()`.** `distributionAuthContext` made the same project-or-skill `RequireAnyUnblocked` as the skills service, so it reuses S1's operation. The plugins service's `engine` field now only prepares administrator admission contexts.
+2. **`plugins.RolePluginsForResource` takes `*authz.Client`.** Its organization administration and read checks become `Organization(id).Administer()` and `.Read()`, and its `RequirePluginWrite` fallback becomes `Evaluate(Project(org, id).PublishPlugin())`. As before, any failure to confirm publication leaves the matches undisclosed rather than failing the read.
+3. **The access service takes the client beside the engine** for that one call. This touches the access service's constructor ahead of its own organization slice; the rest of access still uses the engine. _If reversed:_ the organization slice adds the parameter and S2 rebases onto it.
+4. **The Platform MCP access reads keep their old answer.** They built a fresh engine for every call; they now build one client over a fresh engine at construction, with no migration router, so the client always answers through the engine. The Platform MCP slice will swap in the routed client when it threads the client through its config. _If reversed:_ thread the routed client into `NewAccessReadService` now.
+5. **The principal and grant loaders stay in the services** (`ResolveDeliveryPrincipals`, `accessibleSkillIDs`, the `GrantsFromContext` presence check). They resolve who a projection is for, not whether the caller may act, and the RFC keeps loading in the service, as AS1 decision 4 describes. Their inventory rows remain under S2.
+6. **Parity:** the plugins, access, Platform MCP and cmd/gram suites made 2,457 comparisons, all matching. `TestProcessRoleDistributionSetup_DeleteWaitsForSetup` fails on the base branch in this environment too.

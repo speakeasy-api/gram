@@ -143,7 +143,6 @@ var foundationFileOwners = map[string]string{
 	"internal/mcp/mandatory_shadow.go":                          ownerM5,
 	"internal/mcp/serve_platform.go":                            ownerX3,
 	"internal/plugins/delivery_principals.go":                   ownerS2,
-	"internal/plugins/distribution_projection.go":               ownerS2,
 	"internal/plugins/role_matches.go":                          ownerS2,
 }
 

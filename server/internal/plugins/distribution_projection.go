@@ -25,10 +25,7 @@ func (s *Service) distributionAuthContext(ctx context.Context, id string) (*cont
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
 	}
-	if err := s.engine.RequireAnyUnblocked(ctx,
-		authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: ac.ProjectID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: authz.ResourceKindSkill, ResourceID: skillID.String(), Dimensions: nil},
-	); err != nil {
+	if err := s.authz.Require(ctx, authz.Skill(ac.ProjectID.String(), skillID.String()).Read()); err != nil {
 		return nil, err
 	}
 	if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: *ac.ProjectID, OrganizationID: ac.ActiveOrganizationID}); err != nil {

@@ -151,7 +151,7 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 			principals = append(principals, entry.PrincipalUrn)
 		}
 	}
-	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.authz, ac.ActiveOrganizationID, uuid.MustParse(projectID), uuid.MustParse(payload.ResourceID), principals)
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.client, ac.ActiveOrganizationID, uuid.MustParse(projectID), uuid.MustParse(payload.ResourceID), principals)
 	if err != nil {
 		return nil, fmt.Errorf("read audience role plugins: %w", err)
 	}
