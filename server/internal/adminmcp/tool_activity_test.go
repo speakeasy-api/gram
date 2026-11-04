@@ -138,6 +138,13 @@ func TestOrganizationActivityInternalClassification(t *testing.T) {
 	status, body, data := callStaffReadTool(t, reads, "list_organization_activity", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, `"isError":true`)
+	var output ListOrganizationActivityOutput
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Len(t, output.Activity, 2)
+	require.Equal(t, "ordinary", output.Activity[0].ID)
+	require.False(t, output.Activity[0].IsInternal)
+	require.Equal(t, "internal", output.Activity[1].ID)
+	require.True(t, output.Activity[1].IsInternal)
 	require.Contains(t, string(data), `"is_internal":false`)
 	require.Contains(t, string(data), `"is_internal":true`)
 }

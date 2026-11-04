@@ -408,4 +408,6 @@ func TestAuditLogEntriesInternalClassification(t *testing.T) {
 	require.False(t, output.Entries[0].IsInternal)
 	require.Equal(t, "internal", output.Entries[1].ID)
 	require.True(t, output.Entries[1].IsInternal)
+	require.Contains(t, string(data), `"is_internal":false`)
+	require.Contains(t, string(data), `"is_internal":true`)
 }
