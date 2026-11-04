@@ -125,6 +125,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 func privateIngressServerFlags() []cli.Flag {
 	flags := mcpRuntimeFlags()
 	return append(flags,
+		riskFingerprintPepperFlag(),
 		&cli.StringFlag{
 			Name:    "netingress-address",
 			Usage:   "Private network ingress HTTPS address; empty disables the listener",

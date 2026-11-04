@@ -104,6 +104,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -698,7 +699,6 @@ func serverFlags() []cli.Flag {
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, pluginsFlags()...)
-	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
@@ -1112,14 +1112,6 @@ func newStartCommand() *cli.Command {
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
-				pulseTenantID: c.String("pulse-registry-tenant"),
-				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
-				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create mcp registry client: %w", err)
-			}
 
 			principalCredentials := principalcredential.New(callerAssertions, db)
 			deviceAgentTokens := deviceagenttoken.New(callerAssertions, db)
@@ -1185,7 +1177,9 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
+			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
 				return err
 			}
@@ -1242,6 +1236,7 @@ func newStartCommand() *cli.Command {
 			tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
 			tunnelMetricsShutdown = stopTunnelMetrics
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
+				Connections:      connectionRecorder,
 				CallerAssertions: callerAssertions,
 				IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -1765,8 +1760,8 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)), featureFlags)
-			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
+			mcpCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)))
+			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
@@ -1899,7 +1894,7 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
-			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.Outbound)
+			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), mcpCatalog, authzEngine, callbackOrigins.Outbound)
 			externalMCPService.SetCallbackOrigins(callbackOrigins)
 			externalmcp.Attach(mux, externalMCPService)
 			riskSignaler := background.NewThrottledSignaler(
@@ -1951,7 +1946,6 @@ func newStartCommand() *cli.Command {
 				Encryption:                encryptionClient,
 				Identity:                  identityResolver,
 				Sessions:                  sessionManager,
-				Registry:                  mcpRegistryClient,
 				Catalog:                   mcpCatalog,
 				GuardianPolicy:            guardianPolicy,
 				RemoteChallengeManager:    remoteChallengeManager,
@@ -2242,7 +2236,6 @@ func newStartCommand() *cli.Command {
 						FunctionsDeployer:              functionsOrchestrator,
 						FunctionsVersion:               runnerVersion,
 						RagService:                     ragService,
-						MCPRegistryClient:              mcpRegistryClient,
 						MCPCatalog:                     mcpCatalog,
 						TelemetryLogger:                telemLogger,
 						ClickhouseConn:                 chDB,

@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -292,7 +293,10 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
-	bindingRefresh     *remotesessions.BindingRefreshAttempts
+
+	// connections records connection attempt steps.
+	connections    *mcpconnectionattempts.Recorder
+	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -553,6 +557,7 @@ func NewService(
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
+	connections *mcpconnectionattempts.Recorder,
 ) (*Service, error) {
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
@@ -716,6 +721,7 @@ func NewService(
 		identityValidator:      mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:      userSessionSigner,
 		remoteChallengeMgr:     remoteChallengeMgr,
+		connections:            connections,
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
@@ -822,11 +828,11 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		case netingress.RouteInstallScript:
 			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript)
 		case netingress.RouteProtectedResource:
-			handler = oops.ErrHandle(service.logger, service.HandleGetProtectedResource)
+			handler = oops.AuthErrHandle(service.logger, service.HandleGetProtectedResource)
 		case netingress.RouteAuthorizationServer:
-			handler = oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer)
+			handler = oops.AuthErrHandle(service.logger, service.HandleGetAuthorizationServer)
 		case netingress.RouteRegister:
-			handler = oops.ErrHandle(service.logger, service.HandleRegister)
+			handler = oops.AuthErrHandle(service.logger, service.HandleRegister)
 		case netingress.RouteAuthorize:
 			handler = oops.BrowserErrHandle(service.logger, service.HandleAuthorize)
 		case netingress.RouteConnect:
@@ -911,9 +917,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 
 	// OAuth metadata at the canonical RFC paths; resolution semantics are
 	// documented in authnchallenge_well_known.go.
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.AuthErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.AuthErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.AuthErrHandle(service.logger, service.HandleRegister).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/authorize", oops.BrowserErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/idp_callback", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.BrowserErrHandle(service.logger, service.HandleConsent).ServeHTTP)
@@ -942,6 +948,7 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	}
 	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
 	if err != nil {
+		remotesessions.TagExternalOutage(w, err)
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
 	if result.Grant != nil {

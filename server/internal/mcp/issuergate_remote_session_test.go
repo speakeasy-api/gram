@@ -221,7 +221,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
@@ -476,7 +476,7 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			if refused.ProviderRefusal() {
 				refresh = identitychaining.RefreshRefused
 			}
-			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: refresh, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: refresh, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)
@@ -486,13 +486,13 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			require.Equal(t, 1, acquired, "the gate tries chaining before answering")
 			switch {
 			case tc.refusal.retryable:
-				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "retry shortly")
+				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "Try again in a moment.")
 				require.Empty(t, w.Header().Get("WWW-Authenticate"))
 			case refused.ProviderRefusal():
 				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
 				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 			default:
-				require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "contact your administrator")
+				require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "Contact your administrator.")
 				require.Empty(t, w.Header().Get("WWW-Authenticate"))
 			}
 		})
