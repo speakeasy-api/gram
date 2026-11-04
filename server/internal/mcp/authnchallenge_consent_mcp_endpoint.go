@@ -440,7 +440,11 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	// As at runtime, a typed auth client that resolved serves its own material, never a chained identity.
 	// Chaining waits until access is authorized below.
-	chain := errors.Is(err, remotesessions.ErrNoValidToken) && (auth == nil || auth.outcome == authClientLegacy) &&
+	// Refined failures also match ErrNoValidToken but must preserve their retry/configuration responses.
+	chain := errors.Is(err, remotesessions.ErrNoValidToken) &&
+		!errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) &&
+		!errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) &&
+		(auth == nil || auth.outcome == authClientLegacy) &&
 		s.identityChainer != nil && s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID)
 	noToken := err
 	if chain {
