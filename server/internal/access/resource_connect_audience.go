@@ -42,13 +42,16 @@ func (r *RoleManager) ReadResourceConnectionAudience(ctx context.Context, organi
 	if err != nil {
 		return ResourceConnectionAudience{}, err
 	}
-	rules, err := audienceRulesSnapshot(ctx, r.db, organizationID, resourceID)
-	if err != nil {
-		return ResourceConnectionAudience{}, oops.E(oops.CodeUnexpected, err, "read resource audience rules").LogError(ctx, r.logger)
-	}
+	// The version is read before the rules: a save landing between the two
+	// leaves a version older than the rules, so the next save conflicts
+	// rather than overwriting rules the caller never saw.
 	version, err := r.audienceFingerprint(ctx, r.db, organizationID, resourceID)
 	if err != nil {
 		return ResourceConnectionAudience{}, err
+	}
+	rules, err := audienceRulesSnapshot(ctx, r.db, organizationID, resourceID)
+	if err != nil {
+		return ResourceConnectionAudience{}, oops.E(oops.CodeUnexpected, err, "read resource audience rules").LogError(ctx, r.logger)
 	}
 	audience, err := r.resourceConnectAudience(ctx, organizationID, resourceID, projectID)
 	if err != nil {
@@ -61,9 +64,11 @@ func (r *RoleManager) ReadResourceConnectionAudience(ctx context.Context, organi
 // on one resource and leaves every other rule naming it as it is, through the
 // same save, guards and audit entry as the audience editor. "allowed" writes
 // an unnarrowed connect grant, "blocked" an unnarrowed connect block, and
-// "not_granted" removes both. Tool- or annotation-scoped blocks the principal
-// holds survive "allowed" and "not_granted", so this never widens access past
-// a narrower block someone wrote on purpose.
+// "not_granted" removes both. Tool- or annotation-scoped rules the principal
+// holds are kept, except that the new whole-server rule replaces a narrowed
+// rule at its own level: "allowed" replaces a tool-limited grant and
+// "blocked" a tool-limited block. So this never widens access past a narrower
+// block, and clearing or blocking never deletes a narrower grant.
 //
 // Only people, roles and everyone (user:all) can be named. Callers must
 // already have checked that the actor administers the organization.
@@ -85,10 +90,7 @@ func (r *RoleManager) SetResourceConnectRule(ctx context.Context, organizationID
 	for _, existing := range current {
 		if existing.PrincipalUrn == target {
 			narrowed := len(existing.Tools) > 0 || len(existing.Dispositions) > 0
-			switch {
-			case existing.Level == audienceLevelUse:
-				continue
-			case existing.Level == audienceLevelBlocked && (!narrowed || level == audienceLevelBlocked):
+			if (existing.Level == audienceLevelUse || existing.Level == audienceLevelBlocked) && (!narrowed || existing.Level == level) {
 				continue
 			}
 		}

@@ -241,6 +241,27 @@ func TestRoleManager_SetResourceConnectRule_ChangesOnlyOneConnectRule(t *testing
 	}, rulesOf(cleared))
 	require.NotContains(t, connectDecisions(cleared.Audience), alice)
 
+	// Clearing or blocking a member's whole-server rule keeps a narrower
+	// grant they hold; only allowing them replaces it.
+	carol := seedOrgMember(t, ctx, ti, orgID, "carol@example.com")
+	carolURN := urn.NewPrincipal(urn.PrincipalTypeUser, carol)
+	saveAudience(t, ctx, ti, serverID,
+		append(cleared.Rules, &gen.SetResourceAudienceEntry{PrincipalUrn: userURN(carol), Level: "use", Tools: []string{"search"}})...,
+	)
+	narrowed, err := roles.ReadResourceConnectionAudience(ctx, orgID, serverID)
+	require.NoError(t, err)
+	carolBlocked, err := roles.SetResourceConnectRule(ctx, orgID, actor, serverID, carolURN, ConnectRuleBlocked, narrowed.Version)
+	require.NoError(t, err)
+	require.Equal(t, "narrowed", rulesOf(carolBlocked)[userURN(carol)+"|use"])
+	require.Equal(t, "whole", rulesOf(carolBlocked)[userURN(carol)+"|blocked"])
+	carolCleared, err := roles.SetResourceConnectRule(ctx, orgID, actor, serverID, carolURN, ConnectRuleNotGranted, carolBlocked.Version)
+	require.NoError(t, err)
+	require.Equal(t, "narrowed", rulesOf(carolCleared)[userURN(carol)+"|use"])
+	require.NotContains(t, rulesOf(carolCleared), userURN(carol)+"|blocked")
+	carolAllowed, err := roles.SetResourceConnectRule(ctx, orgID, actor, serverID, carolURN, ConnectRuleAllowed, carolCleared.Version)
+	require.NoError(t, err)
+	require.Equal(t, "whole", rulesOf(carolAllowed)[userURN(carol)+"|use"])
+
 	// A stale version is a conflict, not an overwrite.
 	_, err = roles.SetResourceConnectRule(ctx, orgID, actor, serverID, aliceURN, ConnectRuleAllowed, read.Version)
 	var oopsErr *oops.ShareableError
