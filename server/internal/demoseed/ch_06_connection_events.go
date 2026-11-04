@@ -85,12 +85,16 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolPermissionDenied},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeMCPToolCallsPaused},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRejectedByMember},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant},
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshReplayed},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenRevoked},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
 }
 

@@ -19,12 +19,15 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, connectionAttemptDays*len(connectionRequestEndings))
 	steps := make(map[string]bool)
+	outcomes := make(map[string]bool)
 	attempts := make(map[string]bool)
 	for _, row := range rows {
 		require.True(t, row.IsFinal)
 		require.False(t, attempts[row.AttemptID.String()], "each outcome is its own attempt")
 		attempts[row.AttemptID.String()] = true
 		steps[row.Step] = true
+		outcomes[row.Step+"/"+row.Reason] = true
+		outcomes[row.Step+"/"+row.StepResult] = true
 		require.Empty(t, row.MemberID, "no member should be attributed to a different gateway")
 		switch row.Step {
 		case "inbound_token":
@@ -38,6 +41,15 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 				require.Empty(t, row.ClientFamily)
 			}
 		}
+	}
+	for _, outcome := range []string{
+		"mcp_request/mcp_tool_calls_paused",
+		"mcp_request/rejected_by_member",
+		"inbound_token/refresh_token_expired",
+		"inbound_token/refresh_replayed",
+		"inbound_token/refresh_token_revoked",
+	} {
+		require.True(t, outcomes[outcome], outcome)
 	}
 	for _, step := range []string{"mcp_request", "inbound_token", "provider_refresh", "sign_in_renewal"} {
 		require.True(t, steps[step], step)
