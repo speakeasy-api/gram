@@ -14,6 +14,8 @@ export const Scopes = {
   OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
   OrgBlockedAdmin: "org:blocked_admin",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -34,12 +36,12 @@ export const Scopes = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   AssistantRead: "assistant:read",
   AssistantBlockedRead: "assistant:blocked_read",
   AssistantWrite: "assistant:write",
   AssistantBlockedWrite: "assistant:blocked_write",
-  PluginWrite: "plugin:write",
-  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
@@ -55,8 +57,6 @@ export const Scopes = {
   WorkloadBlockedRead: "workload:blocked_read",
   WorkloadWrite: "workload:write",
   WorkloadBlockedWrite: "workload:blocked_write",
-  OrgDeviceAgentSync: "org:device_agent_sync",
-  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 export type Scopes = OpenEnum<typeof Scopes>;
 
