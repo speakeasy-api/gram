@@ -582,8 +582,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "unified-chat" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "unified-chat", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
+		if !(platform == "claude" || platform == "claude-cowork" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "claude-cowork", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
 		}
 		if err != nil {
 			return nil, err

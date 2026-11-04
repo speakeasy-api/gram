@@ -83,7 +83,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	// The unified chat distribution only ships transcripts: every other
+	// The Claude Cowork distribution only ships transcripts: every other
 	// event has no handler, so nothing reaches ingest, the sign-in preflight,
 	// or MCP inventory.
 	if cfg.TranscriptOnly {

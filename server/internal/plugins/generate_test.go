@@ -2282,7 +2282,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "unified-chat", "cursor", "codex", "opencode", "copilot", "openclaw"} {
+	for _, platform := range []string{"claude", "claude-cowork", "cursor", "codex", "opencode", "copilot", "openclaw"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -4548,10 +4548,10 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }
 
-// The unified chat package registers Stop alone and bakes transcript_only, so
+// The Claude Cowork package registers Stop alone and bakes transcript_only, so
 // the hooks binary ships transcripts and relays no other event. The standard
 // Claude package must stay free of the flag.
-func TestGenerateUnifiedChatObservabilityPluginPackage(t *testing.T) {
+func TestGenerateClaudeCoworkObservabilityPluginPackage(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -4559,13 +4559,13 @@ func TestGenerateUnifiedChatObservabilityPluginPackage(t *testing.T) {
 		ProjectSlug: "default",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "unified-chat")
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude-cowork")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{".claude-plugin/plugin.json", "hooks/hooks.json", "hooks/bootstrap.sh", "speakeasy.json"}, slices.Collect(maps.Keys(files)))
 
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/plugin.json"], &meta))
-	require.Equal(t, ClaudeObservabilitySlug(cfg)+"-unified-chat", meta.Name)
+	require.Equal(t, ClaudeObservabilitySlug(cfg)+"-cowork", meta.Name)
 
 	var hooks claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files["hooks/hooks.json"], &hooks))

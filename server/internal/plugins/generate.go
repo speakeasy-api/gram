@@ -135,7 +135,7 @@ type GenerateConfig struct {
 	InstallFailOpen bool
 	// TranscriptOnly bakes transcript_only into speakeasy.json, switching the
 	// hooks binary to shipping the session transcript on Stop and relaying
-	// nothing else. Only the unified chat package sets it.
+	// nothing else. Only the Claude Cowork package sets it.
 	TranscriptOnly bool
 }
 
@@ -545,11 +545,11 @@ var ClaudeObservabilityHookEvents = []string{
 	"Notification",
 }
 
-// UnifiedChatObservabilityHookEvents are the only events the unified chat
+// ClaudeCoworkObservabilityHookEvents are the only events the Claude Cowork
 // package registers. Claude's unified Chat/Cowork mode runs plugin hooks only
 // inside the Cowork VM, so the package ships the session transcript from Stop
 // instead of relaying per-event hooks.
-var UnifiedChatObservabilityHookEvents = []string{"Stop"}
+var ClaudeCoworkObservabilityHookEvents = []string{"Stop"}
 
 // CursorObservabilityHookEvents are Cursor's native hook event names (per
 // server/design/hooks/design.go:58). Cursor uses different event names
@@ -1423,22 +1423,22 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}, ClaudeObservabilityHookEvents)
 }
 
-// generateUnifiedChatObservabilityPluginFlat emits the unified chat package
+// generateClaudeCoworkObservabilityPluginFlat emits the Claude Cowork package
 // at the zip root. An organization administrator uploads it in Claude's admin
 // plugin settings, because Cowork loads only plugins registered to the
 // Anthropic account. It registers Stop alone and bakes transcript_only, so the
 // hooks binary ships the session transcript each turn and relays nothing else.
-func generateUnifiedChatObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+func generateClaudeCoworkObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
 	cfg.TranscriptOnly = true
 	return generateClaudeHooksPluginInDir(files, "", cfg, claudePluginMeta{
-		Name:        ClaudeObservabilitySlug(cfg) + "-unified-chat",
-		DisplayName: cfg.OrgName + " Unified Chat Observability",
-		Description: "Speakeasy observability for " + cfg.OrgName + " in Claude's unified Chat/Cowork mode. Ships each session's transcript to your team's Speakeasy dashboard.",
+		Name:        ClaudeObservabilitySlug(cfg) + "-cowork",
+		DisplayName: cfg.OrgName + " Cowork Observability",
+		Description: "Speakeasy observability for " + cfg.OrgName + " in Claude Cowork. Ships each session's transcript to your team's Speakeasy dashboard.",
 		Version:     hooksManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
-	}, UnifiedChatObservabilityHookEvents)
+	}, ClaudeCoworkObservabilityHookEvents)
 }
 
 // generateClaudeHooksPluginInDir writes a Claude plugin that runs the hooks
@@ -2477,9 +2477,9 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 		if err := generateClaudeObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
 		}
-	case "unified-chat":
-		if err := generateUnifiedChatObservabilityPluginFlat(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate unified chat observability plugin: %w", err)
+	case "claude-cowork":
+		if err := generateClaudeCoworkObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude cowork observability plugin: %w", err)
 		}
 	case "cursor":
 		if err := generateCursorObservabilityPluginFlat(files, cfg); err != nil {

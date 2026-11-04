@@ -58380,7 +58380,7 @@ paths:
                     description: Target platform.
                     enum:
                         - claude
-                        - unified-chat
+                        - claude-cowork
                         - cursor
                         - codex
                         - opencode
