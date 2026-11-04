@@ -11,8 +11,13 @@ import (
 
 // agentAdmissionRejection tells a refused agent from an admission check that could not run.
 func agentAdmissionRejection(err error) string {
-	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
-		return "agent_admission_denied"
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		switch shareable.Code {
+		case oops.CodeUnauthorized:
+			return "agent_credential_invalid"
+		case oops.CodeForbidden:
+			return "agent_admission_denied"
+		}
 	}
 	return "agent_admission_unavailable"
 }
@@ -78,7 +83,7 @@ func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tr
 // inboundRefreshHappened leaves out a request with no token to judge; an unknown reason is ours.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
-	case "refresh_token_resource_mismatch":
+	case "refresh_token_resource_mismatch", "resource_mismatch":
 		return mcpconnectionattempts.CodeResourceMismatch, true
 	case "refresh_token_unknown_or_already_used", "refresh_token_client_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
@@ -86,7 +91,7 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeRefreshTokenExpired, true
 	case "sign_in_revoked":
 		return mcpconnectionattempts.CodeSignInRevoked, true
-	case "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
+	case "agent_credential_invalid", "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
 	case "agent_admission_denied":
 		return mcpconnectionattempts.CodeNoServerAccess, true
@@ -96,7 +101,7 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):
 		return mcpconnectionattempts.CodeUpstreamEMARefused, true
-	case "invalid_request", "resource_mismatch":
+	case "invalid_request":
 		var none mcpconnectionattempts.Code
 		return none, false
 	default:
