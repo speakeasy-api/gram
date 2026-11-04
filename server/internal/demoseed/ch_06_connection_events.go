@@ -82,6 +82,9 @@ var connectionEndings = []connectionEnding{
 // request, and a refresh. A served request has no row.
 var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeUsageLimitReached},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolPermissionDenied},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected},
@@ -96,6 +99,8 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshReplayed},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenRevoked},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
+	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired},
+	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable},
 }
 
 // connectionRequestRows seeds single-row outcomes each day, each its own attempt.
@@ -118,7 +123,7 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
 			// These request refusals come from a selected member, never the gateway itself.
-			if ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused) {
+			if ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
 				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
 			}
@@ -133,7 +138,7 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 				return nil, fmt.Errorf("build connection request event: %w", err)
 			}
 			row.TraceID = md5Hex(s.name(key))
-			if ending.step == mcpconnectionattempts.StepMCPRequest || ending.step == mcpconnectionattempts.StepInboundToken {
+			if ending.step == mcpconnectionattempts.StepMCPRequest || ending.step == mcpconnectionattempts.StepInboundToken || (ending.step == mcpconnectionattempts.StepProviderRefresh && row.AppKey != "background") {
 				client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
 				row.ClientFamily, row.ClientVersion = client.family, client.version
 				row.DeviceKey = s.connectionDevice(key)

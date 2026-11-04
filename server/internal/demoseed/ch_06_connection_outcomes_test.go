@@ -36,13 +36,13 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		} else {
 			require.Equal(t, "connected", row.Outcome)
 		}
-		if row.Step == "mcp_request" || row.Step == "inbound_token" {
+		if row.Step == "mcp_request" || row.Step == "inbound_token" || (row.Step == "provider_refresh" && row.AppKey != "background") {
 			require.NotEmpty(t, row.ClientFamily)
 			require.NotEmpty(t, row.ClientVersion)
 			require.Regexp(t, `^[0-9a-f]{32}$`, row.DeviceKey)
 		}
 		require.NotEqual(t, "rejected_by_member", row.Reason, "request outcomes must match a live request producer")
-		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused") {
+		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "usage_limit_reached" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused") {
 			require.Equal(t, "meta", row.ServerKind)
 			require.Equal(t, s.projectID(), row.ProjectID)
 			require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
@@ -66,6 +66,11 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	for _, outcome := range []string{
 		"mcp_request/mcp_tool_calls_paused",
 		"mcp_request/provider_server_error",
+		"mcp_request/invalid_bearer_token",
+		"mcp_request/no_server_access",
+		"mcp_request/usage_limit_reached",
+		"sign_in_renewal/reauthentication_required",
+		"sign_in_renewal/renewal_retryable",
 		"mcp_request/provider_rejected",
 		"mcp_request/tool_permission_denied",
 		"inbound_token/refresh_token_expired",
