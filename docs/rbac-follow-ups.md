@@ -9,27 +9,37 @@ Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migratio
 3. **Stop leaking the engine type into the client.** `NewClient` takes `*Engine`, but the client only uses it for two different jobs. The first is request admission: `PrepareContext`, `RefreshContext`, `ShouldEnforce`, the admission boundary, grant loading from the stored tables, plus `mapError` and the logger. That job outlives the engine and should move into the client, or into an admission component the client owns. The second is the old-mode decider (`Require`, `RequireAny`, `RequireAnyUnblocked`, `Evaluate`, `EvaluateLoadedGrants`, `FindMatched`, `RequireUserOrganizationScopeWithDBTX`), which the client should take as a narrow unexported interface. After this, removing the engine means deleting one adapter and the old and shadow modes, and no call site changes. One PR on the integration branch, with no behaviour change.
 4. **Drop the engine from services that no longer call it.** About 100 non-test files still reference `*authz.Engine`. Services whose last engine call has moved to the client can lose the parameter now, without waiting for shadow data. Check each one first: some of the sign-in services in #8531 still use the engine elsewhere, for example `agentmanagement` and `keys` build `agentmanagement.NewAuthorizer(authzEngine)` until the agents stack lands. Services that still call the engine directly (stored-grant writers, explanation helpers, Platform MCP rows) keep it until X1 or X3.
 
+5. **Declaration language changes (#8538, open).** Approved by Tiago on 2026-11-04. Grants and blocks take `GrantSpec`/`BlockSpec` (`exhaustruct` excluded for those two); broader blocks move to `BlockSpec.ImpliedBy`, and `ExcludedBy` names only the direct block; every `Alternatives` must choose `AnyBlockVetoes` or `BlocksApplyPerOption`; `Checks`, `RuntimeSafeSince` and `WrittenBy` become `AnswersScope`, `DelegatableSince` and `GrantSurface`; one declaration function per type. Compiled scopes and decisions are unchanged. The agents stack (#8524, #8530, #8532) converts its declarations when it merges into the integration branch.
+6. **Remaining items from the declaration review.** Not started, each is its own PR:
+   - derive the static scope tables (`scopes.go`, `grant_surface.go`, runtime policy scopes) from the registry instead of keeping hand-written copies, split from X1, after the agents stack;
+   - scope-keyed grants (`s.Grant(ScopeOrgRead, ...)`), which drop the local relation names and the `string(...)` casts;
+   - a test that every declared permission and `Alternatives` has a typed constructor, and the reverse, replacing the hand-kept `typedOperations()` list;
+   - the project dimension on every child ref (`Skill`, `Chat`, `ProjectRef.ReadSkills`), which can change decisions and so needs the shadow corpus;
+   - keep or remove the facts grammar (`Attr`, `Derived`, `Guard`, `Is`, `Via`, `When`), decided with the chat ownership item below;
+   - operation names that describe migration mechanics, such as `chat.read_grant`.
+
 ## Waiting on a decision
 
-5. **Chat list cutover onto the Q1 filter.** #8534 adds `Plan`/`AccessPlan`, but chat collections still list through the old queries. The cutover waits on the five list-versus-single-chat divergences characterized in #8533: a project-wide `chat:read` grant, a single-chat grant, legacy API keys, dashboard chat-session tokens, and a failing visibility check.
-6. **Member agent self-creation.** #7590 removed it, and #8524 flags it at the top. The recommended fix is a default Member grant `agent:write {owner: self}`. The alternative is restoring self-creation in #7590.
-7. **Confirm `EvaluateGrants` keeps no transport refusal.** F6 decision 21 deliberately keeps `GrantsAuthorize`'s behaviour: the grants belong to another principal, so the request's own credential does not decide the answer, and adding the refusal would turn allows into denials. Only the loaded-policy entry points reject principal credentials. The review threads on #8465, #8487 and #8531 ask Tiago to confirm this. No change is planned unless he reverses it.
-8. **Expired grants.** `principal_grants` has no `expires_at`, so #8481 cannot honour expiry yet.
-9. **Two security threads on #8519.** The risk scanner runs with a nil authorization (no repro yet), and Platform MCP `connection_mutation` uses project-level `mcp:write`.
+7. **Chat list cutover onto the Q1 filter.** #8534 adds `Plan`/`AccessPlan`, but chat collections still list through the old queries. The cutover waits on the five list-versus-single-chat divergences characterized in #8533: a project-wide `chat:read` grant, a single-chat grant, legacy API keys, dashboard chat-session tokens, and a failing visibility check.
+8. **Member agent self-creation.** #7590 removed it, and #8524 flags it at the top. The recommended fix is a default Member grant `agent:write {owner: self}`. The alternative is restoring self-creation in #7590.
+9. **Confirm `EvaluateGrants` keeps no transport refusal.** F6 decision 21 deliberately keeps `GrantsAuthorize`'s behaviour: the grants belong to another principal, so the request's own credential does not decide the answer, and adding the refusal would turn allows into denials. Only the loaded-policy entry points reject principal credentials. The review threads on #8465, #8487 and #8531 ask Tiago to confirm this. No change is planned unless he reverses it.
+10. **Expired grants.** `principal_grants` has no `expires_at`, so #8481 cannot honour expiry yet.
+11. **Two security threads on #8519.** The risk scanner runs with a nil authorization (no repro yet), and Platform MCP `connection_mutation` uses project-level `mcp:write`.
 
 ## Waiting on another PR
 
-10. **Chat ownership permissions.** Once AG1 (#8524) declares `agent.is_owner`, declare the attribute-reading `chat.read` and `chat.write` from the RFC, load the chat's attributes in `loadAuthorizedChat`, and point `Chat(...).Read()` and `.Write()` at them (chat decision 1). No call site changes.
-11. **#7590 lands first.** The agents stack (#8524, #8530, #8532) is based on it. It needs an SDK lockfile regeneration and the Agents page edits listed in #8524.
+12. **Chat ownership permissions.** Once AG1 (#8524) declares `agent.is_owner`, declare the attribute-reading `chat.read` and `chat.write` from the RFC, load the chat's attributes in `loadAuthorizedChat`, and point `Chat(...).Read()` and `.Write()` at them (chat decision 1). No call site changes.
+13. **#7590 lands first.** The agents stack (#8524, #8530, #8532) is based on it. It needs an SDK lockfile regeneration and the Agents page edits listed in #8524.
 
 ## Waiting on production shadow data (release gate)
 
 The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout.
 
-12. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1).
-13. **X2, runtime and key policy projections (AIS-874).**
-14. **X4, demo seed and dashboard gates (AIS-876).** This includes the "blocked" label for shared sign-in that was deferred from the MCP stack.
-15. **Z-stage cleanup (Z1, Z2).** Remove what the migration kept alive on purpose:
+14. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1).
+15. **X2, runtime and key policy projections (AIS-874).**
+16. **X4, demo seed and dashboard gates (AIS-876).** This includes the "blocked" label for shared sign-in that was deferred from the MCP stack.
+17. **Move `org:hooks_ingest` to a project scope.** It is declared on the organization with a project selector key but decided per project. Moving it changes stored grants, so it waits for shadow data.
+18. **Z-stage cleanup (Z1, Z2).** Remove what the migration kept alive on purpose:
     - the explanation helpers left in `explain_access.go` (13 rows, 15 call sites), plus the tool-discovery explanation;
     - access grant loaders and writers, and grant loading through `LoadGrants` for plugin servers, device-agent connections and role snapshots (M6 decision 6);
     - the engine itself: the old-mode decider adapter from item 3, the old and shadow routing modes, the shadow recorder and the migration flags;
