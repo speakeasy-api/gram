@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -55,4 +56,6 @@ func TestTitleIsUpForGrabsLeavesCronJobTitles(t *testing.T) {
 	}}
 
 	require.False(t, titleIsUpForGrabs("Cron: weekly-skill-review", messages))
+	// A cron chat captured before cron titles stored the envelope itself.
+	require.False(t, titleIsUpForGrabs(chat.DerivedTitle(messages[0].Content), messages))
 }

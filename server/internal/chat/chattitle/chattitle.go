@@ -6,6 +6,7 @@ package chattitle
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -35,6 +36,33 @@ func CronJobTitle(content string) (string, bool) {
 	return conv.TruncateString("Cron: "+name, MaxRunes), true
 }
 
+// truncatedCronEnvelope matches a stored derived title cut at MaxRunes inside
+// the envelope's job name, before its closing bracket.
+var truncatedCronEnvelope = regexp.MustCompile(`^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)$`)
+
+// StoredCronTitle names a chat after its cron job from a stored title that is
+// a cron run's raw envelope, as cron chats captured before CronJobTitle
+// existed stored it. That title was cut to MaxRunes, which can end inside a
+// long job name; the name is then shown as far as it was kept. It reports
+// false when title is not such an envelope.
+func StoredCronTitle(title string) (string, bool) {
+	if cronTitle, ok := CronJobTitle(title); ok {
+		return cronTitle, true
+	}
+	if utf8.RuneCountInString(title) != MaxRunes {
+		return "", false
+	}
+	match := truncatedCronEnvelope.FindStringSubmatch(title)
+	if match == nil {
+		return "", false
+	}
+	name := strings.TrimSpace(match[1])
+	if name == "" {
+		return "", false
+	}
+	return conv.TruncateString("Cron: "+name, MaxRunes), true
+}
+
 // Display is the title to show for a stored chat title. Cron chats captured
 // before CronJobTitle existed stored their raw envelope; those are shown
 // under their job name. A title someone set by hand is shown as is.
@@ -42,7 +70,7 @@ func Display(title string, manuallySet bool) string {
 	if manuallySet {
 		return title
 	}
-	if cronTitle, ok := CronJobTitle(title); ok {
+	if cronTitle, ok := StoredCronTitle(title); ok {
 		return cronTitle
 	}
 	return title
