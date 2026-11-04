@@ -1,6 +1,6 @@
 package relay
 
-// Transcript shipping for the Claude Cowork distribution. Claude's unified
+// Transcript shipping for the unified chat distribution. Claude's unified
 // Chat/Cowork mode runs plugin hooks only inside the Cowork VM, so that
 // distribution registers just the Stop hook (Config.TranscriptOnly) and, each
 // time it fires, uploads the transcript lines written since the last

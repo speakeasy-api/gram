@@ -1561,8 +1561,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 
 	filename := "observability"
 	switch payload.Platform {
-	case "claude-cowork":
-		filename = "observability-claude-cowork"
+	case "unified-chat":
+		filename = "observability-unified-chat"
 	case "cursor":
 		filename = "observability-cursor"
 	case "codex":

@@ -19,7 +19,7 @@ export type DownloadObservabilityPluginSecurity = {
  */
 export const Platform = {
   Claude: "claude",
-  ClaudeCowork: "claude-cowork",
+  UnifiedChat: "unified-chat",
   Cursor: "cursor",
   Codex: "codex",
   Opencode: "opencode",

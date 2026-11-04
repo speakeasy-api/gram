@@ -356,7 +356,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "claude-cowork", "cursor", "codex", "opencode", "copilot", "openclaw", "pi")
+				Enum("claude", "unified-chat", "cursor", "codex", "opencode", "copilot", "openclaw", "pi")
 			})
 			Required("platform")
 			security.SessionPayload()

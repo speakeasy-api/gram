@@ -64,7 +64,7 @@ type Config struct {
 	// login nudge can point the sign-in command at the same deployment identity
 	// instead of the production defaults.
 	ConfigPath string
-	// TranscriptOnly switches the binary to the Claude Cowork distribution's
+	// TranscriptOnly switches the binary to the unified chat distribution's
 	// mode: it ships the session transcript on every Stop hook to the
 	// dedicated transcript endpoint and relays no other event. Policy is not
 	// enforced in this mode; it exists for observability where Claude runs
@@ -92,7 +92,7 @@ type FileConfig struct {
 	AgentKey     bool   `json:"agent_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
-	// TranscriptOnly is set only by the Claude Cowork distribution.
+	// TranscriptOnly is set only by the unified chat distribution.
 	TranscriptOnly bool `json:"transcript_only,omitempty"`
 }
 

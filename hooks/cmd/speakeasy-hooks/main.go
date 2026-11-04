@@ -80,7 +80,7 @@ func runInstall(args []string) int {
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
-	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the Claude Cowork mode; claude-code only)")
+	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the unified chat mode; claude-code only)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

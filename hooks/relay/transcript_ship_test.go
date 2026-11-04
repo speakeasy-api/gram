@@ -548,7 +548,7 @@ func TestLoadConfigIgnoresTranscriptOnlyEnv(t *testing.T) {
 }
 
 // TestWritePluginBakesTranscriptOnly: `speakeasy-hooks install
-// --transcript-only` is how local testing reaches the Cowork mode, since no
+// --transcript-only` is how local testing reaches the unified chat mode, since no
 // environment variable can switch it on.
 func TestWritePluginBakesTranscriptOnly(t *testing.T) {
 	t.Parallel()

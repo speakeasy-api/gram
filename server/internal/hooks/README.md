@@ -5,7 +5,7 @@ The hooks service supports four hook entry points:
 - Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses for session capture and policy enforcement.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
-- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop in transcript-only mode (the Claude Cowork package). See [Transcript Upload](#transcript-upload).
+- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop in transcript-only mode (the unified chat package). See [Transcript Upload](#transcript-upload).
 
 ## Unified Ingest
 
