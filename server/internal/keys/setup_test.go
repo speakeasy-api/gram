@@ -81,7 +81,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{

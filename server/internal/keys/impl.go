@@ -44,6 +44,7 @@ type Service struct {
 	repo        *repo.Queries
 	auth        *auth.Auth
 	authz       *authz.Engine
+	authzClient *authz.Client
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
 	audit       *audit.Logger
@@ -60,6 +61,7 @@ func NewService(
 	sessions *sessions.Manager,
 	env string,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
@@ -72,10 +74,11 @@ func NewService(
 		repo:        repo.New(db),
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
+		authzClient: authzClient,
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
-		authorizer:  agentmanagement.NewAuthorizer(authzEngine, nil),
+		authorizer:  agentmanagement.NewAuthorizer(authzEngine, authzClient),
 		keyPrefix:   fullKeyPrefix,
 	}
 }
@@ -143,7 +146,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	// them out of hooks entirely. Every other scope (and any mix) stays
 	// admin-only.
 	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) || len(payload.PolicyGrants) > 0 {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 			return nil, err
 		}
 	}
@@ -177,7 +180,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load key project").LogError(ctx, s.logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+		if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, project.ID.String()).Read()); err != nil {
 			return nil, err
 		}
 		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
@@ -263,7 +266,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	if payload.AgentID != nil {
 		return s.listAgentKeys(ctx, *payload.AgentID)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -339,7 +342,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		}
 		return nil
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return err
 	}
 

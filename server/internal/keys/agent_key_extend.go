@@ -129,7 +129,7 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "extend agent API key").LogError(ctx, s.logger)
 		}
-		if err := recordAgentKeyAuthClientChoices(ctx, tx, human, updated.ID, choicesFor(payload.AuthClientChoices, added)); err != nil {
+		if err := recordAgentKeyAuthClientChoices(ctx, tx, s.authzClient, human, updated.ID, choicesFor(payload.AuthClientChoices, added)); err != nil {
 			return nil, err
 		}
 		if err := s.audit.LogKeyPolicyUpdate(ctx, tx, audit.LogKeyPolicyUpdateEvent{

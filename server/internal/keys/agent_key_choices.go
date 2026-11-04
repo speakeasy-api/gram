@@ -22,7 +22,7 @@ import (
 // the server offers enabled, or no upstream authentication on a server that
 // needs none. The choice grants nothing: every request still checks that the
 // agent may use the credential and reach the server.
-func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, keyID uuid.UUID, choices []*gen.AgentKeyAuthClientChoice) error {
+func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, client *authz.Client, human agentmanagement.HumanContext, keyID uuid.UUID, choices []*gen.AgentKeyAuthClientChoice) error {
 	if len(choices) == 0 {
 		return nil
 	}
@@ -61,7 +61,7 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agent
 		if err != nil {
 			return fmt.Errorf("load credential choice server: %w", err)
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, server.ID.String(), server.ProjectID.String()))
+		allowed, err := client.EvaluateGrants(ctx, grants, authz.MCPServer(server.ProjectID.String(), server.ID.String()).Connect())
 		if err != nil {
 			return fmt.Errorf("authorize credential choice server: %w", err)
 		}
