@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -56,5 +57,26 @@ func TestDelegationAdapterTranslatesDefinitiveAuthorizationFailure(t *testing.T)
 		var failure *delegation.RefreshError
 		require.ErrorAs(t, delegationRefreshError(&FederatedRefreshError{Kind: tc.source}), &failure)
 		require.Equal(t, tc.want, failure.Kind)
+	}
+}
+
+func TestDelegationProviderLoadProvenance(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		cause    error
+		provider bool
+	}{
+		{"discovery", ErrFederatedUnavailable, true},
+		{"database", errors.New("database unavailable"), false},
+		{"signing", ErrFederatedSigning, false},
+		{"signing unavailable", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := delegationConfigurationError(tc.cause)
+			require.Equal(t, tc.provider, errors.Is(err, delegation.ErrProviderUnavailable))
+			require.ErrorIs(t, err, tc.cause)
+		})
 	}
 }

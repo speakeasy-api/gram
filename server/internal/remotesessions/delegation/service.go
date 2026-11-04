@@ -16,9 +16,11 @@ import (
 
 // Delegation errors are deliberately stable and contain no provider payloads.
 var (
-	ErrTemporary        = errors.New("delegation temporarily unavailable")
-	ErrReauthentication = errors.New("delegation reauthentication required")
-	ErrConfiguration    = errors.New("delegation configuration requires remediation")
+	ErrTemporary = errors.New("delegation temporarily unavailable")
+	// ErrProviderUnavailable marks a failed provider dependency, not local storage or signing.
+	ErrProviderUnavailable = errors.New("delegation provider temporarily unavailable")
+	ErrReauthentication    = errors.New("delegation reauthentication required")
+	ErrConfiguration       = errors.New("delegation configuration requires remediation")
 
 	// ErrStaleRegistration is the ErrConfiguration a retained delegation
 	// reports when it predates the current trusted registration. Unlike other
@@ -548,8 +550,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, now) {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
-		return Assertion{}, configurationFailureError(c)
+		failure := configurationFailureError(c)
+		code := mcpconnectionattempts.CodeRenewalMisconfigured
+		if errors.Is(failure, ErrReauthentication) {
+			code = mcpconnectionattempts.CodeReauthenticationRequired
+		}
+		s.recordRenewal(ctx, b, code)
+		return Assertion{}, failure
 	}
 	if c.claim != uuid.Nil {
 		return Assertion{}, claimError(c, now)
@@ -607,7 +614,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		code := mcpconnectionattempts.CodeInternalError
+		if errors.Is(err, ErrProviderUnavailable) {
+			code = mcpconnectionattempts.CodeRenewalRetryable
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil {
@@ -620,11 +631,8 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
-		code := mcpconnectionattempts.CodeRenewalMisconfigured
-		if errors.Is(err, errCredentialDecryption) {
-			code = mcpconnectionattempts.CodeInternalError
-		}
-		s.recordRenewal(ctx, b, code)
+		// These are retained local secrets: only a fresh sign-in replaces them.
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
@@ -759,7 +767,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	if quarantined {
 		renewalDecided = true
-		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeInternalError)
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalAmbiguous)
 		return Assertion{}, ErrTemporary
 	}
 	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
@@ -835,6 +843,12 @@ func clearDelegationSecrets(c delegationCredential) delegationCredential {
 	return c
 }
 func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegationCredential, claim uuid.UUID, cause error) error {
+	decided := false
+	defer func() {
+		if !decided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	var failure *RefreshError
 	if !errors.As(cause, &failure) {
 		failure = &RefreshError{Kind: RefreshAmbiguous}
@@ -850,7 +864,6 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !c.observedAt.IsZero() && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
-	s.recordRenewal(ctx, b, renewalHappened(kind))
 	switch kind {
 	case RefreshInvalidGrant:
 		next.refresh = ""
@@ -903,9 +916,15 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
 	ok, err := s.store.finish(ctx, b, c.generation, claim, next)
-	if err != nil || !ok {
+	if err != nil {
 		return ErrTemporary
 	}
+	if !ok {
+		decided = true
+		return ErrTemporary
+	}
+	decided = true
+	s.recordRenewal(ctx, b, renewalHappened(kind))
 	return outcome
 }
 

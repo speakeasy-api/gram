@@ -3,6 +3,7 @@ package delegation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -106,6 +107,9 @@ func TestRenewal_FailuresKeepWhoFixes(t *testing.T) {
 			_, err = s.Resolve(t.Context(), b, allow)
 			require.Error(t, err)
 			require.Len(t, rec.Rows(), tc.rows)
+			if tc.kind == RefreshInvalidIdentity {
+				require.Equal(t, "reauthentication_required", rec.Rows()[1].Reason)
+			}
 		})
 	}
 }
@@ -212,12 +216,13 @@ func TestRenewal_PostClaimSetupRecordsExactlyOnce(t *testing.T) {
 		{name: "provider configuration", providerErr: ErrConfiguration, wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
 		{name: "provider reauthentication", providerErr: ErrReauthentication, wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
 		{name: "provider missing", providerErr: pgx.ErrNoRows, wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
-		{name: "provider unavailable", providerErr: errors.New("discovery unavailable"), wantErr: ErrTemporary, want: mcpconnectionattempts.CodeRenewalRetryable},
+		{name: "provider unavailable", providerErr: ErrProviderUnavailable, wantErr: ErrTemporary, want: mcpconnectionattempts.CodeRenewalRetryable},
+		{name: "local provider load failure", providerErr: errors.New("database unavailable"), wantErr: ErrTemporary, want: mcpconnectionattempts.CodeInternalError},
 		{name: "nil provider", nilProvider: true, wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
 		{name: "registration changed", changed: true, wantErr: ErrStaleRegistration, want: mcpconnectionattempts.CodeReauthenticationRequired},
-		{name: "empty retained refresh", secret: "refresh", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
-		{name: "missing retained subject", secret: "subject", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
-		{name: "unreadable retained nonce", secret: "nonce", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeInternalError},
+		{name: "empty retained refresh", secret: "refresh", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeReauthenticationRequired},
+		{name: "missing retained subject", secret: "subject", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeReauthenticationRequired},
+		{name: "unreadable retained nonce", secret: "nonce", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeReauthenticationRequired},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -370,4 +375,58 @@ func (s renewalFinishHookStore) finish(ctx context.Context, b Binding, generatio
 	ok, err := s.delegationStore.finish(ctx, b, generation, claim, next)
 	s.after()
 	return ok, err
+}
+
+func TestRenewal_QuarantineNamesSignInRecovery(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	s.connections = rec.Recorder
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+			return nil, errors.New("database unavailable")
+		}
+		return delegationRenewal(p, s.now(), "new-id", "rotation"), nil
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalAmbiguous)
+	require.NotEqual(t, uuid.Nil, store.rows[b].claim)
+	s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) { return p, nil }
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	require.Len(t, rec.Rows(), 1)
+	require.Equal(t, 1, store.claims)
+}
+
+func TestRenewal_FailurePersistenceOutcome(t *testing.T) {
+	t.Parallel()
+	for _, superseded := range []bool{false, true} {
+		t.Run(fmt.Sprint(superseded), func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			rec := mcpconnectionattemptstest.New(t)
+			s.connections = rec.Recorder
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				if superseded {
+					c := store.rows[b]
+					c.generation++
+					store.rows[b] = c
+				} else {
+					store.finishError = errors.New("database unavailable")
+				}
+				return nil, &RefreshError{Kind: RefreshInvalidGrant}
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary)
+			if superseded {
+				rec.RequireNothing()
+			} else {
+				rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeInternalError)
+				require.Len(t, rec.Rows(), 1)
+			}
+		})
+	}
 }

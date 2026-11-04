@@ -24,13 +24,15 @@ func (s *RefreshService) recordRefresh(
 	trigger remotesessionmetrics.RefreshTrigger,
 	outcome remotesessionmetrics.RefreshOutcome,
 	err error,
-) {
+) bool {
 	what, ok := refreshHappened(outcome, client, err)
 	if !ok {
-		return
+		return false
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
-		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(ctx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
+		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		defer cancel()
+		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
 			RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
 			UserSessionIssuerID:   sess.UserSessionIssuerID,
 		})
@@ -51,9 +53,11 @@ func (s *RefreshService) recordRefresh(
 	}
 	if !attribution.attempt.IsZero() {
 		s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
-		return
+		return false
 	}
-	s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
+	accepted := s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
+	_, failed := what.(mcpconnectionattempts.Code)
+	return accepted && failed
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.
@@ -65,10 +69,10 @@ func canReregister(clientIDMetadataURI pgtype.Text, identityProviderConnectionID
 
 // refreshHappened maps a metric outcome to the row; revoked mid-refresh and canceled write none.
 func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, err error) (mcpconnectionattempts.Happened, bool) {
-	// A response body that was cut off or could not be decoded is malformed,
+	// A response body that was cut off or could not be decoded is a provider failure,
 	// even through a tunnel. Do not override canceled/deferred/no-row outcomes.
 	if (outcome == remotesessionmetrics.RefreshOutcomeUnreachable || outcome == remotesessionmetrics.RefreshOutcomeInternalError) && errors.Is(err, errRefreshUnusableAnswer) {
-		return mcpconnectionattempts.CodeMalformedResponse, true
+		return mcpconnectionattempts.CodeProviderServerError, true
 	}
 	if client.TunneledMcpServerID.Valid {
 		if code, ok := refreshTunnelFailure(outcome, err); ok {
@@ -93,7 +97,12 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeRejected, remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
 		// Name provider failures without changing the response-facing refresh outcome.
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
+			if tokenErr.statusCode == http.StatusRequestTimeout {
+				return mcpconnectionattempts.CodeProviderUnreachable, true
+			}
 			switch tokenErr.code {
+			case oautherr.OIDCCodeLoginRequired, oautherr.OIDCCodeInteractionRequired, oautherr.OIDCCodeConsentRequired, oautherr.OIDCCodeAccountSelectionRequired:
+				return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 			case oautherr.CodeServerError:
 				return mcpconnectionattempts.CodeProviderServerError, true
 			case oautherr.CodeTemporarilyUnavailable:
@@ -133,6 +142,9 @@ func refreshTunnelFailure(outcome remotesessionmetrics.RefreshOutcome, err error
 		return mcpconnectionattempts.CodeInternalError, true
 	}
 	if outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
+		if code, ok := tunnelrouting.FailureHappened("", err); ok {
+			return code, true
+		}
 		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	}
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.statusCode == http.StatusBadGateway {
