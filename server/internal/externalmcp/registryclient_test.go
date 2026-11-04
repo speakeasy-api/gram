@@ -167,13 +167,13 @@ func TestListServers_OmitsToolsAndComputesScalars(t *testing.T) {
 
 	// Scalars are precomputed; all tools read-only -> is_read_only true.
 	readonly := result.Servers[0]
-	require.Equal(t, 2, readonly.ToolCount)
-	require.True(t, readonly.IsReadOnly)
+	require.Equal(t, 2, *readonly.ToolCount)
+	require.True(t, *readonly.IsReadOnly)
 
 	// One non-read-only tool -> is_read_only false.
 	writer := result.Servers[1]
-	require.Equal(t, 2, writer.ToolCount)
-	require.False(t, writer.IsReadOnly)
+	require.Equal(t, 2, *writer.ToolCount)
+	require.False(t, *writer.IsReadOnly)
 
 	// The _meta blob must not carry tool definitions (schemas/descriptions).
 	metaJSON, err := json.Marshal(readonly.Meta)

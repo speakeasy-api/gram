@@ -431,7 +431,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,
-		ToolCount:   entry.ToolCount,
+		ToolCount:   conv.PtrValOr(entry.ToolCount, 0),
 		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
 	}

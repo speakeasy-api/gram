@@ -131,7 +131,6 @@ const catalogServer = {
   version: "1.0.0",
   title: "Linear",
   meta: {},
-  toolCount: 2,
   isReadOnly: true,
   supportsDcr: true,
   remotes: [
@@ -384,7 +383,7 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+        "The catalog lists curated MCP servers. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
     expect(
@@ -481,7 +480,7 @@ describe("ProjectGuide", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: /Linear.*2 tools/,
+          name: "Linear",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -1513,7 +1512,7 @@ describe("ProjectGuide", () => {
       screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Linear.*2 tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Linear" }));
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );
