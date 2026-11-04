@@ -143,21 +143,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	checks := []authz.Check{{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}}
-	if ac.ProjectID != nil {
-		checks = append(checks, authz.Check{
-			Scope:        authz.ScopeProjectRead,
-			ResourceKind: "",
-			ResourceID:   ac.ProjectID.String(),
-			Dimensions:   nil,
-		})
-	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authzClient.Require(ctx, organizationOrProjectRead(ac)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {
@@ -395,21 +381,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	checks := []authz.Check{{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}}
-	if ac.ProjectID != nil {
-		checks = append(checks, authz.Check{
-			Scope:        authz.ScopeProjectRead,
-			ResourceKind: "",
-			ResourceID:   ac.ProjectID.String(),
-			Dimensions:   nil,
-		})
-	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authzClient.Require(ctx, organizationOrProjectRead(ac)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {
@@ -1525,14 +1497,14 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 				ResourceID:   challenge.ResourceID,
 				Dimensions:   dimensions,
 			}
-			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
+			roleAllows, authorizeErr := s.authzClient.EvaluateGrantsForStoredCheck(ctx, roleGrants, check.WithStrictSelectorMatch())
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
 			}
 			if !roleAllows {
 				return oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
 			}
-			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
+			resultAllows, authorizeErr := s.authzClient.EvaluateGrantsForStoredCheck(ctx, resultingGrants, check.WithStrictSelectorMatch())
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "resulting access cannot be evaluated").LogError(ctx, s.logger)
 			}
@@ -1788,4 +1760,13 @@ func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdent
 		Servers: servers,
 		Skills:  skills,
 	}, nil
+}
+
+// organizationOrProjectRead allows organization read, or project read when
+// the request names a project.
+func organizationOrProjectRead(ac *contextvalues.AuthContext) authz.Operation {
+	if ac.ProjectID == nil {
+		return authz.Organization(ac.ActiveOrganizationID).Read()
+	}
+	return authz.Project(ac.ActiveOrganizationID, ac.ProjectID.String()).ReadOrOrganizationRead()
 }

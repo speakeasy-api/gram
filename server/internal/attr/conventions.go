@@ -91,7 +91,7 @@ const (
 
 	// AuthzMigrationUnitKey names the authorization migration units an operation touches.
 	AuthzMigrationUnitKey = attribute.Key("gram.authz.migration.unit")
-	// AuthzShadowEntryKey is the client entry point a shadow comparison ran for: require, evaluate, evaluate_grants, match_many or audience.
+	// AuthzShadowEntryKey is the client entry point a shadow comparison ran for: require, require_member, evaluate, evaluate_grants, match_many or audience.
 	AuthzShadowEntryKey = attribute.Key("gram.authz.shadow.entry")
 	// AuthzShadowPermissionsKey lists the typed permissions a shadow comparison covered, without resource IDs.
 	AuthzShadowPermissionsKey = attribute.Key("gram.authz.shadow.permissions")

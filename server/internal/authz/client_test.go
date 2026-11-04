@@ -395,3 +395,39 @@ func TestClientDeviceAgentAndHookOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestClientReadOrOrganizationRead(t *testing.T) {
+	t.Parallel()
+
+	role := "role:organization:role_1"
+	project := Project(fixtureOrgID, "proj_1")
+	for _, mode := range []MigrationMode{MigrationModeOld, MigrationModeShadow, MigrationModeNew} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			recorder := &capturedComparisons{}
+			client, _ := newRoutedTestClient(t, nil, fixedModes(mode), recorder)
+
+			projectReader := humanClientContext(t, grantOf(role, string(ScopeProjectRead), ResourceKindProject, "proj_1"))
+			require.NoError(t, client.Require(projectReader, project.ReadOrOrganizationRead()))
+
+			orgReader := humanClientContext(t, grantOf(role, string(ScopeOrgRead), ResourceKindOrg, fixtureOrgID))
+			require.NoError(t, client.Require(orgReader, project.ReadOrOrganizationRead()))
+
+			blockedProject := humanClientContext(t,
+				grantOf(role, string(ScopeOrgRead), ResourceKindOrg, fixtureOrgID),
+				grantOf(role, string(ScopeProjectBlockedRead), ResourceKindProject, "proj_1"),
+			)
+			require.NoError(t, client.Require(blockedProject, project.ReadOrOrganizationRead()), "a project block does not stop organization read")
+
+			otherProject := humanClientContext(t, grantOf(role, string(ScopeProjectRead), ResourceKindProject, "proj_2"))
+			require.Error(t, client.Require(otherProject, project.ReadOrOrganizationRead()))
+
+			for _, outcome := range recorder.outcomes() {
+				require.Equal(t, ShadowMatch, outcome)
+			}
+			if mode == MigrationModeShadow {
+				require.Len(t, recorder.outcomes(), 4)
+			}
+		})
+	}
+}

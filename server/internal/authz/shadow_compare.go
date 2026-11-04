@@ -60,8 +60,8 @@ type ShadowComparison struct {
 	OrganizationID string
 	// Units are the migration units the call touched.
 	Units []string
-	// Entry is the client entry point: require, evaluate, evaluate_grants,
-	// match_many or audience.
+	// Entry is the client entry point: require, require_member, evaluate,
+	// evaluate_grants, match_many or audience.
 	Entry string
 	// Permissions are the typed permissions the call asked for, such as
 	// project.read, in call order.

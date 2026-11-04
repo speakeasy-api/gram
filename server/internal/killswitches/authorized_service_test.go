@@ -13,6 +13,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,9 +86,8 @@ func TestNewAuthorizedServiceRequiresCustomerReadService(t *testing.T) {
 }
 
 type authorizationCheck struct {
-	organizationID string
-	userID         string
-	scope          authz.Scope
+	userID    string
+	operation string
 }
 
 type authorizerStub struct {
@@ -95,8 +95,8 @@ type authorizerStub struct {
 	checks []authorizationCheck
 }
 
-func (a *authorizerStub) RequireUserOrganizationScope(_ context.Context, organizationID, userID string, scope authz.Scope) error {
-	a.checks = append(a.checks, authorizationCheck{organizationID: organizationID, userID: userID, scope: scope})
+func (a *authorizerStub) RequireMemberOrganization(_ context.Context, userID string, op authz.Operation) error {
+	a.checks = append(a.checks, authorizationCheck{userID: userID, operation: op.String()})
 	return a.err
 }
 
@@ -125,7 +125,7 @@ func TestAuthorizedServiceDerivesTenantAndActorForAllSixMethods(t *testing.T) {
 	require.Equal(t, []string{"list-definitions", "activate", "change", "deactivate", "get", "list"}, generic.calls)
 	require.Len(t, authorizer.checks, 6)
 	for _, check := range authorizer.checks {
-		require.Equal(t, authorizationCheck{organizationID: "org_trusted", userID: "user_trusted", scope: authz.ScopeOrgAdmin}, check)
+		require.Equal(t, authorizationCheck{userID: "user_trusted", operation: authz.Organization("org_trusted").Administer().String()}, check)
 	}
 	require.Equal(t, OrganizationID("org_trusted"), generic.activate.OrganizationID)
 	require.Equal(t, "user_trusted", generic.activate.ActorUserID)
@@ -173,7 +173,7 @@ func TestAuthorizedServiceRejectsAdminRevokedAfterContextPreparation(t *testing.
 	require.NoError(t, engine.Require(ctx, check))
 
 	generic := &genericServiceStub{}
-	service, err := NewAuthorizedService(generic, engine)
+	service, err := NewAuthorizedService(generic, authztest.NewParityClient(t, engine))
 	require.NoError(t, err)
 	_, err = service.ListDefinitions(ctx)
 	requireOopsCode(t, err, oops.CodeForbidden)

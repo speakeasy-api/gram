@@ -100,7 +100,7 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 		return authCtx, organizationID, nil, nil
 	}
 
-	if err := s.authz.RequireUserOrganizationScope(ctx, organizationID, authCtx.UserID, scope); err != nil {
+	if err := s.authzClient.RequireMemberOrganization(ctx, authCtx.UserID, organizationOperation(organizationID, scope)); err != nil {
 		return nil, "", nil, fmt.Errorf("require %s for requested organization: %w", scope, err)
 	}
 
