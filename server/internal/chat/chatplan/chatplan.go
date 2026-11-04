@@ -76,10 +76,13 @@ type Page struct {
 }
 
 // ListVisible returns one page of the chats plan admits in its project,
-// newest first. The page and total come from the plan's snapshot: the total
+// newest first. limit must be at least 1. The page and total come from the plan's snapshot: the total
 // is counted with the page when the page has rows, and by a second statement
 // in the same snapshot when the page is past the end.
 func ListVisible(ctx context.Context, tx pgx.Tx, plan authz.AccessPlan, limit, offset int32) (Page, error) {
+	if limit < 1 || offset < 0 {
+		return Page{}, fmt.Errorf("list visible chats: limit %d and offset %d must be positive", limit, offset)
+	}
 	where, args, err := visible(ctx, tx, plan)
 	if err != nil {
 		return Page{}, err
@@ -131,10 +134,13 @@ func CountVisible(ctx context.Context, tx pgx.Tx, plan authz.AccessPlan) (int64,
 }
 
 // visible renders the filter every listing shares: the plan's tenant, live
-// rows, and the plan's predicate. It refuses a plan for another adapter or
-// another snapshot.
+// rows, and the plan's predicate. It refuses a plan for another type, another
+// adapter or another snapshot.
 func visible(ctx context.Context, tx pgx.Tx, plan authz.AccessPlan) (string, []any, error) {
 	binding := plan.Binding()
+	if binding.Permission.Type != "chat" {
+		return "", nil, fmt.Errorf("%w: plan answers %s.%s, not a chat permission", authz.ErrPlanStale, binding.Permission.Type, binding.Permission.Permission)
+	}
 	if binding.Adapter != Adapter.Name {
 		return "", nil, fmt.Errorf("%w: plan was compiled for adapter %q", authz.ErrPlanStale, binding.Adapter)
 	}

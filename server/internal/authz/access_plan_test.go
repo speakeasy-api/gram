@@ -283,6 +283,8 @@ func TestAccessPlanBinding(t *testing.T) {
 	require.Empty(t, plan.Binding().Snapshot, "binding returns a copy")
 	_, err = bound.BindSnapshot("snapshot_2")
 	require.ErrorIs(t, err, ErrPlanStale)
+	_, _, err = bound.Predicate(0)
+	require.Error(t, err, "parameters are numbered from $1")
 
 	require.NoError(t, bound.Reusable(bound.Binding()))
 	mutations := map[string]func(*PlanBinding){

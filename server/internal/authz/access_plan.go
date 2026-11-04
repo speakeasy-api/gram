@@ -147,6 +147,9 @@ func (p AccessPlan) Predicate(firstParam int) (string, []any, error) {
 	if p.binding.Snapshot == "" {
 		return "", nil, errors.New("access plan is not bound to a snapshot")
 	}
+	if firstParam < 1 {
+		return "", nil, fmt.Errorf("access plan parameters start at $1, not $%d", firstParam)
+	}
 	r := &planRenderer{next: firstParam, args: nil}
 	return p.root.render(r), r.args, nil
 }

@@ -456,4 +456,17 @@ func TestBindRequiresOneSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	_, err = chatplan.CountVisible(ctx, tx, bound)
 	require.ErrorIs(t, err, authz.ErrPlanStale, "a plan for %s does not run on %s", other.Name, chatplan.Adapter.Name)
+
+	agents, err := evaluator.Plan(userSet(actorID), s.PermissionRef{Type: "agent", Permission: "read"}, chatplan.Adapter,
+		authz.PlanTenant{OrganizationID: f.orgID, ProjectID: f.projectID.String()})
+	require.NoError(t, err)
+	agents, err = chatplan.Bind(ctx, tx, agents)
+	require.NoError(t, err)
+	_, err = chatplan.CountVisible(ctx, tx, agents)
+	require.ErrorIs(t, err, authz.ErrPlanStale, "a plan for another type does not run on chats")
+
+	chats, err := chatplan.Bind(ctx, tx, compiled)
+	require.NoError(t, err)
+	_, err = chatplan.ListVisible(ctx, tx, chats, 0, 0)
+	require.Error(t, err, "an empty page is refused rather than reporting a zero total")
 }
