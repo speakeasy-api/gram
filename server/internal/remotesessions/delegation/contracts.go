@@ -84,6 +84,10 @@ const (
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.
-type RefreshError struct{ Kind RefreshFailure }
+type RefreshError struct {
+	Kind RefreshFailure
+	// SigningFailure changes outcome ownership, never retry or claim semantics.
+	SigningFailure bool
+}
 
 func (e *RefreshError) Error() string { return "delegation refresh failed" }

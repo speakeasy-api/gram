@@ -431,3 +431,26 @@ func TestRenewal_FailurePersistenceOutcome(t *testing.T) {
 		})
 	}
 }
+
+func TestRenewal_SignerSetupOwnership(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []RefreshFailure{RefreshSetup, RefreshSetupRetryable} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			s, _, p, b, allow := newDelegationUnitFixture(t)
+			rec := mcpconnectionattemptstest.New(t)
+			s.connections = rec.Recorder
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				return nil, &RefreshError{Kind: kind, SigningFailure: true}
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			if kind == RefreshSetup {
+				require.ErrorIs(t, err, ErrRetainedConfiguration)
+			} else {
+				require.ErrorIs(t, err, ErrTemporary)
+			}
+			rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeInternalError)
+		})
+	}
+}

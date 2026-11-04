@@ -80,3 +80,25 @@ func TestDelegationProviderLoadProvenance(t *testing.T) {
 		})
 	}
 }
+
+func TestDelegationRefreshSignerOwnership(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		cause   error
+		kind    delegation.RefreshFailure
+		signing bool
+	}{
+		{"missing signer", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), delegation.RefreshSetupRetryable, true},
+		{"signer fault", ErrFederatedSigning, delegation.RefreshSetup, true},
+		{"discovery", ErrFederatedUnavailable, delegation.RefreshSetupRetryable, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var failure *delegation.RefreshError
+			require.ErrorAs(t, delegationRefreshError(federatedRefreshSetupError(tc.cause)), &failure)
+			require.Equal(t, tc.kind, failure.Kind)
+			require.Equal(t, tc.signing, failure.SigningFailure)
+		})
+	}
+}

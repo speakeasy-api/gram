@@ -103,6 +103,8 @@ func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Re
 
 	idp, err := c.challenges.LoadIdentityProviderEndpoint(ctx, c.keys, req.OrganizationID, sel.trustedIssuerID, sel.trustedClientID)
 	switch {
+	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
+		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
 	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
 		return none, newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
 	case err != nil:

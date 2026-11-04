@@ -665,7 +665,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		// erases the credential instead.
 		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
 		if result != nil && result.Credentials != nil && !invalidIdentity {
-			refreshErr = &RefreshError{Kind: RefreshAmbiguous}
+			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false}
 			c.assertion = ""
 			c.assertionExpiry = time.Time{}
 			if rotation := result.Credentials.RefreshToken(); rotation != "" {
@@ -686,7 +686,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	if result == nil || result.Credentials == nil {
 		renewalDecided = true
-		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous})
+		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false})
 	}
 	next := c
 	next.observedAt = s.now()
@@ -718,7 +718,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		defer identity.DiscardCredentials()
 		if identity.SubjectID() != subject || identity.IssuerURL() != p.IssuerURL() {
 			renewalDecided = true
-			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity})
+			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, SigningFailure: false})
 		}
 		if identity.Expiration().After(s.now()) {
 			next.assertion, err = s.encrypt(result.Credentials.IDToken())
@@ -851,7 +851,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	}()
 	var failure *RefreshError
 	if !errors.As(cause, &failure) {
-		failure = &RefreshError{Kind: RefreshAmbiguous}
+		failure = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false}
 	}
 	next := c
 	next.observedAt = s.now()
@@ -924,7 +924,11 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		return ErrTemporary
 	}
 	decided = true
-	s.recordRenewal(ctx, b, renewalHappened(kind))
+	code := renewalHappened(kind)
+	if failure.SigningFailure {
+		code = mcpconnectionattempts.CodeInternalError
+	}
+	s.recordRenewal(ctx, b, code)
 	return outcome
 }
 
