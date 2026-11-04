@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -242,6 +243,14 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			} else {
 				require.Equal(t, urn.NewUserSubject("user_owner"), source.subjects[0], "the authorizer's own connection serves")
 			}
+			source.clientErr = remotesessions.ErrRemoteSessionUnavailable
+			_, err = f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok, "agent outage must reach request recorder: %v", err)
+			require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, failure.code)
+			_, unavailable := errors.AsType[memberUnavailableError](err)
+			require.True(t, unavailable)
+
 		})
 	}
 }

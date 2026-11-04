@@ -445,8 +445,9 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 // fakeUpstreamTokens serves the chosen client's token from whichever
 // connection its binding names when tokens are read.
 type fakeUpstreamTokens struct {
-	issuerID uuid.UUID
-	bound    uuid.UUID
+	clientErr error
+	issuerID  uuid.UUID
+	bound     uuid.UUID
 	// subjects records whose connection each read asked for.
 	subjects []urn.SessionSubject
 }
@@ -462,6 +463,9 @@ func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Context, re
 
 func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.subjects = append(f.subjects, subject)
+	if f.clientErr != nil {
+		return nil, f.clientErr
+	}
 	return f.tokens(), nil
 }
 
