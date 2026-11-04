@@ -456,5 +456,5 @@ C2 changes no behaviour. It adds `docs/rbac-chat-collections.md` and the test th
 
    _If reversed:_ each needs its own approved change, then the test row flips.
 
-4. **The list operation gets its own name in the plan.** It is "list visible chats": the project-level `ReadChats()` question plus the own-scope predicate. Collections are not reimplemented as "chats a point read would open", because the two answers differ for three of the callers above. _If reversed:_ settle decisions 3.1 to 3.4 first, then the collection could reuse the point operation.
+4. **The list operation gets its own name in the plan.** It is "list visible chats": the project-level `ReadChats()` question plus the own-scope predicate. Collections are not reimplemented as "chats a point read would open", because the two answers differ for all five callers in decision 3. _If reversed:_ settle those five divergences first, then the collection could reuse the point operation.
 5. **Resolving owned agents inside the page snapshot is allowed as an improvement.** Today the agent list is fetched before the page statement. Moving it into the query narrows a race and changes no answer. _If reversed:_ keep the prefetched list.
