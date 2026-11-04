@@ -14,7 +14,16 @@ import (
 // as Evaluate: the unit's mode chooses the engine's grant matching, the
 // registry evaluator, or both with a comparison. The grants form one policy,
 // so an empty set denies. Alternatives are rejected; ask for each option.
+// Errors are mapped as the client's other methods map them.
 func (c *Client) EvaluateGrants(ctx context.Context, grants []Grant, op Operation) (bool, error) {
+	allowed, err := c.evaluateGrants(ctx, grants, op)
+	if err != nil {
+		return false, c.engine.mapError(ctx, err)
+	}
+	return allowed, nil
+}
+
+func (c *Client) evaluateGrants(ctx context.Context, grants []Grant, op Operation) (bool, error) {
 	if err := c.validate([]Operation{op}); err != nil {
 		return false, err
 	}
