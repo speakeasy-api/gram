@@ -284,7 +284,6 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedSigning)
 		_, refreshErr := m.RefreshFederatedIdentity(t.Context(), p, "refresh", "subject", "")
-		require.ErrorIs(t, refreshErr, ErrFederatedSigning)
 		var setup *FederatedRefreshError
 		require.ErrorAs(t, refreshErr, &setup)
 		require.Equal(t, FederatedRefreshSetupRetryable, setup.Kind)

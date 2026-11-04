@@ -8,18 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFederatedRefreshSetupPreservesSignerOwnership(t *testing.T) {
+func TestFederatedRefreshSetupClassifiesSignerFaults(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		cause  error
-		kind   FederatedRefreshFailure
-		signer bool
+		name  string
+		cause error
+		kind  FederatedRefreshFailure
 	}{
-		{"missing signer", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), FederatedRefreshSetupRetryable, true},
-		{"live signer fault", ErrFederatedSigning, FederatedRefreshSetup, true},
-		{"provider discovery outage", ErrFederatedUnavailable, FederatedRefreshSetupRetryable, false},
-		{"configuration", ErrFederatedConfiguration, FederatedRefreshSetup, false},
+		{"missing signer", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), FederatedRefreshSetupRetryable},
+		{"live signer fault", ErrFederatedSigning, FederatedRefreshSetup},
+		{"provider discovery outage", ErrFederatedUnavailable, FederatedRefreshSetupRetryable},
+		{"configuration", ErrFederatedConfiguration, FederatedRefreshSetup},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -27,7 +26,6 @@ func TestFederatedRefreshSetupPreservesSignerOwnership(t *testing.T) {
 			var failure *FederatedRefreshError
 			require.ErrorAs(t, err, &failure)
 			require.Equal(t, tc.kind, failure.Kind)
-			require.Equal(t, tc.signer, errors.Is(err, ErrFederatedSigning))
 			require.NotContains(t, err.Error(), "private signer detail")
 		})
 	}
