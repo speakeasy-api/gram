@@ -1,0 +1,41 @@
+# RBAC migration follow-ups
+
+Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migration PRs deliberately left for later, collected in one place. Each item names where it was parked and what it waits on. Nothing here changes behaviour on its own until its PR lands.
+
+## Ready to run
+
+1. **Rename facts to attributes (AIS-881).** Approved by Tiago on 2026-11-04. `Fact` becomes `Attribute`, along with its constructors (`StringAttribute`, `BoolAttribute`, `RelatedAttribute`, `AbsentAttribute`, ...), `FactState` → `AttributeState`, `WithFacts` → `WithAttributes`, `RequiredFacts` → `RequiredAttributes`, `ErrFactUnresolved` → `ErrAttributeUnresolved`, and the schema accessors `Cond.Fact()` and `Projection.Fact()`. That is about 350 identifier uses in `server/internal/authz`, about 13 consumer files (mostly chat and agents) and 4 docs (decision log, cutover routing, migrating-a-service guide, `rbac.md`). Unrelated look-alikes stay: `Factory`, `SupportFact`, `RoutingFacts`. One mechanical PR on the integration branch, with no behaviour change. Not started: it runs when Tiago asks.
+2. **Unify the client field name.** Plugins and the projects stack call the client field `authz`, and access calls it `authzClient` (integration decision 2 on #8519). Pick one name and rename it in a single pass. Low priority, cosmetic.
+
+## Waiting on a decision
+
+3. **Chat list cutover onto the Q1 filter.** #8534 adds `Plan`/`AccessPlan`, but chat collections still list through the old queries. The cutover waits on the five list-versus-single-chat divergences characterized in #8533: a project-wide `chat:read` grant, a single-chat grant, legacy API keys, dashboard chat-session tokens, and a failing visibility check.
+4. **Member agent self-creation.** #7590 removed it, and #8524 flags it at the top. The recommended fix is a default Member grant `agent:write {owner: self}`. The alternative is restoring self-creation in #7590.
+5. **`EvaluateGrants` transport refusal.** Loaded-grant questions don't refuse disallowed transports (F6 decision 21). This affects #8465, #8487 and #8531.
+6. **Expired grants.** `principal_grants` has no `expires_at`, so #8481 cannot honour expiry yet.
+7. **Two security threads on #8519.** The risk scanner runs with a nil authorization (no repro yet), and Platform MCP `connection_mutation` uses project-level `mcp:write`.
+
+## Waiting on another PR
+
+8. **Chat ownership permissions.** Once AG1 (#8524) declares `agent.is_owner`, declare the attribute-reading `chat.read` and `chat.write` from the RFC, load the chat's attributes in `loadAuthorizedChat`, and point `Chat(...).Read()` and `.Write()` at them (chat decision 1). No call site changes.
+9. **#7590 lands first.** The agents stack (#8524, #8530, #8532) is based on it. It needs an SDK lockfile regeneration and the Agents page edits listed in #8524.
+
+## Waiting on production shadow data (release gate)
+
+The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout.
+
+10. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1).
+11. **X2, runtime and key policy projections (AIS-874).**
+12. **X4, demo seed and dashboard gates (AIS-876).** This includes the "blocked" label for shared sign-in that was deferred from the MCP stack.
+13. **Z-stage cleanup (Z1, Z2).** Remove what the migration kept alive on purpose:
+    - the explanation helpers left in `explain_access.go` (13 rows, 15 call sites), plus the tool-discovery explanation;
+    - access grant loaders and writers, and grant loading through `LoadGrants` for plugin servers, device-agent connections and role snapshots (M6 decision 6);
+    - dead engine parameters, such as the 13 services that gained an `authzClient` parameter in #8531 and still take the engine;
+    - the missing-client fallbacks for workers and commands (O3, O5, O6 activities and billing);
+    - the auth-client backfill planner (`authclientbackfill`), once X1 retires the tables it writes;
+    - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
+    - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
+
+## Keeping this current
+
+When a follow-up lands, link its PR here and in Linear and strike the item. When a PR parks something new for later, add it here in the same change.
