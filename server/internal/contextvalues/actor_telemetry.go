@@ -46,8 +46,13 @@ func ActorTelemetryAttributes(ctx context.Context) map[string]string {
 		attrs["gram.authorization.actor.id"] = recorded.ID
 	}
 	if authorizer, owner, ok := PrincipalCredentialProvenance(ctx); ok {
-		attrs["gram.authorization.authorizer_user_id"] = authorizer
 		attrs["gram.authorization.owner_user_id"] = owner
+		// An agent's API key is a shared credential. Whoever issued it is not
+		// someone the agent acts for, so its calls record no authorizer.
+		if attrs["gram.authorization.actor.type"] == string(urn.PrincipalTypeAgent) && attrs["gram.authorization.api_key_id"] != "" {
+			return attrs
+		}
+		attrs["gram.authorization.authorizer_user_id"] = authorizer
 	}
 	return attrs
 }

@@ -9477,6 +9477,18 @@ type ToolUsageTraceSummaryResponseBody struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string `form:"via_meta_mcp_server_name,omitempty" json:"via_meta_mcp_server_name,omitempty" xml:"via_meta_mcp_server_name,omitempty"`
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string `form:"via_meta_mcp_server_kind,omitempty" json:"via_meta_mcp_server_kind,omitempty" xml:"via_meta_mcp_server_kind,omitempty"`
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string `form:"via_meta_mcp_server_project_slug,omitempty" json:"via_meta_mcp_server_project_slug,omitempty" xml:"via_meta_mcp_server_project_slug,omitempty"`
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string `form:"via_meta_mcp_server_agent_id,omitempty" json:"via_meta_mcp_server_agent_id,omitempty" xml:"via_meta_mcp_server_agent_id,omitempty"`
 	// Stable MCP client identity used by filters; 'unattributed' when the caller
 	// never reported one
 	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`

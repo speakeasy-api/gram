@@ -119226,12 +119226,25 @@ components:
         user_label:
           type: string
           description: User-facing user identity label
+        via_meta_mcp_server_agent_id:
+          type: string
+          description: Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted
         via_meta_mcp_server_id:
           type: string
           description: Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+        via_meta_mcp_server_kind:
+          type: string
+          description: 'Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent''s gateway; absent when the gateway id resolves to no gateway of the organization'
+          enum:
+            - project
+            - organization
+            - agent
         via_meta_mcp_server_name:
           type: string
           description: Display name of the dispatching gateway; a deleted gateway keeps its last name
+        via_meta_mcp_server_project_slug:
+          type: string
+          description: 'Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization'
       description: A single target-aware tool usage trace row
       required:
         - id
