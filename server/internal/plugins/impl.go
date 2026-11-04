@@ -157,17 +157,18 @@ func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	repo      *repo.Queries
-	auth      *auth.Auth
-	authz     *authz.Engine
-	audit     *audit.Logger
-	cache     cache.Cache
-	github    *GitHubConfig
-	serverURL string
-	keyPrefix string
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	auth        *auth.Auth
+	authz       *authz.Engine
+	authzClient *authz.Client
+	audit       *audit.Logger
+	cache       cache.Cache
+	github      *GitHubConfig
+	serverURL   string
+	keyPrefix   string
 	// features drives the phased hooks rollout gate applied to every publish (see
 	// publishProject). Both the automated publisher (NewPublisher) and the
 	// dashboard service (NewService) set it, so interactive publishes are gated
@@ -201,6 +202,7 @@ func NewService(
 	sessions *sessions.Manager,
 	cacheImpl cache.Cache,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	github *GitHubConfig,
 	env string,
@@ -211,17 +213,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		audit:     auditLogger,
-		cache:     cacheImpl,
-		github:    github,
-		serverURL: serverURL,
-		keyPrefix: auth.APIKeyPrefix(env),
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/plugins"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		authzClient: authzClient,
+		audit:       auditLogger,
+		cache:       cacheImpl,
+		github:      github,
+		serverURL:   serverURL,
+		keyPrefix:   auth.APIKeyPrefix(env),
 		// features gates human/dashboard-initiated hook-output changes (marketplace
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
@@ -251,18 +254,19 @@ func NewPublisher(
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:    nil,
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      nil,
-		authz:     nil,
-		audit:     auditLogger,
-		cache:     nil,
-		github:    github,
-		serverURL: serverURL,
-		keyPrefix: auth.APIKeyPrefix(env),
-		features:  features,
+		tracer:      nil,
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		auth:        nil,
+		authz:       nil,
+		authzClient: nil,
+		audit:       auditLogger,
+		cache:       nil,
+		github:      github,
+		serverURL:   serverURL,
+		keyPrefix:   auth.APIKeyPrefix(env),
+		features:    features,
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
 		publicationRequests:   PublicationRequests{Enabled: false},
@@ -1408,7 +1412,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission, DeliveryAuthz: s.authzClient})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):

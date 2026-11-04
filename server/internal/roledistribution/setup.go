@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"maps"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ import (
 // ProcessRoleDistributionSetup handles an additive role distribution event.
 // Redelivery can re-add assignments removed by an administrator.
 // Errors are retried by the existing transport, not by an application sweep.
-func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, roleURN string, organizationID string) (bool, error) {
+func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, authzClient *authz.Client, roleURN string, organizationID string) (bool, error) {
 	// The selected project is revalidated inside the transaction.
 	var projectID uuid.UUID
 	err := db.QueryRow(ctx, `SELECT p.id FROM projects p
@@ -210,7 +211,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		if !assigned {
 			continue
 		}
-		changed, err := roledelivery.Populate(ctx, tx, organizationID, target.ProjectID, target.ID, roleURN, guard)
+		changed, err := roledelivery.Populate(ctx, tx, organizationID, target.ProjectID, target.ID, roleURN, guard, authzClient)
 		if err != nil {
 			return false, fmt.Errorf("populate role plugin: %w", err)
 		}

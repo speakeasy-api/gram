@@ -218,7 +218,7 @@ func newPipelineFixture(t *testing.T) pipelineFixture {
 	require.Equal(t, role.RoleUrn, event.GetRoleUrn())
 	publication := plugins.PublicationRequests{Enabled: true}
 	handler := roledistribution.NewHandler(testenv.NewLogger(t), roledistribution.Processors{Setup: func(ctx context.Context, roleURN, organization string) (bool, error) {
-		processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, db, publication, nil, roleURN, organization)
+		processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, db, publication, nil, newDeliveryAuthz(t), roleURN, organization)
 		if err != nil {
 			return false, fmt.Errorf("process pipeline setup: %w", err)
 		}

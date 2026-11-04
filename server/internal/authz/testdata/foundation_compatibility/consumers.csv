@@ -20,6 +20,7 @@ cmd/gram/start.go,newStartCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,NewProvisioner,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,SetUpstreamSelectorWriteGate,,,1,F5 AIS-835
 cmd/gram/streams.go,newStreamsCommand,wiring,NewChallengeCHWriter,,,1,F5 AIS-835
+cmd/gram/streams.go,newStreamsCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,ChallengeLoggingEnabled,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/worker.go,newWorkerCommand,wiring,SetUpstreamSelectorWriteGate,,,1,F5 AIS-835
@@ -115,9 +116,6 @@ internal/agent/impl.go,*Service.GetConfiguration,check,Check,ScopeOrgAdmin,Requi
 internal/agent/impl.go,*Service.JWTAuth,check,Check,ScopeOrgDeviceAgentSync,Require,1,O8 AIS-845
 internal/agent/impl.go,*Service.ListSyncedUsers,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
 internal/agent/impl.go,*Service.UpdateConfiguration,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
-internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,check,Check,ScopeMCPRead,,1,M6 AIS-862
-internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,check,MCPCheck,ScopeMCPRead,,1,M6 AIS-862
-internal/agent/pluginservers.go,*Service.pluginServerDashboardURL,evaluator,GrantsAuthorize,,,1,M6 AIS-862
 internal/agent/pluginservers.go,*Service.pluginServers,loader,LoadGrants,,,1,M6 AIS-862
 internal/agentmanagement/authorize.go,*Authorizer.evaluate,engine,EvaluateLoadedGrants,,,2,AG1 AIS-856
 internal/agentmanagement/authorize.go,*Authorizer.lockHumanMemberships,engine,GetScopeOverrides,,,1,AG1 AIS-856
@@ -532,8 +530,6 @@ internal/plugins/role_matches.go,RolePluginsForResource,check,Check,ScopeOrgRead
 internal/plugins/role_matches.go,RolePluginsForResource,engine,RequirePluginWrite,,,1,S2 AIS-854
 internal/plugins/role_matches.go,RolePluginsForResource,loader,GrantsFromContext,,,1,S2 AIS-854
 internal/plugins/roledelivery/delivery.go,Snapshot,loader,LoadGrants,,,1,M6 AIS-862
-internal/plugins/roledelivery/delivery.go,allowed,check,MCPCheck,ScopeMCPConnect,GrantsAuthorize,1,M6 AIS-862
-internal/plugins/roledelivery/delivery.go,allowed,evaluator,GrantsAuthorize,,,1,M6 AIS-862
 internal/plugins/rotate_observability.go,*Service.RotateObservabilityCredential,check,Check,ScopeOrgAdmin,Require,1,PL1 AIS-855
 internal/productfeatures/client.go,provisionSkillsSystemRoleGrantsTx,writer,PatchRoleGrantsTx,,,2,O1 AIS-837
 internal/productfeatures/impl.go,*Service.authorizeOrganization,check,Check,scope,,1,O1 AIS-837

@@ -44,7 +44,7 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 		require.NoError(t, err)
 		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 		require.NoError(t, testrepo.New(tx).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Private, ID: server.ID, ProjectID: *ac.ProjectID}))
-		_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil)
+		_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil, newDeliveryAuthz(t))
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
 	}
@@ -104,9 +104,9 @@ func TestRoleDeliverySkipsWrapperOnDeletedToolset(t *testing.T) {
 			tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Drive the role delivery entry points in their enclosing transaction.
 			require.NoError(t, err)
 			defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-			eligible, err := roledelivery.Eligible(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, wrapper, nil)
+			eligible, err := roledelivery.Eligible(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, wrapper, nil, newDeliveryAuthz(t))
 			require.NoError(t, err)
-			populated, err := roledelivery.Populate(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, uuid.MustParse(plugin.ID), role, nil)
+			populated, err := roledelivery.Populate(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, uuid.MustParse(plugin.ID), role, nil, newDeliveryAuthz(t))
 			require.NoError(t, err)
 			require.NoError(t, tx.Commit(ctx))
 			require.False(t, eligible, "Eligible adds nothing")
@@ -152,7 +152,7 @@ func TestEligibleServerSkipsWrapperOnDeletedToolset(t *testing.T) {
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	_, err = endpointrepo.New(tx).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: wrapper, Valid: true}, Slug: "endpoint-" + wrapper.String()[:8]})
 	require.NoError(t, err)
-	_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: wrapper, Valid: true}, DisplayName: toolset.Name}, nil)
+	_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: wrapper, Valid: true}, DisplayName: toolset.Name}, nil, newDeliveryAuthz(t))
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 

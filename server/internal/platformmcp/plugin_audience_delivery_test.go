@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"testing"
 	"time"
 
@@ -47,9 +48,9 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil).WithPublicationRequests(true)
+	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, "test", "https://example.test", nil, nil).WithPublicationRequests(true)
 	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery).
-		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget()).
+		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t)).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-delivery-access-key")
 	session := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, accessReads)
@@ -140,7 +141,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	signaler := &recordingPluginPublishSignaler{}
 	service := testPluginTargets(conn).WithAuthorization(engine).
-		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget()).
+		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t)).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: false})
 	service.WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-signal-access-key")

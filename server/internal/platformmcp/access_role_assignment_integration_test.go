@@ -83,7 +83,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(single.Close)
 	reads := NewAccessReadService(logger, single, allowBudget(), "assignment-integration-key")
-	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil)
+	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil, newDeliveryAuthz(t))
 	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
 	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", backend)
 	require.NoError(t, err)

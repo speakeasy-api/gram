@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"slices"
 	"sync"
 	"testing"
@@ -321,7 +322,7 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_set_plugin_auto_sync_service")
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
 	fixture.service.WithAutoSyncGuard(management)
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Checked", "checked")
 	off := func(key string) error {
@@ -354,7 +355,7 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_auto_sync_collision")
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
 	fixture.service.WithAutoSyncGuard(management)
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Tools", "tools")
 	seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Conflicting Tools", "tools-codex")

@@ -123,6 +123,8 @@ type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current,
 
 type Dependencies struct {
 	DeliveryGuard *admission.Guard
+	// DeliveryAuthz decides which servers a role audience delivers.
+	DeliveryAuthz *authz.Client
 	Guard         Guard
 	BeforeReplace BeforeReplace
 }
@@ -137,7 +139,7 @@ func LegacyGuard(context.Context, pgx.Tx, pluginsrepo.Plugin, []string, []string
 // Replace atomically validates, authorizes, replaces, and audits one locked
 // plugin's complete assignment set using the caller-owned transaction.
 func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, dependencies Dependencies) (Result, error) {
-	if tx == nil || logger == nil || dependencies.Guard == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
+	if tx == nil || logger == nil || dependencies.Guard == nil || dependencies.DeliveryAuthz == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
 		return Result{}, ErrInvalid
 	}
 
@@ -250,7 +252,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
-	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
+	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard, dependencies.DeliveryAuthz)
 	if err != nil {
 		return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
 	}
