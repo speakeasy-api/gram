@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -335,7 +336,7 @@ func pointVerifyAtTokenEndpoint(t *testing.T, ctx context.Context, fx validation
 	require.EqualValues(t, 1, rows)
 }
 
-// Each failing refresh leaves a connected card, whose Disconnect control the message names.
+// Refresh outages keep the grant and retry guidance; client refusals retain corrective actions.
 func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 	t.Parallel()
 
@@ -368,13 +369,34 @@ func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 			require.NoError(t, err)
 			storeVerifyGrant(t, ctx, fx, conv.ToPGText(refresh), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-			requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
-			page := renderConsent(t, fx)
-			require.Contains(t, page, `data-validate-link`, "the card still offers Verify, so trying again is possible")
-			require.Contains(t, page, `value="disconnect"`)
+			if tc.status == http.StatusServiceUnavailable || tc.status == http.StatusTooManyRequests {
+				w, err := postValidate(t, fx, fx.clientID)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusSeeOther, w.Code)
+				location := w.Header().Get("Location")
+				require.Equal(t, consentPagePath(fx)+"&validate_unfinished="+fx.clientID.String(), location)
+				page := renderConsentAt(t, fx, location)
+				require.Contains(t, page, "Unavailable · try again shortly")
+				require.NotContains(t, page, "data-validate-link")
+				require.NotContains(t, page, verifyNoSignInNotice)
+				require.Equal(t, refresh, storedSession(t, ctx, fx).RefreshTokenEncrypted.String)
+				require.Empty(t, fx.member.drain(), "no probe reached the member")
+			} else {
+				requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
+				page := renderConsent(t, fx)
+				require.Contains(t, page, `data-validate-link`, "the card still offers Verify, so trying again is possible")
+				require.Contains(t, page, `value="disconnect"`)
+			}
 
-			// Trying again works once whatever broke is fixed.
 			healthy.Store(true)
+			if tc.status == http.StatusServiceUnavailable || tc.status == http.StatusTooManyRequests {
+				w, err := postValidate(t, fx, fx.clientID)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusSeeOther, w.Code)
+				require.Equal(t, consentPagePath(fx)+"&validate_unfinished="+fx.clientID.String(), w.Header().Get("Location"), "retry waits for the outage cooldown")
+				// Model the cooldown elapsing without sleeping through it.
+				require.NoError(t, fx.ti.cacheAdapter.Delete(ctx, remotesessions.RefreshCooldownKey(storedSession(t, ctx, fx))))
+			}
 			requireValidated(t, fx)
 		})
 	}
