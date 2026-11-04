@@ -29,7 +29,7 @@ func TestProcessRoleDistributionSetup_RefusesPackageDirectoryCollision(t *testin
 			before, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 			require.NoError(t, err)
 			role := createTestRolePrincipal(t, ctx, ti, tc.role)
-			err = processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{})
+			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
 			require.ErrorIs(t, err, plugins.ErrPluginSlugUnavailable)
 			listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 			require.NoError(t, err)

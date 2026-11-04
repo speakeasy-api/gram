@@ -111,7 +111,7 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 					case "audience":
 						assign()
 					case "setup":
-						require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{}))
+						require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
 					case "role_grant", "eligible":
 						tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Exercise transactional distribution hooks.
 						require.NoError(t, err)

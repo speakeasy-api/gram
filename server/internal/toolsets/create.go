@@ -104,7 +104,7 @@ func ToolsetSlugFromName(name string) string {
 // It returns oops errors with the same codes the management API has always
 // returned, so that handler passes them straight through.
 func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authzClient *authz.Client, input ToolsetCreateInput) (ToolsetCreateResult, error) {
-	if tx == nil || logger == nil || auditLogger == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
+	if tx == nil || logger == nil || auditLogger == nil || authzClient == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, nil, "invalid toolset creation input")
 	}
 	// Checked here rather than left to the column CHECKs, which would turn an

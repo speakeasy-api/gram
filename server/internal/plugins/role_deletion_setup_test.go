@@ -122,7 +122,7 @@ func TestProcessRoleDistributionSetup_DeleteWaitsForSetup(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 	assertRoleSetupDeletionState(t, ctx, ti, setup, assignmentID, true)
-	n, err := processRoleSetup(t, ctx, ti, setup, plugins.PublicationRequests{})
+	n, err := processRoleSetup(ctx, ti, setup, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	require.Zero(t, n, "replaying successful setup must not restore the deleted audience")
 	count, err := fixtures.PipelineCountPluginAssignments(ctx, pluginID)
@@ -164,7 +164,7 @@ func TestProcessRoleDistributionSetup_DeleteFirstSkipsSetup(t *testing.T) {
 	}
 	assertRoleSetupDeletionState(t, ctx, ti, setup, assignmentID, true)
 	require.Zero(t, readRoleSetupRun(t, ctx, worker))
-	n, err := processRoleSetup(t, ctx, ti, setup, plugins.PublicationRequests{})
+	n, err := processRoleSetup(ctx, ti, setup, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	require.Zero(t, n)
 	after, err := fixtures.RoleDeletionContentSnapshot(ctx)

@@ -70,6 +70,9 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	publisher      *capturePublishSignaler
+	// deliveryAuthz is built on the test goroutine so helpers that run role
+	// delivery from other goroutines never construct one there.
+	deliveryAuthz *authz.Client
 }
 
 // capturePublishSignaler records the republish enqueues a plugin mutation makes
@@ -159,6 +162,7 @@ func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, f
 		conn:           conn,
 		sessionManager: sessionManager,
 		publisher:      nil,
+		deliveryAuthz:  newDeliveryAuthz(t),
 	}
 }
 
@@ -251,6 +255,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		conn:           conn,
 		sessionManager: sessionManager,
 		publisher:      publisher,
+		deliveryAuthz:  newDeliveryAuthz(t),
 	}
 }
 

@@ -304,7 +304,7 @@ func TestRoleAudienceCanonicalEndpointFallback(t *testing.T) {
 			require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{PluginID: plugin.ID, ID: removedID}))
 			// Setup invokes Populate with preserveRemoval, unlike unchanged audience replay.
 			// The other live alternate must not bypass this toolset's removal history.
-			require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{}))
+			require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
 			got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 			require.NoError(t, err)
 			require.Empty(t, got.Servers, "setup replay must not resurrect a sibling wrapper")
@@ -325,7 +325,7 @@ func TestRoleAudienceCanonicalEndpointFallback(t *testing.T) {
 			// A newly live canonical endpoint must not replace or duplicate the existing fallback.
 			_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: canonical, Valid: true}, Slug: "endpoint-" + canonical.String()[:8]})
 			require.NoError(t, err)
-			require.NoError(t, processDirectRoleSetup(t, ctx, ti, role, plugins.PublicationRequests{}))
+			require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
 			got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 			require.NoError(t, err)
 			require.Len(t, got.Servers, 1)
