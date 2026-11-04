@@ -1286,7 +1286,7 @@ func TestServeConsentAction_ValidateRateLimited(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.Equal(t, consentPagePath(fx)+"&validate_limited="+fx.clientID.String(), location)
+	require.Equal(t, consentPagePath(fx)+"&consent=required&validate_limited="+fx.clientID.String(), location)
 	require.Empty(t, fx.member.drain(), "a limited verify never reaches the member")
 
 	page := renderConsentAt(t, fx, location)
