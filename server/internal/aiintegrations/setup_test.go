@@ -72,7 +72,7 @@ func newInferenceTestService(t *testing.T) (context.Context, *pgxpool.Pool, *Ser
 	ctx, conn, store, orgID := newStoreTestDB(t)
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := &Service{logger: logger, db: conn, authz: engine, audit: audit.NewLogger(), store: store}
+	service := &Service{logger: logger, db: conn, authzClient: authztest.NewParityClient(t, engine), audit: audit.NewLogger(), store: store}
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: orgID, UserID: "user_inference_test", SessionID: conv.PtrEmpty("test_session"), AccountType: "enterprise"})
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, orgID)})
 	return ctx, conn, service, orgID

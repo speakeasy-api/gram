@@ -183,7 +183,7 @@ func ingestMetricTestExport(
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
 		auth:            nil,
-		authz:           nil,
+		authzClient:     nil,
 		chRepo:          nil,
 		logsEnabled:     nil,
 		logPublisher:    nil,

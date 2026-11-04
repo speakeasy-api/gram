@@ -110,3 +110,15 @@ Review follow-ups adopted on #8442 (each fails closed):
 1. **Billing recipients take the client explicitly.** `billingnotifications.ResolveRecipients` now takes the client, and `billingnotifications.OrganizationAdministratorEmails` holds the missing-client fallback for billing paths. Usage's Stripe customer identity and the two billing activities (credit alerts and the weekly usage summary) resolve through it. A second fallback helper exists here, alongside the activities one from O5, because the activities package already depends on this package and usage does not depend on activities. X1 deletes both fallbacks together. _If reversed:_ move one shared fallback into the authorization package and point both at it.
 2. **Stripe checkout status keeps two separate checks.** `GetStripeCheckoutStatus` requires both administer and read, and it still makes two `Require` calls instead of one call with two operations. While the engine decides, this records the same two challenges as before. _If reversed:_ make it a single call, which records one challenge.
 3. **The narrow billing operations service has no client.** `NewBillingOperations` serves trusted server surfaces that authorize on their own. It leaves the client nil, so any administrator lookup there takes the engine fallback, as it did before. _If reversed:_ thread a client into `NewBillingOperations`.
+
+## O7 (AIS-841): AI integrations, audit log, business memory, data exports, OTel events and skill efficacy settings
+
+### Decided without reviewer input
+
+1. **Skill efficacy moves only its organization checks.** `requireAccess` now takes an organization operation, so the efficacy settings endpoints use the typed client. Two checks stay on the engine:
+   - `requireProjectAccess`, which checks `skill:read` on the project, waits for the typed skill operations and is reassigned to AS1;
+   - `QueryInsights`, which checks `chat:read` on the project for scored sessions, waits for the typed chat operations and is reassigned to C1.
+
+   The organization slice cannot declare those types without colliding with the slices that own them. _If reversed:_ O7 waits for AS1 and C1 and moves all three together.
+
+2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. The e2e suite run is its evidence. _If reversed:_ add a service test before moving it.
