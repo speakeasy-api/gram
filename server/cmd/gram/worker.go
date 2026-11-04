@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -950,9 +951,11 @@ func newWorkerCommand() *cli.Command {
 				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
 				}
-				// Join the writer before After closes ClickHouse. Each logs check and
-				// insert is bounded, but the total depends on the queued organizations.
-				if ferr := connectionRecorder.Shutdown(context.WithoutCancel(ctx)); ferr != nil {
+				// Bound draining, then cancel outstanding I/O and join the writer
+				// before After closes ClickHouse.
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+				defer cancelDrain()
+				if ferr := connectionRecorder.ShutdownAndWait(drainCtx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending connection attempts", attr.SlogError(ferr))
 				}
 			}()

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -160,18 +161,26 @@ func TestRefreshNow_NotAnEndState(t *testing.T) {
 type refreshPanicCache struct{ cache.Cache }
 
 func (refreshPanicCache) Get(context.Context, string, any) error { panic("refresh cache failed") }
+func (refreshPanicCache) Add(context.Context, string, time.Duration) (bool, error) {
+	panic("refresh cache failed")
+}
 
 func TestRefreshNow_RecordsRecoveredPanic(t *testing.T) {
 	t.Parallel()
-	ctx, env := newSyntheticExpiryEnv(t, "refresh-panic", tokenAnswer(http.StatusOK, `{}`))
-	rec := mcpconnectionattemptstest.New(t)
-	refresher := env.newRefresher(testenv.NewMeterProvider(t), refreshPanicCache{Cache: cache.NoopCache})
-	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
-	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
-	require.NoError(t, err)
-	scope := mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
-	require.ErrorContains(t, err, "refresh panicked")
-	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInternalError)
-	require.Len(t, rec.Rows(), 1)
+	for _, trigger := range []remotesessionmetrics.RefreshTrigger{remotesessionmetrics.RefreshTriggerRequest, remotesessionmetrics.RefreshTriggerManual, remotesessionmetrics.RefreshTriggerScheduled} {
+		t.Run(string(trigger), func(t *testing.T) {
+			ctx, env := newSyntheticExpiryEnv(t, "refresh-panic", tokenAnswer(http.StatusOK, `{}`))
+			rec := mcpconnectionattemptstest.New(t)
+			refresher := env.newRefresher(testenv.NewMeterProvider(t), refreshPanicCache{Cache: cache.NoopCache})
+			remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+			require.NoError(t, err)
+			scope := mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)
+			_, err = refresher.RefreshNow(ctx, session, "", trigger, remotesessions.RefreshIn(scope))
+			require.ErrorContains(t, err, "refresh panicked")
+			rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInternalError)
+			require.Len(t, rec.Rows(), 1)
+
+		})
+	}
 }
