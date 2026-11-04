@@ -26,9 +26,33 @@ since=$(date -u -d "${retention_days} days ago" +%F 2>/dev/null || date -u -v-"$
 # the branch skip server-test because the merge queue already ran it on the
 # same commit, so the reports come from the queue's gh-readonly-queue/<branch>/
 # runs, which the API can only filter by exact branch name.
-candidates=$(QUEUE_PREFIX="gh-readonly-queue/${branch}/" gh api --method GET --paginate "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs" \
-  -f event=merge_group -f status=success -f created=">=${since}" -f per_page=100 \
-  --jq '.workflow_runs[] | select(.head_branch | startswith(env.QUEUE_PREFIX)) | .id')
+list_candidates() {
+  local start end count midpoint
+  start=$(jq -nr --argjson epoch "$1" '$epoch | todateiso8601') || return
+  end=$(jq -nr --argjson epoch "$2" '$epoch | todateiso8601') || return
+  count=$(gh api --method GET "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs" \
+    -f event=merge_group -f status=success -f created="${start}..${end}" -f per_page=1 \
+    --jq '.total_count') || return
+
+  # Filtered workflow queries expose at most 1,000 runs, even with pagination.
+  # Split crowded windows before filtering by branch, keeping newest first.
+  if [ "$count" -gt 1000 ]; then
+    if [ "$1" -eq "$2" ]; then
+      echo "More than 1,000 successful merge queue runs at $start; cannot list all runs." >&2
+      return 1
+    fi
+    midpoint=$((($1 + $2) / 2))
+    list_candidates "$((midpoint + 1))" "$2" || return
+    list_candidates "$1" "$midpoint" || return
+  elif [ "$count" -gt 0 ]; then
+    QUEUE_PREFIX="gh-readonly-queue/${branch}/" gh api --method GET --paginate "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs" \
+      -f event=merge_group -f status=success -f created="${start}..${end}" -f per_page=100 \
+      --jq '.workflow_runs[] | select(.head_branch | startswith(env.QUEUE_PREFIX)) | .id' || return
+  fi
+}
+
+since_epoch=$(jq -nr --arg since "${since}T00:00:00Z" '$since | fromdateiso8601')
+candidates=$(list_candidates "$since_epoch" "$(date -u +%s)")
 
 found=0
 for run_id in $candidates; do
