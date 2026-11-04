@@ -160,7 +160,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		}
 	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
+	s.connections.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
@@ -202,7 +202,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 			return err
 		}
 		if claimed == nil || *claimed != *codeReconnect {
-			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
 		}

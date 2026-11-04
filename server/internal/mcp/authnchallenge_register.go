@@ -85,7 +85,11 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	refused := func(ctx context.Context, code string) {
-		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Detail(code))
+		what := mcpconnectionattempts.CodeRegistrationInvalid
+		if code == "internal_error" {
+			what = mcpconnectionattempts.CodeInternalError
+		}
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Detail(code))
 	}
 	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID, refused)
 }
@@ -94,10 +98,12 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 // issuer, not to an MCP server, so per-endpoint and shared authorization
 // servers share it.
 // refused records registration metadata that parsed but was rejected, where a server is known.
-func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, refused func(ctx context.Context, code string)) error {
+func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, refused func(ctx context.Context, code string)) (retErr error) {
 	ctx := r.Context()
+	refusalRecorded := false
 	refuse := func(code, description string) error {
 		refused(ctx, code)
+		refusalRecorded = true
 		return writeDCRError(ctx, w, logger, code, description)
 	}
 
@@ -118,6 +124,11 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
 	}
 
+	defer func() {
+		if retErr != nil && !refusalRecorded {
+			refused(ctx, "internal_error")
+		}
+	}()
 	req.SetDefaults()
 	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {

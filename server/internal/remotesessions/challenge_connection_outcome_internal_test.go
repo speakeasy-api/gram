@@ -67,3 +67,9 @@ func TestAuthorityHappened(t *testing.T) {
 	code, _ = AuthorityHappened(errors.New("authority rejected"))
 	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, code)
 }
+
+func TestTypedAuthorizationHappened(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, typedAuthorizationHappened(fmt.Errorf("binding revoked: %w", ErrTypedAuthorizationDenied)))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, typedAuthorizationHappened(errors.New("database unavailable")))
+}

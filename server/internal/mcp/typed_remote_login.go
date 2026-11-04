@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var errTypedLoginDenied = errors.New("typed connection is not authorized")
+var errTypedLoginDenied = remotesessions.ErrTypedAuthorizationDenied
 
 // ValidateRemoteLoginTypedAuthorization rechecks the exact binding and subject
 // that authorized a typed login, not another client that happens to be usable.

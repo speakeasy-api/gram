@@ -81,8 +81,25 @@ func TestTypedCacheObjectGetAndDeleteMarking(t *testing.T) {
 	require.Equal(t, "value", got.Value)
 
 	_, err = objects.Get(t.Context(), "key")
-	require.Error(t, err, "consumed")
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "consumed")
 	won, err := adapter.Add(t.Context(), "marker", time.Minute)
 	require.NoError(t, err)
 	require.False(t, won, "the marker was set with the consume")
+}
+
+func TestTypedCacheObjectInvalidMarkerLifetimePreservesValue(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	objects := cache.NewTypedObjectCache[conditionalTestObject](testenv.NewLogger(t), cache.NewRedisCacheAdapter(client), cache.SuffixNone)
+	require.NoError(t, objects.Store(t.Context(), conditionalTestObject{Key: "key", Value: "value"}))
+	for _, ttl := range []time.Duration{-time.Second, 0, time.Microsecond} {
+		_, err := objects.GetAndDeleteMarking(t.Context(), "key", "marker", ttl)
+		require.ErrorContains(t, err, "at least one millisecond")
+		got, err := objects.Get(t.Context(), "key")
+		require.NoError(t, err)
+		require.Equal(t, "value", got.Value)
+		require.False(t, mr.Exists("marker"))
+	}
 }

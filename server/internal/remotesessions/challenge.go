@@ -405,6 +405,16 @@ func (m *ChallengeManager) SetTypedAuthorizationValidator(validator TypedAuthori
 	m.typedAuthorizationValidator = validator
 }
 
+// ErrTypedAuthorizationDenied distinguishes a changed binding or permission from an unavailable validator.
+var ErrTypedAuthorizationDenied = errors.New("typed connection is not authorized")
+
+func typedAuthorizationHappened(err error) mcpconnectionattempts.Code {
+	if errors.Is(err, ErrTypedAuthorizationDenied) {
+		return mcpconnectionattempts.CodeNoServerAccess
+	}
+	return mcpconnectionattempts.CodeInternalError
+}
+
 func (m *ChallengeManager) validateTypedAuthorization(ctx context.Context, state RemoteLoginState) error {
 	if state.TypedAuthorization == nil {
 		return nil
@@ -1744,6 +1754,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		t.Refuse(ctx, typedAuthorizationHappened(err))
 		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 
@@ -1920,6 +1931,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// Recheck subject permission after the exchange, before taking database
 	// locks. The exact typed binding is then locked through grant commit below.
 	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		t.Refuse(ctx, typedAuthorizationHappened(err))
 		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 	dbtx, err := m.db.Begin(ctx)
@@ -2222,6 +2234,7 @@ func (m *ChallengeManager) retryWithoutResource(r *http.Request, t *mcpconnectio
 	var err error
 	if state.TypedAuthorization != nil {
 		if err = m.validateTypedAuthorization(ctx, state); err != nil {
+			t.Refuse(ctx, typedAuthorizationHappened(err))
 			return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid")
 		}
 		clients, err = m.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})

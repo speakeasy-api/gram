@@ -15,6 +15,7 @@ import (
 var (
 	_ Cache               = (*RedisCacheAdapter)(nil)
 	_ CompareAndSwapCache = (*RedisCacheAdapter)(nil)
+	_ MarkingConsumeCache = (*RedisCacheAdapter)(nil)
 )
 
 const mutateMaxRetries = 5
@@ -59,6 +60,9 @@ func (r *RedisCacheAdapter) GetAndDelete(ctx context.Context, key string, value 
 
 // GetAndDeleteMarking reads and deletes key and sets marker in one script.
 func (r *RedisCacheAdapter) GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration, value any) error {
+	if markerTTL < time.Millisecond {
+		return fmt.Errorf("marker lifetime must be at least one millisecond")
+	}
 	const consume = `
 local value = redis.call("GET", KEYS[1])
 if not value then

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -533,4 +534,63 @@ func TestConnectionOutcome_RecoveryCallbackRefusal(t *testing.T) {
 		require.Error(t, f.ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), callback(f, state, cookies)))
 		rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError)
 	})
+}
+
+func TestConnectionOutcome_TokenConsumeOutageIsNotLostRace(t *testing.T) {
+	t.Parallel()
+	for _, wrongProof := range []bool{false, true} {
+		t.Run(fmt.Sprint(wrongProof), func(t *testing.T) {
+			t.Parallel()
+			var failing *claimFailureCache
+			ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, func(delegate cache.Cache) cache.Cache {
+				failing = &claimFailureCache{Cache: delegate}
+				return failing
+			})
+			rec := recordConnections(t, ti)
+			toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			verifier := "verifier-" + uuid.NewString()
+			stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
+			loc := postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
+			outage := errors.New("cache connection unavailable")
+			failing.fail.Store(&outage)
+			if wrongProof {
+				verifier = "wrong-proof"
+			}
+			w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, loc.Query().Get("code"), verifier))
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			rec.RequireStep(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+			rec.RequireNotEnded()
+		})
+	}
+}
+
+type registrationFailingWriter struct{ http.ResponseWriter }
+
+func (w registrationFailingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("response unavailable")
+}
+
+func TestConnectionOutcome_RegistrationOperationalFailure(t *testing.T) {
+	t.Parallel()
+	for _, parsed := range []bool{false, true} {
+		t.Run(fmt.Sprint(parsed), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			rec := recordConnections(t, ti)
+			toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			body := "not json"
+			if parsed {
+				body = `{"client_name":"test client","redirect_uris":["http://localhost:9876/callback"],"token_endpoint_auth_method":"none"}`
+			}
+			req := httptest.NewRequestWithContext(routedTo(ctx, toolset.McpSlug.String), http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			err := ti.service.HandleRegister(registrationFailingWriter{httptest.NewRecorder()}, req)
+			require.Error(t, err)
+			if parsed {
+				rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
+			} else {
+				rec.RequireNothing()
+			}
+		})
+	}
 }

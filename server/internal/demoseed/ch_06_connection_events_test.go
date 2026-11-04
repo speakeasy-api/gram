@@ -32,6 +32,7 @@ func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 		"organization gateway": mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
 			rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 			require.NoError(t, err)

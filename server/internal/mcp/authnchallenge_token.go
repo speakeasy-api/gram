@@ -802,13 +802,14 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, nil)
 	}
 
+	errGrantChanged := errors.New("authorization grant changed before consumption")
 	consumeGrant := func() error {
 		consumed, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 		if err != nil {
 			return fmt.Errorf("consume authorization code: %w", err)
 		}
 		if !reflect.DeepEqual(consumed, grant) {
-			return errors.New("authorization grant changed before consumption")
+			return errGrantChanged
 		}
 		return nil
 	}
@@ -817,11 +818,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// The code is good here, so a later refusal belongs to the sign-in it came from.
 	t.Attach(grant.Attempt)
 	t.With(mcpconnectionattempts.Subject(&grant.Subject))
+	recordConsumeFailure := func(err error) {
+		if errors.Is(err, redisCache.ErrCacheMiss) || errors.Is(err, errGrantChanged) {
+			s.refusedWithoutRow(ctx, t, "token_code_lost_race")
+		} else {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		}
+	}
 	rejectGrant := func(what mcpconnectionattempts.Code, description string, opts ...mcpconnectionattempts.Option) error {
 		if err := consumeGrant(); err != nil {
 			description = "code not found or expired"
-			// Lost the race: the winner records the attempt.
-			s.refusedWithoutRow(ctx, t, "token_code_lost_race")
+			recordConsumeFailure(err)
 		} else {
 			t.Consumed()
 			t.Refuse(ctx, what, opts...)
@@ -1002,7 +1009,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
-		s.refusedWithoutRow(ctx, t, "token_code_lost_race")
+		recordConsumeFailure(err)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 	}
 	t.Consumed()

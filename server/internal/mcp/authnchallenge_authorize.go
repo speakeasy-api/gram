@@ -127,6 +127,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			page.Reason = oauthui.ReasonOrganizationBlocked
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
 			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDAdmissionDenied)
 			// Checked before the generic *oauthwire.Error branch below, since an
 			// admission denial is policy rather than a spec violation and
@@ -260,6 +261,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oauthAuthorityError(err).LogError(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
@@ -311,7 +313,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	attempt := challengeState.connectionAttempt(endpoint)
 	t.Attach(attempt)
 	t.Consumed()
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+	s.connections.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
 		mcpconnectionattempts.FromRequest(r),
 		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
 		mcpconnectionattempts.UserSessionClient(client.ID),
