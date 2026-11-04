@@ -199,19 +199,22 @@ var consumerEntryPoints = map[string]consumerCategory{
 // inventory by name alone. Require, RequireAny, Evaluate and Filter are not:
 // their checks are inventoried where they are built instead.
 var engineEntryPoints = map[string]bool{
-	"PrepareContext":           true,
-	"RefreshContext":           true,
-	"CaptureAdmissionBoundary": true,
-	"PrepareMandatory":         true,
-	"AuthorizeMandatory":       true,
-	"DecideServerAdmission":    true,
-	"ShouldEnforce":            true,
-	"GetScopeOverrides":        true,
-	"EvaluateLoadedGrants":     true,
-	"RequireAnyUnblocked":      true,
-	"FindMatched":              true,
-	"InvalidateRoleCache":      true,
-	"InvalidateAllRoleCaches":  true,
+	"PrepareContext":                       true,
+	"RefreshContext":                       true,
+	"CaptureAdmissionBoundary":             true,
+	"PrepareMandatory":                     true,
+	"AuthorizeMandatory":                   true,
+	"DecideServerAdmission":                true,
+	"ShouldEnforce":                        true,
+	"GetScopeOverrides":                    true,
+	"EvaluateLoadedGrants":                 true,
+	"RequireAnyUnblocked":                  true,
+	"FindMatched":                          true,
+	"InvalidateRoleCache":                  true,
+	"InvalidateAllRoleCaches":              true,
+	"RequirePluginWrite":                   true,
+	"RequireUserOrganizationScope":         true,
+	"RequireUserOrganizationScopeWithDBTX": true,
 }
 
 // enforcingMethods annotate a check with the Engine method that decides it.
