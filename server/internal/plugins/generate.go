@@ -118,6 +118,9 @@ type GenerateConfig struct {
 	// SPEAKEASY_AI_HOOKS_* env credentials, a previously cached key, or the baked
 	// org-wide key instead of opening a browser.
 	BrowserLogin bool
+	// InstallRoute is baked into the hooks speakeasy.json so hook events
+	// report how the plugin was distributed. See the InstallRoute* values.
+	InstallRoute string
 	// HooksOrgName overrides the org name used to derive the observability
 	// plugin directory slugs (Claude/Cursor/Codex). The publish path sets it to
 	// the published hooks config's org name when it carries the hooks subtree
@@ -159,6 +162,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		MarketplaceName:  "",
 		HooksOrgName:     "",
 		BrowserLogin:     false,
+		InstallRoute:     InstallRouteMarketplace,
 		InstallFailOpen:  false,
 	}
 	out := make(map[string][]byte)
@@ -212,6 +216,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
 		BrowserLogin:    true,
+		InstallRoute:    InstallRouteDogfood,
 		InstallFailOpen: false,
 	}
 	files := make(map[string][]byte)
@@ -394,7 +399,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "58"
+const hooksGeneratorVersion = "59"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits

@@ -59,6 +59,7 @@ func TestHookDeviceTelemetryStampsSpanAttributes(t *testing.T) {
 	req.Header.Set("X-Gram-Device-Harness-Variant", "cli")
 	req.Header.Set("X-Gram-Device-Harness-Version", "2.0.1")
 	req.Header.Set("X-Gram-Device-Elapsed-Ms", "42")
+	req.Header.Set("X-Gram-Device-Install-Route", "marketplace")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -72,6 +73,7 @@ func TestHookDeviceTelemetryStampsSpanAttributes(t *testing.T) {
 	require.Equal(t, "cli", attrs[attr.HookDeviceHarnessVariantKey].AsString())
 	require.Equal(t, "2.0.1", attrs[attr.HookDeviceHarnessVersionKey].AsString())
 	require.Equal(t, int64(42), attrs[attr.HookDeviceElapsedMsKey].AsInt64())
+	require.Equal(t, "marketplace", attrs[attr.HookDeviceInstallRouteKey].AsString())
 }
 
 func TestHookDeviceTelemetrySanitizesUntrustedValues(t *testing.T) {

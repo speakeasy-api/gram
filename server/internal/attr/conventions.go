@@ -934,6 +934,10 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// HookDeviceInstallRouteKey is the install route baked into the plugin's
+	// speakeasy.json (marketplace, download, agent_install, hooks_install,
+	// dogfood). Installs that predate it don't report one.
+	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
 	// HookEndpointGenerationKey records which generation of hook endpoint
 	// and sender produced a row (see the HookEndpointGeneration* values), so
 	// traffic on retired endpoints can be found and moved to a supported one.

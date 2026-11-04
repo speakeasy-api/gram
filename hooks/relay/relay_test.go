@@ -647,6 +647,22 @@ func TestAgentKeyReadFromPluginConfig(t *testing.T) {
 	require.False(t, loaded.AgentKey)
 }
 
+// TestInstallRouteReadFromPluginConfig: the install_route in speakeasy.json
+// reaches the relay config, and the environment can override it.
+func TestInstallRouteReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","install_route":"download"}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + cfgPath})
+	require.Equal(t, "download", cfg.InstallRoute)
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "")
+	t.Setenv("GRAM_HOOKS_INSTALL_ROUTE", "")
+	require.Equal(t, "download", LoadConfig(cfg).InstallRoute)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "mdm")
+	require.Equal(t, "mdm", LoadConfig(cfg).InstallRoute)
+}
+
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
 // present: the server never confirmed the action, so blocking mode denies. A
 // 4xx status exercises the same branch as 5xx without the retry budget's
