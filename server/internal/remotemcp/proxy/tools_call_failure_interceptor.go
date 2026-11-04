@@ -1,6 +1,9 @@
 package proxy
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 // ToolsCallFailure describes a forwarded "tools/call" that ended without a
 // reply reaching the [ToolsCallResponseInterceptor] chain: the remote MCP
@@ -14,6 +17,10 @@ type ToolsCallFailure struct {
 	// StatusCode is the remote MCP server's HTTP status, or zero when no
 	// response arrived.
 	StatusCode int
+
+	// Header is the remote MCP server's response header, or nil when no
+	// response arrived.
+	Header http.Header
 
 	// Err is the error the proxy returned to its caller, or nil when the
 	// proxy answered the user itself.
