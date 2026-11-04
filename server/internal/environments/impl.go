@@ -41,7 +41,7 @@ type Service struct {
 	db      *pgxpool.Pool
 	repo    *repo.Queries
 	auth    *auth.Auth
-	authz   *authz.Engine
+	authz   *authz.Client
 	entries *EnvironmentEntries
 	audit   *audit.Logger
 }
@@ -53,7 +53,8 @@ func NewService(logger *slog.Logger,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	enc *encryption.Client,
-	authz *authz.Engine,
+	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("environments"))
@@ -65,8 +66,8 @@ func NewService(logger *slog.Logger,
 		logger:  logger,
 		db:      db,
 		repo:    envRepo,
-		auth:    auth.New(logger, db, sessions, authz),
-		authz:   authz,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzClient,
 		entries: NewEnvironmentEntries(logger, db, enc, mcpMetadataRepo),
 		audit:   auditLogger,
 	}
@@ -80,12 +81,7 @@ func NewService(logger *slog.Logger,
 // and for slug-miss paths in update/delete/clone, where authorizing before
 // reporting not-found keeps the response from becoming an existence oracle.
 func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+	return s.authz.Require(ctx, authz.EnvironmentsInProject(projectID.String()).Write())
 }
 
 // requireProjectEnvironmentRead gates on an environment:read grant confined to
@@ -97,12 +93,7 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 // on project:write instead would let a caller without environment:read
 // exfiltrate secrets by linking an environment to a resource they can run.
 func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentRead,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+	return s.authz.Require(ctx, authz.EnvironmentsInProject(projectID.String()).Read())
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -213,7 +204,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -260,12 +251,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   environment.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), environment.ID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -451,12 +437,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	// check covers both reading the source and producing the destination. Future
 	// per-env granularity is additive at the role layer (per-env grants instead
 	// of wildcard).
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   sourceEnv.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), sourceEnv.ID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -561,12 +542,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   environment.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authCtx.ProjectID.String(), environment.ID.String()).Write()); err != nil {
 		return err
 	}
 
@@ -708,7 +684,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -810,7 +786,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 

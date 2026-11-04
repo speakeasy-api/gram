@@ -279,14 +279,6 @@ internal/deviceintegrations/impl.go,*Service.RetrySchedule,check,Check,ScopeOrgA
 internal/deviceintegrations/impl.go,*Service.SetScheduleEnabled,check,Check,ScopeOrgAdmin,Require,1,O3 AIS-839
 internal/deviceintegrations/impl.go,*Service.TestConnection,check,Check,ScopeOrgAdmin,Require,1,O3 AIS-839
 internal/deviceintegrations/impl.go,*Service.UpsertConfig,check,Check,ScopeOrgAdmin,Require,1,O3 AIS-839
-internal/environments/impl.go,*Service.CloneEnvironment,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.DeleteEnvironment,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.GetSourceEnvironment,check,Check,ScopeProjectRead,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.GetToolsetEnvironment,check,Check,ScopeProjectRead,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.ListEnvironments,check,Check,ScopeProjectRead,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.UpdateEnvironment,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.requireProjectEnvironmentRead,check,Check,ScopeEnvironmentRead,Require,1,E1 AIS-852
-internal/environments/impl.go,*Service.requireProjectEnvironmentWrite,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
 internal/externalcredentials/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
 internal/externalkeys/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
 internal/hiddenmcpservers/impl.go,*Service.canConnect,check,MCPCheck,ScopeMCPConnect,Require,1,M2 AIS-865

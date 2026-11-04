@@ -80,7 +80,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/dataexports":                                   ownerO7,
 	"internal/demoseed":                                      ownerX4,
 	"internal/deviceintegrations":                            ownerO3,
-	"internal/environments":                                  ownerE1,
 	"internal/externalcredentials":                           ownerO4,
 	"internal/externalkeys":                                  ownerO4,
 	"internal/hiddenmcpservers":                              ownerM2,
