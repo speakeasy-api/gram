@@ -177,9 +177,9 @@ func (e *RegistryEvaluator) decide(set PolicySet, req PermissionRequest, p evalu
 // DecideAlternatives answers named alternatives: options lists one request per
 // option of the compiled set, in declaration order. The request is allowed
 // when one complete option is allowed in every policy; an option allowed in
-// one policy and another option allowed in a second does not count. With
-// VetoBlocks, a block standing against any option in any policy denies
-// first, whatever the other options allow.
+// one policy and another option allowed in a second does not count. When the
+// alternatives declare AnyBlockVetoes, a block standing against any option in
+// any policy denies first, whatever the other options allow.
 func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.PermissionRef, options []PermissionRequest) (PolicyDecision, error) {
 	alternatives, ok := e.alternates[ref]
 	if !ok {
@@ -211,7 +211,7 @@ func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.Permiss
 
 	// A standing block in any option and policy vetoes, even when checking
 	// another option or policy could not be decided.
-	if alternatives.VetoBlocks {
+	if alternatives.Blocks == schema.AnyBlockVetoes {
 		var vetoErr error
 		for i, option := range options {
 			policies, err := e.policiesFor(set, option.Permission)

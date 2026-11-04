@@ -20,16 +20,16 @@ import (
 // hop without changing any production table.
 func ownershipDeclarations() []s.TypeDecl {
 	return []s.TypeDecl{
-		s.NewType("agent", s.WrittenBy("access"),
+		s.NewType("agent", s.GrantSurface("access"),
 			s.Attr("owner", s.FactUser),
 			s.Attr("deleted", s.FactBool),
 			s.Attr("owner_reassignment_required_at", s.FactNullableTimestamp),
 			s.Guard("live", s.All(s.IsFalse("deleted"), s.IsNull("owner_reassignment_required_at"))),
-			s.Grant("reader", s.StoredAs("agent:read"), s.Describe("Read agents")),
-			s.Permission("read", s.Rel("reader"), s.Checks("agent:read")),
+			s.Grant("reader", s.GrantSpec{StoredAs: "agent:read", Description: "Read agents"}),
+			s.Permission("read", s.Rel("reader"), s.AnswersScope("agent:read")),
 			s.Permission("is_owner", s.When("live", s.Is("owner"))),
 		),
-		s.NewType("chat", s.WrittenBy("access"),
+		s.NewType("chat", s.GrantSurface("access"),
 			s.Attr("internal_user_id", s.FactNullableString),
 			s.Attr("external_user_id", s.FactNullableString),
 			s.Attr("agent", "agent"),
@@ -39,10 +39,10 @@ func ownershipDeclarations() []s.TypeDecl {
 				s.NullOrEmpty("external_user_id"),
 				s.Present("agent"),
 			)),
-			s.Grant("reader", s.StoredAs("chat:read"), s.Describe("Read session transcripts")),
-			s.Grant("writer", s.StoredAs("chat:write"), s.Describe("Change sessions")),
-			s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks("chat:read")),
-			s.Permission("write_grant", s.Rel("writer"), s.Checks("chat:write")),
+			s.Grant("reader", s.GrantSpec{StoredAs: "chat:read", Description: "Read session transcripts"}),
+			s.Grant("writer", s.GrantSpec{StoredAs: "chat:write", Description: "Change sessions"}),
+			s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.AnswersScope("chat:read")),
+			s.Permission("write_grant", s.Rel("writer"), s.AnswersScope("chat:write")),
 			s.Permission("read", s.Union(
 				s.Rel("reader"), s.Rel("writer"), s.Is("author"),
 				s.When("agent_only", s.Via("agent", "is_owner")),
@@ -56,7 +56,7 @@ func ownershipDeclarations() []s.TypeDecl {
 
 func ownershipEvaluator(t *testing.T) *RegistryEvaluator {
 	t.Helper()
-	reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil}, ownershipDeclarations()...)
+	reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil}, ownershipDeclarations()...)
 	require.NoError(t, err)
 	evaluator, err := NewRegistryEvaluator(reg)
 	require.NoError(t, err)
@@ -519,13 +519,13 @@ func TestRelatedResourcesAreValidatedLikeRequests(t *testing.T) {
 
 	t.Run("a further relationship errors", func(t *testing.T) {
 		t.Parallel()
-		reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
-			s.NewType("folder", s.WrittenBy("access"),
+		reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+			s.NewType("folder", s.GrantSurface("access"),
 				s.Attr("parent", "folder"),
 				s.Attr("owner", s.FactUser),
-				s.Grant("reader", s.StoredAs("folder:read"), s.Describe("Read")),
+				s.Grant("reader", s.GrantSpec{StoredAs: "folder:read", Description: "Read"}),
 				s.Permission("owned", s.Is("owner")),
-				s.Permission("read_grant", s.Rel("reader"), s.Checks("folder:read")),
+				s.Permission("read_grant", s.Rel("reader"), s.AnswersScope("folder:read")),
 				s.Permission("read", s.Union(s.Rel("reader"), s.Via("parent", "owned"))),
 			))
 		require.NoError(t, err)
@@ -617,15 +617,15 @@ func TestAuthClientPermissionsKeepTheRepresentedCeiling(t *testing.T) {
 
 	t.Run("no permission may reach an auth client through a relationship", func(t *testing.T) {
 		t.Parallel()
-		reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
-			s.NewType("client", s.StoredKind(ResourceKindMCPAuthClient), s.WrittenBy("access"),
-				s.Grant("user", s.StoredAs("client:use"), s.StrictMatching(), s.Describe("Use")),
-				s.Permission("use", s.Rel("user"), s.Checks("client:use")),
+		reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+			s.NewType("client", s.StoredKind(ResourceKindMCPAuthClient), s.GrantSurface("access"),
+				s.Grant("user", s.GrantSpec{StoredAs: "client:use", StrictMatching: true, Description: "Use"}),
+				s.Permission("use", s.Rel("user"), s.AnswersScope("client:use")),
 			),
-			s.NewType("session", s.WrittenBy("access"),
+			s.NewType("session", s.GrantSurface("access"),
 				s.Attr("client", "client"),
-				s.Grant("reader", s.StoredAs("session:read"), s.Describe("Read")),
-				s.Permission("read_grant", s.Rel("reader"), s.Checks("session:read")),
+				s.Grant("reader", s.GrantSpec{StoredAs: "session:read", Description: "Read"}),
+				s.Permission("read_grant", s.Rel("reader"), s.AnswersScope("session:read")),
 				s.Permission("read", s.Union(s.Rel("reader"), s.Via("client", "use"))),
 			))
 		require.NoError(t, err)
@@ -637,20 +637,20 @@ func TestAuthClientPermissionsKeepTheRepresentedCeiling(t *testing.T) {
 func TestVetoDeniesDespiteAnUndecidedOption(t *testing.T) {
 	t.Parallel()
 
-	reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
-		s.NewType("doc", s.WrittenBy("access"),
+	reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+		s.NewType("doc", s.GrantSurface("access"),
 			s.Attr("archived", s.FactBool),
 			s.Guard("active", s.IsFalse("archived")),
-			s.Grant("reader", s.StoredAs("doc:read"), s.Describe("Read")),
-			s.Block("read_blocked", s.StoredAs("doc:blocked_read")),
-			s.Permission("read_grant", s.Rel("reader"), s.Checks("doc:read")),
+			s.Grant("reader", s.GrantSpec{StoredAs: "doc:read", Description: "Read"}),
+			s.Block("read_blocked", s.BlockSpec{StoredAs: "doc:blocked_read"}),
+			s.Permission("read_grant", s.Rel("reader"), s.AnswersScope("doc:read")),
 			s.Permission("read", s.When("active", s.Rel("reader")), s.ExcludedBy("read_blocked")),
-			s.Alternatives("open", s.Alternative("doc", "read"), s.Alternative("folder", "read"), s.VetoBlocks()),
+			s.Alternatives("open", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "doc", Permission: "read"}, {Type: "folder", Permission: "read"}}, Blocks: s.AnyBlockVetoes}),
 		),
-		s.NewType("folder", s.WrittenBy("access"),
-			s.Grant("reader", s.StoredAs("folder:read"), s.Describe("Read")),
-			s.Block("read_blocked", s.StoredAs("folder:blocked_read")),
-			s.Permission("read", s.Rel("reader"), s.Checks("folder:read"), s.ExcludedBy("read_blocked")),
+		s.NewType("folder", s.GrantSurface("access"),
+			s.Grant("reader", s.GrantSpec{StoredAs: "folder:read", Description: "Read"}),
+			s.Block("read_blocked", s.BlockSpec{StoredAs: "folder:blocked_read"}),
+			s.Permission("read", s.Rel("reader"), s.AnswersScope("folder:read"), s.ExcludedBy("read_blocked")),
 		))
 	require.NoError(t, err)
 	evaluator, err := NewRegistryEvaluator(reg)

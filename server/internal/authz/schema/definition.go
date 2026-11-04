@@ -14,16 +14,24 @@
 //
 //	schema.NewType("mcp_server", schema.Parent("project"), schema.StoredKind("mcp"),
 //	    schema.SelectorKeys("project_id", "tool", "disposition"),
-//	    schema.WrittenBy("access"),
-//	    schema.Grant("viewer", schema.StoredAs("mcp:read"),
-//	        schema.AnchoredAt("organization", "project", schema.Self),
-//	        schema.Conditions("mcp_tools"),
-//	        schema.Describe("Inspect server configuration")),
-//	    schema.Block("read_blocked", schema.StoredAs("mcp:blocked_read"),
-//	        schema.Conditions("mcp_tools")),
+//	    schema.GrantSurface("access"),
+//	    schema.Grant("viewer", schema.GrantSpec{
+//	        StoredAs:    "mcp:read",
+//	        Description: "Inspect server configuration",
+//	        AnchoredAt:  []string{"organization", "project", schema.Self},
+//	        Conditions:  []string{"mcp_tools"},
+//	    }),
+//	    schema.Block("read_blocked", schema.BlockSpec{
+//	        StoredAs:   "mcp:blocked_read",
+//	        Conditions: []string{"mcp_tools"},
+//	    }),
 //	    schema.Permission("read", schema.Rel("viewer"),
-//	        schema.Checks("mcp:read"), schema.ExcludedBy("read_blocked")),
+//	        schema.AnswersScope("mcp:read"), schema.ExcludedBy("read_blocked")),
 //	)
+//
+// Grant and Block bind a local relation name to a scope that already exists
+// in storage, with its catalogue metadata. Declaring one grants nothing:
+// stored grants and role defaults decide who holds it.
 //
 // The package only declares and compiles. It evaluates nothing, performs no
 // I/O and imports no service or authz code, so authz can depend on it.
@@ -31,7 +39,10 @@
 // neither verifies ancestry nor makes a parent's permissions apply to a child.
 package schema
 
-import "slices"
+import (
+	"slices"
+	"strconv"
+)
 
 // Self names the declared type itself in AnchoredAt.
 const Self = "$self"
@@ -43,7 +54,7 @@ type TypeDecl struct {
 	parent       string
 	storedKind   string
 	selectorKeys []string
-	writtenBy    string
+	grantSurface string
 	attrs        []attrDecl
 	factOrder    []string
 	derived      []derivedDecl
@@ -79,34 +90,35 @@ const (
 )
 
 type relationDecl struct {
-	kind          relationKind
-	name          string
-	storedAs      string
-	anchors       []string
-	conditions    []string
-	selectorKeys  []string
-	description   string
-	internal      bool
-	sensitive     bool
-	strict        bool
-	writtenBy     string
-	roles         []string
-	runtimeSince  int
-	subjectScoped bool
+	kind         relationKind
+	name         string
+	storedAs     string
+	anchors      []string
+	conditions   []string
+	selectorKeys []string
+	description  string
+	internal     bool
+	sensitive    bool
+	strict       bool
+	grantSurface string
+	roles        []string
+	delegatable  int
+	impliedBy    []string
 }
 
 type permissionDecl struct {
 	name        string
 	expr        Expr
+	direct      []string
 	excludedBy  []string
-	checks      string
+	answers     string
 	description string
 }
 
 type alternativesDecl struct {
 	name      string
 	options   []PermissionRef
-	veto      bool
+	blocks    BlockRule
 	instances bool
 }
 
@@ -124,28 +136,14 @@ type TypeOption interface {
 	applyType(t *TypeDecl)
 }
 
-// RelationOption configures a Grant or Block.
-type RelationOption interface {
-	applyRelation(r *relationDecl)
-}
-
 // PermissionOption configures a Permission.
 type PermissionOption interface {
 	applyPermission(p *permissionDecl)
 }
 
-// AlternativesOption configures named Alternatives.
-type AlternativesOption interface {
-	applyAlternatives(a *alternativesDecl)
-}
-
 type typeOptionFunc func(t *TypeDecl)
 
 func (f typeOptionFunc) applyType(t *TypeDecl) { f(t) }
-
-type relationOptionFunc func(r *relationDecl)
-
-func (f relationOptionFunc) applyRelation(r *relationDecl) { f(r) }
 
 type permissionOptionFunc func(p *permissionDecl)
 
@@ -159,7 +157,7 @@ func NewType(name string, opts ...TypeOption) TypeDecl {
 		parent:       "",
 		storedKind:   "",
 		selectorKeys: nil,
-		writtenBy:    "",
+		grantSurface: "",
 		attrs:        nil,
 		factOrder:    nil,
 		derived:      nil,
@@ -213,41 +211,128 @@ func Guard(name string, cond Cond) TypeOption {
 	})
 }
 
-// Grant binds a local relation to an existing stored allow scope.
-func Grant(name string, opts ...RelationOption) TypeOption {
-	return relation(relationGrant, name, opts)
+// GrantSpec describes the stored allow scope a Grant binds and its catalogue
+// metadata. Only StoredAs is required.
+type GrantSpec struct {
+	// StoredAs names the existing stored scope the grant reads.
+	StoredAs string
+
+	// Description is the catalogue text. Every grant that is not Internal
+	// needs one.
+	Description string
+
+	// DefaultFor lists the system roles that hold the grant by default.
+	DefaultFor []string
+
+	// DelegatableSince records the agent runtime registry version from which
+	// the scope may be placed in a delegated runtime policy. Zero means it is
+	// never delegatable.
+	DelegatableSince int
+
+	// AnchoredAt lists where the grant may be stored: Self or a type on the
+	// Parent chain. A grant anchored at a parent applies to every resource of
+	// this type under it through selector matching; it does not verify that
+	// relationship.
+	AnchoredAt []string
+
+	// Conditions lists registered pure conditions every path through the
+	// grant must satisfy, such as MCP tool and disposition limits.
+	Conditions []string
+
+	// SelectorKeys adds selector keys, beyond the type's, that stored grants
+	// of this scope may set.
+	SelectorKeys []string
+
+	// Sensitive marks a grant whose holder can read sensitive content.
+	Sensitive bool
+
+	// Internal hides the grant from the permission catalogue.
+	Internal bool
+
+	// StrictMatching makes the grant match selectors strictly: every key the
+	// grant constrains must appear in the check.
+	StrictMatching bool
+
+	// GrantSurface overrides the type's GrantSurface for this grant.
+	GrantSurface string
 }
 
-// Block binds a local relation to an existing stored blocking scope
-// (<resource>:blocked_<action>). Blocks are internal, match selectors
-// strictly, and apply only through ExcludedBy.
-func Block(name string, opts ...RelationOption) TypeOption {
-	return relation(relationBlock, name, opts)
+// BlockSpec describes the stored blocking scope a Block binds. Only StoredAs
+// is required.
+type BlockSpec struct {
+	// StoredAs names the existing stored blocking scope
+	// (<resource>:blocked_<action>) the block reads.
+	StoredAs string
+
+	// ImpliedBy lists other blocks of the same type that also impose this
+	// one. A permission ExcludedBy this block is excluded by them as well, so
+	// a read block that also stops writes is declared on the write block.
+	ImpliedBy []string
+
+	// Conditions lists registered pure conditions every path through the
+	// block must satisfy.
+	Conditions []string
+
+	// DelegatableSince records the agent runtime registry version from which
+	// the block may be placed in a delegated runtime policy.
+	DelegatableSince int
+
+	// GrantSurface overrides the type's GrantSurface for this block.
+	GrantSurface string
 }
 
-func relation(kind relationKind, name string, opts []RelationOption) TypeOption {
-	opts = slices.Clone(opts)
+// Grant binds a local relation to an existing stored allow scope and its
+// catalogue metadata. It grants nothing: stored grants and role defaults
+// decide who holds the scope.
+func Grant(name string, spec GrantSpec) TypeOption {
+	spec.DefaultFor = slices.Clone(spec.DefaultFor)
+	spec.AnchoredAt = slices.Clone(spec.AnchoredAt)
+	spec.Conditions = slices.Clone(spec.Conditions)
+	spec.SelectorKeys = slices.Clone(spec.SelectorKeys)
 	return typeOptionFunc(func(t *TypeDecl) {
-		r := relationDecl{
-			kind:          kind,
-			name:          name,
-			storedAs:      "",
-			anchors:       nil,
-			conditions:    nil,
-			selectorKeys:  nil,
-			description:   "",
-			internal:      kind == relationBlock,
-			sensitive:     false,
-			strict:        kind == relationBlock,
-			writtenBy:     "",
-			roles:         nil,
-			runtimeSince:  0,
-			subjectScoped: false,
-		}
-		for _, opt := range opts {
-			opt.applyRelation(&r)
-		}
-		t.relations = append(t.relations, r)
+		t.relations = append(t.relations, relationDecl{
+			kind:         relationGrant,
+			name:         name,
+			storedAs:     spec.StoredAs,
+			anchors:      spec.AnchoredAt,
+			conditions:   spec.Conditions,
+			selectorKeys: spec.SelectorKeys,
+			description:  spec.Description,
+			internal:     spec.Internal,
+			sensitive:    spec.Sensitive,
+			strict:       spec.StrictMatching,
+			grantSurface: spec.GrantSurface,
+			roles:        spec.DefaultFor,
+			delegatable:  spec.DelegatableSince,
+			impliedBy:    nil,
+		})
+	})
+}
+
+// Block binds a local relation to an existing stored blocking scope. It
+// blocks nothing on its own: stored block grants decide who is blocked, and
+// a block applies only through ExcludedBy. Blocks are internal and match
+// selectors strictly.
+func Block(name string, spec BlockSpec) TypeOption {
+	spec.ImpliedBy = slices.Clone(spec.ImpliedBy)
+	spec.Conditions = slices.Clone(spec.Conditions)
+	return typeOptionFunc(func(t *TypeDecl) {
+		t.relations = append(t.relations, relationDecl{
+			kind:         relationBlock,
+			name:         name,
+			storedAs:     spec.StoredAs,
+			anchors:      nil,
+			conditions:   spec.Conditions,
+			selectorKeys: nil,
+			description:  "",
+			internal:     true,
+			sensitive:    false,
+			strict:       true,
+			grantSurface: spec.GrantSurface,
+			roles:        nil,
+			delegatable:  spec.DelegatableSince,
+			impliedBy:    spec.ImpliedBy,
+		})
 	})
 }
 
@@ -256,7 +341,7 @@ func relation(kind relationKind, name string, opts []RelationOption) TypeOption 
 func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
-		p := permissionDecl{name: name, expr: expr, excludedBy: nil, checks: "", description: ""}
+		p := permissionDecl{name: name, expr: expr, direct: nil, excludedBy: nil, answers: "", description: ""}
 		for _, opt := range opts {
 			opt.applyPermission(&p)
 		}
@@ -264,163 +349,97 @@ func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 	})
 }
 
+// BlockRule says how the blocks of Alternatives' options combine. Every
+// Alternatives must choose one; the zero value is a declaration error.
+type BlockRule int
+
+const (
+	blockRuleUnset BlockRule = iota
+
+	// AnyBlockVetoes rejects the request when any option's ExcludedBy block
+	// matches in any policy, even if another option passes.
+	AnyBlockVetoes
+
+	// BlocksApplyPerOption lets a block stop only its own option, so another
+	// unblocked option can still pass.
+	BlocksApplyPerOption
+)
+
+// String returns the rule's name.
+func (r BlockRule) String() string {
+	switch r {
+	case blockRuleUnset:
+		return "unset"
+	case AnyBlockVetoes:
+		return "AnyBlockVetoes"
+	case BlocksApplyPerOption:
+		return "BlocksApplyPerOption"
+	default:
+		return "BlockRule(" + strconv.Itoa(int(r)) + ")"
+	}
+}
+
+// AlternativesSpec describes named Alternatives.
+type AlternativesSpec struct {
+	// Options lists the complete permission checks, in order.
+	Options []PermissionRef
+
+	// Blocks says how the options' blocks combine. It must be set.
+	Blocks BlockRule
+
+	// AcrossInstances lets Options name the same permission more than once,
+	// because each position is asked of a different resource instance: for
+	// example a grant stored against the whole collection, or one against a
+	// single member. The typed constructor supplies the instance for each
+	// position. Without it a repeated option is a declaration error.
+	AcrossInstances bool
+}
+
 // Alternatives declares a named list of complete permission checks. A caller
-// passes when one alternative passes in every policy; it is not a Union, so
-// different policies cannot each satisfy a different alternative.
-func Alternatives(name string, opts ...AlternativesOption) TypeOption {
-	opts = slices.Clone(opts)
+// passes when one option passes in every policy; it is not a Union, so
+// different policies cannot each satisfy a different option.
+func Alternatives(name string, spec AlternativesSpec) TypeOption {
+	options := slices.Clone(spec.Options)
 	return typeOptionFunc(func(t *TypeDecl) {
-		a := alternativesDecl{name: name, options: nil, veto: false, instances: false}
-		for _, opt := range opts {
-			opt.applyAlternatives(&a)
-		}
-		t.alternatives = append(t.alternatives, a)
+		t.alternatives = append(t.alternatives, alternativesDecl{
+			name:      name,
+			options:   options,
+			blocks:    spec.Blocks,
+			instances: spec.AcrossInstances,
+		})
 	})
-}
-
-type alternativeOption PermissionRef
-
-func (o alternativeOption) applyAlternatives(a *alternativesDecl) {
-	a.options = append(a.options, PermissionRef(o))
-}
-
-// Alternative adds one complete permission check to Alternatives.
-func Alternative(typeName, permission string) AlternativesOption {
-	return alternativeOption{Type: typeName, Permission: permission}
-}
-
-type vetoBlocksOption struct{}
-
-func (vetoBlocksOption) applyAlternatives(a *alternativesDecl) { a.veto = true }
-
-// VetoBlocks rejects the request when any alternative's ExcludedBy block
-// matches in any policy, even if another alternative passes.
-func VetoBlocks() AlternativesOption { return vetoBlocksOption{} }
-
-type acrossInstancesOption struct{}
-
-func (acrossInstancesOption) applyAlternatives(a *alternativesDecl) { a.instances = true }
-
-// AcrossInstances lets Alternatives name the same permission more than once,
-// because each position is asked of a different resource instance: for
-// example a grant stored against the whole collection, or one against a
-// single member. The typed constructor supplies the instance for each
-// position. Without it a repeated alternative is a declaration error.
-func AcrossInstances() AlternativesOption { return acrossInstancesOption{} }
-
-// StoredAs names the existing stored scope a Grant or Block reads.
-func StoredAs(scope string) RelationOption {
-	return relationOptionFunc(func(r *relationDecl) { r.storedAs = scope })
-}
-
-// AnchoredAt lists where a grant may be stored: Self or a type on the Parent
-// chain. A grant anchored at a parent applies to every resource of this type
-// under it through selector matching; it does not verify that relationship.
-func AnchoredAt(levels ...string) RelationOption {
-	levels = slices.Clone(levels)
-	return relationOptionFunc(func(r *relationDecl) { r.anchors = append(r.anchors, levels...) })
-}
-
-// Conditions attaches registered pure conditions that every path through the
-// relation must satisfy, such as MCP tool and disposition limits.
-func Conditions(names ...string) RelationOption {
-	names = slices.Clone(names)
-	return relationOptionFunc(func(r *relationDecl) { r.conditions = append(r.conditions, names...) })
-}
-
-// Internal hides a grant from the permission catalogue.
-func Internal() RelationOption {
-	return relationOptionFunc(func(r *relationDecl) { r.internal = true })
-}
-
-// Sensitive marks a grant whose holder can read sensitive content.
-func Sensitive() RelationOption {
-	return relationOptionFunc(func(r *relationDecl) { r.sensitive = true })
-}
-
-// StrictMatching makes a grant match selectors strictly: every key the grant
-// constrains must appear in the check.
-func StrictMatching() RelationOption {
-	return relationOptionFunc(func(r *relationDecl) { r.strict = true })
-}
-
-// DefaultFor lists the system roles that hold the grant by default.
-func DefaultFor(roles ...string) RelationOption {
-	roles = slices.Clone(roles)
-	return relationOptionFunc(func(r *relationDecl) { r.roles = append(r.roles, roles...) })
-}
-
-// RuntimeSafeSince records the agent runtime registry version from which the
-// scope is safe to place in a delegated runtime policy. Without it the scope
-// is active but never safe.
-func RuntimeSafeSince(version int) RelationOption {
-	return relationOptionFunc(func(r *relationDecl) {
-		r.runtimeSince = version
-	})
-}
-
-// SubjectScoped is reserved for audience-limited grants. This foundation does
-// not support it, and Compile rejects any declaration that uses it.
-func SubjectScoped(_ ...string) RelationOption {
-	return relationOptionFunc(func(r *relationDecl) { r.subjectScoped = true })
 }
 
 // ExcludedBy applies block precedence to the permission: a matching block
 // removes access unless a qualifying direct user grant restores the matching
-// instance, and the principal's own blocks always win. When the permission
-// Checks a scope, the first block is that scope's direct exclusion and the
-// rest are the broader blocks that also exclude it.
-func ExcludedBy(blocks ...string) PermissionOption {
-	blocks = slices.Clone(blocks)
-	return permissionOptionFunc(func(p *permissionDecl) { p.excludedBy = append(p.excludedBy, blocks...) })
+// instance, and the principal's own blocks always win. The named block is
+// the permission's direct block; the blocks that imply it, through
+// BlockSpec.ImpliedBy, exclude the permission too.
+func ExcludedBy(block string) PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.direct = append(p.direct, block) })
 }
 
-// Checks names the stored scope whose existing authz.Check this permission
-// answers. The permission must be grant-only, so a check routed to it keeps
-// today's grant semantics.
-func Checks(scope string) PermissionOption {
-	return permissionOptionFunc(func(p *permissionDecl) { p.checks = scope })
+// AnswersScope names the stored scope whose existing authz.Check this
+// permission answers. The permission must be grant-only, so a check routed to
+// it keeps today's grant semantics.
+func AnswersScope(scope string) PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.answers = scope })
 }
 
-type describeOption string
-
-func (d describeOption) applyRelation(r *relationDecl)     { r.description = string(d) }
-func (d describeOption) applyPermission(p *permissionDecl) { p.description = string(d) }
-
-// DescribeOption sets catalogue text on a Grant or Permission.
-type DescribeOption interface {
-	RelationOption
-	PermissionOption
-}
-
-// Describe sets the catalogue description of a Grant or Permission.
-func Describe(text string) DescribeOption { return describeOption(text) }
-
-type selectorKeysOption []string
-
-func (k selectorKeysOption) applyType(t *TypeDecl) { t.selectorKeys = append(t.selectorKeys, k...) }
-func (k selectorKeysOption) applyRelation(r *relationDecl) {
-	r.selectorKeys = append(r.selectorKeys, k...)
-}
-
-// TypeAndRelationOption configures either a type or one of its relations.
-type TypeAndRelationOption interface {
-	TypeOption
-	RelationOption
+// Describe sets the catalogue description of a Permission.
+func Describe(text string) PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.description = text })
 }
 
 // SelectorKeys lists the selector keys, beyond resource_kind and resource_id,
-// that stored grants may set. On a type it applies to every relation; on a
-// relation it adds keys for that relation only.
-func SelectorKeys(keys ...string) TypeAndRelationOption {
-	return selectorKeysOption(slices.Clone(keys))
+// that stored grants of every relation on the type may set.
+func SelectorKeys(keys ...string) TypeOption {
+	keys = slices.Clone(keys)
+	return typeOptionFunc(func(t *TypeDecl) { t.selectorKeys = append(t.selectorKeys, keys...) })
 }
 
-type writtenByOption string
-
-func (w writtenByOption) applyType(t *TypeDecl)         { t.writtenBy = string(w) }
-func (w writtenByOption) applyRelation(r *relationDecl) { r.writtenBy = string(w) }
-
-// WrittenBy names the grant surface that owns writes for the type's relations,
-// or for one relation when set on it.
-func WrittenBy(surface string) TypeAndRelationOption { return writtenByOption(surface) }
+// GrantSurface names the grant surface that owns writes for the type's
+// relations. A Grant or Block can override it in its spec.
+func GrantSurface(surface string) TypeOption {
+	return typeOptionFunc(func(t *TypeDecl) { t.grantSurface = surface })
+}

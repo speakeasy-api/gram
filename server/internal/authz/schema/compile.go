@@ -30,13 +30,13 @@ const blockedActionPrefix = "blocked_"
 
 // Config supplies the closed vocabularies declarations may reference.
 type Config struct {
-	// Roles lists the system roles DefaultFor may name.
+	// Roles lists the system roles GrantSpec.DefaultFor may name.
 	Roles []string
 
-	// WriteSurfaces lists the grant surfaces WrittenBy may name.
-	WriteSurfaces []string
+	// GrantSurfaces lists the grant surfaces GrantSurface may name.
+	GrantSurfaces []string
 
-	// Conditions lists the pure conditions Conditions may name.
+	// Conditions lists the pure conditions a spec's Conditions may name.
 	Conditions []Condition
 
 	// RetiredRuntimeScopes lists stored scopes no type declares any more but
@@ -90,6 +90,7 @@ func Compile(cfg Config, types ...TypeDecl) (*Registry, error) {
 		problems:   nil,
 	}
 	c.validateConfig()
+	c.types = slices.Clone(c.types)
 	c.indexTypes()
 	for i := range c.types {
 		c.validateType(&c.types[i])
@@ -100,6 +101,7 @@ func Compile(cfg Config, types ...TypeDecl) (*Registry, error) {
 	if len(c.problems) > 0 {
 		return nil, &CompileError{Problems: c.problems}
 	}
+	c.expandExclusions()
 	reg := c.build()
 	if len(c.problems) > 0 {
 		return nil, &CompileError{Problems: c.problems}
@@ -354,9 +356,6 @@ func (c *compiler) validateRelations(t *TypeDecl) {
 	ancestors := c.ancestors(t)
 	for _, r := range t.relations {
 		where := fmt.Sprintf("type %q: %s %q", t.name, r.kind, r.name)
-		if r.subjectScoped {
-			c.problemf("%s: SubjectScoped is not supported by this foundation", where)
-		}
 		c.validateStoredAs(where, r)
 		relKeys, ok := c.validateSelectorKeys(r.selectorKeys)
 		if !ok {
@@ -385,40 +384,95 @@ func (c *compiler) validateRelations(t *TypeDecl) {
 				}
 			}
 		}
-		surface := cmp.Or(r.writtenBy, t.writtenBy)
+		surface := cmp.Or(r.grantSurface, t.grantSurface)
 		switch {
 		case surface == "":
-			c.problemf("%s: no WrittenBy surface on the relation or its type", where)
-		case !slices.Contains(c.cfg.WriteSurfaces, surface):
-			c.problemf("%s: write surface %q is not registered", where, surface)
+			c.problemf("%s: no GrantSurface on the relation or its type", where)
+		case !slices.Contains(c.cfg.GrantSurfaces, surface):
+			c.problemf("%s: grant surface %q is not registered", where, surface)
 		}
 		for _, role := range r.roles {
 			if !slices.Contains(c.cfg.Roles, role) {
 				c.problemf("%s: role %q is not registered", where, role)
 			}
 		}
-		if r.runtimeSince < 0 {
-			c.problemf("%s: runtime safe-since version %d is negative", where, r.runtimeSince)
+		if r.delegatable < 0 {
+			c.problemf("%s: DelegatableSince version %d is negative", where, r.delegatable)
 		}
 		if r.kind == relationBlock {
-			c.validateBlockOptions(where, r)
+			c.validateImpliedBy(t, where, r)
 			continue
 		}
 		if !r.internal && r.description == "" {
-			c.problemf("%s: user-visible grant needs a Describe", where)
+			c.problemf("%s: user-visible grant needs a Description", where)
 		}
 	}
 }
 
-func (c *compiler) validateBlockOptions(where string, r relationDecl) {
-	if r.description != "" {
-		c.problemf("%s: blocks are internal and take no Describe", where)
+// validateImpliedBy checks that a block is implied only by other blocks of
+// its own type, and that implications form no cycle.
+func (c *compiler) validateImpliedBy(t *TypeDecl, where string, r relationDecl) {
+	if dup := firstDuplicate(r.impliedBy); dup != "" {
+		c.problemf("%s: ImpliedBy lists block %q twice", where, dup)
 	}
-	if r.sensitive {
-		c.problemf("%s: blocks cannot be Sensitive", where)
+	for _, name := range r.impliedBy {
+		i := slices.IndexFunc(t.relations, func(other relationDecl) bool { return other.name == name })
+		switch {
+		case name == r.name:
+			c.problemf("%s: ImpliedBy names the block itself", where)
+		case i < 0:
+			c.problemf("%s: ImpliedBy names unknown block %q", where, name)
+		case t.relations[i].kind != relationBlock:
+			c.problemf("%s: ImpliedBy names grant %q; it needs a Block", where, name)
+		}
 	}
-	if len(r.roles) > 0 {
-		c.problemf("%s: blocks cannot be role defaults", where)
+	if slices.Contains(impliersOf(t, r.name), r.name) {
+		c.problemf("%s: ImpliedBy forms a cycle back to %q", where, r.name)
+	}
+}
+
+// impliersOf lists every block that implies block, directly or through other
+// blocks, sorted. It stops at cycles, which validateImpliedBy reports.
+func impliersOf(t *TypeDecl, block string) []string {
+	seen := make(map[string]bool)
+	queue := []string{block}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		i := slices.IndexFunc(t.relations, func(r relationDecl) bool { return r.name == name && r.kind == relationBlock })
+		if i < 0 {
+			continue
+		}
+		for _, implier := range t.relations[i].impliedBy {
+			if !seen[implier] {
+				seen[implier] = true
+				queue = append(queue, implier)
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// expandExclusions resolves each permission's direct block into the full set
+// that excludes it: the direct block first, then every block implying it.
+// It runs after validation, on the compiler's own copies of the declarations.
+func (c *compiler) expandExclusions() {
+	for i := range c.types {
+		t := &c.types[i]
+		t.permissions = slices.Clone(t.permissions)
+		for j := range t.permissions {
+			p := &t.permissions[j]
+			p.excludedBy = nil
+			for _, direct := range p.direct {
+				p.excludedBy = append(p.excludedBy, direct)
+				p.excludedBy = append(p.excludedBy, impliersOf(t, direct)...)
+			}
+		}
 	}
 }
 
@@ -473,7 +527,10 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 	for _, p := range t.permissions {
 		where := fmt.Sprintf("type %q: permission %q", t.name, p.name)
 		c.validateExpr(t, m, where, p.expr)
-		for _, name := range p.excludedBy {
+		if len(p.direct) > 1 {
+			c.problemf("%s: ExcludedBy is given more than once; declare broader blocks with BlockSpec.ImpliedBy", where)
+		}
+		for _, name := range p.direct {
 			r, ok := m.relations[name]
 			switch {
 			case !ok:
@@ -482,33 +539,30 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 				c.problemf("%s: ExcludedBy names grant %q; it needs a Block", where, name)
 			}
 		}
-		if dup := firstDuplicate(p.excludedBy); dup != "" {
-			c.problemf("%s: ExcludedBy lists block %q twice", where, dup)
-		}
-		if p.checks == "" {
+		if p.answers == "" {
 			continue
 		}
-		if other, dup := checked[p.checks]; dup {
-			c.problemf("%s: scope %q is already checked by permission %q", where, p.checks, other)
+		if other, dup := checked[p.answers]; dup {
+			c.problemf("%s: scope %q is already answered by permission %q", where, p.answers, other)
 			continue
 		}
-		checked[p.checks] = p.name
+		checked[p.answers] = p.name
 		var relation string
 		for _, r := range t.relations {
-			if r.storedAs == p.checks && r.kind == relationGrant {
+			if r.storedAs == p.answers && r.kind == relationGrant {
 				relation = r.name
 			}
 		}
 		if relation == "" {
-			c.problemf("%s: Checks names %q, which is not a grant of this type", where, p.checks)
+			c.problemf("%s: AnswersScope names %q, which is not a grant of this type", where, p.answers)
 			continue
 		}
 		if !grantOnly(m, p.expr, nil) {
-			c.problemf("%s: a permission that Checks a scope may use only Rel, Union, Minus and grant-only Perm", where)
+			c.problemf("%s: a permission that answers a scope may use only Rel, Union, Minus and grant-only Perm", where)
 			continue
 		}
 		if !slices.Contains(satisfyingRelations(m, p.expr, nil), relation) {
-			c.problemf("%s: Checks %q but no Rel(%q) satisfies it", where, p.checks, relation)
+			c.problemf("%s: AnswersScope %q but no Rel(%q) satisfies it", where, p.answers, relation)
 		}
 	}
 	for _, r := range t.relations {
@@ -516,7 +570,7 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 			continue
 		}
 		if _, ok := checked[r.storedAs]; !ok {
-			c.problemf("type %q: grant %q: no permission Checks its scope %q", t.name, r.name, r.storedAs)
+			c.problemf("type %q: grant %q: no permission answers its scope %q", t.name, r.name, r.storedAs)
 		}
 	}
 }
@@ -609,7 +663,7 @@ func grantOnly(m members, e Expr, visiting []string) bool {
 		if !ok || slices.Contains(visiting, e.name) {
 			return false
 		}
-		return len(p.excludedBy) == 0 && grantOnly(m, p.expr, append(visiting, e.name))
+		return len(p.direct) == 0 && grantOnly(m, p.expr, append(visiting, e.name))
 	case OpIs, OpVia, OpWhen:
 		return false
 	default:
@@ -662,15 +716,23 @@ func (c *compiler) validateAlternatives(t *TypeDecl) {
 				c.problemf("%s: type %q declares no permission %q", where, ref.Type, ref.Permission)
 				continue
 			}
-			if len(target.permissions[i].excludedBy) > 0 {
+			if len(target.permissions[i].direct) > 0 {
 				anyBlock = true
 			}
 		}
 		if dup := firstDuplicateRef(a.options); dup != nil && !a.instances {
 			c.problemf("%s: alternative %s.%s listed twice", where, dup.Type, dup.Permission)
 		}
-		if a.veto && !anyBlock {
-			c.problemf("%s: VetoBlocks needs an alternative with ExcludedBy", where)
+		switch a.blocks {
+		case AnyBlockVetoes:
+			if !anyBlock {
+				c.problemf("%s: AnyBlockVetoes needs an option with ExcludedBy", where)
+			}
+		case BlocksApplyPerOption:
+		case blockRuleUnset:
+			c.problemf("%s: Blocks must be set to AnyBlockVetoes or BlocksApplyPerOption", where)
+		default:
+			c.problemf("%s: Blocks has unknown rule %s", where, a.blocks)
 		}
 	}
 }

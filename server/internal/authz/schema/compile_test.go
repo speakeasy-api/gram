@@ -10,7 +10,7 @@ import (
 
 var testConfig = s.Config{
 	Roles:         []string{"admin", "member"},
-	WriteSurfaces: []string{"access", "risk_policy"},
+	GrantSurfaces: []string{"access", "risk_policy"},
 	Conditions: []s.Condition{
 		{Name: "mcp_tools", SelectorKeys: []string{"tool", "disposition"}},
 	},
@@ -18,51 +18,45 @@ var testConfig = s.Config{
 }
 
 func organizationType() s.TypeDecl {
-	return s.NewType("organization", s.StoredKind("org"), s.WrittenBy("access"),
-		s.Grant("reader", s.StoredAs("org:read"), s.Describe("Read the organization"), s.DefaultFor("admin", "member")),
-		s.Grant("admin", s.StoredAs("org:admin"), s.Describe("Administer the organization"), s.DefaultFor("admin")),
-		s.Block("read_blocked", s.StoredAs("org:blocked_read")),
-		s.Block("admin_blocked", s.StoredAs("org:blocked_admin")),
+	return s.NewType("organization", s.StoredKind("org"), s.GrantSurface("access"),
+		s.Grant("reader", s.GrantSpec{StoredAs: "org:read", Description: "Read the organization", DefaultFor: []string{"admin", "member"}}),
+		s.Grant("admin", s.GrantSpec{StoredAs: "org:admin", Description: "Administer the organization", DefaultFor: []string{"admin"}}),
+		s.Block("read_blocked", s.BlockSpec{StoredAs: "org:blocked_read"}),
+		s.Block("admin_blocked", s.BlockSpec{StoredAs: "org:blocked_admin", ImpliedBy: []string{"read_blocked"}}),
 		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("admin")),
-			s.Checks("org:read"), s.ExcludedBy("read_blocked")),
+			s.AnswersScope("org:read"), s.ExcludedBy("read_blocked")),
 		s.Permission("administer", s.Rel("admin"),
-			s.Checks("org:admin"), s.ExcludedBy("admin_blocked", "read_blocked")),
+			s.AnswersScope("org:admin"), s.ExcludedBy("admin_blocked")),
 	)
 }
 
 func projectType() s.TypeDecl {
-	return s.NewType("project", s.Parent("organization"), s.WrittenBy("access"),
-		s.Grant("reader", s.StoredAs("project:read"), s.AnchoredAt("organization", s.Self), s.Describe("Read the project")),
-		s.Grant("publisher", s.StoredAs("plugin:write"), s.Describe("Publish plugins")),
-		s.Block("publish_blocked", s.StoredAs("plugin:blocked_write")),
-		s.Permission("read", s.Rel("reader"), s.Checks("project:read")),
-		s.Permission("publish_plugin", s.Rel("publisher"), s.Checks("plugin:write"), s.ExcludedBy("publish_blocked")),
-		s.Alternatives("plugin_publication",
-			s.Alternative("project", "publish_plugin"),
-			s.Alternative("organization", "administer"),
-			s.VetoBlocks()),
+	return s.NewType("project", s.Parent("organization"), s.GrantSurface("access"),
+		s.Grant("reader", s.GrantSpec{StoredAs: "project:read", AnchoredAt: []string{"organization", s.Self}, Description: "Read the project"}),
+		s.Grant("publisher", s.GrantSpec{StoredAs: "plugin:write", Description: "Publish plugins"}),
+		s.Block("publish_blocked", s.BlockSpec{StoredAs: "plugin:blocked_write"}),
+		s.Permission("read", s.Rel("reader"), s.AnswersScope("project:read")),
+		s.Permission("publish_plugin", s.Rel("publisher"), s.AnswersScope("plugin:write"), s.ExcludedBy("publish_blocked")),
+		s.Alternatives("plugin_publication", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "project", Permission: "publish_plugin"}, {Type: "organization", Permission: "administer"}}, Blocks: s.AnyBlockVetoes}),
 	)
 }
 
 func mcpServerType() s.TypeDecl {
-	return s.NewType("mcp_server", s.Parent("project"), s.StoredKind("mcp"), s.WrittenBy("access"),
+	return s.NewType("mcp_server", s.Parent("project"), s.StoredKind("mcp"), s.GrantSurface("access"),
 		s.SelectorKeys("project_id", "tool", "disposition"),
-		s.Grant("viewer", s.StoredAs("mcp:read"), s.AnchoredAt("organization", "project", s.Self),
-			s.Conditions("mcp_tools"), s.Describe("Inspect server configuration"), s.RuntimeSafeSince(1)),
-		s.Grant("editor", s.StoredAs("mcp:write"), s.AnchoredAt("organization", "project", s.Self),
-			s.Conditions("mcp_tools"), s.Describe("Change server configuration")),
-		s.Grant("connector", s.StoredAs("mcp:connect"), s.AnchoredAt("organization", "project", s.Self),
-			s.Conditions("mcp_tools"), s.Describe("Connect and invoke permitted tools")),
-		s.Block("connect_blocked", s.StoredAs("mcp:blocked_connect"), s.Conditions("mcp_tools")),
-		s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor")), s.Checks("mcp:read")),
-		s.Permission("edit", s.Rel("editor"), s.Checks("mcp:write")),
+		s.Grant("viewer", s.GrantSpec{StoredAs: "mcp:read", AnchoredAt: []string{"organization", "project", s.Self}, Conditions: []string{"mcp_tools"}, Description: "Inspect server configuration", DelegatableSince: 1}),
+		s.Grant("editor", s.GrantSpec{StoredAs: "mcp:write", AnchoredAt: []string{"organization", "project", s.Self}, Conditions: []string{"mcp_tools"}, Description: "Change server configuration"}),
+		s.Grant("connector", s.GrantSpec{StoredAs: "mcp:connect", AnchoredAt: []string{"organization", "project", s.Self}, Conditions: []string{"mcp_tools"}, Description: "Connect and invoke permitted tools"}),
+		s.Block("connect_blocked", s.BlockSpec{StoredAs: "mcp:blocked_connect", Conditions: []string{"mcp_tools"}}),
+		s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor")), s.AnswersScope("mcp:read")),
+		s.Permission("edit", s.Rel("editor"), s.AnswersScope("mcp:write")),
 		s.Permission("connect", s.Union(s.Rel("connector"), s.Perm("read")),
-			s.Checks("mcp:connect"), s.ExcludedBy("connect_blocked")),
+			s.AnswersScope("mcp:connect"), s.ExcludedBy("connect_blocked")),
 	)
 }
 
 func agentType() s.TypeDecl {
-	return s.NewType("agent", s.Parent("organization"), s.WrittenBy("access"),
+	return s.NewType("agent", s.Parent("organization"), s.GrantSurface("access"),
 		s.Attr("owner", s.FactUser),
 		s.Attr("deleted", s.FactBool),
 		s.Attr("owner_reassignment_required_at", s.FactNullableTimestamp),
@@ -72,7 +66,7 @@ func agentType() s.TypeDecl {
 }
 
 func chatType() s.TypeDecl {
-	return s.NewType("chat", s.Parent("project"), s.WrittenBy("access"),
+	return s.NewType("chat", s.Parent("project"), s.GrantSurface("access"),
 		s.Attr("internal_user_id", s.FactNullableString),
 		s.Attr("external_user_id", s.FactNullableString),
 		s.Attr("agent", "agent"),
@@ -82,12 +76,10 @@ func chatType() s.TypeDecl {
 			s.NullOrEmpty("external_user_id"),
 			s.Present("agent"),
 		)),
-		s.Grant("reader", s.StoredAs("chat:read"), s.AnchoredAt("organization", s.Self),
-			s.Sensitive(), s.Describe("Read session transcripts")),
-		s.Grant("writer", s.StoredAs("chat:write"), s.AnchoredAt("organization", s.Self),
-			s.Describe("Change session transcripts")),
-		s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks("chat:read")),
-		s.Permission("write_grant", s.Rel("writer"), s.Checks("chat:write")),
+		s.Grant("reader", s.GrantSpec{StoredAs: "chat:read", AnchoredAt: []string{"organization", s.Self}, Sensitive: true, Description: "Read session transcripts"}),
+		s.Grant("writer", s.GrantSpec{StoredAs: "chat:write", AnchoredAt: []string{"organization", s.Self}, Description: "Change session transcripts"}),
+		s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.AnswersScope("chat:read")),
+		s.Permission("write_grant", s.Rel("writer"), s.AnswersScope("chat:write")),
 		s.Permission("read", s.Union(
 			s.Perm("read_grant"), s.Is("author"),
 			s.When("agent_only", s.Via("agent", "is_owner")),
@@ -97,11 +89,11 @@ func chatType() s.TypeDecl {
 }
 
 func riskPolicyType() s.TypeDecl {
-	return s.NewType("risk_policy", s.WrittenBy("risk_policy"),
-		s.Grant("included", s.StoredAs("risk_policy:evaluate"), s.Describe("Apply the policy")),
-		s.Grant("bypassed", s.StoredAs("risk_policy:bypass"), s.Describe("Skip the policy")),
-		s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")), s.Checks("risk_policy:evaluate")),
-		s.Permission("bypass", s.Rel("bypassed"), s.Checks("risk_policy:bypass")),
+	return s.NewType("risk_policy", s.GrantSurface("risk_policy"),
+		s.Grant("included", s.GrantSpec{StoredAs: "risk_policy:evaluate", Description: "Apply the policy"}),
+		s.Grant("bypassed", s.GrantSpec{StoredAs: "risk_policy:bypass", Description: "Skip the policy"}),
+		s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")), s.AnswersScope("risk_policy:evaluate")),
+		s.Permission("bypass", s.Rel("bypassed"), s.AnswersScope("risk_policy:bypass")),
 	)
 }
 
@@ -130,11 +122,11 @@ func TestCompile_SyntheticDeclarations(t *testing.T) {
 	require.Equal(t, "mcp", mcpRead.ResourceKind)
 	require.Equal(t, s.MatchingPermissive, mcpRead.Matching)
 	require.Equal(t, s.VisibilityUserVisible, mcpRead.Visibility)
-	require.Equal(t, "access", mcpRead.WrittenBy)
+	require.Equal(t, "access", mcpRead.GrantSurface)
 	require.Equal(t, []string{"organization", "project", s.Self}, mcpRead.Anchors)
 	require.Equal(t, []string{"mcp_tools"}, mcpRead.Conditions)
 	require.Equal(t, []string{"disposition", "project_id", "tool"}, mcpRead.SelectorKeys)
-	require.Equal(t, 1, mcpRead.RuntimeSafeSince)
+	require.Equal(t, 1, mcpRead.DelegatableSince)
 
 	block, ok := reg.Scope("mcp:blocked_connect")
 	require.True(t, ok)
@@ -158,7 +150,7 @@ func TestCompile_PermissionPrerequisites(t *testing.T) {
 
 	read, ok := reg.Permission(s.PermissionRef{Type: "chat", Permission: "read"})
 	require.True(t, ok)
-	require.Empty(t, read.Checks)
+	require.Empty(t, read.AnswersScope)
 	require.Equal(t, []string{"agent", "author", "external_user_id", "internal_user_id"}, read.Facts)
 	require.Equal(t, []string{"chat:read", "chat:write"}, read.Scopes)
 	require.Equal(t, []s.PermissionRef{{Type: "agent", Permission: "is_owner"}}, read.Traverses)
@@ -249,7 +241,7 @@ func TestCompile_AlternativesAndRuntime(t *testing.T) {
 
 	alts, ok := reg.Alternatives(s.PermissionRef{Type: "project", Permission: "plugin_publication"})
 	require.True(t, ok)
-	require.True(t, alts.VetoBlocks)
+	require.Equal(t, s.AnyBlockVetoes, alts.Blocks)
 	require.Equal(t, []s.PermissionRef{
 		{Type: "project", Permission: "publish_plugin"},
 		{Type: "organization", Permission: "administer"},
@@ -333,30 +325,32 @@ func TestCompile_ReportsEveryProblem(t *testing.T) {
 	t.Parallel()
 
 	_, err := s.Compile(testConfig,
-		s.NewType("broken", s.WrittenBy("access"),
-			s.Grant("reader", s.StoredAs("broken:read")),
-			s.Permission("read", s.Rel("missing"), s.Checks("broken:read")),
+		s.NewType("broken", s.GrantSurface("access"),
+			s.Grant("reader", s.GrantSpec{StoredAs: "broken:read"}),
+			s.Permission("read", s.Rel("missing"), s.AnswersScope("broken:read")),
 		),
 	)
 	var compileErr *s.CompileError
 	require.ErrorAs(t, err, &compileErr)
 	require.Len(t, compileErr.Problems, 3)
-	require.Contains(t, err.Error(), `type "broken": grant "reader": user-visible grant needs a Describe`)
+	require.Contains(t, err.Error(), `type "broken": grant "reader": user-visible grant needs a Description`)
 	require.Contains(t, err.Error(), `type "broken": permission "read": Rel names unknown relation "missing"`)
-	require.Contains(t, err.Error(), `type "broken": permission "read": Checks "broken:read" but no Rel("reader") satisfies it`)
+	require.Contains(t, err.Error(), `type "broken": permission "read": AnswersScope "broken:read" but no Rel("reader") satisfies it`)
 }
 
 func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 	t.Parallel()
 
-	grant := func(name, scope string, opts ...s.RelationOption) s.TypeOption {
-		return s.Grant(name, append([]s.RelationOption{s.StoredAs(scope), s.Describe(name)}, opts...)...)
+	grant := func(name, scope string, spec s.GrantSpec) s.TypeOption {
+		spec.StoredAs = scope
+		spec.Description = name
+		return s.Grant(name, spec)
 	}
 	simple := func(name string, opts ...s.TypeOption) s.TypeDecl {
 		base := []s.TypeOption{
-			s.WrittenBy("access"),
-			grant("reader", name+":read"),
-			s.Permission("read", s.Rel("reader"), s.Checks(name+":read")),
+			s.GrantSurface("access"),
+			grant("reader", name+":read", s.GrantSpec{}),
+			s.Permission("read", s.Rel("reader"), s.AnswersScope(name+":read")),
 		}
 		return s.NewType(name, append(base, opts...)...)
 	}
@@ -384,9 +378,9 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		},
 		{
 			name: "duplicate stored scope",
-			types: []s.TypeDecl{simple("thing"), s.NewType("other", s.WrittenBy("access"),
-				grant("reader", "thing:read"),
-				s.Permission("read", s.Rel("reader"), s.Checks("thing:read")),
+			types: []s.TypeDecl{simple("thing"), s.NewType("other", s.GrantSurface("access"),
+				grant("reader", "thing:read", s.GrantSpec{}),
+				s.Permission("read", s.Rel("reader"), s.AnswersScope("thing:read")),
 			)},
 			want: `stored scope "thing:read" is already declared by type "thing": grant "reader"`,
 		},
@@ -407,76 +401,66 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		},
 		{
 			name: "anchor outside parent chain",
-			types: []s.TypeDecl{simple("org"), s.NewType("thing", s.WrittenBy("access"),
-				grant("reader", "thing:read", s.AnchoredAt("org")),
-				s.Permission("read", s.Rel("reader"), s.Checks("thing:read")),
+			types: []s.TypeDecl{simple("org"), s.NewType("thing", s.GrantSurface("access"),
+				grant("reader", "thing:read", s.GrantSpec{AnchoredAt: []string{"org"}}),
+				s.Permission("read", s.Rel("reader"), s.AnswersScope("thing:read")),
 			)},
 			want: `anchor "org" is neither $self nor a type on the parent chain []`,
 		},
 		{
 			name:  "missing stored scope",
-			types: []s.TypeDecl{simple("thing", s.Grant("other", s.Describe("other")))},
+			types: []s.TypeDecl{simple("thing", s.Grant("other", s.GrantSpec{Description: "other"}))},
 			want:  `type "thing": grant "other": missing StoredAs`,
 		},
 		{
 			name:  "malformed stored scope",
-			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing")))},
+			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.BlockSpec{StoredAs: "thing"}))},
 			want:  `stored scope "thing" must have the form <resource>:<action>`,
 		},
 		{
 			name:  "block without blocked_ action",
-			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing:deny")))},
+			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.BlockSpec{StoredAs: "thing:deny"}))},
 			want:  `stored scope "thing:deny" must be a blocked_* scope`,
 		},
 		{
 			name:  "block without an action",
-			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing:blocked_")))},
+			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.BlockSpec{StoredAs: "thing:blocked_"}))},
 			want:  `stored scope "thing:blocked_" names no action after blocked_`,
 		},
 		{
 			name:  "grant on a blocking scope",
-			types: []s.TypeDecl{simple("thing", grant("deny", "thing:blocked_read"))},
+			types: []s.TypeDecl{simple("thing", grant("deny", "thing:blocked_read", s.GrantSpec{}))},
 			want:  `stored scope "thing:blocked_read" is a blocking scope; declare it with Block`,
 		},
 		{
-			name:  "missing write surface",
-			types: []s.TypeDecl{s.NewType("thing", grant("reader", "thing:read"), s.Permission("read", s.Rel("reader"), s.Checks("thing:read")))},
-			want:  `no WrittenBy surface on the relation or its type`,
+			name:  "missing grant surface",
+			types: []s.TypeDecl{s.NewType("thing", grant("reader", "thing:read", s.GrantSpec{}), s.Permission("read", s.Rel("reader"), s.AnswersScope("thing:read")))},
+			want:  `no GrantSurface on the relation or its type`,
 		},
 		{
-			name:  "unknown write surface",
-			types: []s.TypeDecl{simple("thing", s.WrittenBy("billing"))},
-			want:  `write surface "billing" is not registered`,
+			name:  "unknown grant surface",
+			types: []s.TypeDecl{simple("thing", s.GrantSurface("billing"))},
+			want:  `grant surface "billing" is not registered`,
 		},
 		{
 			name:  "unknown role",
-			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.DefaultFor("owner")), s.Permission("write", s.Rel("writer"), s.Checks("thing:write")))},
+			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.GrantSpec{DefaultFor: []string{"owner"}}), s.Permission("write", s.Rel("writer"), s.AnswersScope("thing:write")))},
 			want:  `role "owner" is not registered`,
 		},
 		{
-			name:  "block as role default",
-			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing:blocked_read"), s.DefaultFor("admin")))},
-			want:  `blocks cannot be role defaults`,
-		},
-		{
 			name:  "unknown condition",
-			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.Conditions("tools")), s.Permission("write", s.Rel("writer"), s.Checks("thing:write")))},
+			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.GrantSpec{Conditions: []string{"tools"}}), s.Permission("write", s.Rel("writer"), s.AnswersScope("thing:write")))},
 			want:  `condition "tools" is not registered`,
 		},
 		{
 			name:  "condition key the relation does not accept",
-			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.Conditions("mcp_tools")), s.Permission("write", s.Rel("writer"), s.Checks("thing:write")))},
+			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.GrantSpec{Conditions: []string{"mcp_tools"}}), s.Permission("write", s.Rel("writer"), s.AnswersScope("thing:write")))},
 			want:  `condition "mcp_tools" reads selector key "tool", which the relation does not accept`,
 		},
 		{
 			name:  "reserved selector key",
 			types: []s.TypeDecl{simple("thing", s.SelectorKeys("resource_id"))},
 			want:  `selector keys [resource_id] must be distinct and exclude resource_kind and resource_id`,
-		},
-		{
-			name:  "subject scoped grant",
-			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.SubjectScoped("author")), s.Permission("write", s.Rel("writer"), s.Checks("thing:write")))},
-			want:  `SubjectScoped is not supported by this foundation`,
 		},
 		{
 			name:  "unknown attr type",
@@ -500,7 +484,7 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		},
 		{
 			name:  "Rel to a block",
-			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing:blocked_read")), s.Permission("denied", s.Rel("blocked")))},
+			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.BlockSpec{StoredAs: "thing:blocked_read"}), s.Permission("denied", s.Rel("blocked")))},
 			want:  `Rel names block "blocked"; apply blocks with ExcludedBy`,
 		},
 		{
@@ -535,44 +519,76 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `permission "empty": missing expression`,
 		},
 		{
-			name:  "Checks a permission with ownership",
-			types: []s.TypeDecl{s.NewType("thing", s.WrittenBy("access"), s.Attr("owner", s.FactUser), grant("reader", "thing:read"), s.Permission("read", s.Union(s.Rel("reader"), s.Is("owner")), s.Checks("thing:read")))},
-			want:  `a permission that Checks a scope may use only Rel, Union, Minus and grant-only Perm`,
+			name:  "AnswersScope on a permission with ownership",
+			types: []s.TypeDecl{s.NewType("thing", s.GrantSurface("access"), s.Attr("owner", s.FactUser), grant("reader", "thing:read", s.GrantSpec{}), s.Permission("read", s.Union(s.Rel("reader"), s.Is("owner")), s.AnswersScope("thing:read")))},
+			want:  `a permission that answers a scope may use only Rel, Union, Minus and grant-only Perm`,
 		},
 		{
-			name:  "grant nobody checks",
-			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write"))},
-			want:  `grant "writer": no permission Checks its scope "thing:write"`,
+			name:  "grant nobody answers",
+			types: []s.TypeDecl{simple("thing", grant("writer", "thing:write", s.GrantSpec{}))},
+			want:  `grant "writer": no permission answers its scope "thing:write"`,
 		},
 		{
-			name:  "scope checked twice",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader"), s.Checks("thing:read")))},
-			want:  `scope "thing:read" is already checked by permission "read"`,
+			name:  "scope answered twice",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader"), s.AnswersScope("thing:read")))},
+			want:  `scope "thing:read" is already answered by permission "read"`,
 		},
 		{
-			name:  "Checks a scope of another type",
-			types: []s.TypeDecl{simple("other"), simple("thing", s.Permission("theirs", s.Rel("reader"), s.Checks("other:read")))},
-			want:  `Checks names "other:read", which is not a grant of this type`,
+			name:  "AnswersScope names a scope of another type",
+			types: []s.TypeDecl{simple("other"), simple("thing", s.Permission("theirs", s.Rel("reader"), s.AnswersScope("other:read")))},
+			want:  `AnswersScope names "other:read", which is not a grant of this type`,
 		},
 		{
 			name:  "single alternative",
-			types: []s.TypeDecl{simple("thing", s.Alternatives("only", s.Alternative("thing", "read")))},
+			types: []s.TypeDecl{simple("thing", s.Alternatives("only", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}}, Blocks: s.BlocksApplyPerOption}))},
 			want:  `alternatives "only": needs at least two alternatives`,
 		},
 		{
 			name:  "unknown alternative",
-			types: []s.TypeDecl{simple("thing", s.Alternatives("pair", s.Alternative("thing", "read"), s.Alternative("thing", "write")))},
+			types: []s.TypeDecl{simple("thing", s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "write"}}, Blocks: s.BlocksApplyPerOption}))},
 			want:  `type "thing" declares no permission "write"`,
 		},
 		{
 			name:  "repeated alternative",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.Alternative("thing", "read"), s.Alternative("thing", "read")))},
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "read"}}, Blocks: s.BlocksApplyPerOption}))},
 			want:  `alternative thing.read listed twice`,
 		},
 		{
 			name:  "veto without blocks",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.Alternative("thing", "read"), s.Alternative("thing", "again"), s.VetoBlocks()))},
-			want:  `VetoBlocks needs an alternative with ExcludedBy`,
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "again"}}, Blocks: s.AnyBlockVetoes}))},
+			want:  `AnyBlockVetoes needs an option with ExcludedBy`,
+		},
+		{
+			name:  "alternatives without a block rule",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("reader")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "again"}}}))},
+			want:  `alternatives "pair": Blocks must be set to AnyBlockVetoes or BlocksApplyPerOption`,
+		},
+		{
+			name:  "ExcludedBy given twice",
+			types: []s.TypeDecl{simple("thing", s.Block("a_blocked", s.BlockSpec{StoredAs: "thing:blocked_a"}), s.Block("b_blocked", s.BlockSpec{StoredAs: "thing:blocked_b"}), s.Permission("guarded", s.Rel("reader"), s.ExcludedBy("a_blocked"), s.ExcludedBy("b_blocked")))},
+			want:  `ExcludedBy is given more than once; declare broader blocks with BlockSpec.ImpliedBy`,
+		},
+		{
+			name:  "ImpliedBy an unknown block",
+			types: []s.TypeDecl{simple("thing", s.Block("write_blocked", s.BlockSpec{StoredAs: "thing:blocked_write", ImpliedBy: []string{"missing"}}))},
+			want:  `block "write_blocked": ImpliedBy names unknown block "missing"`,
+		},
+		{
+			name:  "ImpliedBy a grant",
+			types: []s.TypeDecl{simple("thing", s.Block("write_blocked", s.BlockSpec{StoredAs: "thing:blocked_write", ImpliedBy: []string{"reader"}}))},
+			want:  `block "write_blocked": ImpliedBy names grant "reader"; it needs a Block`,
+		},
+		{
+			name:  "ImpliedBy itself",
+			types: []s.TypeDecl{simple("thing", s.Block("write_blocked", s.BlockSpec{StoredAs: "thing:blocked_write", ImpliedBy: []string{"write_blocked"}}))},
+			want:  `block "write_blocked": ImpliedBy names the block itself`,
+		},
+		{
+			name: "ImpliedBy cycle",
+			types: []s.TypeDecl{simple("thing",
+				s.Block("a_blocked", s.BlockSpec{StoredAs: "thing:blocked_a", ImpliedBy: []string{"b_blocked"}}),
+				s.Block("b_blocked", s.BlockSpec{StoredAs: "thing:blocked_b", ImpliedBy: []string{"a_blocked"}}))},
+			want: `block "a_blocked": ImpliedBy forms a cycle back to "a_blocked"`,
 		},
 		{
 			name:  "permission cycle",
@@ -590,7 +606,7 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		{
 			name: "retired runtime scope still declared",
 			cfg: s.Config{
-				Roles: testConfig.Roles, WriteSurfaces: testConfig.WriteSurfaces,
+				Roles: testConfig.Roles, GrantSurfaces: testConfig.GrantSurfaces,
 				Conditions: testConfig.Conditions, RetiredRuntimeScopes: []string{"thing:read"},
 			},
 			types: []s.TypeDecl{simple("thing")},
@@ -599,7 +615,7 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		{
 			name: "duplicate condition",
 			cfg: s.Config{
-				Roles: testConfig.Roles, WriteSurfaces: testConfig.WriteSurfaces,
+				Roles: testConfig.Roles, GrantSurfaces: testConfig.GrantSurfaces,
 				Conditions: []s.Condition{{Name: "c", SelectorKeys: nil}, {Name: "c", SelectorKeys: nil}},
 			},
 			types: []s.TypeDecl{simple("thing")},
@@ -622,25 +638,41 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 	}
 }
 
-func TestCompile_RejectsConflictingBlockExpansions(t *testing.T) {
+// A permission is excluded by its direct block and by every block that
+// implies it, directly or through another block.
+func TestCompile_ExpandsImpliedBlocks(t *testing.T) {
 	t.Parallel()
 
-	_, err := s.Compile(testConfig, s.NewType("thing", s.WrittenBy("access"),
-		s.Grant("reader", s.StoredAs("thing:read"), s.Describe("read")),
-		s.Grant("writer", s.StoredAs("thing:write"), s.Describe("write")),
-		s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
-		s.Block("write_blocked", s.StoredAs("thing:blocked_write")),
-		s.Block("all_blocked", s.StoredAs("thing:blocked_all")),
-		s.Permission("read", s.Rel("reader"), s.Checks("thing:read"), s.ExcludedBy("read_blocked", "all_blocked")),
-		s.Permission("write", s.Rel("writer"), s.Checks("thing:write"), s.ExcludedBy("read_blocked", "write_blocked")),
+	reg, err := s.Compile(testConfig, s.NewType("thing", s.GrantSurface("access"),
+		s.Grant("reader", s.GrantSpec{StoredAs: "thing:read", Description: "read"}),
+		s.Grant("writer", s.GrantSpec{StoredAs: "thing:write", Description: "write"}),
+		s.Grant("administrator", s.GrantSpec{StoredAs: "thing:admin", Description: "admin"}),
+		s.Block("read_blocked", s.BlockSpec{StoredAs: "thing:blocked_read"}),
+		s.Block("write_blocked", s.BlockSpec{StoredAs: "thing:blocked_write", ImpliedBy: []string{"read_blocked"}}),
+		s.Block("admin_blocked", s.BlockSpec{StoredAs: "thing:blocked_admin", ImpliedBy: []string{"write_blocked"}}),
+		s.Permission("read", s.Rel("reader"), s.AnswersScope("thing:read"), s.ExcludedBy("read_blocked")),
+		s.Permission("write", s.Rel("writer"), s.AnswersScope("thing:write"), s.ExcludedBy("write_blocked")),
+		s.Permission("administer", s.Rel("administrator"), s.AnswersScope("thing:admin"), s.ExcludedBy("admin_blocked")),
 	))
-	require.ErrorContains(t, err, `block "read_blocked" directly excludes several permissions with different broader blocks ([thing:blocked_all] and [thing:blocked_write])`)
+	require.NoError(t, err)
+
+	admin, ok := reg.Permission(s.PermissionRef{Type: "thing", Permission: "administer"})
+	require.True(t, ok)
+	require.Equal(t, []string{"thing:blocked_admin", "thing:blocked_read", "thing:blocked_write"}, admin.ExcludedBy)
+
+	blockedAdmin, ok := reg.Scope("thing:blocked_admin")
+	require.True(t, ok)
+	require.Equal(t, []string{"thing:blocked_read", "thing:blocked_write"}, blockedAdmin.SatisfiedBy)
+
+	writeScope, ok := reg.Scope("thing:write")
+	require.True(t, ok)
+	require.Equal(t, "thing:blocked_write", writeScope.Exclusion)
 }
 
 func TestCompile_FactsKeepDeclarationOrder(t *testing.T) {
 	t.Parallel()
 
-	reg, err := s.Compile(testConfig, s.NewType("note", s.WrittenBy("access"),
+	reg, err := s.Compile(testConfig, s.NewType("note", s.GrantSurface("access"),
 		s.Attr("author_id", s.FactNullableString),
 		s.Derived("author", s.NonEmptyPrincipal(s.FactUser, "author_id")),
 		s.Attr("archived", s.FactBool),
@@ -655,27 +687,29 @@ func TestCompile_FactsKeepDeclarationOrder(t *testing.T) {
 	}, note.Facts)
 }
 
-// Options copy their arguments, so changing a caller's slice after building
-// an option cannot change the declaration.
-func TestOptions_CopyTheirArguments(t *testing.T) {
+// Grant and Block copy their specs' slices, so changing a caller's slice
+// after building one cannot change the declaration.
+func TestSpecs_CopyTheirSlices(t *testing.T) {
 	t.Parallel()
 
 	anchors := []string{"organization", s.Self}
 	roles := []string{"admin"}
-	blocks := []string{"read_blocked"}
-	anchoredAt := s.AnchoredAt(anchors...)
-	defaultFor := s.DefaultFor(roles...)
-	excludedBy := s.ExcludedBy(blocks...)
+	impliedBy := []string{"read_blocked"}
+	reader := s.Grant("reader", s.GrantSpec{StoredAs: "thing:read", Description: "read", AnchoredAt: anchors, DefaultFor: roles})
+	writeBlocked := s.Block("write_blocked", s.BlockSpec{StoredAs: "thing:blocked_write", ImpliedBy: impliedBy})
 	anchors[0] = "project"
 	roles[0] = "member"
-	blocks[0] = "missing"
+	impliedBy[0] = "missing"
 
 	reg, err := s.Compile(testConfig,
-		s.NewType("organization", s.WrittenBy("access")),
-		s.NewType("thing", s.Parent("organization"), s.WrittenBy("access"),
-			s.Grant("reader", s.StoredAs("thing:read"), s.Describe("read"), anchoredAt, defaultFor),
-			s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
-			s.Permission("read", s.Rel("reader"), s.Checks("thing:read"), excludedBy),
+		s.NewType("organization", s.GrantSurface("access")),
+		s.NewType("thing", s.Parent("organization"), s.GrantSurface("access"),
+			reader,
+			s.Grant("writer", s.GrantSpec{StoredAs: "thing:write", Description: "write"}),
+			s.Block("read_blocked", s.BlockSpec{StoredAs: "thing:blocked_read"}),
+			writeBlocked,
+			s.Permission("read", s.Rel("reader"), s.AnswersScope("thing:read"), s.ExcludedBy("read_blocked")),
+			s.Permission("write", s.Rel("writer"), s.AnswersScope("thing:write"), s.ExcludedBy("write_blocked")),
 		),
 	)
 	require.NoError(t, err)
@@ -684,4 +718,7 @@ func TestOptions_CopyTheirArguments(t *testing.T) {
 	require.Equal(t, []string{"organization", s.Self}, read.Anchors)
 	require.Equal(t, []string{"admin"}, read.Roles)
 	require.Equal(t, "thing:blocked_read", read.Exclusion)
+	write, ok := reg.Permission(s.PermissionRef{Type: "thing", Permission: "write"})
+	require.True(t, ok)
+	require.Equal(t, []string{"thing:blocked_write", "thing:blocked_read"}, write.ExcludedBy)
 }
