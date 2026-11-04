@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/agentgateway"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -42,16 +43,6 @@ import (
 // slug so it can never be shadowed by a server whose slug is "agent".
 const AgentGatewayRoute = "/agent-mcp/{agentID}"
 
-// agentGatewayNamespace derives the synthetic meta-server id an agent gateway
-// reports. There is no meta_mcp_servers row behind it, so it must never be
-// used to read one back; it exists so telemetry and session records group per
-// agent instead of collapsing onto a single nil id.
-var agentGatewayNamespace = uuid.MustParse("a6e17a1e-0000-4000-8000-000000000001")
-
-func agentGatewayID(agentID uuid.UUID) uuid.UUID {
-	return uuid.NewSHA1(agentGatewayNamespace, agentID[:])
-}
-
 // ServeAgentGateway terminates MCP for /agent-mcp/{agentID}. Only the agent
 // whose key is presented may reach its own gateway: the key is authenticated
 // first, then matched against the id in the path, so a valid key for another
@@ -65,7 +56,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	}
 	// The synthetic id is what every downstream record carries, so logging it
 	// here is what ties those records back to this request.
-	logger := s.logger.With(attr.SlogMetaMcpServerID(agentGatewayID(agentID).String()))
+	logger := s.logger.With(attr.SlogMetaMcpServerID(agentgateway.GatewayID(agentID).String()))
 
 	authedCtx, authCtx, err := s.authenticateAgentGatewayKey(ctx, r, agentID)
 	if err != nil {
@@ -89,7 +80,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	// an agent gateway has none. Only the fields the runtime reads are
 	// meaningful; the rest are zeroed rather than invented.
 	metaServer := &metamcprepo.MetaMcpServer{
-		ID:             agentGatewayID(agentID),
+		ID:             agentgateway.GatewayID(agentID),
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.Nil,
 		// No issuer: the agent key is the credential, so the OAuth issuer gate

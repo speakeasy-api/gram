@@ -25,6 +25,8 @@ import (
 
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -44,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/overview"
@@ -3912,7 +3915,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints").LogError(ctx, logger)
 	}
-	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
+	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, logger)
 	}
@@ -3987,7 +3990,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	}
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
+	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
 	}
@@ -4324,13 +4327,41 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	return append(anchoredMatchers, platformMatchers...), nil
 }
 
-// LoadMetaMCPNames maps gateway ids to names, deleted gateways included.
-func LoadMetaMCPNames(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) (map[string]string, error) {
-	rows, err := metamcpRepo.New(db).ListMetaMCPServerNamesForTelemetryByProjectID(ctx, projectID)
+// unknownGatewayName labels a gateway id no gateway of the organization
+// derives, so a trace never shows a raw id in place of a name.
+const unknownGatewayName = "Unknown gateway"
+
+// LoadMetaMCPNames maps every gateway id the organization's telemetry can
+// carry to a name. A member's calls are logged in the member's project, so
+// stored gateways come from every project of the organization, deleted ones
+// included. Agent and organization gateways have no row and stamp a derived
+// id, so each is named after the agent, organization, or project it serves.
+func LoadMetaMCPNames(ctx context.Context, db *pgxpool.Pool, organizationID string) (map[string]string, error) {
+	rows, err := metamcpRepo.New(db).ListMetaMCPServerNamesForTelemetryByOrganizationID(ctx, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("list project gateways: %w", err)
+		return nil, fmt.Errorf("list organization gateways: %w", err)
 	}
-	names := make(map[string]string, len(rows))
+	agents, err := agentsRepo.New(db).ListAgentNamesIncludingDeleted(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization agents: %w", err)
+	}
+	projects, err := projectsRepo.New(db).ListProjectsByOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization projects: %w", err)
+	}
+	organization, err := orgsRepo.New(db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("get organization: %w", err)
+	}
+
+	names := make(map[string]string, len(rows)+len(agents)+len(projects)+1)
+	names[orggateway.GatewayID(organizationID).String()] = organization.Name
+	for _, project := range projects {
+		names[orggateway.ProjectGatewayID(organizationID, project.ID).String()] = project.Name
+	}
+	for _, agent := range agents {
+		names[agentgateway.GatewayID(agent.ID).String()] = agent.Name + " gateway"
+	}
 	for _, row := range rows {
 		names[row.ID.String()] = row.Name
 	}
@@ -4367,7 +4398,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			viaGatewayID = conv.PtrEmpty(row.MetaMCPServerID)
 			name := gatewayNames[row.MetaMCPServerID]
 			if name == "" {
-				name = row.MetaMCPServerID
+				name = unknownGatewayName
 			}
 			viaGatewayName = conv.PtrEmpty(name)
 		}

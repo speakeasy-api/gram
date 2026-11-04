@@ -771,6 +771,40 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 	return items, nil
 }
 
+const listAgentNamesIncludingDeleted = `-- name: ListAgentNamesIncludingDeleted :many
+SELECT id, name
+FROM agents
+WHERE organization_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListAgentNamesIncludingDeletedRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Reads every agent's name in an organization, deleted agents included, for
+// labelling records written while they existed.
+func (q *Queries) ListAgentNamesIncludingDeleted(ctx context.Context, organizationID string) ([]ListAgentNamesIncludingDeletedRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNamesIncludingDeleted, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesIncludingDeletedRow
+	for rows.Next() {
+		var i ListAgentNamesIncludingDeletedRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentOwnerProfiles = `-- name: ListAgentOwnerProfiles :many
 SELECT u.id, u.display_name, u.photo_url
 FROM users AS u
