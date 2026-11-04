@@ -99,6 +99,10 @@ Counts are call sites at the baseline. Prerequisites are the Linear blocked-by r
 | X3 AIS-875  | most domain batches | 91    | check 43, engine 10, evaluator 13, loader 24, writer 1        | platformmcp, launcher, mcp platform tool scopes                                                                                           |
 | X4 AIS-876  | X1, X3              | 2     | wiring 2                                                      | demoseed                                                                                                                                  |
 
+Rows reassigned after the baseline:
+
+- O3 moves the directory review emails audience onto the client. The remaining loader row is the fallback for workers built without a client, so it moves from O3 to X1, which deletes it.
+
 F1-F4, F6, C2, Q1, Z1 and Z2 own no call site: they build the foundation, characterize chat collections, or verify and retire. The total is 962 sites in 931 rows.
 
 ### Contract notes per batch
