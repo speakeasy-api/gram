@@ -173,7 +173,7 @@ func TestRefreshHappened_TruncatedBodyPrecedesTunnelOutage(t *testing.T) {
 		require.ErrorIs(t, &RefreshError{Outcome: outcome, err: err}, ErrRemoteSessionUnavailable)
 		what, ok := refreshHappened(outcome, client, err)
 		require.True(t, ok)
-		require.Equal(t, mcpconnectionattempts.CodeMalformedResponse, what)
+		require.Equal(t, mcpconnectionattempts.CodeProviderServerError, what)
 		for _, suppressed := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeDeferred, remotesessionmetrics.RefreshOutcomeSessionInactive} {
 			_, ok := refreshHappened(suppressed, client, err)
 			require.False(t, ok)

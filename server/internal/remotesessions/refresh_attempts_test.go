@@ -53,14 +53,23 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 		{name: "rejected", status: http.StatusBadRequest, body: `{"error":"unauthorized_client"}`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rejected with an unreadable body", status: http.StatusBadRequest, body: `nope`, want: mcpconnectionattempts.CodeRefreshRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "rate limited", status: http.StatusTooManyRequests, body: `{}`, want: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider},
-		{name: "truncated success", truncated: true, status: http.StatusOK, body: `{`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
-		{name: "malformed success", status: http.StatusOK, body: `nope`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
-		{name: "missing access token", misconfigured: true, status: http.StatusOK, body: `{}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
-		{name: "wrong access token type", status: http.StatusOK, body: `{"access_token":123}`, want: mcpconnectionattempts.CodeMalformedResponse, who: mcpconnectionattempts.WhoAdmin},
+		{name: "truncated success", truncated: true, status: http.StatusOK, body: `{`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "malformed success", status: http.StatusOK, body: `nope`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "missing access token", misconfigured: true, status: http.StatusOK, body: `{}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
+		{name: "wrong access token type", status: http.StatusOK, body: `{"access_token":123}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 		{name: "server_error http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 		{name: "server_error http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"server_error"}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 		{name: "temporarily_unavailable http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
 		{name: "temporarily_unavailable http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"temporarily_unavailable"}`, want: mcpconnectionattempts.CodeProviderUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "login_required http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"login_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "login_required http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"login_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "interaction_required http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"interaction_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "interaction_required http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"interaction_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "consent_required http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"consent_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "consent_required http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"consent_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "account_selection_required http.StatusOK", misconfigured: true, status: http.StatusOK, body: `{"error":"account_selection_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "account_selection_required http.StatusBadRequest", misconfigured: true, status: http.StatusBadRequest, body: `{"error":"account_selection_required"}`, want: mcpconnectionattempts.CodeUpstreamReconnectRequired, who: mcpconnectionattempts.WhoPerson},
+		{name: "provider timeout", misconfigured: true, status: http.StatusRequestTimeout, body: `{}`, want: mcpconnectionattempts.CodeProviderUnreachable, who: mcpconnectionattempts.WhoProvider},
 		{name: "provider outage", status: http.StatusServiceUnavailable, body: `{}`, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -213,4 +222,43 @@ func TestRefreshNow_RecordsRecoveredPanic(t *testing.T) {
 
 		})
 	}
+}
+
+func TestRefreshNow_DetachedInvalidClientKeepsDynamicRemedy(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	answer := tokenAnswer(http.StatusBadRequest, `{"error":"invalid_client"}`)
+	ctx, env := newSyntheticExpiryEnv(t, "detached-invalid-client", func(w http.ResponseWriter, r *http.Request) {
+		if r.FormValue("grant_type") == "refresh_token" {
+			close(started)
+			<-release
+		}
+		answer(w, r)
+	})
+	_, err := env.db.Exec(ctx, "UPDATE remote_session_issuers SET registration_endpoint = $1 WHERE id = $2", "https://idp.example.com/register", env.issuerID)
+	require.NoError(t, err)
+	rec := mcpconnectionattemptstest.New(t)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := refresher.RefreshNow(requestCtx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)))
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("refresh POST did not start")
+	}
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
+	close(release)
+	require.NoError(t, refresher.DrainRefreshes(ctx))
+	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeRefreshInvalidClient)
+	require.Len(t, rec.Rows(), 1)
 }

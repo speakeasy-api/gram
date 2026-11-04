@@ -30,7 +30,9 @@ func (s *RefreshService) recordRefresh(
 		return
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
-		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(ctx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
+		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+		defer cancel()
+		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
 			RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
 			UserSessionIssuerID:   sess.UserSessionIssuerID,
 		})
@@ -65,10 +67,10 @@ func canReregister(clientIDMetadataURI pgtype.Text, identityProviderConnectionID
 
 // refreshHappened maps a metric outcome to the row; revoked mid-refresh and canceled write none.
 func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, err error) (mcpconnectionattempts.Happened, bool) {
-	// A response body that was cut off or could not be decoded is malformed,
+	// A response body that was cut off or could not be decoded is a provider failure,
 	// even through a tunnel. Do not override canceled/deferred/no-row outcomes.
 	if (outcome == remotesessionmetrics.RefreshOutcomeUnreachable || outcome == remotesessionmetrics.RefreshOutcomeInternalError) && errors.Is(err, errRefreshUnusableAnswer) {
-		return mcpconnectionattempts.CodeMalformedResponse, true
+		return mcpconnectionattempts.CodeProviderServerError, true
 	}
 	if client.TunneledMcpServerID.Valid {
 		if code, ok := refreshTunnelFailure(outcome, err); ok {
@@ -93,7 +95,12 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeRejected, remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
 		// Name provider failures without changing the response-facing refresh outcome.
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
+			if tokenErr.statusCode == http.StatusRequestTimeout {
+				return mcpconnectionattempts.CodeProviderUnreachable, true
+			}
 			switch tokenErr.code {
+			case oautherr.OIDCCodeLoginRequired, oautherr.OIDCCodeInteractionRequired, oautherr.OIDCCodeConsentRequired, oautherr.OIDCCodeAccountSelectionRequired:
+				return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 			case oautherr.CodeServerError:
 				return mcpconnectionattempts.CodeProviderServerError, true
 			case oautherr.CodeTemporarilyUnavailable:
