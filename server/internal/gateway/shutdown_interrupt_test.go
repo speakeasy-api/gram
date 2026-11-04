@@ -1,0 +1,280 @@
+package gateway
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// shutdownTestTimeout bounds every wait in these tests. An interrupted call
+// returns in milliseconds, so reaching it means the interrupt never landed.
+const shutdownTestTimeout = 5 * time.Second
+
+// heldToolServer is an HTTP tool's server that answers with prefix (when
+// non-empty) and then holds the response open until the gateway goes away.
+// reached closes once the server has written everything it will write, and
+// gone closes once it sees the gateway's request cancelled.
+type heldToolServer struct {
+	server  *httptest.Server
+	reached chan struct{}
+	gone    chan struct{}
+}
+
+func newHeldToolServer(t *testing.T, contentType string, prefix string) *heldToolServer {
+	t.Helper()
+
+	s := &heldToolServer{server: nil, reached: make(chan struct{}), gone: make(chan struct{})}
+	release := make(chan struct{})
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		if prefix != "" {
+			w.Header().Set("Content-Type", contentType)
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, prefix)
+			_ = http.NewResponseController(w).Flush()
+		}
+		close(s.reached)
+		select {
+		case <-r.Context().Done():
+			close(s.gone)
+		case <-release:
+		}
+	}))
+	t.Cleanup(s.server.Close)
+	// Runs before server.Close (LIFO) so a handler still holding its response
+	// does not block shutdown.
+	t.Cleanup(func() { close(release) })
+
+	return s
+}
+
+func newShutdownTestToolProxy(t *testing.T, drain *shutdowndrain.Drain, platformTools PlatformExecutor) *ToolProxy {
+	t.Helper()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	return NewToolProxy(
+		testenv.NewLogger(t),
+		tracerProvider,
+		testenv.NewMeterProvider(t),
+		ToolCallSourceMCP,
+		testenv.NewEncryptionClient(t),
+		nil,
+		policy,
+		funcs,
+		platformTools,
+		drain,
+	)
+}
+
+func newShutdownTestHTTPPlan(serverURL string) *ToolCallPlan {
+	return NewHTTPToolCallPlan(newTestToolDescriptor(), &HTTPToolCallPlan{
+		ServerEnvVar:       "TEST_SERVER_URL",
+		DefaultServerUrl:   NullString{Value: serverURL, Valid: true},
+		Security:           []*HTTPToolSecurity{},
+		SecurityScopes:     map[string][]string{},
+		Method:             http.MethodGet,
+		Path:               "/slow",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	})
+}
+
+func emptyToolCallBody(t *testing.T) []byte {
+	t.Helper()
+
+	body, err := json.Marshal(ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	})
+	require.NoError(t, err)
+
+	return body
+}
+
+func emptyToolCallEnv() toolconfig.ToolCallEnv {
+	return toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
+		GramChatID: "",
+		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+	}
+}
+
+// runToolCall runs plan through proxy in a goroutine and returns a channel
+// that delivers Do's error once it returns.
+func runToolCall(t *testing.T, proxy *ToolProxy, plan *ToolCallPlan) <-chan error {
+	t.Helper()
+
+	body := emptyToolCallBody(t)
+	done := make(chan error, 1)
+	go func() {
+		done <- proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(body), emptyToolCallEnv(), plan, tm.HTTPLogAttributes{})
+	}()
+
+	return done
+}
+
+func waitForSignal(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+
+	select {
+	case <-ch:
+	case <-time.After(shutdownTestTimeout):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+func waitForToolCall(t *testing.T, done <-chan error) error {
+	t.Helper()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(shutdownTestTimeout):
+		t.Fatal("timed out waiting for the tool call to return")
+		return nil
+	}
+}
+
+func TestToolProxy_Do_ShutdownInterruptsHTTPToolAwaitingResponse(t *testing.T) {
+	t.Parallel()
+
+	upstream := newHeldToolServer(t, "", "")
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+
+	done := runToolCall(t, proxy, newShutdownTestHTTPPlan(upstream.server.URL))
+	waitForSignal(t, upstream.reached, "the tool's server to receive the call")
+
+	drain.Start(0)
+
+	err := waitForToolCall(t, done)
+	require.ErrorIs(t, err, shutdowndrain.ErrInterrupted)
+	waitForSignal(t, upstream.gone, "the tool's server to see the call abandoned")
+}
+
+func TestToolProxy_Do_ShutdownInterruptsHTTPToolMidBody(t *testing.T) {
+	t.Parallel()
+
+	// The body copy swallows read errors, so without the interrupt check a
+	// truncated body would come back as a successful result.
+	upstream := newHeldToolServer(t, "application/json", `{"rows":[`)
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+
+	done := runToolCall(t, proxy, newShutdownTestHTTPPlan(upstream.server.URL))
+	waitForSignal(t, upstream.reached, "the tool's server to start its response")
+
+	drain.Start(0)
+
+	err := waitForToolCall(t, done)
+	require.ErrorIs(t, err, shutdowndrain.ErrInterrupted)
+}
+
+func TestToolProxy_Do_ShutdownInterruptsHTTPToolMidStream(t *testing.T) {
+	t.Parallel()
+
+	upstream := newHeldToolServer(t, "text/event-stream", "data: {\"partial\":true}\n\n")
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+
+	done := runToolCall(t, proxy, newShutdownTestHTTPPlan(upstream.server.URL))
+	waitForSignal(t, upstream.reached, "the tool's server to start its stream")
+
+	drain.Start(0)
+
+	err := waitForToolCall(t, done)
+	require.ErrorIs(t, err, shutdowndrain.ErrInterrupted)
+}
+
+func TestToolProxy_Do_CompletedCallIsNotInterrupted(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	t.Cleanup(upstream.Close)
+
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+	recorder := httptest.NewRecorder()
+
+	err := proxy.Do(t.Context(), recorder, bytes.NewReader(emptyToolCallBody(t)), emptyToolCallEnv(), newShutdownTestHTTPPlan(upstream.URL), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+	drain.Start(0)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"ok":true}`, recorder.Body.String())
+}
+
+// heldPlatformExecutor runs a platform tool that waits for the test to
+// release it, recording whether its context was cancelled meanwhile.
+type heldPlatformExecutor struct {
+	entered  chan struct{}
+	release  chan struct{}
+	ctxError error
+}
+
+func (e *heldPlatformExecutor) ExecuteTool(ctx context.Context, _ *ToolCallPlan, _ toolconfig.ToolCallEnv, _ io.Reader) (*PlatformResult, error) {
+	close(e.entered)
+	<-e.release
+	e.ctxError = ctx.Err()
+
+	return &PlatformResult{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{"ok":true}`)}, nil
+}
+
+func TestToolProxy_Do_ShutdownLeavesPlatformToolsRunning(t *testing.T) {
+	t.Parallel()
+
+	executor := &heldPlatformExecutor{entered: make(chan struct{}), release: make(chan struct{}), ctxError: nil}
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, executor)
+
+	descriptor := newTestToolDescriptor()
+	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")
+	plan := NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{SourceSlug: "logs", InputSchema: nil})
+
+	done := runToolCall(t, proxy, plan)
+	waitForSignal(t, executor.entered, "the platform tool to start")
+
+	// Interrupt, then give the drain's callbacks time to run before the tool
+	// finishes; an interruptible call would have its context cancelled here.
+	drain.Start(0)
+	interruptRan := make(chan struct{})
+	defer drain.AfterInterrupt(func() { close(interruptRan) })()
+	waitForSignal(t, interruptRan, "the interrupt deadline to pass")
+	close(executor.release)
+
+	require.NoError(t, waitForToolCall(t, done))
+	require.NoError(t, executor.ctxError, "a platform tool runs in process and must not be interrupted")
+}

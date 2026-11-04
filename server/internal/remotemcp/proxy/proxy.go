@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -219,9 +220,11 @@ type Proxy struct {
 
 	// Drain ends streams that only carry server-initiated messages when the
 	// server starts shutting down: the standalone GET stream and the
-	// 2026-07-28 subscriptions/listen stream. Nil leaves them open until they
-	// end on their own.
-	Drain *Drain
+	// 2026-07-28 subscriptions/listen stream. POST streams end as soon as
+	// their response has been relayed, and requests still waiting on the
+	// remote MCP server at the interrupt deadline are answered with a
+	// JSON-RPC error. Nil leaves streams open until they end on their own.
+	Drain *shutdowndrain.Drain
 
 	// StreamingTimeout is the per-event idle bound applied to streaming
 	// response bodies. The clock resets on every successful Read from
@@ -537,7 +540,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		// nothing on it says which request a reply answers, so assume any
 		// attached filter shaped it.
 		label := p.resolveCacheLabel(r, len(p.ToolsListResponseInterceptors) > 0 || len(p.ResourcesListResponseInterceptors) > 0)
-		stopDrain := p.Drain.afterStart(func() { drainStream(upstreamResp.Body) })
+		stopDrain := p.Drain.AfterStart(func() { drainStream(upstreamResp.Body) })
 		defer stopDrain()
 		age := p.streamAge(start)
 		stopAge := age.afterDeadline(func() { rotateStream(upstreamResp.Body) })
@@ -836,16 +839,16 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	listen := jsonrpcMethod == mcpversions.MethodSubscriptionsListen && userReqID.IsValid()
 
 	// The upstream call runs under forwardCtx so the shutdown interrupt can
-	// abandon it, with errShutdownInterrupt as the cause, while ctx stays live
+	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
 	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
-		stopInterrupt := p.Drain.afterInterrupt(func() {
+		stopInterrupt := p.Drain.AfterInterrupt(func() {
 			if !relay.responseRelayed.Load() {
-				cancelForward(errShutdownInterrupt)
+				cancelForward(shutdowndrain.ErrInterrupted)
 			}
 		})
 		defer stopInterrupt()
@@ -853,7 +856,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// answerInterrupted ends a request the drain interrupted before any
 	// response header was written.
 	answerInterrupted := func(upstreamResp *http.Response) error {
-		failure = oops.E(oops.CodeUnavailable, errShutdownInterrupt, "interrupted by server shutdown")
+		failure = oops.E(oops.CodeUnavailable, shutdowndrain.ErrInterrupted, "interrupted by server shutdown")
 		observation.finish("incomplete")
 		p.logInterrupted(ctx, jsonrpcMethod, false)
 		responseBytes = p.writeInterruptedResponse(ctx, w, span, userReqID, jsonrpcMethod)
@@ -876,7 +879,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
 			return nil
 		}
-		if forwardInterrupted(forwardCtx) {
+		if shutdowndrain.Interrupted(forwardCtx) {
 			return answerInterrupted(nil)
 		}
 		return err
@@ -919,7 +922,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if isEventStream(upstreamResp.Header) {
 		// A listen stream ends as soon as the drain starts; any other stream
 		// ends then only if its response was already relayed.
-		stopDrain := p.Drain.afterStart(func() {
+		stopDrain := p.Drain.AfterStart(func() {
 			if listen || relay.responseRelayed.Load() {
 				drainStream(upstreamResp.Body)
 			}
@@ -940,7 +943,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes = relay.bytes
 		responseRelayed := relay.responseRelayed.Load()
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
-		if forwardInterrupted(forwardCtx) {
+		if shutdowndrain.Interrupted(forwardCtx) {
 			// The interrupt only fires before the response is relayed, but the
 			// response may still have been relayed while it was firing; the
 			// client has its answer then, so the stream simply closed.
@@ -982,7 +985,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			}
 			return nil
 		case StreamEndShutdownInterrupted:
-			failure = oops.E(oops.CodeUnavailable, errShutdownInterrupt, "interrupted by server shutdown")
+			failure = oops.E(oops.CodeUnavailable, shutdowndrain.ErrInterrupted, "interrupted by server shutdown")
 			observation.finish("incomplete")
 			p.logInterrupted(ctx, jsonrpcMethod, relay.resumable)
 			n, writeErr := writeInterruptedEvent(w, userReqID, jsonrpcMethod)
@@ -1038,7 +1041,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
-	if err != nil && forwardInterrupted(forwardCtx) {
+	if err != nil && shutdowndrain.Interrupted(forwardCtx) {
 		return answerInterrupted(upstreamResp)
 	}
 	switch {
@@ -1723,9 +1726,9 @@ type sseRelay struct {
 // and, once the drain has started or the stream has passed its maximum age,
 // ends the upstream stream: the request is complete, so there is nothing
 // left to wait for.
-func (r *sseRelay) markResponseRelayed(drain *Drain, body io.ReadCloser) {
+func (r *sseRelay) markResponseRelayed(drain *shutdowndrain.Drain, body io.ReadCloser) {
 	r.responseRelayed.Store(true)
-	if drain.isStarted() {
+	if drain.Started() {
 		drainStream(body)
 		return
 	}

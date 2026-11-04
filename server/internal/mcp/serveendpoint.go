@@ -926,13 +926,14 @@ func (s *Service) remoteBackendProxyBuilder(
 	}, nil
 }
 
-// StartDrain starts the shutdown drain for relayed remote and tunneled MCP
-// traffic: streams that only carry server-initiated messages end now, so
-// their clients reconnect to a replica that is still serving, and requests
-// still waiting on a remote MCP server after interruptAfter are answered with
-// a JSON-RPC error. Call it when the server starts shutting down, before
-// waiting for in-flight requests.
+// StartDrain starts the shutdown drain. Relayed remote and tunneled streams
+// that only carry server-initiated messages end now, so their clients
+// reconnect to a replica that is still serving. Requests still waiting after
+// interruptAfter on a remote MCP server, or on a tool call or resource read
+// the gateway runs itself, are answered with a JSON-RPC error. Call it when
+// the server starts shutting down, before waiting for in-flight requests.
 func (s *Service) StartDrain(interruptAfter time.Duration) {
+	s.shutdownDrain.Start(interruptAfter)
 	if s.remoteProxyManager != nil {
 		s.remoteProxyManager.StartDrain(interruptAfter)
 	}

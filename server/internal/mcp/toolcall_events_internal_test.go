@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 // publishedToolCallRecord publishes record for call and returns what reached
@@ -124,6 +126,18 @@ func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {
 	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusForbidden, false, failure))
 	require.Equal(t, string(oops.CodeForbidden), recordStringAttribute(record, "error.type"))
 	require.Equal(t, "blocked by policy", recordStringAttribute(record, "error.message"), "the client's message, never the cause")
+}
+
+func TestToolCallRecordNamesAShutdownInterrupt(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-6", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
+	failure := oops.E(oops.CodeUnavailable, fmt.Errorf("%w: execute request: context canceled", shutdowndrain.ErrInterrupted), "interrupted by server shutdown")
+
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusServiceUnavailable, false, failure))
+	require.Equal(t, string(oops.CodeUnavailable), recordStringAttribute(record, "error.type"))
+	require.Equal(t, "interrupted by server shutdown", recordStringAttribute(record, "error.message"))
+	require.Equal(t, "server_shutdown", recordStringAttribute(record, "gram.tool_call.interrupt_reason"), "a deploy, not the tool, ended the call")
 }
 
 func TestToolCallRecordFollowsAPassthroughResultsOwnVerdict(t *testing.T) {
