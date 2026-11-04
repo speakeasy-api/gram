@@ -9,9 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -200,6 +209,255 @@ func TestListToolUsageTraces_ClassifiesHookObservedGateway(t *testing.T) {
 	rawFiltered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query, MetaMcpServerIds: []string{uuid.NewString()}})
 	require.NoError(t, err)
 	require.Empty(t, rawFiltered.Traces)
+}
+
+// A member's calls are logged in the member's project, whichever gateway
+// routed them, so a gateway in another project of the organization, an agent
+// gateway, and the organization gateway are all named; an id no gateway of the
+// organization derives reads as unknown rather than as the raw id. Each named
+// gateway also says where its page is, so the dashboard can link to it.
+func TestListToolUsageTraces_NamesGatewaysAcrossTheOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	otherGateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      ti.orgID,
+		ProjectID:           otherProject.ID,
+		Name:                "Other Project Gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
+	})
+	require.NoError(t, err)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support bot",
+	})
+	require.NoError(t, err)
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+
+	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member", slug: "member-" + uuid.NewString()[:8]})
+	want := map[string]gatewayRef{
+		otherGateway.ID.String():                                        {name: "Other Project Gateway", kind: "project", projectSlug: otherProject.Slug},
+		agentgateway.GatewayID(agent.ID).String():                       {name: "Support bot gateway", kind: "agent", agentID: agent.ID.String()},
+		orggateway.GatewayID(ti.orgID).String():                         {name: organization.Name, kind: "organization"},
+		orggateway.ProjectGatewayID(ti.orgID, otherProject.ID).String(): {name: "Other project", kind: "organization", projectSlug: otherProject.Slug},
+		uuid.NewString():                                                {name: "Unknown gateway"},
+	}
+	for gatewayID := range want {
+		logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-time.Minute)})
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == len(want)
+	})
+	got := map[string]gatewayRef{}
+	for _, trace := range result.Traces {
+		require.NotNil(t, trace.ViaMetaMcpServerID)
+		require.NotNil(t, trace.ViaMetaMcpServerName)
+		got[*trace.ViaMetaMcpServerID] = gatewayRef{
+			name:        *trace.ViaMetaMcpServerName,
+			kind:        conv.PtrValOr(trace.ViaMetaMcpServerKind, ""),
+			projectSlug: conv.PtrValOr(trace.ViaMetaMcpServerProjectSlug, ""),
+			agentID:     conv.PtrValOr(trace.ViaMetaMcpServerAgentID, ""),
+		}
+	}
+	require.Equal(t, want, got)
+
+	// The gateway filter offers every gateway that resolves, and not an id
+	// a client could have stamped on its own.
+	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"gateways"}})
+	require.NoError(t, err)
+	offered := map[string]string{}
+	for _, option := range options.Gateways {
+		offered[option.MetaMcpServerID] = option.Name
+	}
+	requireGatewaysOffered(t, options, want)
+}
+
+// A deleted gateway keeps its name, and so does the organization gateway of a
+// deleted project, but neither has a page left to link to.
+func TestListToolUsageTraces_NamesDeletedGatewaysWithoutLinks(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC()
+
+	deletedGateway := createGateway(t, ctx, ti, "Retired Gateway")
+	_, err := metamcprepo.New(ti.conn).DeleteMetaMCPServer(ctx, metamcprepo.DeleteMetaMCPServerParams{
+		ID:             deletedGateway.ID,
+		OrganizationID: ti.orgID,
+		ProjectID:      uuid.MustParse(ti.projectID),
+	})
+	require.NoError(t, err)
+
+	deletedProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Closed project", Slug: "closed-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	gatewayInDeletedProject, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      ti.orgID,
+		ProjectID:           deletedProject.ID,
+		Name:                "Closed Project Gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
+	})
+	require.NoError(t, err)
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, deletedProject.ID)
+	require.NoError(t, err)
+
+	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member", slug: "member-" + uuid.NewString()[:8]})
+	want := map[string]gatewayRef{
+		deletedGateway.ID.String():                                        {name: "Retired Gateway"},
+		gatewayInDeletedProject.ID.String():                               {name: "Closed Project Gateway"},
+		orggateway.ProjectGatewayID(ti.orgID, deletedProject.ID).String(): {name: "Closed project"},
+	}
+	result, options := listGatewayTraces(t, ctx, ti, member, want, now)
+	require.Equal(t, want, result)
+	requireGatewaysOffered(t, options, want)
+}
+
+// The telemetry endpoints check only the project being viewed, so a gateway
+// in a project the caller may not read, or serving an agent they may not
+// read, is neither named nor placed. The organization gateway is named after
+// the organization they belong to, and an agent's owner sees its gateway
+// without an agent grant.
+func TestListToolUsageTraces_HidesGatewaysTheCallerCannotRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+
+	currentProject, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, uuid.MustParse(ti.projectID))
+	require.NoError(t, err)
+	ownGateway := createGateway(t, ctx, ti, "Own Gateway")
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Private project", Slug: "private-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	otherGateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      ti.orgID,
+		ProjectID:           otherProject.ID,
+		Name:                "Private Project Gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
+	})
+	require.NoError(t, err)
+	hiddenAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Hidden bot",
+	})
+	require.NoError(t, err)
+	grantedAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Granted bot",
+	})
+	require.NoError(t, err)
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+
+	// Only the viewed project and one agent are readable.
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeLogRead, ti.projectID),
+		authz.NewGrant(authz.ScopeProjectRead, ti.projectID),
+		authz.NewGrant(authz.ScopeAgentRead, grantedAgent.ID.String()),
+	)
+	// Someone other than the agents' owner is looking.
+	viewer := *authCtx
+	viewer.UserID = "viewer-" + uuid.NewString()[:8]
+	viewerCtx := contextvalues.SetAuthContext(ctx, &viewer)
+
+	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member", slug: "member-" + uuid.NewString()[:8]})
+	hidden := gatewayRef{name: "Gateway in another project"}
+	want := map[string]gatewayRef{
+		ownGateway.ID.String():   {name: "Own Gateway", kind: "project", projectSlug: currentProject.Slug},
+		otherGateway.ID.String(): hidden,
+		orggateway.ProjectGatewayID(ti.orgID, otherProject.ID).String(): hidden,
+		orggateway.GatewayID(ti.orgID).String():                         {name: organization.Name, kind: "organization"},
+		agentgateway.GatewayID(hiddenAgent.ID).String():                 hidden,
+		agentgateway.GatewayID(grantedAgent.ID).String():                {name: "Granted bot gateway", kind: "agent", agentID: grantedAgent.ID.String()},
+	}
+	result, options := listGatewayTraces(t, viewerCtx, ti, member, want, now)
+	require.Equal(t, want, result)
+	requireGatewaysOffered(t, options, want)
+
+	// The owner sees their agent's gateway with no agent grant.
+	owner, _ := listGatewayTraces(t, ctx, ti, member, nil, now)
+	require.Equal(t, gatewayRef{name: "Hidden bot gateway", kind: "agent", agentID: hiddenAgent.ID.String()}, owner[agentgateway.GatewayID(hiddenAgent.ID).String()])
+}
+
+// listGatewayTraces logs one dispatch through each gateway in want (none when
+// want is nil) and returns what the traces and filter options say about them.
+func listGatewayTraces(t *testing.T, ctx context.Context, ti *testInstance, member tunneledMCPServerFixture, want map[string]gatewayRef, now time.Time) (map[string]gatewayRef, *gen.GetToolUsageFilterOptionsResult) {
+	t.Helper()
+
+	for gatewayID := range want {
+		logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member.mcpServerID.String(), sourceID: member.sourceID.String(), tool: "query", status: 200, at: now.Add(-time.Minute)})
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 50})
+	require.NoError(t, err)
+	got := map[string]gatewayRef{}
+	for _, trace := range result.Traces {
+		require.NotNil(t, trace.ViaMetaMcpServerID)
+		require.NotNil(t, trace.ViaMetaMcpServerName)
+		got[*trace.ViaMetaMcpServerID] = gatewayRef{
+			name:        *trace.ViaMetaMcpServerName,
+			kind:        conv.PtrValOr(trace.ViaMetaMcpServerKind, ""),
+			projectSlug: conv.PtrValOr(trace.ViaMetaMcpServerProjectSlug, ""),
+			agentID:     conv.PtrValOr(trace.ViaMetaMcpServerAgentID, ""),
+		}
+	}
+
+	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"gateways"}})
+	require.NoError(t, err)
+	return got, options
+}
+
+// requireGatewaysOffered checks the gateway filter offers every gateway that
+// resolves, under the name its traces carry, and not an id a client could
+// have stamped on its own.
+func requireGatewaysOffered(t *testing.T, options *gen.GetToolUsageFilterOptionsResult, want map[string]gatewayRef) {
+	t.Helper()
+
+	offered := map[string]string{}
+	for _, option := range options.Gateways {
+		offered[option.MetaMcpServerID] = option.Name
+	}
+	for gatewayID, gateway := range want {
+		if gateway.name == "Unknown gateway" {
+			require.NotContains(t, offered, gatewayID)
+			continue
+		}
+		require.Equal(t, gateway.name, offered[gatewayID])
+	}
+}
+
+// gatewayRef is what a trace says about the gateway that dispatched it.
+type gatewayRef struct {
+	name        string
+	kind        string
+	projectSlug string
+	agentID     string
 }
 
 func TestGetToolUsageSummary_ClassifiesAndFiltersGateway(t *testing.T) {

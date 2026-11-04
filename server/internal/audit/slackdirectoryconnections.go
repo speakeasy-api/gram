@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	ActionSlackDirectoryConnectionAuthorize  Action = "slack-directory-connection:authorize"
-	ActionSlackDirectoryConnectionDisconnect Action = "slack-directory-connection:disconnect"
-	ActionSlackDirectoryConnectionSync       Action = "slack-directory-connection:sync"
+	ActionSlackDirectoryConnectionAuthorize      Action = "slack-directory-connection:authorize"
+	ActionSlackDirectoryConnectionDisconnect     Action = "slack-directory-connection:disconnect"
+	ActionSlackDirectoryConnectionSync           Action = "slack-directory-connection:sync"
+	ActionSlackDirectoryConnectionDefaultProject Action = "slack-directory-connection:set-default-project"
 )
 
 type LogSlackDirectoryConnectionEvent struct {
@@ -31,6 +32,10 @@ func (l *Logger) LogSlackDirectoryConnectionAuthorize(ctx context.Context, dbtx 
 }
 func (l *Logger) LogSlackDirectoryConnectionDisconnect(ctx context.Context, dbtx repo.DBTX, event LogSlackDirectoryConnectionEvent) error {
 	return l.logSlackDirectoryConnection(ctx, dbtx, ActionSlackDirectoryConnectionDisconnect, event, nil)
+}
+
+func (l *Logger) LogSlackDirectoryConnectionDefaultProject(ctx context.Context, dbtx repo.DBTX, event LogSlackDirectoryConnectionEvent) error {
+	return l.logSlackDirectoryConnection(ctx, dbtx, ActionSlackDirectoryConnectionDefaultProject, event, nil)
 }
 
 type SlackDirectorySyncSummary struct {

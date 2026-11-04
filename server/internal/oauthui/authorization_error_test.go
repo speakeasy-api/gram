@@ -217,6 +217,32 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 	}
 }
 
+func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{"named provider", "auth.example.com", "auth.example.com isn't available right now"},
+		{"unknown provider", "", "The service this connection uses isn't available right now"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonProviderUnavailable, ProviderName: tc.provider, ClientName: "Example Client", ServerName: "example-server"}))
+			page := strings.Join(strings.Fields(response.Body.String()), " ")
+			require.Equal(t, http.StatusServiceUnavailable, response.Code)
+			require.Contains(t, page, tc.want)
+			require.Contains(t, page, "Try connecting again shortly")
+			require.Contains(t, page, "This isn't something you did")
+			require.NotContains(t, page, "problem on our side")
+			require.NotContains(t, page, "isn't allowed")
+		})
+	}
+}
+
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -262,6 +288,31 @@ func TestAuthorizationErrorRejectsUnsafeRecoveryLink(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, response.Code)
 			require.NotContains(t, response.Body.String(), "href=")
 			require.Empty(t, response.Header().Get("Location"))
+		})
+	}
+}
+
+// Every failure page leads with what happened, in normal text with the names picked out.
+func TestAuthorizationErrorLeadsWithWhatHappened(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		page oauthui.AuthorizationError
+	}{
+		{"connection", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", ClientName: "Client", ServerName: "Server"}},
+		{"provider outage", oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonProviderUnavailable, ClientName: "Client", ServerName: "Server"}},
+		{"setup", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Setup: true}},
+		{"approval", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Approval: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, tc.page))
+			require.Contains(t, response.Body.String(), `<p class="text-sm text-foreground" data-what-happened>`)
+			if tc.page.ClientName != "" {
+				require.Contains(t, response.Body.String(), `<span class="text-foreground font-medium">Client</span>`)
+			}
 		})
 	}
 }

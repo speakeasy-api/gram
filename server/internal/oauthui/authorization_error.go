@@ -110,6 +110,9 @@ type AuthorizationError struct {
 	// ServerName names the MCP server the client was connecting to, as on the
 	// consent page. Empty when the request did not identify one.
 	ServerName string
+
+	// ProviderName names the sign-in provider on ReasonProviderUnavailable, when known.
+	ProviderName string
 }
 
 // Reason describes what the person can do about a browser failure.
@@ -132,6 +135,8 @@ const (
 	ReasonInvalidLink Reason = "invalid-link"
 	// ReasonUnavailable identifies a dependency failure independently of HTTP status.
 	ReasonUnavailable Reason = "unavailable"
+	// ReasonProviderUnavailable identifies a sign-in provider that is down or rate limiting.
+	ReasonProviderUnavailable Reason = "provider-unavailable"
 )
 
 // errorKind groups OAuth error codes by who can act on them, which is what
@@ -205,6 +210,9 @@ type authorizationErrorView struct {
 	ClientID       string
 	ClientIDOrigin string
 
+	// ProviderName mirrors AuthorizationError.
+	ProviderName string
+
 	// Code and Description are the OAuth error, shown under Technical details.
 	Code        string
 	Description string
@@ -247,6 +255,7 @@ func technicalDetailsText(view authorizationErrorView) string {
 		{"MCP client ID", view.ClientID},
 		{"Client verified from", view.ClientIDOrigin},
 		{"MCP server", view.ServerName},
+		{"Sign-in provider", view.ProviderName},
 		{"Returns to", view.Destination},
 	} {
 		if field.value != "" {
@@ -329,6 +338,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		ServerName:     page.ServerName,
 		ClientID:       page.ClientID,
 		ClientIDOrigin: page.ClientIDOrigin,
+		ProviderName:   page.ProviderName,
 		Code:           page.Code,
 		Description:    page.Description,
 		// Native application schemes require template.URL after scheme validation;

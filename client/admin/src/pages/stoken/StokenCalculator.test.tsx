@@ -91,6 +91,16 @@ describe("stoken calculator route", () => {
     expect(router.state.location.pathname).toBe("/stoken-calculator");
   });
 
+  it("renders method notes without nested paragraphs", async () => {
+    await renderCalculator();
+
+    const methodNotes = screen.getByRole("region", {
+      name: "How this estimate works",
+    });
+    expect(within(methodNotes).getByText("Anthropic example")).not.toBeNull();
+    expect(methodNotes.querySelector("p p")).toBeNull();
+  });
+
   it("names itself in the breadcrumb", async () => {
     await renderCalculator();
 

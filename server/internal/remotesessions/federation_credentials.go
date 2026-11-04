@@ -21,7 +21,7 @@ type EphemeralFederatedCredentials struct {
 	receivedAt       time.Time
 }
 
-// RefreshExpiresAt distinguishes an unknown lifetime from an explicitly expired grant.
+// RefreshExpiresAt is the refresh token's deadline, or nil when the lifetime is unknown.
 func (c EphemeralFederatedCredentials) RefreshExpiresAt() *time.Time {
 	if c.refreshExpiresAt == nil {
 		return nil

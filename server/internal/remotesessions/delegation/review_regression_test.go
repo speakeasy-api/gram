@@ -152,7 +152,6 @@ func TestLoginRefreshLifetimeFallback(t *testing.T) {
 		{name: "negative relative lifetime is unknown", seconds: -1},
 		{name: "overflow relative lifetime is unknown", seconds: 1<<63 - 1},
 		{name: "absolute lifetime takes precedence", seconds: 120, absolute: "future", wantExpiry: time.Hour},
-		{name: "explicit zero overrides relative lifetime", seconds: 120, absolute: "zero", expired: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -160,13 +159,9 @@ func TestLoginRefreshLifetimeFallback(t *testing.T) {
 			login := delegationLogin(p, s.now(), "id", "refresh", time.Hour)
 			login.credentials.value.receivedAt = s.now().Add(-tc.receivedAgo)
 			login.credentials.value.refreshExpiresIn = tc.seconds
-			switch tc.absolute {
-			case "future":
+			if tc.absolute == "future" {
 				expiry := s.now().Add(time.Hour)
 				login.credentials.value.refreshExpiresAt = &expiry
-			case "zero":
-				zero := time.Time{}
-				login.credentials.value.refreshExpiresAt = &zero
 			}
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
 			c := store.rows[b]

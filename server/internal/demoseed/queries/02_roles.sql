@@ -291,13 +291,13 @@ INSERT INTO device_agent_state_reports
    generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
    tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
    speakeasy_version, os, arch, auto_update, update_channel)
-VALUES (@organization_id, @email, @serial_number::text, @hostname::text, 1,
+VALUES (@organization_id, @email, NULLIF(@serial_number::text, ''), @hostname::text, 1,
         now() - (@reported_ago::text)::interval,
         now() - (@reported_ago::text)::interval,
         @applied_etag::text, now() - (@applied_ago::text)::interval, FALSE,
         @tools::jsonb, @degraded_tool_count::integer,
         now() - interval '9 days', @speakeasyd_version::text,
-        @speakeasyd_version::text, 'darwin', 'arm64', 'automatic', 'stable');
+        @speakeasyd_version::text, @os::text, @arch::text, 'automatic', 'stable');
 
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;
