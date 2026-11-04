@@ -2,6 +2,7 @@ package tunnelrouting
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,14 @@ import (
 // callers should surface this as an upstream-availability problem rather than
 // a platform fault.
 var ErrNoTunnelRoute = errors.New("tunnel has no live route")
+
+// routeCleanupError marks a failed cleanup as our store failing, unless the caller's own context ended it.
+func routeCleanupError(action string, err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return fmt.Errorf("%s: %w: %w", action, ErrRouteStoreUnavailable, err)
+}
 
 // ErrRouteStoreUnavailable marks a failure reading our own route store, not the tunnel or its provider.
 var ErrRouteStoreUnavailable = errors.New("tunnel route store unavailable")
@@ -141,7 +150,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
 			}
 			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish unreachable tunnel route: %w: %w", ErrRouteStoreUnavailable, uerr))
+				unpublishErr = errors.Join(unpublishErr, routeCleanupError("unpublish unreachable tunnel route", uerr))
 			}
 			exclude[addr] = struct{}{}
 			dialErr = errors.Join(dialErr, fmt.Errorf("forward request via tunnel: %w", err))
@@ -155,7 +164,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		case wire.TunnelErrorNoLiveSession:
 			drainAndClose(resp)
 			if err := c.routes.Unpublish(ctx, tunnelID, addr); err != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w: %w", ErrRouteStoreUnavailable, err))
+				unpublishErr = errors.Join(unpublishErr, routeCleanupError("unpublish stale tunnel route", err))
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:

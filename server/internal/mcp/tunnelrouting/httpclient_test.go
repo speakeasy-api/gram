@@ -1,6 +1,7 @@
 package tunnelrouting
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -317,6 +318,20 @@ func TestHTTPClientUnpublishFailureNamesTheRouteStore(t *testing.T) {
 		require.Nil(t, resp, name)
 		require.ErrorIs(t, err, ErrRouteStoreUnavailable, name)
 		require.Equal(t, 1, routes.calls, name)
+	}
+
+	// The caller's own context ending the cleanup says nothing about the store.
+	for name, gateway := range map[string]string{"unreachable": deadURL, "no live session": noSession.URL} {
+		for _, callerErr := range []error{context.Canceled, context.DeadlineExceeded} {
+			routeTable := route.NewRouteTable()
+			require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", gateway, time.Minute))
+			routes := &unpublishErrorStore{Store: routeTable, err: callerErr, calls: 0}
+
+			resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://as.customer.internal/oauth/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp, name)
+			require.ErrorIs(t, err, ErrNoTunnelRoute, name)
+			require.NotErrorIs(t, err, ErrRouteStoreUnavailable, name)
+		}
 	}
 }
 

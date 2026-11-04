@@ -142,6 +142,7 @@ func TestIssuerGatePrincipalCredentialOutageIsNotARejection(t *testing.T) {
 	}
 
 	// The caller's own deadline ran out: not an outage, and not a sign-in prompt either.
+	ti.service.SetAuthzEngine(ti.authzEngine)
 	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
 	w := httptest.NewRecorder()

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -233,6 +234,10 @@ func (c *Chainer) redeem(ctx context.Context, logger *slog.Logger, resourceAS to
 // classifyEndpointError maps a token endpoint failure to an outcome.
 // invalid_grant stays ambiguous: it does not prove expiry or missing trust.
 func classifyEndpointError(stage Stage, err error) Outcome {
+	// Our own route store failing is retryable, and nothing reached the provider.
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return newOutcome(stage, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
 	failure, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
 	if !ok {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)

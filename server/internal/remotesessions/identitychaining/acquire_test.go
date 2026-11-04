@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -485,4 +486,14 @@ func TestAcquisitionFailure_LogsProviderDescriptionOnly(t *testing.T) {
 	wire, err := json.Marshal(attemptResult{Outcome: outcome, FinishedAt: time.Time{}})
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "No seat", "serialized outcomes never carry provider text")
+}
+
+// A route store outage stays retryable here, and isn't read as a bad provider answer.
+func TestClassifyEndpointError_RouteStoreOutageIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	outcome := classifyEndpointError(StageRedemption, fmt.Errorf("post token: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis down")))
+	require.Equal(t, ReasonTransientFailure, outcome.Reason)
+	require.True(t, outcome.Retryable)
+	require.False(t, outcome.Submitted, "nothing reached the provider")
 }
