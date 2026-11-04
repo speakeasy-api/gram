@@ -468,8 +468,8 @@ internal/platformmcp/authorization.go,*LiveOrgAdminAuthorizer.PrepareExternalCon
 internal/platformmcp/chat_search.go,*ChatSearchService.authorize,check,ChatReadCheck,,Require,2,X3 AIS-875
 internal/platformmcp/chat_search.go,*ChatSearchService.authorize,engine,ShouldEnforce,,,1,X3 AIS-875
 internal/platformmcp/chat_search.go,*ChatSearchService.authorize,loader,GrantsFromContext,,,1,X3 AIS-875
-internal/platformmcp/connection_mutation.go,*MCPConnectionMutationService.validateInput,check,Check,ScopeMCPWrite,Require,1,X3 AIS-875
 internal/platformmcp/connection_mutation.go,*MCPConnectionMutationService.validateInput,check,Check,ScopeOrgAdmin,Require,1,X3 AIS-875
+internal/platformmcp/connection_mutation.go,*MCPConnectionMutationService.validateInput,check,MCPCheck,ScopeMCPWrite,Require,1,X3 AIS-875
 internal/platformmcp/connection_settings.go,*MCPConnectionSettingsService.get,check,Check,ScopeOrgAdmin,GrantsAuthorize,1,X3 AIS-875
 internal/platformmcp/connection_settings.go,*MCPConnectionSettingsService.get,check,MCPCheck,ScopeMCPRead,GrantsAuthorize,1,X3 AIS-875
 internal/platformmcp/connection_settings.go,*MCPConnectionSettingsService.get,evaluator,GrantsAuthorize,,,2,X3 AIS-875
