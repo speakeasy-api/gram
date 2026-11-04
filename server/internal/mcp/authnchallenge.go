@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -1310,6 +1309,7 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogToolsetMCPSlug(endpoint.Slug),
 		attr.SlogMcpURL(authentication.mcpURL),
 		attr.SlogOAuthFailureReason(reason),
+		attr.SlogUserSessionSubjectKind(string(authentication.subject.Kind)),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 }
@@ -1336,19 +1336,20 @@ func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w ht
 
 // subjectReauthorizesToReconnect reports a person at the client who can repair
 // a connection on the consent page. Enforced auth clients can offer an anonymous
-// subject no personal connection, so it is not told to reauthorize here; the
-// auth client resolver still decides its refresh.
+// subject no personal connection, so the request is not told to reauthorize.
+// The auth client resolver still decides its refresh and may refuse it, which
+// sends the client to reauthorize anyway.
 func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizationID string, subject urn.SessionSubject) bool {
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		return true
 	case urn.SessionSubjectKindAnonymous:
-		mode, err := s.authClientMode(ctx, organizationID)
+		enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
 		if err != nil {
-			s.logger.WarnContext(ctx, "read auth client mode for an anonymous reconnect; not asking it to reauthorize", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "read auth enforcement for an anonymous reconnect; not asking it to reauthorize", attr.SlogError(err))
 			return false
 		}
-		return mode != feature.AuthClientResolverEnforced
+		return !enforced
 	default:
 		return false
 	}
