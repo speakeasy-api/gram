@@ -179,8 +179,8 @@ func (o stubMemberOutcome) tunnelError() string { return o.tunnelErr }
 
 func (o stubMemberOutcome) retryAfter(time.Time) time.Duration { return 0 }
 
-// The SDK reports busy and down members as a JSON-RPC error of its own. Neither its text nor the
-// missing row may survive, whichever way the failure arrives.
+// Preserve the SDK's JSON-RPC error text while recording the outcome code from the
+// upstream HTTP status and whether the call was sent.
 func TestMemberClientFailure_SDKRejection(t *testing.T) {
 	t.Parallel()
 

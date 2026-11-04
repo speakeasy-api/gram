@@ -264,3 +264,49 @@ func TestRenewal_PostClaimSetupRecordsExactlyOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestRenewal_PrePOSTStoreFaults(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"reread failure", "mark failure", "superseded claim", "mark conflict"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			rec := mcpconnectionattemptstest.New(t)
+			s.connections = rec.Recorder
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			switch name {
+			case "reread failure":
+				s.store = &delegationRereadHookStore{delegationStore: store, beforeReread: func() {}, rereadError: errors.New("database unavailable")}
+			case "mark failure":
+				store.attemptError = errors.New("database unavailable")
+			case "superseded claim":
+				s.store = &delegationRereadHookStore{delegationStore: store, beforeReread: func() {
+					c := store.rows[b]
+					c.claim = uuid.New()
+					c.generation++
+					store.rows[b] = c
+				}}
+			case "mark conflict":
+				store.attemptConflict = true
+			}
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				t.Error("pre-POST failure must not refresh")
+				return nil, ErrTemporary
+			}
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary)
+			if name == "superseded claim" || name == "mark conflict" {
+				rec.RequireNothing()
+			} else {
+				row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable)
+				require.Len(t, rec.Rows(), 1)
+				require.Equal(t, b.IssuerID.String(), row.RemoteSessionIssuerID)
+				require.Equal(t, b.ClientID.String(), row.RemoteSessionClientID)
+			}
+			if name != "superseded claim" {
+				require.Equal(t, uuid.Nil, store.rows[b].claim)
+			}
+			require.Equal(t, "old-refresh", delegationPlain(t, s, store.rows[b].refresh))
+		})
+	}
+}

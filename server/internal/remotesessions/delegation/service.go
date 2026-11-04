@@ -589,7 +589,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}()
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
-	if err != nil || c.claim != claim {
+	if err != nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		return Assertion{}, ErrTemporary
+	}
+	if c.claim != claim {
 		return Assertion{}, ErrTemporary
 	}
 	// Load full discovery and credentials only after obtaining durable ownership.
@@ -616,7 +620,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
-	if err != nil || !marked {
+	if err != nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		return Assertion{}, ErrTemporary
+	}
+	if !marked {
 		return Assertion{}, ErrTemporary
 	}
 	refreshStarted = true
