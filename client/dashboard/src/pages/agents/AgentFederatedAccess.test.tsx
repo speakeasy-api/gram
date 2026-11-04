@@ -236,7 +236,7 @@ it("renders one policy control per issuer while preserving every subject row", (
 it("counts an assistant's running sandboxes on one row instead of listing each", () => {
   const issuer: WorkloadIssuer = {
     id: "iss_kit",
-    name: "kit-runtime-122e3a27241b5dded18087937b188cbe",
+    name: "kit-runtime-00000000000000000000000000000000",
     issuer: "https://container.googleapis.com/v1/example",
     jwksUri: "https://container.googleapis.com/v1/example/openid/jwks",
     description: "",
