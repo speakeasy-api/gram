@@ -51,11 +51,12 @@ func (c *Client) OrganizationAdministratorEmails(ctx context.Context, db repo.DB
 		return resolveOrganizationAudience(ctx, db, organizationID, registryAllows)
 	case MigrationModeShadow:
 		var engineAnswers, registryAnswers []bool
-		var registryErr error
+		var engineErr, registryErr error
 		var registryTime time.Duration
 		emails, err := resolveOrganizationAudience(ctx, db, organizationID, func(userID string, grants []Grant) (bool, error) {
 			allowed, err := engineAllows(grants)
 			if err != nil {
+				engineErr = err
 				return false, err
 			}
 			start := time.Now()
@@ -72,7 +73,7 @@ func (c *Client) OrganizationAdministratorEmails(ctx context.Context, db repo.DB
 		// nothing, so it records nothing.
 		if err == nil || len(engineAnswers) > 0 {
 			c.shadow.recordAudience(ctx, organizationID, rt, []Operation{op},
-				shadowAnswer{allowed: engineAnswers, err: nil},
+				shadowAnswer{allowed: engineAnswers, err: engineErr},
 				shadowAnswer{allowed: registryAnswers, err: registryErr},
 				registryTime)
 		}
