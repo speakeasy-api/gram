@@ -171,10 +171,14 @@ Success receipts are never cleared by retrying another attempt.
 Guide issue reconciliation scans at most 100 pages of 100 issues, events or open
 PRs, and also obeys the attempt deadline. Reaching a history limit blocks creation to
 avoid duplicates; large repositories may require indexed reconciliation.
-GitHub lists at most 3000 changed files per PR, so a larger PR only counts as
-changing a guide when one of the listed files is in that guide's folder. The
-worker caches each open PR's changed guide folders by head commit, so later
-checks list files only for new or updated PRs.
+The changed-files check is the exception. GitHub lists at most 3000 changed
+files per PR, and a larger PR only counts as changing a guide when one of the
+listed files is in that guide's folder. An open guide PR whose folder only
+appears after the first 3000 files is missed, so a duplicate request can be
+filed. That trade-off keeps one oversized, unrelated PR from blocking every new
+guide request while it stays open. The worker caches each open PR's changed
+guide folders by head commit, so later checks list files only for new or
+updated PRs.
 An issue with the same marker but a different body requires manual reconciliation.
 Preserve the original body and put factory questions and answers in comments.
 
