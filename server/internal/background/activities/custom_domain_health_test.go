@@ -311,6 +311,9 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	require.Equal(t, "https://app.example.com/"+organizationID+"/domains", sent[0].DataVariables["domain_link"])
 }
 
+// TestCustomDomainNotifyOrgAdminsLinksToOrganizationDefaultHost also covers
+// a worker built without an authorization client, which resolves recipients
+// with the engine.
 func TestCustomDomainNotifyOrgAdminsLinksToOrganizationDefaultHost(t *testing.T) {
 	t.Parallel()
 
@@ -326,7 +329,7 @@ func TestCustomDomainNotifyOrgAdminsLinksToOrganizationDefaultHost(t *testing.T)
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"custom_domain_unhealthy": "domain-unhealthy-test-id",
-	}), true), customDomainTestOrgHosts(t), nil, audienceParityClient(t, conn))
+	}), true), customDomainTestOrgHosts(t), nil, nil)
 
 	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
 		CustomDomainID: uuid.New(),
