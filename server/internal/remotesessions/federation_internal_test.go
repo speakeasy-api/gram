@@ -282,10 +282,15 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 	for _, signer := range []TokenEndpointAssertionSigner{nil, unavailableTokenEndpointAssertionSigner{}} {
 		m := &ChallengeManager{assertions: signer}
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
-		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedSignerUnavailable)
+		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedSigning)
+		_, refreshErr := m.RefreshFederatedIdentity(t.Context(), p, "refresh", "subject", "")
+		require.ErrorIs(t, refreshErr, ErrFederatedSigning)
+		var setup *FederatedRefreshError
+		require.ErrorAs(t, refreshErr, &setup)
+		require.Equal(t, FederatedRefreshSetupRetryable, setup.Kind)
 		_, err := NewTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
 		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedUnavailable)
-		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSignerUnavailable)
+		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSigning)
 	}
 	calls := 0
 	signer := federatedAssertionSignerFunc(func(context.Context, ClientAssertionRequest) (string, error) { calls++; return "signed-assertion", nil })

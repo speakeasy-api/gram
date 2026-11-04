@@ -265,5 +265,10 @@ func federatedRefreshSetupError(err error) error {
 	if errors.Is(err, ErrFederatedUnavailable) {
 		kind = FederatedRefreshSetupRetryable
 	}
-	return &FederatedRefreshError{Kind: kind}
+	failure := &FederatedRefreshError{Kind: kind}
+	if errors.Is(err, ErrFederatedSigning) {
+		// Preserve only the safe owner marker, never a signing service's raw error.
+		return errors.Join(failure, ErrFederatedSigning)
+	}
+	return failure
 }
