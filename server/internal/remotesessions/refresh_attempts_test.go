@@ -169,6 +169,7 @@ func TestRefreshNow_RecordsRecoveredPanic(t *testing.T) {
 	t.Parallel()
 	for _, trigger := range []remotesessionmetrics.RefreshTrigger{remotesessionmetrics.RefreshTriggerRequest, remotesessionmetrics.RefreshTriggerManual, remotesessionmetrics.RefreshTriggerScheduled} {
 		t.Run(string(trigger), func(t *testing.T) {
+			t.Parallel()
 			ctx, env := newSyntheticExpiryEnv(t, "refresh-panic", tokenAnswer(http.StatusOK, `{}`))
 			rec := mcpconnectionattemptstest.New(t)
 			refresher := env.newRefresher(testenv.NewMeterProvider(t), refreshPanicCache{Cache: cache.NoopCache})
