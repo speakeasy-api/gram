@@ -117,7 +117,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/plugins/assignments":                           ownerPL1,
 	"internal/plugins/roledelivery":                          ownerM6,
 	"internal/productfeatures":                               ownerO1,
-	"internal/projects":                                      ownerP1,
 	"internal/remotemcp":                                     ownerM4,
 	"internal/remotesessions":                                ownerG1,
 	"internal/resources":                                     ownerP3,

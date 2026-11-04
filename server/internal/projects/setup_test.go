@@ -89,17 +89,14 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := projects.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(
-			logger,
-			conn,
-
-			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient()),
+		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 
 		auditLogger,
 		nil,

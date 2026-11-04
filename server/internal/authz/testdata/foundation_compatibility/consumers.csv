@@ -598,15 +598,6 @@ internal/plugins/rotate_observability.go,*Service.RotateObservabilityCredential,
 internal/productfeatures/client.go,provisionSkillsSystemRoleGrantsTx,writer,PatchRoleGrantsTx,,,2,O1 AIS-837
 internal/productfeatures/impl.go,*Service.authorizeOrganization,check,Check,scope,,1,O1 AIS-837
 internal/productfeatures/impl.go,*Service.authorizeOrganization,engine,RequireUserOrganizationScope,,,1,O1 AIS-837
-internal/projects/impl.go,*Service.CreateProject,check,Check,ScopeOrgAdmin,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.DeleteProject,check,Check,ScopeOrgAdmin,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.GetProject,check,Check,ScopeProjectRead,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.ListAllowedOrigins,check,Check,ScopeProjectRead,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.ListProjects,check,Check,ScopeProjectRead,,1,P1 AIS-843
-internal/projects/impl.go,*Service.SetLogo,check,Check,ScopeProjectWrite,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.SetOrganizationWhitelist,check,Check,ScopeOrgAdmin,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.UpdateProject,check,Check,ScopeProjectWrite,Require,1,P1 AIS-843
-internal/projects/impl.go,*Service.UpsertAllowedOrigin,check,Check,ScopeProjectWrite,Require,1,P1 AIS-843
 internal/remotemcp/discoverprotectedresource.go,*Service.DiscoverProtectedResourceMetadata,check,Check,ScopeMCPWrite,Require,1,M4 AIS-866
 internal/remotemcp/impl.go,*Service.CreateServer,check,Check,ScopeMCPWrite,Require,1,M4 AIS-866
 internal/remotemcp/impl.go,*Service.CreateServerAndMcpServer,check,Check,ScopeMCPWrite,Require,1,M4 AIS-866
