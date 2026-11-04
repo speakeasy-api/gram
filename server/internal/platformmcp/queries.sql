@@ -2967,7 +2967,7 @@ ORDER BY server.id, server_membership.membership_id;
 -- same fail-closed treatment.
 
 -- name: ListOwnedChatSessionsForRecall :many
-SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
 FROM chats c
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -2979,7 +2979,7 @@ ORDER BY c.updated_at DESC
 LIMIT @row_limit;
 
 -- name: GetOwnedChatForRecall :one
-SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.cwd, c.updated_at, c.project_id
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = @chat_id
@@ -4050,6 +4050,7 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
        CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
        CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
@@ -4070,7 +4071,11 @@ WHERE m.project_id = @project_id::uuid
        OR (octet_length(m.content) <= 131072 AND m.content ILIKE @pattern ESCAPE '\')
        OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE @pattern ESCAPE '\')
        OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE @pattern ESCAPE '\')
-       OR c.title ILIKE @pattern ESCAPE '\')
+       OR c.title ILIKE @pattern ESCAPE '\'
+       -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
+       -- so a search for the shown title matches it too.
+       OR (NOT c.title_manually_set
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE @pattern ESCAPE '\'))
   AND (@participant_id::text = ''
        OR (@participant_provider::text = '' AND m.user_id = @participant_id)
        OR EXISTS (
@@ -4088,7 +4093,7 @@ ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
 LIMIT @row_limit::integer;
 
 -- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id

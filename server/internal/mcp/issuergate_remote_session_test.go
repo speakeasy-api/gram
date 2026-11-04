@@ -221,7 +221,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
@@ -476,7 +476,7 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			if refused.ProviderRefusal() {
 				refresh = identitychaining.RefreshRefused
 			}
-			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: refresh, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: refresh, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)

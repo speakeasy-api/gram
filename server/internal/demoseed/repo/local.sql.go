@@ -148,19 +148,6 @@ func (q *Queries) LocalEnablePlatformMCPFeature(ctx context.Context, organizatio
 	return err
 }
 
-const localEnsureMCPRegistry = `-- name: LocalEnsureMCPRegistry :exec
-INSERT INTO mcp_registries (name, url)
-VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
-ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
-`
-
-// The default registry backing the Catalog page. Global, not tenant-scoped,
-// which is precisely why it cannot live in the tenant seed.
-func (q *Queries) LocalEnsureMCPRegistry(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, localEnsureMCPRegistry)
-	return err
-}
-
 const localGrantAPIKeyPolicy = `-- name: LocalGrantAPIKeyPolicy :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1::text, 'api_key:' || $2::text, 'mcp:connect',

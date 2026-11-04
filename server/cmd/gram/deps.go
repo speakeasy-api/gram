@@ -72,7 +72,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
@@ -1129,23 +1128,6 @@ func newFunctionOrchestrator(
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
-}
-
-type mcpRegistryClientOptions struct {
-	pulseTenantID string
-	pulseAPIKey   conv.Secret
-	cacheImpl     cache.Cache
-}
-
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
-	pulseURL, err := url.Parse("https://api.pulsemcp.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse pulse registry url: %w", err)
-	}
-
-	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
-
-	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
