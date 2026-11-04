@@ -58,7 +58,7 @@ func TestEvaluateGrantsRejectsAlternatives(t *testing.T) {
 
 	client, _ := newTestClient(t)
 	ctx := humanClientContext(t)
-	_, err := client.EvaluateGrants(ctx, nil, Project(fixtureOrgID, "proj_1").WriteOrAdminister())
+	_, err := client.EvaluateGrants(ctx, nil, Project(fixtureOrgID, "proj_1").PublishPlugin())
 	require.ErrorIs(t, err, ErrInvalidCheck)
 	_, err = client.EvaluateGrants(ctx, nil, Operation{})
 	require.Error(t, err)
