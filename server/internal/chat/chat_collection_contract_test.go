@@ -144,9 +144,9 @@ func (f collectionFixture) sourced(t *testing.T, ctx context.Context) []string {
 	return labels
 }
 
-// pointReads returns the labels whose transcript LoadChat opens and whose
-// metadata LoadChatOverview returns, failing on any outcome other than
-// success or forbidden.
+// pointReads returns the labels whose transcript LoadChat opens, the labels
+// whose metadata LoadChatOverview returns, and the distinct error codes the
+// refused reads returned.
 func (f collectionFixture) pointReads(t *testing.T, ctx context.Context) (transcripts, overviews []string, refusals []oops.Code) {
 	t.Helper()
 	transcripts, overviews, refusals = []string{}, []string{}, []oops.Code{}
