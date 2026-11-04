@@ -169,6 +169,9 @@ func TestEvaluateGrantsInOrganizationMatchesAcrossModes(t *testing.T) {
 				require.NoError(t, err, tc.name)
 				require.Equal(t, tc.want, got, tc.name)
 			}
+			if mode == MigrationModeShadow {
+				require.Len(t, recorder.outcomes(), len(cases))
+			}
 			for _, outcome := range recorder.outcomes() {
 				require.Equal(t, ShadowMatch, outcome)
 			}

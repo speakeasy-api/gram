@@ -26,10 +26,12 @@ func (c *Client) EvaluateGrants(ctx context.Context, grants []Grant, op Operatio
 }
 
 // EvaluateGrantsInOrganization is EvaluateGrants for grants loaded in
-// organizationID. Inside an admitted request it routes exactly as
-// EvaluateGrants does. Outside one, such as in a stream consumer or a
-// background job, the call is its own boundary and follows organizationID's
-// rollout instead of always keeping the engine.
+// organizationID. Inside an admitted request with an active organization it
+// routes exactly as EvaluateGrants does. An admitted request without one
+// routes by organizationID and pins that mode for the rest of the request.
+// Outside a request, such as in a stream consumer or a background job, the
+// call is its own boundary and follows organizationID's rollout instead of
+// always keeping the engine.
 func (c *Client) EvaluateGrantsInOrganization(ctx context.Context, organizationID string, grants []Grant, op Operation) (bool, error) {
 	allowed, err := c.evaluateGrants(ctx, grants, op, func(ops []Operation) route {
 		return c.router.routeForLoaded(ctx, ops, organizationID)
