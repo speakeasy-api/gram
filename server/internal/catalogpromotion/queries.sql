@@ -240,7 +240,7 @@ SELECT * FROM registry_promotion_candidates WHERE organization_id= @organization
 
 -- name: RetryDocs :one
 UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failures=0,
- docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_review_since=NULL,
+ docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_outcome=NULL,docs_review_since=NULL,
  docs_retry_key= @retry_key,docs_retry_revision= @retry_revision,docs_retry_by= @actor,
  docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND organization_id= @organization_id RETURNING *;

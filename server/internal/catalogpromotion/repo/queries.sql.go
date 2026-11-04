@@ -1360,7 +1360,7 @@ func (q *Queries) RepointPromotionSourceFixture(ctx context.Context, arg Repoint
 
 const retryDocs = `-- name: RetryDocs :one
 UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failures=0,
- docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_review_since=NULL,
+ docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_outcome=NULL,docs_review_since=NULL,
  docs_retry_key= $1,docs_retry_revision= $2,docs_retry_by= $3,
  docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND organization_id= $6 RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, docs_outcome, docs_review_since, created_at, updated_at
