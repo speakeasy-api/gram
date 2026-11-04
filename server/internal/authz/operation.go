@@ -505,5 +505,6 @@ func typedOperations() []Operation {
 		project.ReadChats(),
 		Agent("agent", "owner").Read(), Agent("agent", "owner").Write(),
 		Agent("agent", "owner").Authorize(), Agent("agent", "owner").Transfer(),
+		WorkloadPolicy("organization").Read(), WorkloadPolicy("organization").Write(),
 	}
 }
