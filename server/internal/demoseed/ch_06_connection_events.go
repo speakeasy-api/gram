@@ -223,10 +223,12 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	failed.TraceID = md5Hex(s.name(key + "-failed-step"))
+	failed.ClientFamily, failed.DeviceKey = first.ClientFamily, first.DeviceKey
 	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-github")))
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	member.TraceID = md5Hex(s.name(key + "-member"))
+	member.ClientFamily, member.DeviceKey = first.ClientFamily, first.DeviceKey
 	return append(rows, failed, member), nil
 }
