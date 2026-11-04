@@ -425,3 +425,12 @@ Review follow-ups adopted on #8442 (each fails closed):
    `ListGrants`, which feeds the dashboard's scope gates, moves to X4 with the other dashboard gates. _If reversed:_ O2 keeps those rows, and they wait for X1's storage switch anyway.
 
 6. **The MCP explain and audience rows wait for M1.** Explain access and resource audiences ask MCP server and tool-call checks and explain grant matches. They move once M1's MCP server operations are integrated. _If reversed:_ stack this part on M1 now.
+
+## Integration: combining the package stacks
+
+### Decided without reviewer input
+
+1. **One integration branch merges every package stack in a fixed order.** The branch starts at the last Organization PR and merges, in turn, the projects/plugins/skills stack (ending at I1), the MCP stack (ending at M6), the chat stack (ending at C3) and the governance, risk and logs stack (ending at the risk transcript follow-up). It exists to prove the stacks compose; review stays on the per-ticket PRs. Follow-up integrator PRs use it as their base, so their diffs show only their own change. _If reversed:_ the stacks merge to `main` one by one and each later stack resolves the same conflicts on its own.
+2. **Where stacks named the same field differently, the earlier stack's name wins.** Plugins keeps `authz` for the client and `engine` for the engine, and access keeps `authzClient`. The MCP stack's uses were renamed to match. Test constructors take the MCP stack's single shared engine. _If reversed:_ rename the fields in one pass.
+3. **The stored-check test now uses `agent:read` as its undeclared scope.** Once chat is declared, `chat:read` is no longer undeclared, so the test that proves undeclared scopes stay on the engine needed a scope no permission checks yet. Agent scopes stay undeclared until the agents slice moves. _If reversed:_ pick another undeclared scope; once every scope is declared the case goes away.
+4. **The client corpus count is 102.** The organization and projects stacks add seven cases each, the chat stack seven, and risk one, with overlaps. The count is the union.
