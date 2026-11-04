@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/url"
 	"testing"
@@ -38,7 +39,7 @@ func TestWorkloadInference_Standalone(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{}, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	require.NoError(t, err)
 	service := usersessions.NewService(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn,
-		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, ti.audit, policy, nil, ti.enc,
+		ti.sessionManager, ti.chatSessionsManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit, policy, nil, ti.enc,
 		usersessions.NewSigner("test-jwt-secret"), ti.serverURL.String(),
 		authserver.Hosts{ServerURL: ti.serverURL.String()}, nil, nil)
 	created, err := service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{

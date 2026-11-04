@@ -144,6 +144,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		sessionManager,
 		tokenRevoker,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		audit.NewLogger(),
 		guardianPolicy,
 		nil,

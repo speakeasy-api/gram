@@ -121,7 +121,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +186,7 @@ func (s *Service) ListFacets(ctx context.Context, _ *gen.ListFacetsPayload) (*ge
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -246,7 +246,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeBadRequest, err, "invalid session id").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return err
 	}
 

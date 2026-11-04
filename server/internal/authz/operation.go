@@ -172,6 +172,16 @@ func (p ProjectRef) WriteOrAdminister() Operation {
 	)
 }
 
+// ReadOrEditMCPServer asks to read the project or to change one of its MCP
+// servers. serverID may be the project ID to name every server of the
+// project. A block on one alternative does not stop the other.
+func (p ProjectRef) ReadOrEditMCPServer(serverID string) Operation {
+	return newAlternatives("mcp_server", "project_read_or_edit",
+		p.Read(),
+		MCPServer(p.id, serverID).Edit(),
+	)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -182,6 +192,6 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
-		project.WriteOrAdminister(),
+		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
 	}
 }

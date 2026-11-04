@@ -105,7 +105,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if server.ToolsetID.Valid {
 			grantID = server.ToolsetID.UUID
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), grantID.String()).Edit()); err != nil {
 			return none, err
 		}
 		if hostedmcp.IsCanonical(&server, server.ID) {
@@ -131,7 +131,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err != nil {
 			return none, attachTargetLoadError(ctx, logger, err, "toolset")
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), toolset.ID.String()).Edit()); err != nil {
 			return none, err
 		}
 		hosting, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
@@ -151,7 +151,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err != nil {
 			return none, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogWarn(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServersInProject(projectID.String()).Edit()); err != nil {
 			return none, err
 		}
 		server, err := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{ID: id, OrganizationID: organizationID, ProjectID: projectID})
