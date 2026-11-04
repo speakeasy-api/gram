@@ -336,3 +336,148 @@ func TestGetToolUsageSummary_ClassifiesAndFiltersGateway(t *testing.T) {
 	require.Empty(t, gatewaysOnly.HostedServers)
 	require.Empty(t, gatewaysOnly.Users)
 }
+
+// openClawGatewayCall is one OpenClaw tool call on an MCP server: a pre-call
+// row, then a post-call row carrying the server name.
+type openClawGatewayCall struct {
+	conversationID string
+	toolName       string
+	serverName     string
+	url            string
+	// preServerName is the server name on the pre-call row. A relay that
+	// resolves the server from the tool name sends it, an older one sends none.
+	preServerName string
+	// preURLOnly leaves the URL off the post-call row, as for a call blocked
+	// before it ran, whose result names no server.
+	preURLOnly bool
+}
+
+func insertOpenClawGatewayCall(t *testing.T, ctx context.Context, ti *testInstance, at time.Time, call openClawGatewayCall) {
+	t.Helper()
+	traceID := uuid.New().String()
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      ti.projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      at,
+		traceID:        traceID,
+		userEmail:      "alice@example.com",
+		hookSource:     "openclaw",
+		toolSource:     call.preServerName,
+		toolName:       call.toolName,
+		mcpMatch:       call.url,
+		mcpServerURL:   call.url,
+		conversationID: call.conversationID,
+	})
+	postURL := call.url
+	if call.preURLOnly {
+		postURL = ""
+	}
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      ti.projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      at.Add(time.Second),
+		traceID:        traceID,
+		userEmail:      "alice@example.com",
+		hookSource:     "openclaw",
+		toolSource:     call.serverName,
+		toolName:       call.toolName,
+		result:         `"ok"`,
+		mcpMatch:       postURL,
+		mcpServerURL:   postURL,
+		conversationID: call.conversationID,
+	})
+}
+
+// OpenClaw names every MCP server by its config key, so an agent gateway
+// configured as "speakeasy" looks like any third-party server of that name.
+// The URL the call reached decides: an agent, organization or project gateway
+// URL classifies the call as that gateway, labelled as LoadGatewayLabels names
+// it, on the trace_summaries path and the raw-log path a query forces, even
+// when the pre-call row carries the URL but no server name. A third-party
+// server named "speakeasy" at another URL stays a shadow server. Its pre-call
+// row names the server, as the relay that resolves servers from tool names
+// sends it: trace_summaries keeps any() of tool_source, so a pre-call row
+// without the name can still leave the summary path without a source.
+func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support bot",
+	})
+	require.NoError(t, err)
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, uuid.MustParse(ti.projectID))
+	require.NoError(t, err)
+
+	agentGatewayID := agentgateway.GatewayID(agent.ID).String()
+	agentGatewayURL := "https://app.example.com/agent-mcp/" + agent.ID.String()
+	orgGatewayURL := "https://app.example.com/mcp/gateway/" + organization.Slug
+	calls := []struct {
+		call       openClawGatewayCall
+		targetType string
+		targetID   string
+		label      string
+	}{
+		{
+			call:       openClawGatewayCall{conversationID: "conv-agent-ok", toolName: "speakeasy__list_servers", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-agent-blocked", toolName: "speakeasy__delete_server", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: true},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-org", toolName: "org__search", serverName: "org", url: orgGatewayURL, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.GatewayID(ti.orgID).String(), label: organization.Name,
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-project", toolName: "proj__search", serverName: "proj", url: orgGatewayURL + "/projects/" + project.Slug, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.ProjectGatewayID(ti.orgID, project.ID).String(), label: project.Name,
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-third-party", toolName: "speakeasy__lookup", serverName: "speakeasy", url: "https://mcp.third-party.example/speakeasy", preServerName: "speakeasy", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeShadowMCP, targetID: "speakeasy", label: "speakeasy",
+		},
+	}
+	for i, tc := range calls {
+		insertOpenClawGatewayCall(t, ctx, ti, now.Add(-time.Duration(len(calls)-i)*time.Minute), tc.call)
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 20}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == len(calls)
+	})
+	byTool := map[string]*gen.ToolUsageTraceSummary{}
+	for _, trace := range all.Traces {
+		byTool[trace.ToolName] = trace
+	}
+	for _, tc := range calls {
+		summary := byTool[tc.call.toolName]
+		require.NotNil(t, summary, "summary path: %s is missing: %v", tc.call.toolName, byTool)
+		require.Equal(t, gen.ToolUsageTargetType(tc.targetType), summary.TargetType, "summary path: %s", tc.call.toolName)
+		require.Equal(t, tc.targetID, summary.TargetID, "summary path: %s", tc.call.toolName)
+		require.Equal(t, tc.label, summary.TargetLabel, "summary path: %s", tc.call.toolName)
+		require.Nil(t, summary.ViaMetaMcpServerID, "a call on a gateway is not routed through one")
+
+		query := tc.call.conversationID
+		raw, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})
+		require.NoError(t, err)
+		require.Len(t, raw.Traces, 1, "raw path: %s must not split across targets", tc.call.toolName)
+		require.Equal(t, gen.ToolUsageTargetType(tc.targetType), raw.Traces[0].TargetType, "raw path: %s", tc.call.toolName)
+		require.Equal(t, tc.targetID, raw.Traces[0].TargetID, "raw path: %s", tc.call.toolName)
+		require.Equal(t, tc.label, raw.Traces[0].TargetLabel, "raw path: %s", tc.call.toolName)
+	}
+
+	filtered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, MetaMcpServerIds: []string{agentGatewayID}})
+	require.NoError(t, err)
+	require.Len(t, filtered.Traces, 2, "the agent gateway filter covers both agent gateway calls")
+}

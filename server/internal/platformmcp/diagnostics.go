@@ -259,7 +259,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview MCP servers: %w", err)
 	}
-	metaMCPMatchers, err := telemetryservice.LoadMetaMCPMatchers(ctx, s.db, projectUUID)
+	metaMCPMatchers, err := telemetryservice.LoadMetaMCPMatchers(ctx, s.db, principal.OrganizationID, projectUUID)
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview gateways: %w", err)
 	}

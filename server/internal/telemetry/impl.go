@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -2637,7 +2638,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error listing MCP servers for project overview")
 		}
-		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, *authCtx.ProjectID)
+		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error listing gateways for project overview")
 		}
@@ -3541,7 +3542,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
@@ -3911,7 +3912,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
 	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints").LogError(ctx, logger)
 	}
@@ -4273,9 +4274,22 @@ func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uu
 	return ids, nil
 }
 
-// LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
-// that classify hook-observed calls; host-anchored custom-domain suffixes go first.
-func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
+// agentGatewayPathPrefix is the path an agent gateway is served under,
+// followed by the agent id.
+const agentGatewayPathPrefix = "/agent-mcp/"
+
+// agentGatewayName names the gateway that serves an agent.
+func agentGatewayName(agentName string) string {
+	return agentName + " gateway"
+}
+
+// LoadMetaMCPMatchers loads the gateway URL suffixes (gram.mcp.server_url)
+// that classify hook-observed calls; host-anchored custom-domain suffixes go
+// first. The project's stored gateway endpoints come with the gateways every
+// project of the organization can call: each agent gateway, the organization
+// gateway and each project gateway. Those have no endpoint row, and a call
+// reaches them by URL from whichever project its hook is logged in.
+func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, organizationID string, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
 	endpoints, err := metamcpRepo.New(db).ListMetaMCPEndpointsForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
@@ -4324,7 +4338,59 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 			anchoredMatchers = append(anchoredMatchers, matcher)
 		}
 	}
+	organizationMatchers, err := organizationGatewayMatchers(ctx, db, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	platformMatchers = append(platformMatchers, organizationMatchers...)
 	return append(anchoredMatchers, platformMatchers...), nil
+}
+
+// organizationGatewayMatchers matches the URLs of the gateways that have no
+// endpoint row: /agent-mcp/<agent id> for each agent, deleted ones included
+// because an agent id is never reused and its past calls keep their gateway,
+// and /mcp/gateway/<organization slug>, plus /projects/<project slug>, for
+// the organization and project gateways. Each is labelled the way
+// LoadGatewayLabels names the gateway id it carries.
+func organizationGatewayMatchers(ctx context.Context, db *pgxpool.Pool, organizationID string) ([]repo.MetaMCPMatcher, error) {
+	agents, err := agentsRepo.New(db).ListAgentNamesIncludingDeleted(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization agents: %w", err)
+	}
+	organization, err := orgsRepo.New(db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("get organization: %w", err)
+	}
+	projects, err := projectsRepo.New(db).ListProjectsByOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization projects: %w", err)
+	}
+
+	matchers := make([]repo.MetaMCPMatcher, 0, len(agents)+len(projects)+1)
+	for _, agent := range agents {
+		matchers = append(matchers, repo.MetaMCPMatcher{
+			URLSuffix:    agentGatewayPathPrefix + agent.ID.String(),
+			TargetID:     agentgateway.GatewayID(agent.ID).String(),
+			TargetLabel:  agentGatewayName(agent.Name),
+			HostAnchored: false,
+		})
+	}
+	organizationPath := "/" + mcproute.OrganizationGateway.String() + "/" + organization.Slug
+	matchers = append(matchers, repo.MetaMCPMatcher{
+		URLSuffix:    organizationPath,
+		TargetID:     orggateway.GatewayID(organizationID).String(),
+		TargetLabel:  organization.Name,
+		HostAnchored: false,
+	})
+	for _, project := range projects {
+		matchers = append(matchers, repo.MetaMCPMatcher{
+			URLSuffix:    organizationPath + "/projects/" + project.Slug,
+			TargetID:     orggateway.ProjectGatewayID(organizationID, project.ID).String(),
+			TargetLabel:  project.Name,
+			HostAnchored: false,
+		})
+	}
+	return matchers, nil
 }
 
 // unknownGatewayName labels a gateway id no gateway of the organization
@@ -4399,7 +4465,7 @@ func LoadGatewayLabels(ctx context.Context, db *pgxpool.Pool, organizationID str
 			agentID = agent.ID.String()
 		}
 		labels[agentgateway.GatewayID(agent.ID).String()] = GatewayLabel{
-			Name:        agent.Name + " gateway",
+			Name:        agentGatewayName(agent.Name),
 			Kind:        gatewayKindAgent,
 			ProjectSlug: "",
 			AgentID:     agentID,
