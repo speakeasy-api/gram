@@ -267,6 +267,30 @@ func TestLoadChat_RBAC_AgentOwnerReadsAgentSession(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+// An agent's editors (agent:write) stand in for its owner too: a member granted
+// agent:write on someone else's agent opens its sessions, but not another
+// agent's, and still cannot delete what the agent did.
+func TestLoadChat_RBAC_AgentEditorReadsAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	editedAgent := seedAgent(t, ctx, ti, "other-owner", "Shared Agent")
+	edited := seedAgentChat(t, ctx, ti, editedAgent, "shared agent's session")
+	foreign := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, "other-owner", "Their Agent"), "their agent's session")
+	editorCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentWrite, editedAgent.String()))
+
+	res, err := ti.service.LoadChat(editorCtx, loadPayload(edited.String()))
+	require.NoError(t, err)
+	require.Equal(t, edited.String(), res.ID)
+
+	_, err = ti.service.LoadChat(editorCtx, loadPayload(foreign.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	err = ti.service.DeleteChat(editorCtx, &gen.DeleteChatPayload{ID: edited.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 // A session that carries a human identity stays that human's even when an
 // agent the caller owns was stamped onto it: owning the agent does not open it.
 func TestLoadChat_RBAC_AgentOwnerCannotReadHumanSession(t *testing.T) {

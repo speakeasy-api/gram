@@ -654,6 +654,34 @@ func TestListChats_Member_SeesOwnedAgentSessions(t *testing.T) {
 	require.Equal(t, 2, result.Total)
 }
 
+// An agent's editors (agent:write) answer for it as its owner does, so a member
+// granted agent:write on someone else's agent lists that agent's sessions, and
+// no other agent's.
+func TestListChats_Member_SeesEditableAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	edited := seedAgent(t, ctx, ti, "other-owner", "Shared Agent")
+	untouched := seedAgent(t, ctx, ti, "other-owner", "Their Agent")
+	editedChat := seedAgentChat(t, ctx, ti, edited, "shared agent's session")
+	seedAgentChat(t, ctx, ti, untouched, "their agent's session")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	editorCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentWrite, edited.String()))
+	result, err := ti.service.ListChats(editorCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, editedChat.String(), result.Chats[0].ID)
+
+	// agent:read alone does not open what the agent did.
+	readerCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAgentRead, edited.String()))
+	result, err = ti.service.ListChats(readerCtx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+}
+
 // A chat that carries a human identity belongs to that human, even if an
 // agent the caller owns was stamped onto it, so owning the agent does not
 // reveal it.
