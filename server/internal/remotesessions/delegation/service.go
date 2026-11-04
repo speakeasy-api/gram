@@ -592,11 +592,10 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 			return Assertion{}, err
 		}
 	}
-	// Lifetime updates are independent of token rotation. An explicit zero
-	// expires the retained token; omission cannot remove a previously known bound.
+	// Lifetime updates are independent of token rotation. Omission cannot
+	// remove a previously known bound.
 	if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 		next.refreshExpiry = *expiry
-		// A present zero is an expired bound, not the omitted/unknown sentinel.
 		if !expiry.After(s.now()) {
 			next.refresh = ""
 		}

@@ -50,7 +50,7 @@ func enforcedShadowService(t *testing.T, f *authClientFixture) *sdkmetric.Manual
 	f.service.logger = testenv.NewLogger(t)
 	f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
 	f.service.features = flags
-	f.service.mandatoryShadowLog = newMandatoryShadowLog()
+	f.service.mandatoryShadowLog = newOnceLog()
 	f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 	return reader

@@ -464,8 +464,8 @@ and changed tools are shown. Only approval replaces the catalogue; the original
 connection expiry is preserved. Verification alone never changes
 consent. Connections without a usable catalogue, and non-OAuth connections, still need a
 full gateway reconnect:
-when `client_reconnect_required` is true, the user must reconnect the gateway
-in their MCP client and approve the member. The agent returns the link, ends
+when `client_reconnect_required` is true, the user must reconnect this gateway
+in their AI app and approve the member. The agent returns the link, ends
 execution, and checks access in a fresh execution after the user finishes.
 Programs and tool calls are never replayed by the recovery flow.
 

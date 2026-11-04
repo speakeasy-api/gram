@@ -64,6 +64,8 @@ const (
 	SignInError = "error"
 	// SignInUnavailable: an outage stops the sign-in being used; Detail names the fallback.
 	SignInUnavailable = "unavailable"
+	// SignInActionRequired: signing in here won't help; Detail says what to do.
+	SignInActionRequired = "action_required"
 	// SignInHidden: the caller hid the member, so its tools are not served.
 	SignInHidden = "hidden"
 )
@@ -115,9 +117,6 @@ func (r ConnectionStatusResult) Text() string {
 			verified++
 			consented = true
 		}
-		if s.Status == SignInNeedsConsent {
-			consented = true
-		}
 		if s.Status == SignInConnected || s.Status == SignInNotRequired {
 			connected++
 		}
@@ -150,6 +149,8 @@ func (r ConnectionStatusResult) Text() string {
 		case SignInNotConnected:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: not signed in\n", label)
+		case SignInActionRequired:
+			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
 		case SignInHidden:
 			hidden = true
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
@@ -161,7 +162,7 @@ func (r ConnectionStatusResult) Text() string {
 		}
 	}
 	if needsConsent {
-		b.WriteString("\nStart authorization again in your AI client to review access.\n")
+		b.WriteString("\nReconnect this gateway in your AI app to review access.\n")
 	}
 	if hidden && r.ConnectURL != "" {
 		fmt.Fprintf(&b, "\nTo use a hidden server, show it again at %s.\n", r.ConnectURL)

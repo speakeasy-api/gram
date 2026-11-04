@@ -110,6 +110,9 @@ func (s *Service) handleMetaConnectionStatusCall(
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string, *metamcp.ConnectionStatusOutage) {
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+				return s.staleMemberStatus(ctx, logger, gate, member)
+			}
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err), nil
 		}
 		for _, outcome := range gate.catalog.MemberOutcomes {
@@ -141,6 +144,9 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
 	if err != nil {
+		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+			return s.staleMemberStatus(ctx, logger, gate, member)
+		}
 		return memberFailureSignIn(*gate, member, err)
 	}
 	if !dial.anonymous {
@@ -235,6 +241,15 @@ func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind,
 	case remotesessions.RefreshOutageNone:
 	}
 	return name + " can't renew its sign-in right now. " + retry
+}
+
+// staleMemberStatus gives a stale choice the call's remedy; the connect page can't fix it.
+func (s *Service) staleMemberStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string, *metamcp.ConnectionStatusOutage) {
+	message, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
+	if reconnect {
+		return metamcp.SignInNeedsConsent, message, nil
+	}
+	return metamcp.SignInActionRequired, message, nil
 }
 
 func memberErrorMessage(err error) string {

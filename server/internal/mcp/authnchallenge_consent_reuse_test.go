@@ -63,7 +63,12 @@ func (f sharedConsentFlow) inventory(t *testing.T, ctx context.Context, ti *test
 
 func (f sharedConsentFlow) page(t *testing.T, ctx context.Context, ti *testInstance) string {
 	t.Helper()
-	req := sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+f.state.UserSessionIssuerID.String()+"/connect?state="+f.state.ID, f.state.UserSessionIssuerID.String(), nil)
+	return f.pageWith(t, ctx, ti, "")
+}
+
+func (f sharedConsentFlow) pageWith(t *testing.T, ctx context.Context, ti *testInstance, query string) string {
+	t.Helper()
+	req := sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+f.state.UserSessionIssuerID.String()+"/connect?state="+f.state.ID+query, f.state.UserSessionIssuerID.String(), nil)
 	if f.cookie != nil {
 		req.AddCookie(f.cookie)
 	}
@@ -130,6 +135,19 @@ func TestSharedConsentReusePreservesResourcePolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Verify's notice redirects carry consent=required, so saved consent can't hide the card notice.
+func TestSharedConsentReuseYieldsToVerifyNotice(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	issuer := seedSharedIssuer(t, ctx, ti)
+	first := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	first.submit(t, ctx, ti, "approve", first.inventory(t, ctx, ti), "off")
+	second := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	notice := "&validate_failed=" + uuid.NewString()
+	require.Contains(t, second.pageWith(t, ctx, ti, notice), `id="consent-reuse"`, "saved consent alone shows the short page")
+	require.NotContains(t, second.pageWith(t, ctx, ti, "&consent=required"+notice), `id="consent-reuse"`)
 }
 
 func TestSharedConsentReuseRequiresInitiatingBrowser(t *testing.T) {

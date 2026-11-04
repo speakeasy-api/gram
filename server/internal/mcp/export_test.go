@@ -291,3 +291,8 @@ func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotese
 func (s *Service) SetIDJAGTrust(store idjag.Store) {
 	s.idJAGTrust = store
 }
+
+// StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
+func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
+	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
+}

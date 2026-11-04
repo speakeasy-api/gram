@@ -1206,9 +1206,7 @@ func (s *RefreshService) refreshSessionTokens(
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
 
-	// authorization_expires_in is an absolute property of the grant. Preserve
-	// the known deadline when a later response omits it; replace it when the
-	// provider reports the remaining authorization lifetime again.
+	// Keep the grant's known deadline unless this response reports a usable lifetime.
 	authorizationExpires := sess.AuthorizationExpiresAt
 	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))

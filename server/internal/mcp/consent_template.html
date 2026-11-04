@@ -944,7 +944,8 @@
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
         </p>
         {{else}}
-        <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
+        <div class="flex flex-col gap-3 px-6 py-6 sm:px-8">
+        <div class="flex flex-col gap-3 sm:flex-row">
           <form
             method="POST"
             action="{{.ConsentPath}}"
@@ -966,11 +967,6 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError) (not .SelfApprovalError)}}
-            <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
-              Connect a service above to enable access.
-            </p>
-            {{end}}
           </form>
           <form method="POST" action="{{.ConsentPath}}">
             <input type="hidden" name="state" value="{{.State}}" />
@@ -984,6 +980,12 @@
               Cancel
             </button>
           </form>
+        </div>
+        {{if and (not .ConsentEnabled) (not .ApprovalError) (not .SelfApprovalError)}}
+        <p data-agent-self-only class="text-muted-foreground text-xs">
+          Connect or reconnect a service above to give access.
+        </p>
+        {{end}}
         </div>
         {{end}}
       </section>

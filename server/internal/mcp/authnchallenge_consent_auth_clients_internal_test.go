@@ -205,3 +205,29 @@ func TestCardPanelHidesLiveDetailsDuringAnOutage(t *testing.T) {
 	require.False(t, panel.GrantLive)
 	require.False(t, panel.ShowToken)
 }
+
+func TestConsentCardsApprovable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		cards []remoteSessionCard
+		want  bool
+	}{
+		{name: "no cards", cards: nil, want: true},
+		{name: "connected but unavailable", cards: []remoteSessionCard{{Connected: true, Unavailable: true}}, want: false},
+		{name: "unavailable but chained", cards: []remoteSessionCard{{Connected: true, Unavailable: true, Chained: true}}, want: true},
+		{name: "never connected", cards: []remoteSessionCard{{}}, want: false},
+		{name: "expired", cards: []remoteSessionCard{{Expired: true}}, want: false},
+		{name: "unroutable", cards: []remoteSessionCard{{Unroutable: true}}, want: false},
+		{name: "expired and never connected", cards: []remoteSessionCard{{Expired: true}, {}}, want: false},
+		{name: "expired and connected", cards: []remoteSessionCard{{Expired: true}, {Connected: true}}, want: true},
+		{name: "expired and chained", cards: []remoteSessionCard{{Expired: true}, {Chained: true}}, want: true},
+		{name: "expired card chained", cards: []remoteSessionCard{{Expired: true, Chained: true}}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, consentCardsApprovable(tc.cards))
+		})
+	}
+}
