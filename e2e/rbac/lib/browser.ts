@@ -18,11 +18,21 @@ export async function pageAs(
 // The copy every page-level permission gate renders.
 export const ACCESS_DENIED = "You don't have permission to view this page.";
 
+// A cold dashboard on a CI runner can take well over the default expect
+// timeout to render a route the first time, so gates wait longer.
+const RENDER_TIMEOUT = 45_000;
+
 export async function expectAllowed(page: Page, marker: string): Promise<void> {
-  await expect(page.getByText(marker, { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText(marker, { exact: true }).first(),
+    `"${marker}" on ${page.url()}`,
+  ).toBeVisible({ timeout: RENDER_TIMEOUT });
   await expect(page.getByText(ACCESS_DENIED)).toHaveCount(0);
 }
 
 export async function expectDenied(page: Page): Promise<void> {
-  await expect(page.getByText(ACCESS_DENIED).first()).toBeVisible();
+  await expect(
+    page.getByText(ACCESS_DENIED).first(),
+    `access denied on ${page.url()}`,
+  ).toBeVisible({ timeout: RENDER_TIMEOUT });
 }
