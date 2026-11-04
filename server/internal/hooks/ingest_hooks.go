@@ -1140,7 +1140,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	teeRows := cloneHookTelemetryRows(rows)
 	if s.telemetryLogger != nil {
 		for _, row := range rows {
-			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+			s.logHookTelemetry(ctx, authCtx, &metadata, payload, row.timestamp, row.toolName, row.attrs)
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
@@ -1475,16 +1475,17 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	return attrs
 }
 
-func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, payload *gen.IngestPayload, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
 	// Device details the speakeasy-hooks binary reported, so rows can be
 	// counted per client version. A spool replay's headers describe the binary
 	// draining the spool, which after an upgrade is not the one that captured
-	// the event, so replayed rows stay unstamped rather than miscounted.
+	// the event, so replayed rows don't take them.
 	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
 		for key, value := range middleware.HookDeviceAttributes(ctx) {
 			attrs[key] = value
 		}
 	}
+	stampIngestClientVersion(ctx, payload, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
