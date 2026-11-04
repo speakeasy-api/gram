@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -137,6 +138,8 @@ type ParentChallenge struct {
 	// from the host holding the parent challenge's callback cookie.
 	BrowserCookieID string
 	BrowserHash     string
+	// Attempt is the connection attempt this login belongs to. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -209,6 +212,14 @@ type RemoteLoginState struct {
 	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
 	BrowserHash     string    `json:"browser_hash,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Attempt joins this login to the connection attempt that led to it. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
+	// ResourceMcpServerID is the gateway member this login qualified to.
+	ResourceMcpServerID uuid.NullUUID `json:"resource_mcp_server_id,omitzero"`
+	// ProviderHost is the normalized host of the issuer this login went to.
+	ProviderHost string `json:"provider_host,omitempty"`
+	// RemoteSessionIssuerID is the issuer this login went to.
+	RemoteSessionIssuerID uuid.UUID `json:"remote_session_issuer_id,omitzero"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -230,13 +241,34 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
-		// The retry leg reuses the first leg's scopes, so it reads no resource.
-		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Carried so the retry leg's row names the member. Its scopes come from the first leg.
+		ResourceMcpServerID: s.ResourceMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
 		BrowserHash:         s.BrowserHash,
+		Attempt:             s.Attempt,
 	}
+}
+
+// recordSignInStep records the end of a provider sign-in. A login with a final
+// destination ends its attempt here. One returning to consent does not, because
+// the person can still finish connecting.
+func (m *ChallengeManager) recordSignInStep(ctx context.Context, r *http.Request, state RemoteLoginState, what mcpconnectionattempts.Happened, remoteSessionID uuid.UUID) {
+	record := m.connections.Step
+	if state.FinalRedirectURI != "" {
+		record = m.connections.End
+	}
+	record(ctx, state.Attempt, mcpconnectionattempts.StepProviderSignIn, what,
+		mcpconnectionattempts.Provider(state.ProviderHost),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+		mcpconnectionattempts.Member(state.ResourceMcpServerID.UUID),
+		mcpconnectionattempts.RemoteSessionIssuer(state.RemoteSessionIssuerID),
+		mcpconnectionattempts.UserSessionIssuer(state.UserSessionIssuerID),
+		mcpconnectionattempts.RemoteSessionClient(state.RemoteSessionClientID),
+		mcpconnectionattempts.Subject(state.Subject),
+		mcpconnectionattempts.FromRequest(r),
+	)
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -246,15 +278,16 @@ func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	enc       *encryption.Client
-	policy    *guardian.Policy
-	tunnels   *tunnelrouting.HTTPClient
-	cache     cache.TypedCacheObject[RemoteLoginState]
-	locks     cache.Cache
-	refresher *RefreshService
-	serverURL *url.URL
+	connections *mcpconnectionattempts.Recorder
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	enc         *encryption.Client
+	policy      *guardian.Policy
+	tunnels     *tunnelrouting.HTTPClient
+	cache       cache.TypedCacheObject[RemoteLoginState]
+	locks       cache.Cache
+	refresher   *RefreshService
+	serverURL   *url.URL
 
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
@@ -411,6 +444,11 @@ func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.origins = origins }
 }
 
+// WithConnectionRecorder records provider sign-in steps. Without it nothing is recorded.
+func WithConnectionRecorder(recorder *mcpconnectionattempts.Recorder) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.connections = recorder }
+}
+
 // WithProtectedResourceProber lets logins read, and when the organization is
 // enrolled probe, the protected resource row of the MCP server they are for.
 // It is the same prober the proxy refreshes rows with, so one replica has one
@@ -444,6 +482,7 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:          cacheImpl,
+		connections:    nil,
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
@@ -1488,6 +1527,10 @@ func (m *ChallengeManager) mintAuthorization(
 		BrowserCookieID:       parent.BrowserCookieID,
 		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
+		Attempt:               parent.Attempt,
+		ResourceMcpServerID:   parent.ResourceMcpServerID,
+		ProviderHost:          mcpconnectionattempts.NormalizeProviderHost(client.IssuerURL),
+		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -1639,6 +1682,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
+			m.recordSignInStep(ctx, r, state, mcpconnectionattempts.CodeProviderDenied, uuid.Nil)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {
@@ -1972,6 +2016,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
+	m.recordSignInStep(ctx, r, state, mcpconnectionattempts.ResultSignedIn, storedSession.ID)
 
 	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 	if err != nil {

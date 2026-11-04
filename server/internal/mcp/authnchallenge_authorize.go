@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -280,6 +281,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	logger.InfoContext(ctx, "oauth flow started")
+	s.connections.Start(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
+		mcpconnectionattempts.UserSessionClient(client.ID),
+		mcpconnectionattempts.Subject(subject),
+		mcpconnectionattempts.FromRequest(r),
+	)
 
 	if forceIDP {
 		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
