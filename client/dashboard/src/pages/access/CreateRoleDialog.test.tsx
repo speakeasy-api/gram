@@ -330,7 +330,7 @@ describe("agent assignment", () => {
 
 describe("a role pre-filled from an access request", () => {
   function createdGrants() {
-    fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
+    submit("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     return mocks.create.mock.calls[0]![0].request.createRoleForm.grants;
   }
