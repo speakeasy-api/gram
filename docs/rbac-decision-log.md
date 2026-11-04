@@ -101,6 +101,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 3. **`mcpservers` and `mcpendpoints` keep the engine for shadow MCP admission.** `admission.AdministratorWriteContext` takes an engine and belongs to the shadow MCP slice. The services keep a separate `authzEngine` field for it and use the client for every decision of their own. _If reversed:_ that slice moves the admission helper to the client and the field goes away.
 4. **Three list filters use `MatchMany`.** `ListMcpServers`, `ListMcpServersForOrg` and Okta's `readable` keep rows by index instead of rebuilding an ID set; the answers are the same, and a server listed twice (toolset-backed and direct with one grant ID) keeps both rows as before.
 5. **Every command that builds these services builds the client with `newAuthzClient`.** `cmd/gram/mcp.go` and `private_ingress_runtime.go` now build it next to their engine, and `platformMCPConfig` carries `AuthzClient` beside `Authz`.
+6. **Behaviour change: Platform MCP `set_mcp_address` and `set_mcp_network_access` carry the project.** Their `mcp:write` check named only the project id, so a role whose MCP write is bounded to another project could change this project's addresses. The check now passes the project dimension (`MCPCheck`), matching `UpdateMcpEndpoint`. It stays on the engine because Platform MCP moves to the client as a whole in X3. _If reversed:_ drop the dimension and the cross-project write comes back.
 
 ## G1 (AIS-850): remote sessions
 
