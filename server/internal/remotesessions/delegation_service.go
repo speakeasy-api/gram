@@ -21,19 +21,20 @@ type DelegationAuthorizer = delegation.Authorizer
 type DelegationOfflineStatus = delegation.OfflineStatus
 
 var (
-	ErrDelegationTemporary         = delegation.ErrTemporary
-	ErrDelegationReauthentication  = delegation.ErrReauthentication
-	ErrDelegationConfiguration     = delegation.ErrConfiguration
-	ErrDelegationStaleRegistration = delegation.ErrStaleRegistration
+	ErrDelegationTemporary             = delegation.ErrTemporary
+	ErrDelegationReauthentication      = delegation.ErrReauthentication
+	ErrDelegationConfiguration         = delegation.ErrConfiguration
+	ErrDelegationStaleRegistration     = delegation.ErrStaleRegistration
+	ErrDelegationRetainedConfiguration = delegation.ErrRetainedConfiguration
 )
 
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil))}
+	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil))}
 }
 
-func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), now func() time.Time) delegation.Dependencies {
+func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), paused func(context.Context, *FederatedProvider) bool, now func() time.Time) delegation.Dependencies {
 	adaptLoader := func(load func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)) func(context.Context, string, uuid.UUID, uuid.UUID) (delegation.Provider, error) {
 		return func(ctx context.Context, org string, issuer, client uuid.UUID) (delegation.Provider, error) {
 			p, err := load(ctx, org, issuer, client)
@@ -46,10 +47,13 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return delegationProvider{p}, nil
 		}
 	}
-	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
+	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshPaused: func(ctx context.Context, provider delegation.Provider) bool {
+		p, ok := provider.(delegationProvider)
+		return ok && paused(ctx, p.p)
+	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
-			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}
+			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
 		if result == nil {
@@ -84,10 +88,17 @@ func delegationRefreshError(err error) error {
 		kind = delegation.RefreshInvalidGrant
 	case FederatedRefreshConfiguration:
 		kind = delegation.RefreshConfiguration
+	case FederatedRefreshClientRejected:
+		kind = delegation.RefreshClientRejected
+	case FederatedRefreshSetup:
+		kind = delegation.RefreshSetup
+	// A 429 is usually a WAF, and if one hid a rotation the replay's invalid_grant costs the same sign-in a held claim would.
+	case FederatedRefreshRateLimited, FederatedRefreshRetryable:
+		kind = delegation.RefreshRetryable
+	case FederatedRefreshSetupRetryable:
+		kind = delegation.RefreshSetupRetryable
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
-	case FederatedRefreshRetryable:
-		kind = delegation.RefreshRetryable
 	}
 	return &delegation.RefreshError{Kind: kind}
 }

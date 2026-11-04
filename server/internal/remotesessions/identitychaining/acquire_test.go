@@ -213,6 +213,7 @@ func TestClassifyEndpointError(t *testing.T) {
 		{"invalid grant stays ambiguous", rejection(http.StatusBadRequest, "invalid_grant"), ReasonInvalidGrant, ConfidenceUnknown, false},
 		{"unknown code", rejection(http.StatusBadRequest, "something_else"), ReasonUnknownRejection, ConfidenceUnknown, false},
 		{"undecodable success", errors.New("decode token response"), ReasonMalformedResponse, ConfidenceVerified, false},
+		{"client assertion key missing", fmt.Errorf("sign client assertion: %w", remotesessions.ErrTokenEndpointConfiguration), ReasonConfigurationRequired, ConfidenceVerified, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
