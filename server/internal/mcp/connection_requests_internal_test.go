@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // An outage on our side must never tell a person to sign in again.
@@ -93,6 +95,9 @@ func TestMemberNoCredentialHappened(t *testing.T) {
 	misconfigured := &metaGateContext{skippedUpstreams: new(remotesessions.SkippedClients)}
 	misconfigured.skippedUpstreams.Note(project, issuer, uuid.New(), remotesessions.ErrRemoteSessionMisconfigured)
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, misconfigured.memberNoCredentialHappened(member))
+
+	noAccess := authClientResolution{outcome: authClientNoAccess, reason: authClientReasonNotPermitted}
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, (&metaGateContext{}).memberNoCredentialHappened(metaMember{authClient: &noAccess}))
 
 	setup := authClientResolution{outcome: authClientGap, reason: authClientReasonSetup}
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, (&metaGateContext{}).memberNoCredentialHappened(metaMember{authClient: &setup}))
@@ -191,9 +196,10 @@ func TestMemberConnectionFailureKeepsTextAndType(t *testing.T) {
 }
 
 type stubMemberOutcome struct {
-	err      error
-	rejected int
-	code     int
+	err       error
+	rejected  int
+	code      int
+	tunnelErr string
 }
 
 func (o stubMemberOutcome) failure() error { return o.err }
@@ -202,7 +208,45 @@ func (o stubMemberOutcome) rejection() (int, bool) { return o.rejected, o.reject
 
 func (o stubMemberOutcome) status() int { return o.code }
 
+func (o stubMemberOutcome) tunnelError() string { return o.tunnelErr }
+
 func (o stubMemberOutcome) retryAfter(time.Time) time.Duration { return 0 }
+
+// The SDK reports busy and down members as a JSON-RPC error of its own. Neither its text nor the
+// missing row may survive, whichever way the failure arrives.
+func TestMemberClientFailure_SDKRejection(t *testing.T) {
+	t.Parallel()
+
+	rejected := fmt.Errorf("call: %w", &jsonrpc.Error{Code: -32005, Message: sdkTransportRejected})
+	member := &jsonrpc.Error{Code: -32000, Message: "database is down"}
+	for _, tc := range []struct {
+		name string
+		code int
+		err  error
+		text string
+		want mcpconnectionattempts.Code
+	}{
+		{name: "rate limited", code: http.StatusTooManyRequests, err: rejected, text: `server "fixture" is limiting requests right now. Try again in a few minutes.`, want: mcpconnectionattempts.CodeProviderRateLimited},
+		{name: "unavailable", code: http.StatusServiceUnavailable, err: rejected, text: `server "fixture" had an error. Try again in a few minutes.`, want: mcpconnectionattempts.CodeProviderServerError},
+		{name: "server error with its own words", code: http.StatusInternalServerError, err: member, text: `server "fixture" had an error. Try again in a few minutes. It said: database is down`, want: mcpconnectionattempts.CodeProviderServerError},
+		{name: "not sent", err: rejected, text: `server "fixture" did not answer: upstream unreachable or timed out`, want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{code: tc.code}, memberDial{}, metaMember{slug: "fixture"}, tc.err)
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok, err)
+			require.Equal(t, tc.want, failure.code)
+			require.EqualError(t, err, tc.text)
+		})
+	}
+
+	err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{code: http.StatusOK}, memberDial{}, metaMember{slug: "fixture"}, member)
+	require.EqualError(t, err, `server "fixture" rejected the call: database is down`)
+	_, recorded := errors.AsType[memberConnectionError](err)
+	require.False(t, recorded, "a member's own refusal at 200 is its answer")
+}
 
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 	t.Parallel()
@@ -215,9 +259,10 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 	}{
 		{name: "person's credential rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, want: mcpconnectionattempts.CodeProviderRejected},
 		{name: "no credential to send", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeInvalidRemoteSession},
-		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
-		{name: "tunnel down", outcome: stubMemberOutcome{code: http.StatusBadGateway}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeTunnelUnavailable},
-		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "tunnel down", outcome: stubMemberOutcome{code: http.StatusBadGateway, tunnelErr: wire.TunnelErrorNoLiveSession}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeTunnelUnavailable},
+		{name: "server behind the tunnel", outcome: stubMemberOutcome{code: http.StatusBadGateway}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeProviderServerError},
+		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeSharedCredentialRejected},
 		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, want: mcpconnectionattempts.CodeProviderUnreachable},
 		{name: "no route", outcome: stubMemberOutcome{err: fmt.Errorf("%w: %w", errMemberUnroutable, errTunnelNoLiveRoute)}, want: mcpconnectionattempts.CodeTunnelUnavailable},
 		{name: "route store down", outcome: stubMemberOutcome{err: fmt.Errorf("%w: store unavailable", errMemberUnroutable)}, want: mcpconnectionattempts.CodeInternalError},

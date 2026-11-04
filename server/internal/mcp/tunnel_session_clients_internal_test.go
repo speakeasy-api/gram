@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -94,4 +98,56 @@ func TestTunnelSessionClientsCacheMissesButNotFailures(t *testing.T) {
 	require.Empty(t, clients.ClientFamily(t.Context(), "failing"))
 	require.Empty(t, clients.ClientFamily(t.Context(), "failing"))
 	require.Equal(t, 3, store.loads, "a failed read is retried rather than remembered")
+}
+
+// A row's read costs one Redis read per session per replica, and a failure stops further reads for a while.
+func TestSessionClientForRow(t *testing.T) {
+	t.Parallel()
+
+	store := &countingClientInfoStore{fakeClientInfoStore: newFakeClientInfoStore(), loads: 0, err: nil}
+	project := uuid.New()
+	require.NoError(t, store.Store(t.Context(), project, "scope", "session", sessionclientinfo.Info{Name: "claude-code", Version: "2.4.0"}, 1))
+	families := newTunnelClientFamilies(store)
+	logger := testenv.NewLogger(t)
+
+	for range 3 {
+		name, version := families.forRow(logger, project, "scope", "session")
+		require.Equal(t, "claude-code", name)
+		require.Equal(t, "2.4.0", version)
+	}
+	require.Equal(t, 1, store.loads)
+
+	name, _ := families.forRow(logger, project, "other-scope", "session")
+	require.Empty(t, name, "session ids are client-supplied, so records are scoped")
+	require.Equal(t, 2, store.loads)
+
+	store.err = errors.New("redis unavailable")
+	for range 5 {
+		name, _ = families.forRow(logger, project, "scope", "failing")
+		require.Empty(t, name)
+	}
+	require.Equal(t, 3, store.loads, "a failed read pauses further reads")
+}
+
+// Building a row's option reads nothing: healthy requests must cost no Redis.
+func TestReportedClientReadsNothingUntilAsked(t *testing.T) {
+	t.Parallel()
+
+	store := &countingClientInfoStore{fakeClientInfoStore: newFakeClientInfoStore(), loads: 0, err: nil}
+	service := &Service{logger: testenv.NewLogger(t), tunnelClientFamilies: newTunnelClientFamilies(store)}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/x", nil)
+	req.Header.Set(proxy.McpSessionIDHeader, "session")
+	_ = service.reportedClient(t.Context(), req, uuid.New(), "scope")
+	require.Equal(t, 0, store.loads)
+}
+
+func BenchmarkSessionClientForRow(b *testing.B) {
+	store := &countingClientInfoStore{fakeClientInfoStore: newFakeClientInfoStore(), loads: 0, err: nil}
+	project := uuid.New()
+	families := newTunnelClientFamilies(store)
+	logger := slog.New(slog.DiscardHandler)
+	_, _ = families.forRow(logger, project, "scope", "session")
+	for b.Loop() {
+		_, _ = families.forRow(logger, project, "scope", "session")
+	}
 }

@@ -363,7 +363,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		}
 		// A key's choice is served only through the typed resolver, never by
 		// the issuer's credentials.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 	}
 	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
@@ -386,7 +386,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 			return choice, true, err
 		}
 	}
-	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
+	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 	return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 }
 
@@ -995,6 +995,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 			endpoint := &ResolvedMcpEndpoint{
 				AudienceURN:               "",
 				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+				clientInfoScope:           "",
 				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				IsPublic:                  false,
 				idJAGConfigured:           false,

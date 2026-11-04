@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -150,6 +151,22 @@ func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 		}
 	default:
 		return nil
+	}
+}
+
+// FailureHappened says what a tunnel error status means. Empty means the tunnel forwarded the answer,
+// so a 502 without a status came from the server behind it.
+func FailureHappened(tunnelError string) (mcpconnectionattempts.Code, bool) {
+	var none mcpconnectionattempts.Code
+	switch tunnelError {
+	case "":
+		return none, false
+	case wire.TunnelErrorTunnelBusy:
+		return mcpconnectionattempts.CodeProviderUnavailable, true
+	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed:
+		return mcpconnectionattempts.CodeInternalError, true
+	default:
+		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	}
 }
 

@@ -601,6 +601,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	var (
 		upstreamStatus int
+		upstreamHeader http.Header
 		responseBytes  int64
 	)
 	defer func() {
@@ -810,7 +811,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			if failure != nil {
 				cause = failure
 			}
-			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Err: cause})
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, Err: cause})
 		}
 	}()
 
@@ -866,6 +867,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
 
 	upstreamStatus = upstreamResp.StatusCode
+	upstreamHeader = upstreamResp.Header
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
 	}

@@ -73,7 +73,7 @@ func TestRenewal_FailuresKeepWhoFixes(t *testing.T) {
 		who  mcpconnectionattempts.WhoFixes
 		rows int
 	}{
-		{name: "invalid grant", kind: RefreshInvalidGrant, want: mcpconnectionattempts.CodeInvalidGrant, who: mcpconnectionattempts.WhoPerson, rows: 1},
+		{name: "invalid grant", kind: RefreshInvalidGrant, want: mcpconnectionattempts.CodeReauthenticationRequired, who: mcpconnectionattempts.WhoPerson, rows: 1},
 		{name: "configuration", kind: RefreshConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin, rows: 2},
 		{name: "invalid identity", kind: RefreshInvalidIdentity, want: mcpconnectionattempts.CodeInvalidIdentity, who: mcpconnectionattempts.WhoAdmin, rows: 2},
 		{name: "retryable", kind: RefreshRetryable, want: mcpconnectionattempts.CodeRenewalRetryable, who: mcpconnectionattempts.WhoProvider, rows: 1},
@@ -129,6 +129,29 @@ func TestRenewal_ChangedConfigurationIsRecorded(t *testing.T) {
 	require.ErrorIs(t, err, ErrConfiguration)
 	row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalMisconfigured)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+}
+
+// A setup changed since the sign-in is the person's to fix: signing in again binds the new setup.
+func TestRenewal_SignInFromAnOlderSetupAsksForSignIn(t *testing.T) {
+	t.Parallel()
+
+	s, _, p, b, allow := newDelegationUnitFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	s.connections = rec.Recorder
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+	changed := *p
+	changed.client.ClientID += "-changed"
+	require.NotEqual(t, p.DelegationConfigurationHash(), changed.DelegationConfigurationHash())
+	s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) { return &changed, nil }
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+	row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), &changed, b.HumanID, delegationLogin(&changed, s.now(), "new-id", "new-refresh", time.Hour), true))
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err, "the catalog says signing in again fixes this")
 }
 
 // An unproven caller does not reach the row: authorization comes first.

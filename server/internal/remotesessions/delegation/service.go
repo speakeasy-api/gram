@@ -486,7 +486,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrConfiguration
 	}
 	if c.status == "configuration_failure" {
@@ -778,7 +778,7 @@ func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnecti
 func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
 	switch kind {
 	case RefreshInvalidGrant:
-		return mcpconnectionattempts.CodeInvalidGrant
+		return mcpconnectionattempts.CodeReauthenticationRequired
 	case RefreshConfiguration:
 		return mcpconnectionattempts.CodeRenewalMisconfigured
 	case RefreshInvalidIdentity:

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -476,6 +477,125 @@ func TestGatewayMemberRows(t *testing.T) {
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+}
+
+// A busy or broken member must write its row and read true, through the real request path.
+func TestGatewayMemberOutageRows(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   mcpconnectionattempts.Code
+		text   string
+	}{
+		{name: "rate limited", status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeProviderRateLimited, text: "is limiting requests right now"},
+		{name: "server error", status: http.StatusInternalServerError, want: mcpconnectionattempts.CodeProviderServerError, text: "had an error"},
+		{name: "unavailable", status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeProviderServerError, text: "had an error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+			issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+			metaSlug := "meta-outage-" + uuid.NewString()[:8]
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(upstream.Close)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-outage", "", []uuid.UUID{issuerID})
+			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			subject := createTestUser(t, ctx, ti, "meta-outage-user-"+uuid.NewString())
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-outage", upstream.URL)
+
+			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+			require.True(t, isError)
+			require.Contains(t, text, tc.text)
+			require.NotContains(t, text, "transport")
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.NotEmpty(t, row.MemberID)
+			require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+		})
+	}
+}
+
+// A gateway's rows name the client its session reported, with the User-Agent as the fallback.
+func TestGatewayRowsReadTheReportedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-client-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-client", "", []uuid.UUID{issuerID})
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	subject := createTestUser(t, ctx, ti, "meta-client-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-client", upstream.URL)
+
+	const userAgent = "python-httpx/0.28.1"
+	resp, err := servePublicHTTP(t, context.Background(), ti, metaSlug, makeInitializeBodyWithClientInfo(t, "codex-mcp-client", "0.50.0"), bearer, map[string]string{"User-Agent": userAgent})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	sessionID := resp.Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sessionID)
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": "member--ping", "arguments": map[string]any{}}})
+	_, err = servePublicHTTP(t, context.Background(), ti, metaSlug, call, bearer, map[string]string{"User-Agent": userAgent, "Mcp-Session-Id": sessionID})
+	require.NoError(t, err)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.FamilyCodexCLI, row.ClientFamily)
+	require.Equal(t, "0.50.0", row.ClientVersion)
+
+	// A session that reported an unknown name falls back, and so does none at all.
+	resp, err = servePublicHTTP(t, context.Background(), ti, metaSlug, makeInitializeBodyWithClientInfo(t, "acme-agent", "9.9"), bearer, map[string]string{"User-Agent": userAgent})
+	require.NoError(t, err)
+	before := len(rec.Rows())
+	_, err = servePublicHTTP(t, context.Background(), ti, metaSlug, call, bearer, map[string]string{"User-Agent": userAgent, "Mcp-Session-Id": resp.Header().Get("Mcp-Session-Id")})
+	require.NoError(t, err)
+	for _, late := range rec.Rows()[before:] {
+		require.Equal(t, mcpconnectionattempts.FamilyScript, late.ClientFamily)
+		require.Equal(t, "0.28.1", late.ClientVersion)
+	}
+}
+
+// A toolset gate's rejection reads the record a hosted session keeps, and a missing session the User-Agent.
+func TestGateRejectionReadsTheReportedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "gate-reported")
+
+	sessionID := uuid.NewString()
+	require.NoError(t, newClientInfoStore(t).Store(ctx, fixture.Toolset.ProjectID, fixture.Toolset.Slug, sessionID, sessionclientinfo.Info{Name: "cursor-vscode", Version: "1.7.3"}, time.Now().UnixMilli()))
+
+	subject := urn.NewUserSubject("gate-reported-" + uuid.NewString())
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+	_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, map[string]string{"User-Agent": "claude-code/2.1.0", "Mcp-Session-Id": sessionID})
+	require.Error(t, err)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
+	require.Equal(t, mcpconnectionattempts.FamilyCursor, row.ClientFamily)
+	require.Equal(t, "1.7.3", row.ClientVersion)
+	require.NotEmpty(t, row.AppKey)
 }
 
 // A gateway member that answers writes nothing, through the real request path.

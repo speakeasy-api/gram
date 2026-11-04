@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/tunnel/wire"
+
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -67,7 +69,7 @@ func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
 	}{
 		{name: "no transport", outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: newTokenRefreshError("no transport", errRefreshTunnelTransport, refreshRemedyRetry)},
 		{name: "unanswered", outcome: remotesessionmetrics.RefreshOutcomeUnreachable, err: errors.New("post refresh")},
-		{name: "gateway 502", outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, err: &TokenRefreshError{statusCode: http.StatusBadGateway}},
+		{name: "gateway 502", outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, err: &TokenRefreshError{statusCode: http.StatusBadGateway, tunnelError: wire.TunnelErrorNoRoute}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -76,6 +78,22 @@ func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, mcpconnectionattempts.CodeTunnelUnavailable, what)
 		})
+	}
+}
+
+// A 502 the tunnel forwarded came from the provider, and a gateway's other statuses aren't an outage of the tunnel.
+func TestRefreshHappened_BadGatewayFollowsTheTunnelStatus(t *testing.T) {
+	t.Parallel()
+
+	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
+		"":                                mcpconnectionattempts.CodeProviderServerError,
+		wire.TunnelErrorTunnelBusy:        mcpconnectionattempts.CodeProviderUnavailable,
+		wire.TunnelErrorRouteLookupFailed: mcpconnectionattempts.CodeInternalError,
+	} {
+		what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeUpstreamError, client, &TokenRefreshError{statusCode: http.StatusBadGateway, tunnelError: tunnelError})
+		require.True(t, ok)
+		require.Equal(t, want, what, tunnelError)
 	}
 }
 

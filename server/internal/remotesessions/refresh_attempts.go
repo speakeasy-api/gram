@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -123,8 +124,10 @@ func canReregister(clientIDMetadataURI pgtype.Text, identityProviderConnectionID
 
 // refreshHappened maps a metric outcome to the row; revoked mid-refresh and canceled write none.
 func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, err error) (mcpconnectionattempts.Happened, bool) {
-	if client.TunneledMcpServerID.Valid && refreshReachedNoTunnel(outcome, err) {
-		return mcpconnectionattempts.CodeTunnelUnavailable, true
+	if client.TunneledMcpServerID.Valid {
+		if code, ok := refreshTunnelFailure(outcome, err); ok {
+			return code, true
+		}
 	}
 	switch outcome {
 	case remotesessionmetrics.RefreshOutcomeRefreshed:
@@ -166,11 +169,14 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	return nil, false
 }
 
-// refreshReachedNoTunnel reports a refresh through a tunnel that is down.
-func refreshReachedNoTunnel(outcome remotesessionmetrics.RefreshOutcome, err error) bool {
+// refreshTunnelFailure names a refresh the tunnel stopped. A 502 the tunnel forwarded came from the provider.
+func refreshTunnelFailure(outcome remotesessionmetrics.RefreshOutcome, err error) (mcpconnectionattempts.Code, bool) {
 	if errors.Is(err, errRefreshTunnelTransport) || outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
-		return true
+		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	}
-	tokenErr, ok := errors.AsType[*TokenRefreshError](err)
-	return ok && tokenErr.statusCode == http.StatusBadGateway
+	if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.statusCode == http.StatusBadGateway {
+		return tunnelrouting.FailureHappened(tokenErr.tunnelError)
+	}
+	var none mcpconnectionattempts.Code
+	return none, false
 }

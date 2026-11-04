@@ -167,6 +167,9 @@ type requestClient struct {
 	present      bool
 	userAgent    string
 	forwardedFor string
+
+	// reported reads what the MCP session said about itself. It runs on the writer.
+	reported func() (name, version string)
 }
 
 // FromRequest keeps what the request says about its client, for the writer to read. It parses
@@ -175,22 +178,48 @@ func FromRequest(r *http.Request) Option {
 	if r == nil {
 		return Option{apply: nil}
 	}
-	userAgent := r.UserAgent()
-	client := requestClient{
-		present:      true,
-		userAgent:    strings.Clone(userAgent[:min(len(userAgent), maxUserAgentBytes)]),
-		forwardedFor: lastForwardedFor(r),
+	userAgent := strings.Clone(r.UserAgent()[:min(len(r.UserAgent()), maxUserAgentBytes)])
+	forwardedFor := lastForwardedFor(r)
+	return Option{apply: func(row *Row) {
+		row.client.present, row.client.userAgent, row.client.forwardedFor = true, userAgent, forwardedFor
+	}}
+}
+
+// ReportedClient names the client an MCP session reported, read first when the writer names a
+// row's client. read runs on the writer, so a slow lookup costs the request nothing. It must bound
+// its own time and must not touch the request. Nil sets nothing.
+func ReportedClient(read func() (name, version string)) Option {
+	if read == nil {
+		return Option{apply: nil}
 	}
-	return Option{apply: func(row *Row) { row.client = client }}
+	return Option{apply: func(row *Row) { row.client.reported = read }}
 }
 
 // stampClient reads a row's request on the writer: its family, version and device key.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: ""}
+	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil}
+	if client.reported != nil {
+		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
+	}
 	if !client.present {
 		return
 	}
-	row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	if row.ClientFamily == "" {
+		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	}
 	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
+}
+
+// classifyReported returns no family for a name it does not know, so the User-Agent gets its turn.
+// A named client's version comes only from what it reported.
+func classifyReported(name, version string) (string, string) {
+	family, inName := classifyUserAgent(name)
+	if family == FamilyOther {
+		return "", ""
+	}
+	if len(version) <= maxClientVersionBytes && clientVersionShape.MatchString(version) {
+		return family, version
+	}
+	return family, inName
 }

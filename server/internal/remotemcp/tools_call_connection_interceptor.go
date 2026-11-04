@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -104,7 +105,7 @@ func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, fa
 	if proxy.IsShutdownInterrupt(failure.Err) {
 		return
 	}
-	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredential{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled); ok {
+	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredential{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader)); ok {
 		c.record(ctx, code)
 	}
 }
@@ -127,11 +128,15 @@ func HasConfiguredCredential(headers []proxy.ConfiguredHeader) bool {
 }
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.
-func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool) (mcpconnectionattempts.Code, bool) {
+// tunnelError is the tunnel gateway's own error status, when it answered instead of the server.
+func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool, tunnelError string) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
+	if tunneled && status == http.StatusBadGateway {
+		if code, ok := tunnelrouting.FailureHappened(tunnelError); ok {
+			return code, true
+		}
+	}
 	switch {
-	case tunneled && status == http.StatusBadGateway:
-		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	case tunneled && status == 0:
 		// Our own tunnel gateway did not answer, so the tunnel's owner can't fix it.
 		return mcpconnectionattempts.CodeInternalError, true
@@ -140,11 +145,11 @@ func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		switch {
 		case credential.Self:
-			return mcpconnectionattempts.CodeCredentialMisconfigured, true
+			return mcpconnectionattempts.CodeSharedCredentialRejected, true
 		case credential.Attached:
 			return mcpconnectionattempts.CodeProviderRejected, true
 		case credential.Configured:
-			return mcpconnectionattempts.CodeCredentialMisconfigured, true
+			return mcpconnectionattempts.CodeStaticKeyRejected, true
 		}
 		return none, false
 	case status == http.StatusTooManyRequests:

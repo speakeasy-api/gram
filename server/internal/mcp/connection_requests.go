@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,13 +35,36 @@ func requestApp(ctx context.Context) mcpconnectionattempts.App {
 	return mcpconnectionattempts.AppUnverified
 }
 
+// reportedClient names the client a request's MCP session reported, for a row. The writer does the
+// lookup. Only a session the client sent counts: a generated id has no record.
+func (s *Service) reportedClient(ctx context.Context, r *http.Request, projectID uuid.UUID, scope string) mcpconnectionattempts.Option {
+	if info, ok := contextvalues.GetMCPClientInfo(ctx); ok && info.Name != "" {
+		return mcpconnectionattempts.ReportedClient(func() (string, string) { return info.Name, info.Version })
+	}
+	if r == nil || scope == "" || s.tunnelClientFamilies == nil {
+		return mcpconnectionattempts.ReportedClient(nil)
+	}
+	sessionID := r.Header.Get(proxy.McpSessionIDHeader)
+	if sessionID == "" {
+		return mcpconnectionattempts.ReportedClient(nil)
+	}
+	return mcpconnectionattempts.ReportedClient(func() (string, string) {
+		return s.tunnelClientFamilies.forRow(s.logger, projectID, scope, sessionID)
+	})
+}
+
+// gatewayReportedClient is reportedClient for a gateway's own session record.
+func (s *Service) gatewayReportedClient(ctx context.Context, gate *metaGateContext) mcpconnectionattempts.Option {
+	return s.reportedClient(ctx, gate.request, uuid.Nil, metaClientInfoScope(gate.metaServerID))
+}
+
 // recordGateRejection records only a bearer that proves a real flow on this server.
 func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
 	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	code := gateHappened(valErr)
-	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope)}
 	subject, verifyErr := s.userSessionSigner.VerifiedSubject(token)
 	switch {
 	case verifyErr == nil:
@@ -67,13 +91,13 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 }
 
 // directConnectionOptions records a caller who presented a credential; anonymous calls stay in metrics.
-func directConnectionOptions(ctx context.Context, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken) []remotemcp.BuildOption {
+func directConnectionOptions(ctx context.Context, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken, client mcpconnectionattempts.Option) []remotemcp.BuildOption {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
 	}
 	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
-		Details:          []mcpconnectionattempts.Option{callerSubject(ctx)},
+		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client},
 		UpstreamFailures: true,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		Request:          r,
@@ -124,10 +148,10 @@ func authClientGapHappened(reason string) mcpconnectionattempts.Code {
 }
 
 // memberConnectionOption records a member proxy's refused tool calls under its gateway.
-func memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
+func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
 	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
 		Scope:            gate.connectionScope(ctx),
-		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx)},
+		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)},
 		UpstreamFailures: false,
 		SelfCredential:   false,
 		Request:          gate.request,
@@ -139,7 +163,7 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request))
+	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request), s.gatewayReportedClient(ctx, gate))
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
@@ -157,8 +181,14 @@ func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 
 // memberNoCredentialHappened says why a member had no credential to send.
 func (g *metaGateContext) memberNoCredentialHappened(member metaMember) mcpconnectionattempts.Code {
-	if member.authClient != nil && member.authClient.outcome == authClientGap {
-		return authClientGapHappened(member.authClient.reason)
+	if member.authClient != nil {
+		switch member.authClient.outcome {
+		case authClientGap:
+			return authClientGapHappened(member.authClient.reason)
+		case authClientNoAccess:
+			return mcpconnectionattempts.CodeNoServerAccess
+		case authClientLegacy, authClientNoAuth, authClientResolved:
+		}
 	}
 	if reason := g.skippedUpstreams.Reason(member.projectID, member.remoteSessionIssuerID.UUID, member.chosenClientID); reason != nil {
 		return resolveFailureHappened(reason)
@@ -182,7 +212,7 @@ func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcp
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
-	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx), mcpconnectionattempts.FromRequest(payload.request))
+	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx), mcpconnectionattempts.FromRequest(payload.request), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
 }
 
 func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {

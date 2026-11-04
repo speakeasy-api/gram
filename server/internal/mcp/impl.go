@@ -1528,7 +1528,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
 			if !errors.Is(ctx.Err(), context.Canceled) {
-				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
+				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 			}
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
@@ -1760,7 +1760,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 					if cfg.mcpServerID != nil {
 						scope = mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
 					}
-					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
+					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}

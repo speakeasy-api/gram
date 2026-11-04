@@ -1190,7 +1190,7 @@ func (s *Service) authenticateIssuerGate(
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 			s.connections.Once(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
-				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.FromRequest(r))
+				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		}
 		return ctx, nil, nil, err
 	}
@@ -1333,7 +1333,8 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		return
 	}
 	s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, code,
-		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request))
+		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request),
+		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required

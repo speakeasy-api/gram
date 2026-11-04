@@ -12,12 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 const connectionToolsCall = `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`
@@ -107,25 +109,71 @@ func TestToolsCallConnections_UpstreamFailures(t *testing.T) {
 	}
 }
 
+// Through the real proxy: only a 502 the tunnel gateway answered is the tunnel's.
+func TestToolsCallConnections_TunneledBadGateway(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		tunnelError string
+		want        mcpconnectionattempts.Code
+	}{
+		{name: "server behind the tunnel", tunnelError: "", want: mcpconnectionattempts.CodeProviderServerError},
+		{name: "tunnel down", tunnelError: wire.TunnelErrorNoLiveSession, want: mcpconnectionattempts.CodeTunnelUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := mcpconnectionattemptstest.New(t)
+			connections := recordingConnections(rec, "token")
+			connections.tunneled = true
+			serveToolsCall(t.Context(), t, connections, func(w http.ResponseWriter, _ *http.Request) {
+				if tc.tunnelError != "" {
+					w.Header().Set(tunnelrouting.ErrorHeader, tc.tunnelError)
+				}
+				w.WriteHeader(http.StatusBadGateway)
+			}, continueCheckpoint())
+
+			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+		})
+	}
+}
+
 func TestUpstreamFailureHappened(t *testing.T) {
 	t.Parallel()
 
 	attached := UpstreamCredential{Attached: true, Self: false, Configured: false}
-	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: true, Self: true, Configured: false}, false)
+	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: true, Self: true, Configured: false}, false, "")
 	require.True(t, ok)
-	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, code)
+	require.Equal(t, mcpconnectionattempts.CodeSharedCredentialRejected, code)
 
-	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: false}, false)
+	code, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: true}, false, "")
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeStaticKeyRejected, code)
+
+	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: false}, false, "")
 	require.False(t, ok, "a 401 with no credential is the sign-in challenge")
 
-	code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, true)
-	require.Equal(t, mcpconnectionattempts.CodeTunnelUnavailable, code)
-	code, _ = UpstreamFailureHappened(0, attached, true)
+	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
+		"":                                    mcpconnectionattempts.CodeProviderServerError,
+		wire.TunnelErrorNoLiveSession:         mcpconnectionattempts.CodeTunnelUnavailable,
+		wire.TunnelErrorSubstreamFailed:       mcpconnectionattempts.CodeTunnelUnavailable,
+		wire.TunnelErrorNoRoute:               mcpconnectionattempts.CodeTunnelUnavailable,
+		wire.TunnelErrorTunnelBusy:            mcpconnectionattempts.CodeProviderUnavailable,
+		wire.TunnelErrorRouteLookupFailed:     mcpconnectionattempts.CodeInternalError,
+		wire.TunnelErrorRouteStoreUnavailable: mcpconnectionattempts.CodeInternalError,
+	} {
+		code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, true, tunnelError)
+		require.Equal(t, want, code, tunnelError)
+	}
+	code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, false, wire.TunnelErrorNoRoute)
+	require.Equal(t, mcpconnectionattempts.CodeProviderServerError, code, "only a tunneled server has a tunnel")
+	code, _ = UpstreamFailureHappened(0, attached, true, "")
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
-	code, _ = UpstreamFailureHappened(0, attached, false)
+	code, _ = UpstreamFailureHappened(0, attached, false, "")
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 
-	_, ok = UpstreamFailureHappened(http.StatusNotFound, attached, false)
+	_, ok = UpstreamFailureHappened(http.StatusNotFound, attached, false, "")
 	require.False(t, ok)
 }
 
@@ -172,7 +220,7 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	configured := []proxy.ConfiguredHeader{{IsRequired: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}}
 	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", configured), reject, continueCheckpoint())
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 
 	forwarded := mcpconnectionattemptstest.New(t)
