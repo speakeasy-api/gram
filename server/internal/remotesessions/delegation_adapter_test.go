@@ -51,6 +51,7 @@ func TestDelegationAdapterTranslatesDefinitiveAuthorizationFailure(t *testing.T)
 		{FederatedRefreshSetup, delegation.RefreshSetup},
 		{FederatedRefreshInvalidIdentity, delegation.RefreshInvalidIdentity},
 		{FederatedRefreshRetryable, delegation.RefreshRetryable},
+		{FederatedRefreshSetupRetryable, delegation.RefreshSetupRetryable},
 	} {
 		var failure *delegation.RefreshError
 		require.ErrorAs(t, delegationRefreshError(&FederatedRefreshError{Kind: tc.source}), &failure)

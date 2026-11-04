@@ -234,6 +234,17 @@ func TestConsentChainedCardOffersConnectForEveryDefinitiveRefusal(t *testing.T) 
 	}
 }
 
+func TestConsentChainCheckKeptSignInSaysItRetries(t *testing.T) {
+	t.Parallel()
+
+	kept := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
+	require.Equal(t, chainCheckRejected, kept.Status)
+	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use a separate sign-in.", kept.Message)
+
+	unset := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
+	require.Equal(t, "Example isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.", unset.Message)
+}
+
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {
 	t.Parallel()
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{{Chained: true}}), "chaining alone has not connected anything")

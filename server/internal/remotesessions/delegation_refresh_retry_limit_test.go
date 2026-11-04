@@ -136,7 +136,7 @@ func TestFederatedRefreshHostLookupOutageIsRetryable(t *testing.T) {
 	})))
 	m := &ChallengeManager{policy: policy, logger: testenv.NewLogger(t)}
 	_, err := m.RefreshFederatedIdentity(t.Context(), federatedFixture(t), "refresh", "subject", "nonce")
-	require.ErrorIs(t, err, &FederatedRefreshError{Kind: FederatedRefreshRetryable})
+	require.ErrorIs(t, err, &FederatedRefreshError{Kind: FederatedRefreshSetupRetryable})
 
 	s, store, b, allow, _, _ := rejectionFixture(t, nil)
 	s.refreshIdentity = func(ctx context.Context, _ *FederatedProvider, token, subject, nonce string) (*FederatedRefreshResult, error) {

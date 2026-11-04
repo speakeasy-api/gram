@@ -17,7 +17,7 @@ func failRepeatedly(t *testing.T, s *Service, b Binding, allow Authorizer, kind 
 	for moved := time.Duration(0); moved < elapsed; moved += 6 * time.Hour {
 		delegationMoveClock(s, 6*time.Hour)
 		_, err := s.Resolve(t.Context(), b, allow)
-		if moved+6*time.Hour < configurationRetryLimit || kind == RefreshClientRejected || kind == RefreshSetup {
+		if moved+6*time.Hour < configurationRetryLimit || kind == RefreshClientRejected || kind == RefreshSetup || kind == RefreshSetupRetryable {
 			require.ErrorIs(t, err, ErrConfiguration)
 		}
 	}
@@ -87,14 +87,36 @@ func TestDelegationRetryLimitCountsThroughTemporaryFailures(t *testing.T) {
 	require.Equal(t, first.observedAt, c.observedAt, "a 429 or temporarily_unavailable must not push the limit back")
 }
 
-func TestDelegationRetryLimitIgnoresLocalSetupFaults(t *testing.T) {
+func TestDelegationRetryLimitCoversRetryableRefusals(t *testing.T) {
 	t.Parallel()
 	s, store, _, b, allow := failedConfigurationFixture(t)
-	failRepeatedly(t, s, b, allow, RefreshSetup, 2*configurationRetryLimit)
+	failRepeatedly(t, s, b, allow, RefreshRetryable, configurationRetryLimit-6*time.Hour)
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	require.Equal(t, "configuration_failure", c.status)
-	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh), "no request was sent, so the provider has said nothing about the token")
+	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+
+	delegationMoveClock(s, 6*time.Hour)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication, "a kept token answered only with 429s still reaches the limit")
+	c, err = store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "reauthentication_required", c.status)
+	require.Empty(t, c.refresh)
+}
+
+func TestDelegationRetryLimitIgnoresLocalSetupFaults(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []RefreshFailure{RefreshSetup, RefreshSetupRetryable} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			s, store, _, b, allow := failedConfigurationFixture(t)
+			failRepeatedly(t, s, b, allow, kind, 2*configurationRetryLimit)
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, "configuration_failure", c.status)
+			require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh), "no request was sent, so the provider has said nothing about the token")
+		})
+	}
 }
 
 func TestDelegationRetryLimitRestartsAfterARecovery(t *testing.T) {

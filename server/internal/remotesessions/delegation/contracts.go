@@ -75,6 +75,8 @@ const (
 	RefreshSetup           RefreshFailure = "setup"
 	RefreshInvalidIdentity RefreshFailure = "invalid_identity"
 	RefreshRetryable       RefreshFailure = "retryable"
+	// RefreshSetupRetryable is a transient fault before the request was sent.
+	RefreshSetupRetryable RefreshFailure = "setup_retryable"
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.

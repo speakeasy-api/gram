@@ -29,6 +29,7 @@ const (
 	FederatedRefreshAmbiguous       FederatedRefreshFailure = "ambiguous"
 	FederatedRefreshRateLimited     FederatedRefreshFailure = "rate_limited"
 	FederatedRefreshRetryable       FederatedRefreshFailure = "retryable"
+	FederatedRefreshSetupRetryable  FederatedRefreshFailure = "setup_retryable"
 	FederatedRefreshInvalidIdentity FederatedRefreshFailure = "invalid_identity"
 )
 
@@ -275,7 +276,7 @@ func (e *FederatedRefreshError) Is(target error) bool {
 func federatedRefreshSetupError(err error) error {
 	kind := FederatedRefreshSetup
 	if errors.Is(err, ErrFederatedUnavailable) {
-		kind = FederatedRefreshRetryable
+		kind = FederatedRefreshSetupRetryable
 	}
 	return &FederatedRefreshError{Kind: kind, RetryAfter: 0}
 }

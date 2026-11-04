@@ -94,6 +94,8 @@ func delegationRefreshError(err error) error {
 	// A 429 is usually a WAF, and if one hid a rotation the replay's invalid_grant costs the same sign-in a held claim would.
 	case FederatedRefreshRateLimited, FederatedRefreshRetryable:
 		kind = delegation.RefreshRetryable
+	case FederatedRefreshSetupRetryable:
+		kind = delegation.RefreshSetupRetryable
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
 	}
