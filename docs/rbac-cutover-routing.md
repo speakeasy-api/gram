@@ -12,6 +12,7 @@ flowchart BT
     skill["skill<br/>skill"] --> project
     assistant["assistant<br/>assistant"] --> project
     environment["environment<br/>environment"] --> project
+    inference["inference<br/>inference"] --> project
     project --> organization["organization<br/>organization"]
 ```
 
