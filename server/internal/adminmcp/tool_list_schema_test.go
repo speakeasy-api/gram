@@ -231,10 +231,17 @@ func TestActivityAuditLogInternalSchema(t *testing.T) {
 			continue
 		}
 		found++
-		properties := tool.OutputSchema["properties"].(map[string]any)
-		items := properties[field].(map[string]any)["items"].(map[string]any)
+		properties, ok := tool.OutputSchema["properties"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		fieldSchema, ok := properties[field].(map[string]any)
+		require.True(t, ok, tool.Name)
+		items, ok := fieldSchema["items"].(map[string]any)
+		require.True(t, ok, tool.Name)
 		require.Contains(t, items["required"], "is_internal", tool.Name)
-		internal := items["properties"].(map[string]any)["is_internal"].(map[string]any)
+		itemProperties, ok := items["properties"].(map[string]any)
+		require.True(t, ok, tool.Name)
+		internal, ok := itemProperties["is_internal"].(map[string]any)
+		require.True(t, ok, tool.Name)
 		require.Equal(t, "boolean", internal["type"], tool.Name)
 	}
 	require.Equal(t, 2, found)

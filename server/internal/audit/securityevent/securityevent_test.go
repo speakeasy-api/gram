@@ -292,12 +292,12 @@ func TestPublishWebhook_InternalSecurityEvent(t *testing.T) {
 	input := repo.InsertSecurityAuditLogParams{OrganizationID: uuid.NewString(), ActorID: "audit-test", ActorType: "system", Action: string(audit.ActionWorkloadAdmissionAdmit), SubjectID: uuid.NewString(), SubjectType: "workload_admission", IsInternal: true}
 	row, err := repo.New(conn).InsertSecurityAuditLog(ctx, input)
 	require.NoError(t, err)
-	var internal bool
-	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM security_audit_logs WHERE id = $1", row.ID).Scan(&internal))
+	internal, err := audittestrepo.New(conn).GetSecurityAuditLogInternal(ctx, row.ID)
+	require.NoError(t, err)
 	require.True(t, internal)
 	require.NoError(t, audit.PublishWebhook(ctx, conn, auditrepo.InsertAuditLogParams(input), auditrepo.InsertAuditLogRow(row), audit.CategorySecurity, events.WorkloadAdmissionV1))
-	var count int
-	require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM publish_outbox WHERE organization_id = $1", input.OrganizationID).Scan(&count))
+	count, err := audittestrepo.New(conn).CountPublishOutboxByOrg(ctx, input.OrganizationID)
+	require.NoError(t, err)
 	require.Zero(t, count)
 }
 

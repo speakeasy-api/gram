@@ -8,11 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/cmd/internal-audit-events-backfill/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOptions(t *testing.T) {
+	t.Parallel()
 	for _, args := range [][]string{nil, {"--before", "bad"}, {"--before", "2026-11-04"}, {"--before", "2026-11-04T00:00:00Z", "--batch-size", "0"}, {"--before", "2026-11-04T00:00:00Z", "--batch-size", "5001"}, {"--before", "2026-11-04T00:00:00Z", "--max-batches", "0"}, {"--before", "2026-11-04T00:00:00Z", "extra"}} {
 		_, err := parseOptions(args)
 		require.Error(t, err)
@@ -42,6 +45,7 @@ type brokenWriter struct{}
 func (brokenWriter) Write([]byte) (int, error) { return 0, errors.New("broken output") }
 
 func TestBackfill(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	infra, cleanup, err := testenv.Launch(ctx, testenv.LaunchOptions{Postgres: true})
@@ -50,27 +54,19 @@ func TestBackfill(t *testing.T) {
 	pool, err := infra.CloneTestDatabase(t, "backfill")
 	require.NoError(t, err)
 	cutoff := time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
-	for _, table := range []string{"audit_logs", "security_audit_logs"} {
-		// Identifiers are fixed test constants, never operator input.
-		_, err = pool.Exec(ctx, `INSERT INTO `+table+` (organization_id, actor_id, actor_type, subject_id, subject_type, action, created_at, is_internal, metadata) VALUES
- ('test-org','actor','user','one','catalog_promotion','other',$1,false,'{"keep":true}'),
- ('test-org','actor','user','two','mcp_server','mcp-server:promote-catalogue',$1,false,NULL),
- ('test-org','actor','user','three','catalog_promotion','other',$1,false,NULL),
- ('test-org','actor','user','unrelated','mcp_server','mcp-server:update',$1,false,NULL),
- ('test-org','actor','user','exact-cutoff','catalog_promotion','other',$2,false,NULL),
- ('test-org','actor','user','new','catalog_promotion','other',$3,false,NULL),
- ('test-org','actor','user','already','catalog_promotion','other',$1,true,NULL)`, cutoff.Add(-time.Hour), cutoff, cutoff.Add(time.Hour))
-		require.NoError(t, err)
-	}
+	q := testrepo.New(pool)
+	older := pgtype.Timestamptz{Time: cutoff.Add(-time.Hour), Valid: true}
+	atCutoff := pgtype.Timestamptz{Time: cutoff, Valid: true}
+	newer := pgtype.Timestamptz{Time: cutoff.Add(time.Hour), Valid: true}
+	require.NoError(t, q.SeedAuditLogs(ctx, testrepo.SeedAuditLogsParams{Older: older, Cutoff: atCutoff, Newer: newer}))
+	require.NoError(t, q.SeedSecurityLogs(ctx, testrepo.SeedSecurityLogsParams{Older: older, Cutoff: atCutoff, Newer: newer}))
 	snapshot := func() string {
-		var s string
-		err := pool.QueryRow(ctx, `SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM audit_logs a),(SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM security_audit_logs a),(SELECT count(*) FROM outbox),(SELECT count(*) FROM publish_outbox))::text`).Scan(&s)
+		s, err := q.Snapshot(ctx)
 		require.NoError(t, err)
 		return s
 	}
 	data := func() string {
-		var s string
-		err := pool.QueryRow(ctx, `SELECT jsonb_build_array((SELECT jsonb_agg(to_jsonb(a)-'is_internal' ORDER BY id) FROM audit_logs a),(SELECT jsonb_agg(to_jsonb(a)-'is_internal' ORDER BY id) FROM security_audit_logs a))::text`).Scan(&s)
+		s, err := q.Data(ctx)
 		require.NoError(t, err)
 		return s
 	}
@@ -94,20 +90,21 @@ func TestBackfill(t *testing.T) {
 	require.Equal(t, after, snapshot())
 	require.Equal(t, 2, strings.Count(out.String(), "updated=0 batches=0 remaining=0"))
 	require.Equal(t, originalData, data())
-	for _, table := range []string{"audit_logs", "security_audit_logs"} {
-		var count int
-		err = pool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE NOT is_internal AND subject_id IN ('unrelated','exact-cutoff','new')`).Scan(&count)
-		require.NoError(t, err)
-		require.Equal(t, 3, count)
-	}
-	var count int
-	require.NoError(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM outbox)+(SELECT count(*) FROM publish_outbox)`).Scan(&count))
-	require.Zero(t, count)
+	count, err := q.CountUnchangedAuditLogs(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, count)
+	count, err = q.CountUnchangedSecurityLogs(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, count)
+	outboxCount, err := q.CountOutbox(ctx)
+	require.NoError(t, err)
+	require.Zero(t, outboxCount)
 	require.Error(t, backfill(ctx, pool, o, brokenWriter{}))
-	_, err = pool.Exec(ctx, "UPDATE audit_logs SET is_internal=false WHERE subject_id IN ('one','two','three')")
+	err = q.ResetAuditLogs(ctx)
 	require.NoError(t, err)
 	err = backfill(ctx, pool, o, &failAfterHeader{})
 	require.ErrorContains(t, err, "previous batches committed rows=2")
-	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM audit_logs WHERE is_internal AND subject_id IN ('one','two','three')").Scan(&count))
-	require.Equal(t, 2, count)
+	count, err = q.CountUpdatedAuditLogs(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count)
 }

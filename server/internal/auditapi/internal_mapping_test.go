@@ -11,6 +11,7 @@ import (
 )
 
 func TestInternalClassificationResponse(t *testing.T) {
+	t.Parallel()
 	for _, internal := range []bool{false, true} {
 		log, err := toAuditLog(repo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
 		require.NoError(t, err)

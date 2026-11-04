@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -54,8 +55,8 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var internal bool
-	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM audit_logs WHERE subject_id = $1", assetID.String()).Scan(&internal))
+	internal, err := auditrepo.New(conn).GetAuditLogInternalBySubject(ctx, assetID.String())
+	require.NoError(t, err)
 	require.False(t, internal)
 
 	envelope, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
@@ -251,8 +252,8 @@ func TestLogger_WithoutOutboxRecordsAuditRowOnly(t *testing.T) {
 	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAssetCreate)
 	require.NoError(t, err)
 	require.Equal(t, assetID.String(), record.SubjectID)
-	var internal bool
-	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM audit_logs WHERE subject_id = $1", assetID.String()).Scan(&internal))
+	internal, err := auditrepo.New(conn).GetAuditLogInternalBySubject(ctx, assetID.String())
+	require.NoError(t, err)
 	require.False(t, internal)
 
 	_, err = auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
@@ -265,41 +266,42 @@ func TestLogger_WithoutOutboxRecordsAuditRowOnly(t *testing.T) {
 func TestLogger_InternalEvents(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
 	orgID := uuid.NewString()
 	actor := urn.NewSystemPrincipal("audit-test")
 	promotion := urn.NewCatalogPromotion(uuid.New())
 	logger := audit.NewLogger()
 	actions := []struct {
 		name string
-		log  func() error
+		log  func(conn *pgxpool.Pool) error
 	}{
-		{"Archive", func() error {
+		{"Archive", func(conn *pgxpool.Pool) error {
 			return logger.LogCatalogPromotionArchive(ctx, conn, audit.LogCatalogPromotionArchiveEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
 		}},
-		{"Reject", func() error {
+		{"Reject", func(conn *pgxpool.Pool) error {
 			return logger.LogCatalogPromotionReject(ctx, conn, audit.LogCatalogPromotionRejectEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
 		}},
-		{"Restore", func() error {
+		{"Restore", func(conn *pgxpool.Pool) error {
 			return logger.LogCatalogPromotionRestore(ctx, conn, audit.LogCatalogPromotionRestoreEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
 		}},
-		{"RetryDocs", func() error {
+		{"RetryDocs", func(conn *pgxpool.Pool) error {
 			return logger.LogCatalogPromotionRetryDocs(ctx, conn, audit.LogCatalogPromotionRetryDocsEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
 		}},
-		{"PromoteCatalogue", func() error {
+		{"PromoteCatalogue", func(conn *pgxpool.Pool) error {
 			return logger.LogMcpServerPromoteCatalogue(ctx, conn, audit.LogMcpServerPromoteCatalogueEvent{OrganizationID: orgID, Actor: actor, McpServerURN: urn.NewMcpServer(uuid.New())})
 		}},
 	}
 	for _, action := range actions {
 		t.Run(action.name, func(t *testing.T) {
-			require.NoError(t, action.log())
+			t.Parallel()
+			conn, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+			require.NoError(t, action.log(conn))
 			rows, err := writerrepo.New(conn).ListAuditLogs(ctx, writerrepo.ListAuditLogsParams{OrganizationID: orgID, IncludeInternalEvents: true})
 			require.NoError(t, err)
-			require.NotEmpty(t, rows)
+			require.Len(t, rows, 1)
 			require.True(t, rows[0].IsInternal)
-			var count int
-			require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM publish_outbox WHERE organization_id = $1", orgID).Scan(&count))
+			count, err := auditrepo.New(conn).CountPublishOutboxByOrg(ctx, orgID)
+			require.NoError(t, err)
 			require.Zero(t, count)
 		})
 	}

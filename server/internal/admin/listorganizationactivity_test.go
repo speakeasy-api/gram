@@ -637,6 +637,7 @@ func TestListOrganizationActivityFiltered_PaginationAndDelegation(t *testing.T) 
 }
 
 func TestInternalClassificationResponse(t *testing.T) {
+	t.Parallel()
 	for _, internal := range []bool{false, true} {
 		log, err := adminActivityLog(auditrepo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
 		require.NoError(t, err)

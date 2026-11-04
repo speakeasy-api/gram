@@ -93,7 +93,7 @@ func backfill(ctx context.Context, pool *pgxpool.Pool, o options, out io.Writer)
 			return fmt.Errorf("%s before count: %w", table.name, err)
 		}
 		if _, err = fmt.Fprintf(out, "%s apply=%t before=%s eligible_before=%d\n", table.name, o.apply, o.before.Format(time.RFC3339Nano), before); err != nil {
-			return err
+			return fmt.Errorf("write backfill progress: %w", err)
 		}
 		var updated int64
 		batches := 0
@@ -110,7 +110,7 @@ func backfill(ctx context.Context, pool *pgxpool.Pool, o options, out io.Writer)
 				updated += n
 				batches++
 				if _, err = fmt.Fprintf(out, "%s batch=%d committed_rows=%d\n", table.name, batches, n); err != nil {
-					return err
+					return fmt.Errorf("write backfill progress: %w", err)
 				}
 			}
 		}
@@ -119,11 +119,11 @@ func backfill(ctx context.Context, pool *pgxpool.Pool, o options, out io.Writer)
 			return fmt.Errorf("%s after count: %w", table.name, err)
 		}
 		if _, err = fmt.Fprintf(out, "%s updated=%d batches=%d remaining=%d\n", table.name, updated, batches, remaining); err != nil {
-			return err
+			return fmt.Errorf("write backfill progress: %w", err)
 		}
 		if remaining > 0 {
 			if _, err = fmt.Fprintln(out, "Eligible rows remain; review counts and rerun with --apply to continue."); err != nil {
-				return err
+				return fmt.Errorf("write backfill progress: %w", err)
 			}
 		}
 	}
