@@ -157,18 +157,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	chained, outcome := s.identityChainer.Acquire(ctx, req)
 	switch {
 	case outcome.Succeeded():
-		// The token is delegated to the authenticated human, and comes from
-		// no stored grant.
-		return remotesessions.UpstreamToken{
-			Token:                              chained.Value(),
-			Resource:                           "",
-			CredentialOwner:                    remotesessions.CredentialOwnerSubject,
-			RemoteSessionClientID:              uuid.Nil,
-			RemoteSessionID:                    uuid.Nil,
-			RemoteSessionUpdatedAt:             time.Time{},
-			RemoteSessionResolvedFromUpdatedAt: time.Time{},
-			ClientCredentialErr:                nil,
-		}, nil
+		return chainedUpstreamToken(chained), nil
 	case !outcome.Applicable() && unusable:
 		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	case !outcome.Applicable():
@@ -473,4 +462,18 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 		}
 	}
 	return chained
+}
+
+// Chained tokens belong to the authenticated human, not a stored grant.
+func chainedUpstreamToken(chained identitychaining.Token) remotesessions.UpstreamToken {
+	return remotesessions.UpstreamToken{
+		Token:                              chained.Value(),
+		Resource:                           "",
+		CredentialOwner:                    remotesessions.CredentialOwnerSubject,
+		RemoteSessionClientID:              uuid.Nil,
+		RemoteSessionID:                    uuid.Nil,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                nil,
+	}
 }

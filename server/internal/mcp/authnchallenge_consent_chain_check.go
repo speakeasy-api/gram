@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -141,7 +142,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-// consentChainedUpstreamToken exchanges the consent's sign-in for the direct upstream's credential, as gateway consent discovery does.
+// consentChainedUpstreamToken exchanges the sign-in under the consent discovery gate.
 func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clientID uuid.UUID) *remotesessions.UpstreamToken {
 	if s.identityChainer == nil {
 		return nil
@@ -170,11 +171,18 @@ func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.
 	if len(requests) != 1 {
 		return nil
 	}
+	sel := requests[0]
+	req, ok := s.identityChainingRequestForKind(ctx, mcpidentity.KindConsentDiscovery, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, sel.UpstreamResource, sel.RemoteSessionIssuerID.Valid, sel.RemoteSessionIssuerID, sel.RemoteSessionClientID)
+	if !ok || req.UserID != sel.UserID {
+		return nil
+	}
 	signInID := uuid.Nil
 	if challengeState.SignInID != nil {
 		signInID = *challengeState.SignInID
 	}
-	token, outcome := s.identityChainer.AcquireConsent(ctx, requests[0], signInID)
+	acquireCtx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
+	defer cancel()
+	token, outcome := s.identityChainer.AcquireConsent(acquireCtx, req, signInID)
 	if !outcome.Succeeded() {
 		logger.InfoContext(ctx, "consent tool inventory could not use identity chaining",
 			attr.SlogReason(string(outcome.Reason)),
@@ -182,16 +190,8 @@ func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.
 		)
 		return nil
 	}
-	return &remotesessions.UpstreamToken{
-		Token:                              token.Value(),
-		Resource:                           "",
-		CredentialOwner:                    remotesessions.CredentialOwnerSubject,
-		RemoteSessionClientID:              uuid.Nil,
-		RemoteSessionID:                    uuid.Nil,
-		RemoteSessionUpdatedAt:             time.Time{},
-		RemoteSessionResolvedFromUpdatedAt: time.Time{},
-		ClientCredentialErr:                nil,
-	}
+	upstream := chainedUpstreamToken(token)
+	return &upstream
 }
 
 // retireDeniedConsentCredentials erases the vendor credentials this sign-in's
