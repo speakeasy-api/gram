@@ -21,7 +21,7 @@ func TestUpdateCodeReconnectReadsLegacyEncoding(t *testing.T) {
 	typ := reflect.TypeFor[CodeReconnectBinding]()
 	fields := []reflect.StructField{}
 	for f := range typ.Fields() {
-		if f := f; f.Name != "CatalogCanceled" {
+		if f.Name != "CatalogCanceled" {
 			fields = append(fields, f)
 		}
 	}
@@ -45,7 +45,6 @@ func TestUpdateCodeReconnectReadsLegacyEncoding(t *testing.T) {
 	stateType := reflect.TypeFor[AuthnChallengeState]()
 	fields = nil
 	for f := range stateType.Fields() {
-		f := f
 		if f.Name == "CodeReconnect" {
 			f.Type = reflect.TypeFor[any]()
 		}
