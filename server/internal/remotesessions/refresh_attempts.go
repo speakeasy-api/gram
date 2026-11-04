@@ -28,6 +28,16 @@ func (s *RefreshService) recordRefresh(
 	if !ok {
 		return
 	}
+	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
+		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(ctx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
+			RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
+			UserSessionIssuerID:   sess.UserSessionIssuerID,
+		})
+		// Do not recommend re-registration unless the tenant's binding is known.
+		if lookupErr != nil || managed {
+			what = mcpconnectionattempts.CodeProviderOAuthInvalidClient
+		}
+	}
 	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Provider(client.IssuerUrl),
 		mcpconnectionattempts.RemoteSession(sess.ID),
@@ -70,7 +80,7 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 		return mcpconnectionattempts.CodeInvalidGrant, true
 	case remotesessionmetrics.RefreshOutcomeInvalidClient:
 		// Only a client that can re-register is repaired by the person reconnecting.
-		if client.IssuerRegistrationEndpoint.String != "" && !client.HasActiveEmaBinding && canReregister(client.ClientIDMetadataUri, client.IdentityProviderConnectionID, client.TokenEndpointAuthMethod, client.CredentialOwner) {
+		if client.IssuerRegistrationEndpoint.String != "" && canReregister(client.ClientIDMetadataUri, client.IdentityProviderConnectionID, client.TokenEndpointAuthMethod, client.CredentialOwner) {
 			return mcpconnectionattempts.CodeRefreshInvalidClient, true
 		}
 		return mcpconnectionattempts.CodeProviderOAuthInvalidClient, true
