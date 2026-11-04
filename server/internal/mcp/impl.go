@@ -1538,6 +1538,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+			}
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1762,7 +1765,15 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 			}
 			ctx = prepared
 			if err := s.authz.Require(ctx, connect); err != nil {
-				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
+				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
+				if mcpaccess.IsServerPermissionDenied(denied) {
+					scope := mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
+					if cfg.mcpServerID != nil {
+						scope = mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+					}
+					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+				}
+				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}
 		}
 
@@ -2114,7 +2125,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		s.recordHostedToolsCallRefusal(ctx, payload, err)
+		return body, err
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case mcpversions.MethodPromptsGet:

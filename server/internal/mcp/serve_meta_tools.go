@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -240,6 +241,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
+			s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolNotApproved, gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request), s.gatewayReportedClient(ctx, gate))
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -276,6 +278,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, err
 	}
 	if !satisfied {
+		s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
 		return marshalMetaToolError(ctx, logger, req.ID,
 			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
 	}
@@ -307,6 +310,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
+		if code, ok := toolsCallRefusal(err); ok {
+			s.recordMemberFailure(ctx, gate, member, code)
+		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults — unexpected errors and server
@@ -509,6 +515,7 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
+		request:               gate.request,
 		projectID:             projectID,
 		organizationID:        toolset.OrganizationID,
 		toolset:               toolset.Slug,
