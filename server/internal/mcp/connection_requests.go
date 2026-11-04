@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -149,7 +148,7 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-		if refresh, ok := errors.AsType[*remotesessions.RefreshError](err); ok && refresh.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageNone {
+		if remotesessions.RefreshBusy(err) {
 			return mcpconnectionattempts.Code{}
 		}
 		if remotesessions.TokenEndpointCausedOutage(err) {
