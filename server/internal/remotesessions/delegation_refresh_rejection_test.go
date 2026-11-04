@@ -29,10 +29,11 @@ const refusalRetryWait = 10 * time.Minute
 // fakeTokenEndpoint answers each refresh with the current response and records
 // the refresh token it was sent.
 type fakeTokenEndpoint struct {
-	mu        sync.Mutex
-	status    int
-	body      string
-	submitted []string
+	mu         sync.Mutex
+	status     int
+	body       string
+	retryAfter string
+	submitted  []string
 }
 
 func (e *fakeTokenEndpoint) answer(status int, body string) {
@@ -66,6 +67,9 @@ func rejectionFixture(t *testing.T, locks cache.Cache) (*delegationAdapterFixtur
 		endpoint.mu.Lock()
 		defer endpoint.mu.Unlock()
 		endpoint.submitted = append(endpoint.submitted, form.Get("refresh_token"))
+		if endpoint.retryAfter != "" {
+			w.Header().Set("Retry-After", endpoint.retryAfter)
+		}
 		w.WriteHeader(endpoint.status)
 		_, _ = io.WriteString(w, endpoint.body)
 	}))
@@ -287,6 +291,40 @@ func TestDelegationRateLimitOnHealthyTokenReleasesClaim(t *testing.T) {
 	_, err = s.Resolve(t.Context(), b, allow)
 	require.ErrorIs(t, err, ErrDelegationTemporary)
 	require.Equal(t, []string{"secret-refresh", "secret-refresh"}, endpoint.received(), "the retry resends the kept token")
+}
+
+func TestDelegationRateLimitWaitsForRetryAfter(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		retryAfter string
+		want       time.Duration
+	}{
+		{name: "absent", retryAfter: "", want: time.Minute},
+		{name: "shorter than a minute", retryAfter: "5", want: time.Minute},
+		{name: "seconds", retryAfter: "180", want: 3 * time.Minute},
+		{name: "http date", retryAfter: "date", want: 4*time.Minute + 30*time.Second},
+		{name: "capped", retryAfter: "86400", want: 5 * time.Minute},
+		{name: "malformed", retryAfter: "soon", want: time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
+			endpoint.answer(http.StatusTooManyRequests, `slow down`)
+			endpoint.retryAfter = tc.retryAfter
+			if tc.retryAfter == "date" {
+				endpoint.retryAfter = time.Now().Add(4*time.Minute + 30*time.Second).UTC().Format(http.TimeFormat)
+			}
+
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrDelegationTemporary)
+			row, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, "temporary_failure", row.ObservationStatus.String)
+			require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
+			require.WithinDuration(t, s.now().Add(tc.want), row.RetryAfter.Time, 2*time.Second)
+		})
+	}
 }
 
 func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {

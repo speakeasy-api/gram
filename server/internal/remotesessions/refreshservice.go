@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -427,11 +427,11 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 		return remotesessionmetrics.RefreshOutcomeInvalidGrant
 	case tokenErr.invalidClient():
 		return remotesessionmetrics.RefreshOutcomeInvalidClient
-	case tokenErr.statusCode == http.StatusTooManyRequests:
+	case tokenErr.failure().Status == oautherr.RefreshStatusRateLimited:
 		return remotesessionmetrics.RefreshOutcomeRateLimited
-	case tokenErr.statusCode >= http.StatusInternalServerError:
+	case tokenErr.failure().Status == oautherr.RefreshStatusServerError:
 		return remotesessionmetrics.RefreshOutcomeUpstreamError
-	case tokenErr.code == "":
+	case tokenErr.failure().Code == oautherr.RefreshCodeMissing:
 		return remotesessionmetrics.RefreshOutcomeRejectedUnparsed
 	default:
 		return remotesessionmetrics.RefreshOutcomeRejected
@@ -593,6 +593,7 @@ func (s *RefreshService) refresh(
 
 	var tokenRefreshErr *TokenRefreshError
 	clearGrant := errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidGrant()
+	// Clears the grant: the next sign-in re-registers a dynamically registered client.
 	if errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidClient() {
 		// The issuer has forgotten the client, not just this grant. Record it on
 		// the client row so the next remote login confirms and re-registers,
