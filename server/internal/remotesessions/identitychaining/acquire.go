@@ -102,13 +102,8 @@ func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Re
 	}
 
 	idp, err := c.challenges.LoadIdentityProviderEndpoint(ctx, c.keys, req.OrganizationID, sel.trustedIssuerID, sel.trustedClientID)
-	switch {
-	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
-		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
-	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
-		return none, newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
-	case err != nil:
-		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	if err != nil {
+		return none, identityProviderLoadOutcome(err)
 	}
 	if outcome := ready(); !outcome.Succeeded() {
 		return none, outcome
@@ -270,4 +265,15 @@ func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointE
 		return newOutcome(stage, ReasonInvalidGrant, ConfidenceUnknown, false)
 	}
 	return newOutcome(stage, ReasonUnknownRejection, ConfidenceUnknown, false)
+}
+
+func identityProviderLoadOutcome(err error) Outcome {
+	switch {
+	// Must precede the signing case: a signer outage joins both errors and stays retryable.
+	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
+		return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
+		return newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
+	return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
 }
