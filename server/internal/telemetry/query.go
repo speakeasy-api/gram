@@ -78,7 +78,7 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return scope, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return scope, err
 	}
 
@@ -458,7 +458,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 

@@ -153,6 +153,12 @@ func (p ProjectRef) Write() Operation {
 	return newOperation("project", "write", p.id, nil)
 }
 
+// ReadToolLogs asks to read the project's individual tool calls and raw log
+// records, which carry every member's tool arguments, results and prompts.
+func (p ProjectRef) ReadToolLogs() Operation {
+	return newOperation("project", "read_logs", p.id, nil)
+}
+
 // PublishPlugin asks to publish a plugin from the project: either project
 // plugin publication or administration of its organization, with a block on
 // either alternative vetoing both.
@@ -237,5 +243,6 @@ func typedOperations() []Operation {
 		project.Read(), project.Write(), project.PublishPlugin(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
 		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
+		project.ReadToolLogs(),
 	}
 }

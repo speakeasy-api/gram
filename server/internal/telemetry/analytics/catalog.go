@@ -184,6 +184,17 @@ type Dataset struct {
 	Source Source
 }
 
+// AccessOperation is the operation a caller must be allowed to read the
+// dataset, beyond reading its project; ok is false when reading the project
+// is enough.
+func (d *Dataset) AccessOperation(organizationID string) (operation authz.Operation, ok bool) {
+	if d.Access != AccessOrgAdmin {
+		var none authz.Operation
+		return none, false
+	}
+	return authz.Organization(organizationID).Administer(), true
+}
+
 // AccessCheck is the check a caller must pass to read the dataset, beyond
 // reading its project; ok is false when reading the project is enough.
 func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool) {
