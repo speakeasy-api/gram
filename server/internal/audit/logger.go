@@ -53,7 +53,7 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)
 	}
 
-	if l.skipOutbox || entry.Params.IsInternal {
+	if l.skipOutbox {
 		return nil
 	}
 	return PublishWebhook(ctx, dbtx, entry.Params, row, CategoryConfiguration, entry.OutboxEvent)

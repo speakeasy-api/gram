@@ -150,7 +150,7 @@ ORDER BY a.seq DESC
 LIMIT 51;
 
 -- name: ListAuditActorFacets :many
--- Assistant activity and internal catalogue curation events are excluded:
+-- Assistant activity and internal events are excluded:
 -- facets power the platform audit feed, which hides them (see ListAuditLogs).
 WITH filtered_logs AS (
   SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
@@ -207,7 +207,7 @@ LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditSurfaceFacets :many
--- Assistant activity and internal catalogue curation events are excluded:
+-- Assistant activity and internal events are excluded:
 -- facets power the platform audit feed, which hides them (see ListAuditLogs).
 -- Rows predating attribution have no surface and are counted as 'unknown',
 -- so the facet totals reconcile with the unfiltered feed rather than silently
@@ -231,7 +231,7 @@ GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
--- Assistant activity and internal catalogue curation events are excluded:
+-- Assistant activity and internal events are excluded:
 -- facets power the platform audit feed, which hides them (see ListAuditLogs).
 SELECT
   action AS value,

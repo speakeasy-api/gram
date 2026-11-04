@@ -117,8 +117,7 @@ func (s *Service) CurateTx(ctx context.Context, tx pgx.Tx, request CurationReque
 	if err != nil {
 		return Candidate{}, fmt.Errorf("update candidate curation: %w", err)
 	}
-	// Curation is internal staff activity attributed to the source tenant;
-	// customer webhooks must not receive it.
+	// Curation events set IsInternal, suppressing outbox publication.
 	logger := audit.NewLogger()
 	switch request.Action {
 	case "reject":

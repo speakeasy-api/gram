@@ -192,7 +192,7 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and internal catalogue curation events are excluded:
+// Assistant activity and internal events are excluded:
 // facets power the platform audit feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
@@ -280,7 +280,7 @@ type ListAuditActorFacetsRow struct {
 	IsAdminActor bool
 }
 
-// Assistant activity and internal catalogue curation events are excluded:
+// Assistant activity and internal events are excluded:
 // facets power the platform audit feed, which hides them (see ListAuditLogs).
 // Scoped through this organization's memberships for the same reason
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
@@ -520,7 +520,7 @@ type ListAuditSurfaceFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and internal catalogue curation events are excluded:
+// Assistant activity and internal events are excluded:
 // facets power the platform audit feed, which hides them (see ListAuditLogs).
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
