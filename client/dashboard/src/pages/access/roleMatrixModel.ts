@@ -549,7 +549,7 @@ const CATEGORY_COPY: Record<string, { label: string; description: string }> = {
   },
 };
 
-function categoryCopy(category: string): {
+export function categoryCopy(category: string): {
   label: string;
   description: string;
 } {
