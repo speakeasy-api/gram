@@ -429,7 +429,7 @@ func issueMemberAuthRegressionKey(t *testing.T, ctx context.Context, ti *testIns
 	// still intersects the explicit live owner and agent auth grants above.
 	// Do not invent a v5 key or broaden the production issuance contract.
 	version := int(runtimepolicy.IssuedDelegatedPolicyVersion)
-	issued, err := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit).CreateKey(ctx, &keysgen.CreateKeyPayload{Name: "Authorized member regression key", AgentID: &agentID, DelegatedGrantsVersion: &version, RequestedGrants: requested})
+	issued, err := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit).CreateKey(ctx, &keysgen.CreateKeyPayload{Name: "Authorized member regression key", AgentID: &agentID, DelegatedGrantsVersion: &version, RequestedGrants: requested})
 	require.NoError(t, err)
 	require.NotNil(t, issued.Key)
 	return *issued.Key

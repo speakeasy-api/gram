@@ -782,7 +782,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCalle
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit)
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, authztest.NewClient(t, ti.authzEngine), ti.audit)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

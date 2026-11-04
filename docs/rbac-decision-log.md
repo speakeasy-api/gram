@@ -465,3 +465,21 @@ These resolutions are in the base branch's merge commit and are listed here so t
 - Tests written before creation required an owner-scoped `agent:write` grant now seed one.
 - Goa output was regenerated. In the TypeScript SDK, the selector model was merged by hand and `gen.lock` and the OpenAPI output were not regenerated.
 - The dashboard agent pages that the integration branch deleted stay deleted. #7590's edits to them still need porting to their replacements.
+
+## AG2 (AIS-857): agent policies, delegable grants, connection blocks and keys
+
+### Decided without reviewer input
+
+1. **Stacked on AG1, and through it on #7590.** _If reversed:_ see AG1 decision 1.
+2. **Only the key service's request decisions move.** Five checks change. Ordinary key creation (except hooks-only keys without policy grants), organization-wide listing, ordinary-key revocation and policy updates check `Organization(org).Administer()`, and binding a key to a project checks `Project(org, project).Read()`. Agent-key listing and revocation go through the AG1 authorizer. Recording an agent key's credential choices checks `MCPServer(project, server).Connect()` through `EvaluateGrants` against the creator's live grants. The old code used `GrantsAuthorize` there, which is the same effective decision with blocks.
+3. **The other 25 AG2 rows stay, by class.** None of them is a request decision:
+   - Upstream selector writes are an independent gate.
+   - `LoadGrants`, `ResolveUserPrincipals` and `SelectorFromRow` are loaders that feed the loaded decisions.
+   - `PatchPrincipalGrants` and the takeover and backfill markers are grant writers, which X1 owns.
+   - `IsBlocklistScope` decides grant validity before a write, not access; it belongs with X2's key policy validation.
+   - Policy-grant containment (`policyAuthorityChecker`) bounds what a delegate may hand an agent. It is in-package containment, the same gap as AG1 decision 6.
+
+   _If reversed:_ any of these can move once the client grows a containment or validation API.
+
+4. **The key service gets the client beside the engine.** `auth.Auth` still takes the engine. `NewAuthorizer(engine, client)` now gets the client, so the agent decisions behind key issuance (AG1) run through it too.
+5. **Parity is proven by the key suite in shadow.** `newTestKeysService` builds the service with `authztest.NewParityClient`.
