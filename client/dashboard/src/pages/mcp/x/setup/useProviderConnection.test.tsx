@@ -1,3 +1,4 @@
+import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
 import { useReducer, type PropsWithChildren } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -12,7 +13,6 @@ import {
 } from "@/pages/catalog/provider-setup/state";
 import { scopesFor } from "@/pages/catalog/provider-setup/provider-data";
 import { useProviderConnection } from "./useProviderConnection";
-import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 
 const mocks = vi.hoisted(() => ({
   associations: vi.fn(),
@@ -85,7 +85,7 @@ const server = {
   toolVariationsGroupId: "variations",
 } as McpServer;
 const clients: QueryClient[] = [];
-function mount(provider: "slack", override: Partial<State> = {}) {
+function mount(provider: "slack" | "github", override: Partial<State> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -107,11 +107,14 @@ function mount(provider: "slack", override: Partial<State> = {}) {
     },
   );
 }
-function saved(_provider: "slack", scopes: string[] = []) {
+function saved(provider: "slack" | "github", scopes: string[] = []) {
   mocks.associations.mockResolvedValue({
     associations: [
       {
-        issuerUrl: "https://mcp.slack.com",
+        issuerUrl:
+          provider === "github"
+            ? "https://github.com/login/oauth"
+            : "https://mcp.slack.com",
         remoteSessionClientId: "client",
         serverCount: 1,
       },
@@ -161,7 +164,7 @@ afterEach(() => {
 });
 
 describe("live provider setup", () => {
-  it.each(["slack"] as const)(
+  it.each(["slack", "github"] as const)(
     "saves %s credentials through the backend and clears the form",
     async (provider) => {
       const state = initialState(provider);
@@ -1216,6 +1219,87 @@ it.each(["network", "diagnostic"] as const)(
     expect(result.current.error).toBeNull();
   },
 );
+
+describe("GitHub real setup actions", () => {
+  it.each(["new", "existing"])(
+    "saves either app path with GitHub metadata (%s)",
+    async (appChoice) => {
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      const s = initialState("github");
+      const { result } = mount("github", {
+        step: "credentials",
+        values: {
+          ...s.values,
+          org: "example-org",
+          appChoice,
+          clientId: "app-id",
+          clientSecret: "secret",
+        },
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.state.saved).toBe(true));
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          targetServerOnly: true,
+          createProvider: expect.objectContaining({
+            issuer: "https://github.com/login/oauth",
+            authorizationEndpoint: "https://github.com/login/oauth/authorize",
+            tokenEndpoint: "https://github.com/login/oauth/access_token",
+            authorizationResponseIssParameterSupported: true,
+          }),
+          clientConfiguration: expect.objectContaining({
+            clientId: "app-id",
+            clientSecret: "secret",
+            scope: [],
+          }),
+        }),
+      });
+    },
+  );
+  it("verifies first-party sign-in separately from testing and avoids Slack scope mutations", async () => {
+    saved("github", ["offline_access"]);
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    const s = initialState("github");
+    const { result } = mount("github", {
+      step: "test",
+      values: { ...s.values, org: "example-org" },
+    });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.signIn());
+    await waitFor(() =>
+      expect(popup.location.href).toBe(
+        "https://platform.example/mcp/demo-endpoint/connect/first-party",
+      ),
+    );
+    await waitFor(() => expect(result.current.state.authorized).toBe(true));
+    expect(result.current.state.tested).toBe(false);
+    act(() => result.current.testConnection());
+    await waitFor(() => expect(result.current.state.tested).toBe(true));
+    expect(result.current.toolCount).toBe(2);
+    expect(mocks.updateClient).not.toHaveBeenCalled();
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(mocks.sessions).not.toHaveBeenCalled();
+    act(() =>
+      result.current.changeField({
+        field: "appChoice",
+        value: "existing",
+      }),
+    );
+    expect([
+      result.current.state.saved,
+      result.current.state.authorized,
+      result.current.state.tested,
+    ]).toEqual([false, false, false]);
+    expect(result.current.toolCount).toBeNull();
+  });
+});
 
 describe("Slack permission choice hydration", () => {
   it("preserves a retained read-only choice after a failed scope update and retries it after reopening", async () => {
