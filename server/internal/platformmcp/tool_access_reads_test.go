@@ -27,9 +27,10 @@ func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	requireAccessReadToolDescriptors(t, registrar)
 }
 
-// list_access_members is the one access read the assistant is admitted to: it
-// replaces the managed toolset's organization user lookup. The other reads
-// stay external-only.
+// list_access_members and describe_access_permissions are the access reads
+// the assistant is admitted to: the first replaces the managed toolset's
+// organization user lookup, the second explains permissions without exposing
+// who holds them. The other reads stay external-only.
 func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	t.Helper()
 

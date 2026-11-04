@@ -38,7 +38,7 @@ var rolesCustomRoles = []rolesCustomRole{
 		// sensitive workflow to show; Engineer below holds mcp:write without
 		// environment:read, an incomplete one.
 		slug: "session-reviewer", name: "Session Reviewer",
-		description: "Reads chat transcripts and tool-call logs across the organization for quality review.",
+		description: "Reads chat transcripts across the organization and tool-call logs in the demo project for quality review.",
 		scopes:      []string{"chat:read", "log:read"},
 		members:     []string{"hana", "jonas"},
 		agents:      []string{},

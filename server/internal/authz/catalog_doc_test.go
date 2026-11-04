@@ -35,7 +35,7 @@ func TestScopeCatalog_DocTableIsCurrent(t *testing.T) {
 	begin += len(scopeTableBegin)
 
 	// Blank lines on both sides are what the Markdown formatter keeps.
-	want := "\n\n" + renderScopeTable(ScopeCatalog()) + "\n\n"
+	want := "\n\n" + renderScopeTable(t, ScopeCatalog()) + "\n\n"
 	if *updateDocs {
 		require.NoError(t, os.WriteFile(path, []byte(doc[:begin]+want+doc[end:]), 0o600))
 		return
@@ -44,15 +44,17 @@ func TestScopeCatalog_DocTableIsCurrent(t *testing.T) {
 }
 
 // renderScopeTable writes the catalogue as a Markdown table in the layout the
-// repository's formatter produces, so the committed docs pass its check.
-func renderScopeTable(entries []ScopeEntry) string {
+// repository's formatter produces, so the committed docs pass its check. A
+// catalogue entry without a visibility fails the test rather than being
+// documented under a default.
+func renderScopeTable(t *testing.T, entries []ScopeEntry) string {
+	t.Helper()
+
 	header := []string{"Scope", "Label", "Category", "Visibility", "Sensitive", "Includes", "Description"}
 	rows := make([][]string, 0, len(entries))
 	for _, entry := range entries {
 		visibility, ok := ScopeVisibilityFor(entry.Scope)
-		if !ok {
-			visibility = ScopeVisibilityInternal
-		}
+		require.True(t, ok, "%s: no visibility in the catalogue", entry.Scope)
 		sensitive := "no"
 		if entry.Sensitive() {
 			sensitive = string(entry.Sensitivity)
