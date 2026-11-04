@@ -58,6 +58,10 @@ export type ProductFeatures = {
    */
   platformMcpEnabled: boolean;
   /**
+   * Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
+   */
+  providerSetupEnabled?: boolean | undefined;
+  /**
    * Whether consent screens expose automatic remote-session refresh for the organization
    */
   remoteSessionAutoRefreshEnabled: boolean;
@@ -121,6 +125,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     network_ingress_enabled: z.boolean(),
     organization_gateway_disabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
+    provider_setup_enabled: z.optional(z.boolean()),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
@@ -149,6 +154,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "network_ingress_enabled": "networkIngressEnabled",
       "organization_gateway_disabled": "organizationGatewayDisabled",
       "platform_mcp_enabled": "platformMcpEnabled",
+      "provider_setup_enabled": "providerSetupEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":
         "remoteSessionAutoRefreshEnforcedEnabled",

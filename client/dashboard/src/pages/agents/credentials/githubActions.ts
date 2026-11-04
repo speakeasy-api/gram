@@ -179,18 +179,24 @@ export function repositoryProblem(
 
 /**
  * The catalog's rules narrower than the whole repository, by their keys. Each
- * key is also the variable its template adds, which the catalog test pins.
+ * key but pull_request is also the variable its template adds, which the
+ * catalog test pins.
  */
-export const NARROWER_SCOPES = ["branch", "environment"] as const;
+export const NARROWER_SCOPES = [
+  "branch",
+  "environment",
+  "pull_request",
+] as const;
 
 /**
  * Which of the repository's jobs the rule admits, which the workflow has to
- * match: every job, the jobs on one branch, or the jobs that use one
- * environment.
+ * match: every job, the jobs on one branch, the jobs that use one
+ * environment, or pull request jobs.
  */
 export type JobScope =
   | { kind: "repository" }
-  | { kind: (typeof NARROWER_SCOPES)[number]; name: string };
+  | { kind: "pull_request" }
+  | { kind: "branch" | "environment"; name: string };
 
 /** The scope the setup's values choose; its name is empty until typed. */
 export function jobScope(values: Record<string, string>): JobScope {
@@ -198,6 +204,7 @@ export function jobScope(values: Record<string, string>): JobScope {
     (scope) => scope === values[SUBJECT_CHOICE],
   );
   if (kind === undefined) return { kind: "repository" };
+  if (kind === "pull_request") return { kind };
   return { kind, name: values[kind]?.trim() ?? "" };
 }
 
@@ -248,23 +255,15 @@ export function workflowYaml({
   if (problem !== null) return { yaml: null, problem };
   const controlPlane = trimmedControlPlane(controlPlaneUrl);
   const selected = WORKFLOW_AGENTS[agent];
-  // A rule narrower than the repository refuses a pull request's job, so only
-  // the whole repository's workflow runs on one, and only it needs the fork
-  // guard. Names are written as JSON strings, which YAML reads as they are.
-  const repository = scope.kind === "repository";
-  const branch =
-    scope.kind === "branch" ? branchFilter(scope.name || "BRANCH") : "main";
-  const pullRequest = repository ? ["  pull_request:"] : [];
-  const forkGuard = repository ? [FORK_GUARD] : [];
+  const on = triggers(scope);
+  const forkGuard = on.includes(PULL_REQUEST_TRIGGER) ? [FORK_GUARD] : [];
   const environment =
     scope.kind === "environment" ? [environmentKey(scope.name)] : [];
   const lines = [
     "name: Speakeasy",
     "",
     "on:",
-    "  push:",
-    `    branches: [${branch}]`,
-    ...pullRequest,
+    ...on,
     "",
     "jobs:",
     "  agent:",
@@ -302,6 +301,33 @@ export function workflowYaml({
   ];
   return { yaml: lines.join("\n"), problem: null };
 }
+
+/**
+ * The events the workflow runs on, where the rule admits its jobs. A branch
+ * or environment rule refuses a pull request's job, and the pull request rule
+ * refuses every other job. Names are written as JSON strings, which YAML reads
+ * as they are.
+ */
+function triggers(scope: JobScope): string[] {
+  const push = (branch: string) => ["  push:", `    branches: [${branch}]`];
+  switch (scope.kind) {
+    case "repository":
+      return [...push("main"), PULL_REQUEST_TRIGGER];
+    case "branch":
+      return push(branchFilter(scope.name || "BRANCH"));
+    case "environment":
+      return push("main");
+    case "pull_request":
+      // GitHub's default three, and a draft being marked ready for review.
+      return [
+        PULL_REQUEST_TRIGGER,
+        "    types: [opened, synchronize, reopened, ready_for_review]",
+      ];
+  }
+}
+
+/** Runs the workflow on pull requests, which then needs the fork guard. */
+const PULL_REQUEST_TRIGGER = "  pull_request:";
 
 /** Skips a fork's pull request before any step of the job runs. */
 const FORK_GUARD =

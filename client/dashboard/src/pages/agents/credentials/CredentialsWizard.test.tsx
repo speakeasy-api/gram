@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
   checkAuthGrant: vi.fn(),
   authEnforced: false as boolean | undefined,
   mcpServers: vi.fn(),
+  // Holds the token endpoints in their loading state.
+  tokenEndpointsPending: false,
+  getMcpServer: vi.fn(),
+  updateMcpServer: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
   platforms: vi.fn(),
@@ -144,6 +148,8 @@ vi.mock("@/contexts/Sdk", () => ({
       extendAgentKeys: mocks.extendAgentKeys,
     },
     plugins: { getPlugin: mocks.getPlugin },
+    // Moving a server onto the agent's provider, from the Credential step.
+    mcpServers: { get: mocks.getMcpServer, update: mocks.updateMcpServer },
     // Read per project, for the projects that trust a platform on their own.
     // Each project sees its own rows among every issuer listed.
     workloadIdentities: { list: mocks.workloadList },
@@ -226,8 +232,10 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
-    data: { items: mocks.tokenEndpoints() },
-    isPending: false,
+    data: mocks.tokenEndpointsPending
+      ? undefined
+      : { items: mocks.tokenEndpoints() },
+    isPending: mocks.tokenEndpointsPending,
     isError: false,
   }),
 }));
@@ -270,6 +278,39 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
 // Only read to keep a prefilled name from colliding with one in use.
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({ data: { result: { items: mocks.agentList() } } }),
+}));
+// The move's confirmation previews who is connected to the server.
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) =>
+    options?.enabled === false
+      ? { data: undefined, isFetching: false, isPending: true, isError: false }
+      : {
+          data: {
+            serverName: "GitHub",
+            signInRequired: true,
+            sharedSignIn: false,
+            activeConnectionCount: 0,
+            activeSubjectCount: 0,
+            sharedConnectionCount: 0,
+            subjects: [],
+            subjectsTruncated: false,
+          },
+          isFetching: false,
+          isPending: false,
+          isError: false,
+        },
+}));
+// The move's confirmation previews where clients sign in; nothing to show here.
+vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
+  useUserSessionIssuerAttachImpact: () => ({
+    data: undefined,
+    isError: false,
+    isFetching: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
@@ -1283,6 +1324,255 @@ describe("Connecting a GKE cluster", () => {
       name: "Give the pod a Speakeasy token",
     });
   }
+
+  it("will not set up an agent whose server uses its own provider", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    // Says plainly that the agent signs in through one shared server.
+    expect(
+      await screen.findByText(
+        /signs in through a\s+shared authorization server/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/This is the only one available\./)).toBeTruthy();
+    expect(screen.getByText("These servers aren't on shared")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Uses its own sign-in, not a shared authorization server.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("asks for a shared authorization server when there is none", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    expect(
+      await screen.findByText(
+        "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("waits for the providers to load before letting a new agent continue", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    mocks.tokenEndpointsPending = true;
+    try {
+      setup();
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Review Agent" },
+      });
+      await nameChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await continueFromAuthentication();
+      fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+      expect(
+        await screen.findByText(
+          "Checking which shared authorization server the servers use…",
+        ),
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "Continue" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+    } finally {
+      mocks.tokenEndpointsPending = false;
+    }
+  });
+
+  it("moves a server onto the agent's provider without leaving the wizard", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    const onOwnProvider = {
+      ...githubServer,
+      userSessionIssuerId: "usi_private",
+    };
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [onOwnProvider] });
+    mocks.getMcpServer.mockResolvedValue(onOwnProvider);
+    mocks.updateMcpServer.mockImplementation(async () => {
+      const moved = { ...onOwnProvider, userSessionIssuerId: "usi_shared" };
+      mocks.mcpServers.mockResolvedValue({ mcpServers: [moved] });
+      return moved;
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Move to shared" }),
+    );
+    // The same confirmation as the server's settings: its clients sign in
+    // again, and the server's name is typed to confirm.
+    fireEvent.change(
+      await screen.findByLabelText("Type the server name to confirm"),
+      { target: { value: "GitHub" } },
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Change issuer" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        mocks.updateMcpServer.mock.calls.at(-1)?.[0]?.updateMcpServerForm
+          ?.userSessionIssuerId,
+      ).toBe("usi_shared"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("These servers aren't on shared")).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  // GitHub Actions jobs get their tokens through the device agent at each
+  // server, so their servers needn't share a provider.
+  it("sets up GitHub Actions for an agent whose server uses its own provider", async () => {
+    mocks.platforms.mockReturnValue([gke, githubActions]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /GitHub Actions/ }),
+    );
+
+    await screen.findByRole("radio", { name: /GitHub Actions/, checked: true });
+    expect(screen.queryByText(/These servers aren't on/)).toBeNull();
+    // The device agent gets its own tokens, so no shared server is chosen.
+    expect(screen.queryByLabelText("Shared authorization server")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("offers to move servers on another shared server to the recommended one", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([
+      sharedServer,
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_other",
+        userSessionIssuerSlug: "other",
+      },
+    ]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        { ...githubServer, userSessionIssuerId: "usi_shared" },
+        {
+          ...githubServer,
+          id: "server_two",
+          name: "Linear",
+          slug: "linear",
+          toolsetId: "toolset_two",
+          userSessionIssuerId: "usi_other",
+        },
+      ],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    // One server each, so the organization's first is recommended, and the
+    // server on the other one can move there.
+    expect(await screen.findByText("Uses other.")).toBeTruthy();
+    expect(screen.queryByText("Uses shared.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Move to shared" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("offers only the provider the agent's servers use, not the organization's first", async () => {
+    mocks.tokenEndpoints.mockReturnValue([
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_first",
+        userSessionIssuerSlug: "first",
+        issuer: "https://app.example.test/oauth/usi/usi_first",
+        tokenEndpoint: "https://app.example.test/oauth/usi/usi_first/token",
+      },
+      sharedServer,
+    ]);
+    await reachPodStep([
+      {
+        ...githubServer,
+        userSessionIssuerId: "usi_shared",
+      } as typeof githubServer,
+    ]);
+
+    // The organization's first provider has its own issuer, so offering it
+    // would put that issuer on the page instead.
+    expect(screen.getAllByText(sharedServer.issuer).length).toBeGreaterThan(0);
+    expect(
+      screen.queryAllByText("https://app.example.test/oauth/usi/usi_first"),
+    ).toHaveLength(0);
+  });
 
   it("names the audience, token endpoint and server URL the pod needs", async () => {
     mocks.tokenEndpoints.mockReturnValue([sharedServer]);
@@ -2888,6 +3178,64 @@ describe("Editing an agent that already exists", () => {
       expect(mocks.admitSubject).toHaveBeenCalledOnce();
     });
   });
+  describe("its GitHub Actions rule", () => {
+    beforeEach(() => {
+      mocks.platforms.mockReturnValue([githubActions]);
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id: "issuer_github",
+          name: "GitHub Actions",
+          issuer: githubActions.issuer.value,
+          jwksUri: githubActions.jwksUri.value,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          id: "admission_pull_requests",
+          agentId: "agent_one",
+          agentName: "Release Bot",
+          issuer: githubActions.issuer.value,
+          issuerName: "GitHub Actions",
+          matchKind: "exact",
+          name: "",
+          organizationId: "org_example",
+          projectId: "",
+          subject: "repo:acme/payments-api:pull_request",
+          tags: [],
+          wildcardActive: false,
+          workloadIssuerId: "issuer_github",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+    });
+
+    it("reads a saved pull request rule back as its choice", async () => {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your repository" });
+
+      expect(
+        screen
+          .getByRole("radio", { name: "Pull requests" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect((screen.getByLabelText("Owner") as HTMLInputElement).value).toBe(
+        "acme",
+      );
+      expect(
+        (screen.getByLabelText("Repository") as HTMLInputElement).value,
+      ).toBe("payments-api");
+      expect(
+        screen.getByText("repo:acme/payments-api:pull_request"),
+      ).toBeTruthy();
+      // Read back as it was saved, so there is nothing to write.
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    });
+  });
   describe("its Claude Tag or custom issuer", () => {
     const base = {
       agentId: "agent_one",
@@ -3203,6 +3551,19 @@ describe("Servers that sign in as a person", () => {
   it("attaches a personal connection before admitting a workload identity", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.platforms.mockReturnValue([gke]);
+    // Linear signs in through a shared provider, so a workload can be given
+    // a token it accepts.
+    mocks.tokenEndpoints.mockReturnValue([
+      {
+        userSessionIssuerId: "issuer_linear",
+        userSessionIssuerSlug: "linear",
+        projectId: "",
+        projectName: "",
+        issuer: "https://app.example.test/oauth/usi/issuer_linear",
+        tokenEndpoint: "https://app.example.test/oauth/usi/issuer_linear/token",
+        mcpHost: "app.example.test",
+      },
+    ]);
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -3473,6 +3834,12 @@ const githubActions = {
         key: "environment",
         label: "One environment",
         template: "repo:{owner}/{repo}:environment:{environment}",
+        wildcard: false,
+      },
+      {
+        key: "pull_request",
+        label: "Pull requests",
+        template: "repo:{owner}/{repo}:pull_request",
         wildcard: false,
       },
     ],
@@ -3751,6 +4118,41 @@ describe("Connecting a GitHub repository", () => {
       subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
       matchKind: "exact",
     });
+  });
+
+  it("admits pull request jobs alone, and runs the workflow on them", async () => {
+    await reachRepositoryStep();
+    fireEvent.click(screen.getByRole("radio", { name: "Pull requests" }));
+    // Nothing more to name: the rule is the repository's pull requests.
+    expect(screen.queryByLabelText("Branch")).toBeNull();
+    expect(screen.queryByLabelText("Environment")).toBeNull();
+    expect(
+      screen.getByText("repo:acme/payments-api:pull_request"),
+    ).toBeTruthy();
+    expect(screen.getByText(/nobody reviews it first/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:pull_request",
+      matchKind: "exact",
+    });
+    await screen.findByRole("heading", { name: "What the job gets" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toContain(
+      "types: [opened, synchronize, reopened, ready_for_review]",
+    );
+    expect(workflow.textContent).not.toContain("push:");
+    expect(workflow.textContent).toContain(
+      "github.event.pull_request.head.repo.fork == false",
+    );
   });
 
   it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {

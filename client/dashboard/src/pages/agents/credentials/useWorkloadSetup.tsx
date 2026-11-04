@@ -52,6 +52,12 @@ import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 
 export interface WorkloadSetup {
   exchange: SetupValues;
+  /**
+   * Whether the platform takes its tokens from a shared authorization server,
+   * so one is chosen for it. False until the platform's setup is known, and
+   * for a platform that gets its tokens its own way.
+   */
+  usesSharedServer: boolean;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -88,6 +94,7 @@ export function useWorkloadSetup({
   readOnly = false,
   setupOverride,
   targetProjectId,
+  requireOneProvider = false,
   servers = [],
 }: {
   /** The servers the agent may call, for steps that name one to call. */
@@ -96,6 +103,12 @@ export function useWorkloadSetup({
   setupOverride?: PlatformSetup;
   /** An inference exchange cannot use another project’s issuer. */
   targetProjectId?: string;
+  /**
+   * Refuse to connect until the agent's servers share one MCP authentication
+   * provider, rechecked here because the providers may finish loading after
+   * the step that shows the mismatch.
+   */
+  requireOneProvider?: boolean;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -153,7 +166,22 @@ export function useWorkloadSetup({
   const [connecting, setConnecting] = useState(false);
   const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues(targetProjectId);
+  // The catalog's platforms come from the same map the picker offers tiles
+  // from, plus the custom flow for everything the catalog does not know.
+  const setup =
+    setupOverride ??
+    (platformKey === CUSTOM_PLATFORM_KEY
+      ? customSetupInstructions()
+      : entry === undefined
+        ? undefined
+        : platformSetup(entry));
+
+  // A platform whose runtime gets its tokens its own way doesn't take them from
+  // one shared provider, so its servers needn't share one.
+  const setupValues = useSetupValues(
+    targetProjectId,
+    setup?.ownTokenExchange ? [] : servers,
+  );
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -172,16 +200,6 @@ export function useWorkloadSetup({
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
   const withdrawSubject = useWithdrawWorkloadSubjectMutation();
-
-  // The catalog's platforms come from the same map the picker offers tiles
-  // from, plus the custom flow for everything the catalog does not know.
-  const setup =
-    setupOverride ??
-    (platformKey === CUSTOM_PLATFORM_KEY
-      ? customSetupInstructions()
-      : entry === undefined
-        ? undefined
-        : platformSetup(entry));
 
   const customFlow = platformKey === CUSTOM_PLATFORM_KEY;
   const selectedIssuer = issuers.find((issuer) =>
@@ -289,6 +307,17 @@ export function useWorkloadSetup({
     if (current?.projectId && keptProjectSlug === undefined) {
       setError(
         "This access rule belongs to a project you cannot open. Ask an organization admin to change it.",
+      );
+      return false;
+    }
+    if (
+      requireOneProvider &&
+      (setupValues.checking || setupValues.mismatch !== null)
+    ) {
+      setError(
+        setupValues.checking
+          ? "Still checking which shared authorization server this agent's servers use. Try again in a moment."
+          : "Some of this agent's servers aren't on the shared authorization server chosen for it. Go back to Agent sign-in to fix it.",
       );
       return false;
     }
@@ -416,6 +445,7 @@ export function useWorkloadSetup({
 
   return {
     exchange: setupValues,
+    usesSharedServer: setup !== undefined && setup.ownTokenExchange !== true,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
     // A disabled fieldset disables every control inside it, the catalog's

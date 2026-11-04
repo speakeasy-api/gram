@@ -36,6 +36,9 @@ type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
 // GetProductFeaturesResponseBody is the type of the "features" service
 // "getProductFeatures" endpoint HTTP response body.
 type GetProductFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
 	// Whether tool I/O logging is enabled
@@ -688,6 +691,7 @@ func NewSetRemoteSessionAutoRefreshPolicyRequestBody(p *features.SetRemoteSessio
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.ProductFeaturesView {
 	v := &featuresviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    body.ProviderSetupEnabled,
 		LogsEnabled:                             body.LogsEnabled,
 		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   body.SessionCaptureEnabled,

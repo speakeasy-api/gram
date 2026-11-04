@@ -21,6 +21,9 @@ type ProductFeatures struct {
 
 // ProductFeaturesView is a type that runs validations on a projected type.
 type ProductFeaturesView struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled *bool
 	// Whether tool I/O logging is enabled
@@ -89,6 +92,7 @@ var (
 	// by view name.
 	ProductFeaturesMap = map[string][]string{
 		"default": {
+			"provider_setup_enabled",
 			"logs_enabled",
 			"tool_io_logs_enabled",
 			"session_capture_enabled",

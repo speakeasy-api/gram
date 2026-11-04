@@ -389,7 +389,7 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 			}
 		}
 		if body.Audience != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]*$"))
 		}
 		if body.Audience != nil {
 			if utf8.RuneCountInString(*body.Audience) > 512 {

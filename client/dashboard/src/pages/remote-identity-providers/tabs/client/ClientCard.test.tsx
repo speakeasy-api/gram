@@ -58,6 +58,53 @@ vi.mock("./KeySetField", () => ({
 
 afterEach(cleanup);
 
+describe("client audience updates", () => {
+  it.each([
+    ["cleared", "", ""],
+    ["whitespace-only", "   ", ""],
+    ["changed", "  new-audience  ", "new-audience"],
+  ])("sends the %s audience explicitly", (_label, value, expected) => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          audience: expected,
+        }),
+      },
+    });
+  });
+
+  it.each(["aud", undefined])(
+    "omits unchanged audience %s when saving another field",
+    (audience) => {
+      testState.admin = true;
+      render(
+        <ClientCard
+          client={{ ...client, audience }}
+          issuer={issuer}
+          issuerId="issuer-1"
+        />,
+      );
+      fireEvent.click(screen.getByRole("switch"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: true,
+          }),
+        },
+      });
+      expect(
+        testState.mutate.mock.lastCall?.[0].request
+          .updateRemoteSessionClientForm,
+      ).not.toHaveProperty("audience");
+    },
+  );
+});
+
 const client = {
   id: "client-1",
   clientId: "upstream-client",
@@ -149,10 +196,12 @@ it("preserves unknown audience configuration for unrelated non-JWT edits and blo
     request: {
       updateRemoteSessionClientForm: expect.objectContaining({
         audience: "new-audience",
-        tokenEndpointAuthAudienceFormat: undefined,
       }),
     },
   });
+  expect(
+    testState.mutate.mock.lastCall?.[0].request.updateRemoteSessionClientForm,
+  ).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
   const auth = screen
     .getAllByRole("combobox")
     .find((el) => el.id !== "client-scopes")!;

@@ -478,6 +478,16 @@ func (q *Queries) RegistryReady(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
+const restorePlatformIconAssetFixture = `-- name: RestorePlatformIconAssetFixture :exec
+UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, deleted_at = NULL WHERE id = $1
+`
+
+// Test fixture: restores a catalog icon asset after an invalid association.
+func (q *Queries) RestorePlatformIconAssetFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restorePlatformIconAssetFixture, id)
+	return err
+}
+
 const serializedRegistryRecordBytes = `-- name: SerializedRegistryRecordBytes :one
 SELECT octet_length($1::jsonb::text)
 `
@@ -487,6 +497,36 @@ func (q *Queries) SerializedRegistryRecordBytes(ctx context.Context, data []byte
 	var octet_length int32
 	err := row.Scan(&octet_length)
 	return octet_length, err
+}
+
+const setAssetContentTypeFixture = `-- name: SetAssetContentTypeFixture :exec
+UPDATE assets SET content_type = $1 WHERE id = $2
+`
+
+type SetAssetContentTypeFixtureParams struct {
+	ContentType string
+	ID          uuid.UUID
+}
+
+// Test fixture: puts a catalog icon asset into an invalid association state.
+func (q *Queries) SetAssetContentTypeFixture(ctx context.Context, arg SetAssetContentTypeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAssetContentTypeFixture, arg.ContentType, arg.ID)
+	return err
+}
+
+const setAssetProjectFixture = `-- name: SetAssetProjectFixture :exec
+UPDATE assets SET project_id = $1 WHERE id = $2
+`
+
+type SetAssetProjectFixtureParams struct {
+	ProjectID uuid.NullUUID
+	ID        uuid.UUID
+}
+
+// Test fixture: puts a catalog icon asset into an invalid association state.
+func (q *Queries) SetAssetProjectFixture(ctx context.Context, arg SetAssetProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAssetProjectFixture, arg.ProjectID, arg.ID)
+	return err
 }
 
 const setEntryPublished = `-- name: SetEntryPublished :one
@@ -540,6 +580,16 @@ type SetRegistryEntryPublishedFixtureParams struct {
 
 func (q *Queries) SetRegistryEntryPublishedFixture(ctx context.Context, arg SetRegistryEntryPublishedFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRegistryEntryPublishedFixture, arg.Published, arg.ID)
+	return err
+}
+
+const softDeleteAssetFixture = `-- name: SoftDeleteAssetFixture :exec
+UPDATE assets SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Test fixture: puts a catalog icon asset into an invalid association state.
+func (q *Queries) SoftDeleteAssetFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteAssetFixture, id)
 	return err
 }
 

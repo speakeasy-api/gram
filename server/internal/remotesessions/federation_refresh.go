@@ -162,22 +162,16 @@ func classifyFederatedRefreshResponse(status int, body []byte) error {
 func federatedRefreshCredentials(tok tokenResponse, receivedAt time.Time) FederatedRefreshCredentials {
 	c := FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{refreshExpiresAt: nil, idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: receivedAt}}
 	// Use the shortest reported bound, never the access-token expires_in.
-	// Standard explicit zero is distinct from absent; provider aliases follow
-	// the shared parser and count only when positive.
 	idle, hasIdle := tok.RefreshTokenTimeoutSeconds()
 	absolute, hasAbsolute := tok.AuthorizationLifetimeSeconds()
 	for _, bound := range []struct {
 		seconds  int64
 		reported bool
 	}{{idle, hasIdle}, {absolute, hasAbsolute}} {
-		seconds := bound.seconds
-		if !bound.reported || seconds > int64((1<<63-1)/time.Second) {
+		if !bound.reported {
 			continue
 		}
-		if seconds < 0 {
-			seconds = 0
-		}
-		expiry := receivedAt.Add(time.Duration(seconds) * time.Second)
+		expiry := receivedAt.Add(time.Duration(bound.seconds) * time.Second)
 		if c.refreshExpiresAt == nil || expiry.Before(*c.refreshExpiresAt) {
 			c.refreshExpiresAt = &expiry
 		}

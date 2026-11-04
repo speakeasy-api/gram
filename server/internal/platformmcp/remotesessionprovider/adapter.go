@@ -188,6 +188,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		ConsentServer:       "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
+		TypedAuthorization:  nil,
 		Authority: networkingress.Authority{
 			Surface:          "",
 			BaseURL:          "",

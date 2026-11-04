@@ -4170,3 +4170,17 @@ WHERE r.id = @registration_id
   AND r.deleted IS FALSE
   AND a.kind = 'image'
   AND a.deleted IS FALSE;
+
+-- name: GetPlatformMCPFeedbackFixture :one
+-- Test fixture: reads stored feedback columns that no production query returns.
+SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
+FROM platform_mcp_feedback
+WHERE id = @id;
+
+-- name: ExpirePlatformMCPFeedbackFixture :exec
+-- Test fixture: backdates retention to simulate expiry.
+UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = @id;
+
+-- name: PingPlatformMCPDatabaseFixture :exec
+-- Test fixture: proves a pooled connection is still healthy.
+SELECT 1;
