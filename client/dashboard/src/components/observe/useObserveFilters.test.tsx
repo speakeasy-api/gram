@@ -10,6 +10,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
 import {
+  scopedToolUsageDefaultTypes,
   TOOL_USAGE_DEFAULT_TYPES,
   TOOL_USAGE_VALID_TYPES,
 } from "./observeTargetFilters";
@@ -244,6 +245,21 @@ describe("useObserveFilters", () => {
 
     expect(result.current.selectedHookTypes).toEqual(TOOL_USAGE_VALID_TYPES);
     expect(result.current.selectedHookTypes).toContain("local_tool");
+  });
+
+  it("lets a Type selection in the URL win over the identity page's default", () => {
+    // With local tools hidden on the identity page, a user who picks them in
+    // the Type facet still sees them.
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: scopedToolUsageDefaultTypes(false),
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/?hookTypes=local_tool") },
+    );
+
+    expect(result.current.selectedHookTypes).toEqual(["local_tool"]);
   });
 
   it("leaves local tools out of the page-wide tool usage default", () => {

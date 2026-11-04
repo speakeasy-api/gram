@@ -185,6 +185,22 @@ export function isDefaultToolUsageTypeSelection(
   );
 }
 
+/** Every tool type but local tools, for an identity view that hides them. */
+export const TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS: ObserveTypeFilterValue[] =
+  TOOL_USAGE_VALID_TYPES.filter((type) => type !== "local_tool");
+
+/**
+ * The type selection a view scoped to one identity starts from. It shows
+ * every type unless the page hides local tools. Both lists are module
+ * constants, so the reference stays stable across renders.
+ */
+export function scopedToolUsageDefaultTypes(
+  includeLocalTools: boolean,
+): ObserveTypeFilterValue[] {
+  if (includeLocalTools) return TOOL_USAGE_VALID_TYPES;
+  return TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS;
+}
+
 export function toTargetTypes(
   selectedTypes: ObserveTypeFilterValue[],
 ): TargetTypes[] | undefined {

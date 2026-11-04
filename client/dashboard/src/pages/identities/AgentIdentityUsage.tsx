@@ -12,6 +12,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { useAgentSessionList } from "@/pages/agents/useAgentSessionList";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { agentToolUsagePayload } from "./identityLocalTools";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -29,33 +30,38 @@ import { useIdentityProject, useIdentityWindow } from "./useIdentityQueries";
  */
 export function AgentIdentityUsage({
   agent,
+  includeLocalTools = true,
 }: {
   agent: ManagedAgent;
+  /** The page's "Show local tools" choice, shared with its Tool logs. */
+  includeLocalTools?: boolean;
 }): JSX.Element {
   const client = useGramContext();
   const { from, to } = useIdentityWindow();
   const { slug: gramProject } = useIdentityProject();
 
-  // The agent's bare id, not its `agent:` urn: the telemetry filter takes the
-  // principal's id and builds the urn itself.
   const payload = useMemo(
-    () => ({
-      from,
-      to,
-      userFilters: [{ kind: "agent_id" as const, key: agent.id }],
-    }),
-    [from, to, agent.id],
+    () =>
+      agentToolUsagePayload({
+        agentId: agent.id,
+        from,
+        to,
+        includeLocalTools,
+      }),
+    [from, to, agent.id, includeLocalTools],
   );
   // Keyed by hand. These endpoints take their subject and window in the body,
   // and the generated key covers only the project and auth headers — so every
   // agent and every range would share one cache entry and the first answer
-  // would be kept for all of them.
+  // would be kept for all of them. The local tools choice changes the body
+  // too, so it is in the key.
   const key = [
     "agent-usage",
     gramProject,
     agent.id,
     from.toISOString(),
     to.toISOString(),
+    includeLocalTools ? "with-local-tools" : "without-local-tools",
   ];
 
   const totals = useQuery({
@@ -132,7 +138,9 @@ export function AgentIdentityUsage({
       >
         {points.length === 0 ? (
           <IdentityPanelEmpty>
-            This agent made no tool calls in this period.
+            {includeLocalTools
+              ? "This agent made no tool calls in this period."
+              : "This agent made no tool calls other than local tools in this period."}
           </IdentityPanelEmpty>
         ) : (
           <div className="p-4">
@@ -166,7 +174,9 @@ export function AgentIdentityUsage({
       >
         {rows.length === 0 ? (
           <IdentityPanelEmpty>
-            This agent called no tools in this period.
+            {includeLocalTools
+              ? "This agent called no tools in this period."
+              : "This agent called no tools other than local tools in this period."}
           </IdentityPanelEmpty>
         ) : (
           rows

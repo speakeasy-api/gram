@@ -5,9 +5,11 @@ import {
   hostedServerFilterValue,
   isDefaultToolUsageTypeSelection,
   parseTargetFilter,
+  scopedToolUsageDefaultTypes,
   selectedUserEmails,
   splitHostedTargets,
   TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS,
   TOOL_USAGE_VALID_TYPES,
 } from "./observeTargetFilters";
 
@@ -157,6 +159,27 @@ describe("splitHostedTargets", () => {
         { type: "gateway", id: "gw-1" },
       ]),
     ).toEqual({ mcpServerIds: [id], hostedToolsetSlugs: ["payments"] });
+  });
+});
+
+describe("scopedToolUsageDefaultTypes", () => {
+  it("defaults to every type when local tools are shown", () => {
+    expect(scopedToolUsageDefaultTypes(true)).toBe(TOOL_USAGE_VALID_TYPES);
+  });
+
+  it("defaults to every type but local tools when they are hidden", () => {
+    const types = scopedToolUsageDefaultTypes(false);
+    expect(types).toBe(TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS);
+    expect(types).not.toContain("local_tool");
+    expect(types).toHaveLength(TOOL_USAGE_VALID_TYPES.length - 1);
+  });
+
+  it("keeps the facet's default check in step with the toggle", () => {
+    const hidden = scopedToolUsageDefaultTypes(false);
+    expect(isDefaultToolUsageTypeSelection([...hidden], hidden)).toBe(true);
+    expect(
+      isDefaultToolUsageTypeSelection([...TOOL_USAGE_VALID_TYPES], hidden),
+    ).toBe(false);
   });
 });
 

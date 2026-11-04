@@ -20,6 +20,7 @@ import {
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
+  scopedToolUsageDefaultTypes,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
@@ -137,6 +138,11 @@ export type LogsToolsScope = {
    * the view's own so its rows match the page around it.
    */
   accountType?: string;
+  /**
+   * The host page's "Show local tools" choice, which sets the Type facet's
+   * default. Omitted means every type, local tools included.
+   */
+  includeLocalTools?: boolean;
 };
 
 /** Facets that pick identities, which a scoped view has already chosen. */
@@ -159,13 +165,15 @@ export function LogsTools({
 
   const serverNameMappings = useServerNameMappings();
 
-  // A scoped view shows every call the identity made. Local tools are hidden
-  // by default on the page-wide view for volume, but an agent that only runs
-  // through hooks makes nothing but local tool calls, and hiding them would
-  // leave its panel empty. Both lists are module constants, so the reference
-  // stays stable across renders.
+  // A scoped view shows every call the identity made unless its page hides
+  // local tools. Local tools are hidden by default on the page-wide view for
+  // volume, but an agent that only runs through hooks makes nothing but local
+  // tool calls, and hiding them would leave its panel empty. These are only
+  // the defaults: a Type selection the user makes in the facet is kept in the
+  // URL and wins over the page's toggle. Every list is a module constant, so
+  // the reference stays stable across renders.
   const defaultTypes = scope
-    ? TOOL_USAGE_VALID_TYPES
+    ? scopedToolUsageDefaultTypes(scope.includeLocalTools ?? true)
     : TOOL_USAGE_DEFAULT_TYPES;
 
   const {
@@ -1679,6 +1687,7 @@ function LogsToolsContent({
                       from={from}
                       to={to}
                       embedded={embedded}
+                      localToolsHidden={!defaultTypes.includes("local_tool")}
                     />
                   </div>
 
@@ -1727,6 +1736,7 @@ function LogsToolsTableContent({
   from,
   to,
   embedded = false,
+  localToolsHidden = false,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -1745,6 +1755,8 @@ function LogsToolsTableContent({
   agent?: { id: string; name: string };
   /** Scoped to one identity, whose page already says capture is set up. */
   embedded?: boolean;
+  /** The view's default leaves local tools out, so "no calls" means no others. */
+  localToolsHidden?: boolean;
 }) {
   // Agent names are not on a trace — the row carries "agent:<uuid>" and
   // nothing else — so they are read once here rather than per row. Asked for
@@ -1816,7 +1828,9 @@ function LogsToolsTableContent({
       return (
         <div className="py-12 text-center">
           <span className="text-muted-foreground text-sm">
-            No tool calls from this identity in this period.
+            {localToolsHidden
+              ? "No tool calls other than local tools from this identity in this period."
+              : "No tool calls from this identity in this period."}
           </span>
         </div>
       );
