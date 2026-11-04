@@ -357,7 +357,7 @@ type Recorder struct {
 	stop         chan struct{}
 	done         chan struct{}
 	stopOnce     sync.Once
-	writerCtx    context.Context
+	writerCtx    context.Context //nolint:containedctx // Recorder-owned background lifecycle; shutdown cancels writer IO, never a request context.
 	cancelWriter context.CancelFunc
 
 	// stopMu makes enqueueing and stopping exclusive, so each row is drained or counted.
