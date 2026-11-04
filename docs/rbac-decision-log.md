@@ -116,3 +116,11 @@ Review follow-ups adopted on #8442 (each fails closed):
 2. **Analytics dataset checks stay on the engine.** Built-in dashboard visibility (`builtInReadable`) and `widgets.RequireDataset` evaluate the check each analytics dataset declares (`Dataset.AccessCheck`), which the logs slice owns. Both services keep an `engine` field for those calls only. _If reversed:_ give datasets a typed operation in the logs slice and drop the field.
 3. **Owner-or-write stays a code branch.** `requireOwnerOrWrite` lets a dashboard's or widget's creator through before asking for `Project.Write()`. Modelling it as a fact-reading permission (`Is(owner)`) would be the first ownership fact in the project type and change challenge records for creators, so it stays as is. _If reversed (simplification):_ declare `edit_dashboard` as `Union(Rel(writer), Is(creator))` with a creator fact; the branch goes and the decision becomes explainable.
 4. **Parity:** the dashboards, widgets, sigint and platformmcp suites made 850 comparisons, all matching.
+
+## P5 (AIS-848): triggers, assistant memories and model keys
+
+### Decided without reviewer input
+
+1. **Same method-expression helpers as P4.** `triggers.requireAccess` and `assistantmemories.requireMemoryAccess` take `func(authz.ProjectRef) authz.Operation`; callers pass `authz.ProjectRef.Read` or `.Write`. Model keys use the operations directly.
+2. **Assistant memories stay project-scoped.** Memories belong to assistants, which AS1 migrates, but today's check is `project:read`/`project:write` on the request's project; the slice keeps exactly that rather than introducing an assistant-memory permission. _If reversed:_ AS1 can move memories under the assistant type once assistants are declared.
+3. **Parity:** the triggers, modelkeys and assistantmemories suites made 78 comparisons, all matching. The assistant-memories tests authenticate an organization and project, so their decisions are included in the shadow comparisons.

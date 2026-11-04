@@ -21,13 +21,13 @@ import (
 
 // requireMemoryAccess validates auth context and runs the requested authz
 // check. Returns the resolved AuthContext on success.
-func (s *Service) requireMemoryAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) requireMemoryAccess(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
 		return nil, err
 	}
 
@@ -35,7 +35,7 @@ func (s *Service) requireMemoryAccess(ctx context.Context, scope authz.Scope) (*
 }
 
 func (s *Service) ListAssistantMemories(ctx context.Context, payload *gen.ListAssistantMemoriesPayload) (*gen.ListAssistantMemoriesResult, error) {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *Service) ListAssistantMemories(ctx context.Context, payload *gen.ListAs
 }
 
 func (s *Service) GetAssistantMemory(ctx context.Context, payload *gen.GetAssistantMemoryPayload) (*types.AssistantMemory, error) {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *Service) GetAssistantMemory(ctx context.Context, payload *gen.GetAssist
 }
 
 func (s *Service) DeleteAssistantMemory(ctx context.Context, payload *gen.DeleteAssistantMemoryPayload) error {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ScopeProjectWrite)
+	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Write)
 	if err != nil {
 		return err
 	}
