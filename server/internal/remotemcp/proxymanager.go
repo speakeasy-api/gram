@@ -292,6 +292,7 @@ func (f *ProxyManager) Build(
 			StaticValue:            h.Value.String,
 			ValueFromRequestHeader: h.ValueFromRequestHeader.String,
 			IsRequired:             h.IsRequired,
+			IsSecret:               h.IsSecret,
 		})
 	}
 

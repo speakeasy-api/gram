@@ -688,6 +688,7 @@ func (s *Service) serveTunneledPublicSession(
 	headers = append(headers,
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelAgentSession,
 			StaticValue:            session.AgentSessionID,
 			ValueFromRequestHeader: "",
@@ -695,6 +696,7 @@ func (s *Service) serveTunneledPublicSession(
 		// Configured headers win over copied request headers.
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   proxy.McpSessionIDHeader,
 			StaticValue:            session.BackendSessionID,
 			ValueFromRequestHeader: "",

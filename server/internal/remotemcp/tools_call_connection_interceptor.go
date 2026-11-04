@@ -122,9 +122,12 @@ type UpstreamCredential struct {
 	Configured bool
 }
 
-// HasConfiguredCredential reports an admin-set static header. A header forwarded from the caller is the caller's.
+// HasConfiguredCredential reports an admin-set static credential. A header forwarded from the caller is the caller's.
 func HasConfiguredCredential(headers []proxy.ConfiguredHeader) bool {
-	return slices.ContainsFunc(headers, func(header proxy.ConfiguredHeader) bool { return header.StaticValue != "" })
+	return slices.ContainsFunc(headers, func(header proxy.ConfiguredHeader) bool {
+		return header.StaticValue != "" && header.ValueFromRequestHeader == "" &&
+			proxy.IsCredentialHeader(header.Name, header.IsSecret, false)
+	})
 }
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.

@@ -38,6 +38,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 				StaticValue:            row.Value.String,
 				ValueFromRequestHeader: row.ValueFromRequestHeader.String,
 				IsRequired:             row.IsRequired,
+				IsSecret:               row.IsSecret,
 			})
 		}
 		supported, needsOAuth := remoteMemberAuth(headers, oauth)
