@@ -71,6 +71,26 @@ describe("catalogServerInstallState", () => {
     ).toBe("added");
   });
 
+  it("stays added when any endpoint is still installed", () => {
+    expect(
+      catalogServerInstallState(
+        {
+          registrySpecifier: "com.example/multi",
+          remotes: [
+            { url: "https://mcp.example.com/a" },
+            { url: "https://mcp.example.com/b" },
+          ],
+        },
+        {
+          ...emptyEvidence,
+          remoteUrls: new Set(["https://mcp.example.com/b"]),
+        },
+        [],
+        allReady,
+      ),
+    ).toBe("added");
+  });
+
   it("matches an unproxied URL", () => {
     expect(
       stateFor(
