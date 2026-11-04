@@ -172,8 +172,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 	}
 
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	// Shadow mode keeps the parity client, so a disagreement fails the test
+	// instead of only being logged.
 	authorization := authztest.NewParityClient(t, engine)
-	if cfg.authzMode != nil {
+	if cfg.authzMode != nil && *cfg.authzMode != authz.MigrationModeShadow {
 		authorization = authztest.NewClientInMode(t, engine, *cfg.authzMode)
 	}
 	svc := remotesessions.NewService(
