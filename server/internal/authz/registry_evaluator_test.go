@@ -22,8 +22,8 @@ func evaluatorSliceDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
 	return append(frozenSliceDeclarations(),
 		s.NewType("agent", s.Parent("organization"), s.GrantSurface(access),
-			s.Grant("reader", s.GrantSpec{StoredAs: string(ScopeAgentRead), Description: "Read agents", DefaultFor: []string{SystemRoleAdmin}}),
-			s.Permission("read", s.Rel("reader"), s.AnswersScope(string(ScopeAgentRead))),
+			s.Grant(ScopeAgentRead, s.GrantSpec{Description: "Read agents", DefaultFor: []string{SystemRoleAdmin}}),
+			s.Permission("read", s.Rel(ScopeAgentRead), s.AnswersScope(string(ScopeAgentRead))),
 		),
 	)
 }
@@ -201,33 +201,33 @@ func grantOf(principal string, scope string, kind string, id string, extra ...st
 func docDeclarations() []s.TypeDecl {
 	return []s.TypeDecl{
 		s.NewType("doc", s.GrantSurface("access"), s.SelectorKeys(SelectorKeyTool, SelectorKeyDisposition),
-			s.Grant("viewer", s.GrantSpec{StoredAs: "doc:read", Description: "Read"}),
-			s.Grant("editor", s.GrantSpec{StoredAs: "doc:write", Description: "Write"}),
-			s.Grant("archived", s.GrantSpec{StoredAs: "doc:archived", Description: "Archived"}),
-			s.Grant("hidden", s.GrantSpec{StoredAs: "doc:hidden", Description: "Hidden"}),
-			s.Block("read_blocked", s.BlockSpec{StoredAs: "doc:blocked_read"}),
-			s.Block("write_blocked", s.BlockSpec{StoredAs: "doc:blocked_write"}),
-			s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor")),
-				s.AnswersScope("doc:read"), s.ExcludedBy("read_blocked")),
-			s.Permission("write", s.Rel("editor"), s.AnswersScope("doc:write"), s.ExcludedBy("write_blocked")),
-			s.Permission("is_archived", s.Rel("archived"), s.AnswersScope("doc:archived")),
-			s.Permission("is_hidden", s.Rel("hidden"), s.AnswersScope("doc:hidden")),
+			s.Grant("doc:read", s.GrantSpec{Description: "Read"}),
+			s.Grant("doc:write", s.GrantSpec{Description: "Write"}),
+			s.Grant("doc:archived", s.GrantSpec{Description: "Archived"}),
+			s.Grant("doc:hidden", s.GrantSpec{Description: "Hidden"}),
+			s.Block("doc:blocked_read", s.BlockSpec{}),
+			s.Block("doc:blocked_write", s.BlockSpec{}),
+			s.Permission("read", s.Union(s.Rel("doc:read"), s.Rel("doc:write")),
+				s.AnswersScope("doc:read"), s.ExcludedBy("doc:blocked_read")),
+			s.Permission("write", s.Rel("doc:write"), s.AnswersScope("doc:write"), s.ExcludedBy("doc:blocked_write")),
+			s.Permission("is_archived", s.Rel("doc:archived"), s.AnswersScope("doc:archived")),
+			s.Permission("is_hidden", s.Rel("doc:hidden"), s.AnswersScope("doc:hidden")),
 			// An exception to the inner block cannot undo the outer subtraction.
-			s.Permission("live_read", s.Minus(s.Perm("read"), s.Rel("archived"))),
+			s.Permission("live_read", s.Minus(s.Perm("read"), s.Rel("doc:archived"))),
 			// An exception to the outer block cannot undo the inner subtraction.
-			s.Permission("visible_read", s.Minus(s.Union(s.Rel("viewer"), s.Rel("editor")), s.Rel("hidden")),
-				s.ExcludedBy("read_blocked")),
+			s.Permission("visible_read", s.Minus(s.Union(s.Rel("doc:read"), s.Rel("doc:write")), s.Rel("doc:hidden")),
+				s.ExcludedBy("doc:blocked_read")),
 			// Nested raw subtraction: ((viewer − hidden) − archived).
-			s.Permission("nested", s.Minus(s.Minus(s.Rel("viewer"), s.Rel("hidden")), s.Rel("archived"))),
+			s.Permission("nested", s.Minus(s.Minus(s.Rel("doc:read"), s.Rel("doc:hidden")), s.Rel("doc:archived"))),
 			// The block of the reused permission applies to its branch only.
 			s.Permission("read_or_write", s.Union(s.Perm("read"), s.Perm("write"))),
 		),
 		s.NewType("note", s.GrantSurface("access"),
 			s.Attr("owner", "user"),
-			s.Grant("viewer", s.GrantSpec{StoredAs: "note:read", Description: "Read"}),
-			s.Permission("read", s.Rel("viewer"), s.AnswersScope("note:read")),
-			s.Permission("own_first", s.Union(s.Is("owner"), s.Rel("viewer"))),
-			s.Permission("own_last", s.Union(s.Rel("viewer"), s.Is("owner"))),
+			s.Grant("note:read", s.GrantSpec{Description: "Read"}),
+			s.Permission("read", s.Rel("note:read"), s.AnswersScope("note:read")),
+			s.Permission("own_first", s.Union(s.Is("owner"), s.Rel("note:read"))),
+			s.Permission("own_last", s.Union(s.Rel("note:read"), s.Is("owner"))),
 			s.Permission("via_own", s.Perm("own_last")),
 		),
 	}

@@ -62,42 +62,26 @@ var (
 // scopes.
 func organizationType() s.TypeDecl {
 	return s.NewType("organization", s.StoredKind(ResourceKindOrg), s.GrantSurface(accessSurface),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:    string(ScopeOrgRead),
+		s.Block(ScopeOrgBlockedRead, s.BlockSpec{}),
+		s.Block(ScopeOrgBlockedAdmin, s.BlockSpec{ImpliedBy: s.Scopes(ScopeOrgBlockedRead)}),
+
+		s.ScopePermission("read", ScopeOrgRead, s.GrantSpec{
 			Description: "Read the organization",
 			DefaultFor:  adminAndMember,
-		}),
-		s.Grant("admin", s.GrantSpec{
-			StoredAs:    string(ScopeOrgAdmin),
+		}, s.AlsoGrantedBy(ScopeOrgAdmin), s.ExcludedBy(ScopeOrgBlockedRead)),
+		s.ScopePermission("administer", ScopeOrgAdmin, s.GrantSpec{
 			Description: "Administer the organization",
 			DefaultFor:  adminOnly,
-		}),
-		s.Grant("device_agent_sync", s.GrantSpec{
-			StoredAs:         string(ScopeOrgDeviceAgentSync),
+		}, s.ExcludedBy(ScopeOrgBlockedAdmin)),
+		s.ScopePermission("sync_device_agent", ScopeOrgDeviceAgentSync, s.GrantSpec{
 			Description:      "Sync device agents",
 			DelegatableSince: 2,
-		}),
-		s.Grant("hooks_ingest", s.GrantSpec{
-			StoredAs:         string(ScopeOrgHooksIngest),
+		}, s.AlsoGrantedBy(ScopeOrgAdmin)),
+		s.ScopePermission("ingest_hooks", ScopeOrgHooksIngest, s.GrantSpec{
 			Description:      "Ingest hook events",
 			SelectorKeys:     []string{SelectorKeyProjectID},
 			DelegatableSince: 2,
-		}),
-
-		s.Block("read_blocked", s.BlockSpec{StoredAs: string(ScopeOrgBlockedRead)}),
-		s.Block("admin_blocked", s.BlockSpec{
-			StoredAs:  string(ScopeOrgBlockedAdmin),
-			ImpliedBy: []string{"read_blocked"},
-		}),
-
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("admin")),
-			s.AnswersScope(string(ScopeOrgRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("administer", s.Rel("admin"),
-			s.AnswersScope(string(ScopeOrgAdmin)), s.ExcludedBy("admin_blocked")),
-		s.Permission("sync_device_agent", s.Union(s.Rel("device_agent_sync"), s.Rel("admin")),
-			s.AnswersScope(string(ScopeOrgDeviceAgentSync))),
-		s.Permission("ingest_hooks", s.Union(s.Rel("hooks_ingest"), s.Rel("admin")),
-			s.AnswersScope(string(ScopeOrgHooksIngest))),
+		}, s.AlsoGrantedBy(ScopeOrgAdmin)),
 	)
 }
 
@@ -105,51 +89,35 @@ func organizationType() s.TypeDecl {
 // the alternatives that pair a project permission with an organization one.
 func projectType() s.TypeDecl {
 	return s.NewType("project", s.Parent("organization"), s.GrantSurface(accessSurface),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:         string(ScopeProjectRead),
+		s.Block(ScopeProjectBlockedRead, s.BlockSpec{DelegatableSince: 4}),
+		s.Block(ScopeProjectBlockedWrite, s.BlockSpec{
+			ImpliedBy:        s.Scopes(ScopeProjectBlockedRead),
+			DelegatableSince: 4,
+		}),
+		s.Block(ScopePluginBlockedWrite, s.BlockSpec{}),
+
+		s.ScopePermission("read", ScopeProjectRead, s.GrantSpec{
 			Description:      "Read the project",
 			DefaultFor:       adminAndMember,
 			AnchoredAt:       orgAndSelf,
 			DelegatableSince: 1,
-		}),
-		s.Grant("writer", s.GrantSpec{
-			StoredAs:         string(ScopeProjectWrite),
+		}, s.AlsoGrantedBy(ScopeProjectWrite), s.ExcludedBy(ScopeProjectBlockedRead)),
+		s.ScopePermission("write", ScopeProjectWrite, s.GrantSpec{
 			Description:      "Change the project",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgAndSelf,
 			DelegatableSince: 1,
-		}),
-		s.Grant("plugin_publisher", s.GrantSpec{
-			StoredAs:    string(ScopePluginWrite),
+		}, s.ExcludedBy(ScopeProjectBlockedWrite)),
+		s.ScopePermission("publish_plugin", ScopePluginWrite, s.GrantSpec{
 			Description: "Publish plugins",
 			DefaultFor:  adminOnly,
 			AnchoredAt:  orgAndSelf,
-		}),
-		s.Grant("log_reader", s.GrantSpec{
-			StoredAs:    string(ScopeLogRead),
+		}, s.ExcludedBy(ScopePluginBlockedWrite)),
+		s.ScopePermission("read_logs", ScopeLogRead, s.GrantSpec{
 			Description: "Read tool-call logs",
 			AnchoredAt:  orgAndSelf,
 			Sensitive:   true,
 		}),
-
-		s.Block("read_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeProjectBlockedRead),
-			DelegatableSince: 4,
-		}),
-		s.Block("write_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeProjectBlockedWrite),
-			ImpliedBy:        []string{"read_blocked"},
-			DelegatableSince: 4,
-		}),
-		s.Block("plugin_write_blocked", s.BlockSpec{StoredAs: string(ScopePluginBlockedWrite)}),
-
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")),
-			s.AnswersScope(string(ScopeProjectRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("write", s.Rel("writer"),
-			s.AnswersScope(string(ScopeProjectWrite)), s.ExcludedBy("write_blocked")),
-		s.Permission("publish_plugin", s.Rel("plugin_publisher"),
-			s.AnswersScope(string(ScopePluginWrite)), s.ExcludedBy("plugin_write_blocked")),
-		s.Permission("read_logs", s.Rel("log_reader"), s.AnswersScope(string(ScopeLogRead))),
 
 		s.Alternatives("plugin_publication", s.AlternativesSpec{
 			Options: []s.PermissionRef{
@@ -178,58 +146,36 @@ func projectType() s.TypeDecl {
 	)
 }
 
-// mcpServerType declares MCP servers. Every relation carries the tool and
-// disposition condition.
+// mcpServerType declares MCP servers. Every grant and block carries the tool
+// and disposition condition.
 func mcpServerType() s.TypeDecl {
 	return s.NewType("mcp_server", s.Parent("project"), s.StoredKind(ResourceKindMCP), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID, SelectorKeyTool, SelectorKeyDisposition),
-		s.Grant("viewer", s.GrantSpec{
-			StoredAs:         string(ScopeMCPRead),
+		s.Block(ScopeMCPBlockedRead, s.BlockSpec{Conditions: mcpToolsConditions, DelegatableSince: 4}),
+		s.Block(ScopeMCPBlockedWrite, s.BlockSpec{Conditions: mcpToolsConditions, DelegatableSince: 4}),
+		s.Block(ScopeMCPBlockedConnect, s.BlockSpec{Conditions: mcpToolsConditions, DelegatableSince: 4}),
+
+		s.ScopePermission("read", ScopeMCPRead, s.GrantSpec{
 			Description:      "Inspect server configuration",
 			DefaultFor:       adminAndMember,
 			AnchoredAt:       orgProjectAndSelf,
 			Conditions:       mcpToolsConditions,
 			DelegatableSince: 1,
-		}),
-		s.Grant("editor", s.GrantSpec{
-			StoredAs:         string(ScopeMCPWrite),
+		}, s.AlsoGrantedBy(ScopeMCPWrite), s.ExcludedBy(ScopeMCPBlockedRead)),
+		s.ScopePermission("edit", ScopeMCPWrite, s.GrantSpec{
 			Description:      "Change server configuration",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgProjectAndSelf,
 			Conditions:       mcpToolsConditions,
 			DelegatableSince: 1,
-		}),
-		s.Grant("connector", s.GrantSpec{
-			StoredAs:         string(ScopeMCPConnect),
+		}, s.ExcludedBy(ScopeMCPBlockedWrite)),
+		s.ScopePermission("connect", ScopeMCPConnect, s.GrantSpec{
 			Description:      "Connect and invoke permitted tools",
 			DefaultFor:       adminAndMember,
 			AnchoredAt:       orgProjectAndSelf,
 			Conditions:       mcpToolsConditions,
 			DelegatableSince: 1,
-		}),
-
-		s.Block("read_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeMCPBlockedRead),
-			Conditions:       mcpToolsConditions,
-			DelegatableSince: 4,
-		}),
-		s.Block("write_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeMCPBlockedWrite),
-			Conditions:       mcpToolsConditions,
-			DelegatableSince: 4,
-		}),
-		s.Block("connect_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeMCPBlockedConnect),
-			Conditions:       mcpToolsConditions,
-			DelegatableSince: 4,
-		}),
-
-		s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor")),
-			s.AnswersScope(string(ScopeMCPRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("edit", s.Rel("editor"),
-			s.AnswersScope(string(ScopeMCPWrite)), s.ExcludedBy("write_blocked")),
-		s.Permission("connect", s.Union(s.Rel("connector"), s.Rel("viewer"), s.Rel("editor")),
-			s.AnswersScope(string(ScopeMCPConnect)), s.ExcludedBy("connect_blocked")),
+		}, s.AlsoGrantedBy(ScopeMCPRead, ScopeMCPWrite), s.ExcludedBy(ScopeMCPBlockedConnect)),
 
 		s.Alternatives("project_read_or_edit", s.AlternativesSpec{
 			Options: []s.PermissionRef{
@@ -246,21 +192,14 @@ func mcpServerType() s.TypeDecl {
 func mcpAuthClientType() s.TypeDecl {
 	return s.NewType("mcp_auth_client", s.Parent("organization"), s.StoredKind(ResourceKindMCPAuthClient), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyClientType, SelectorKeyConnectionOwner, SelectorKeyProjectID, SelectorKeyUpstreamClient),
-		s.Grant("user", s.GrantSpec{
-			StoredAs:         string(ScopeMCPAuth),
+		s.Block(ScopeMCPBlockedAuth, s.BlockSpec{DelegatableSince: 5}),
+
+		s.ScopePermission("use", ScopeMCPAuth, s.GrantSpec{
 			Description:      "Use an upstream auth client",
 			DefaultFor:       adminAndMember,
 			StrictMatching:   true,
 			DelegatableSince: 5,
-		}),
-
-		s.Block("use_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeMCPBlockedAuth),
-			DelegatableSince: 5,
-		}),
-
-		s.Permission("use", s.Rel("user"),
-			s.AnswersScope(string(ScopeMCPAuth)), s.ExcludedBy("use_blocked")),
+		}, s.ExcludedBy(ScopeMCPBlockedAuth)),
 	)
 }
 
@@ -268,35 +207,24 @@ func mcpAuthClientType() s.TypeDecl {
 func environmentType() s.TypeDecl {
 	return s.NewType("environment", s.Parent("project"), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:         string(ScopeEnvironmentRead),
+		s.Block(ScopeEnvironmentBlockedRead, s.BlockSpec{DelegatableSince: 4}),
+		s.Block(ScopeEnvironmentBlockedWrite, s.BlockSpec{
+			ImpliedBy:        s.Scopes(ScopeEnvironmentBlockedRead),
+			DelegatableSince: 4,
+		}),
+
+		s.ScopePermission("read", ScopeEnvironmentRead, s.GrantSpec{
 			Description:      "View environments and their entries",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 1,
-		}),
-		s.Grant("writer", s.GrantSpec{
-			StoredAs:         string(ScopeEnvironmentWrite),
+		}, s.AlsoGrantedBy(ScopeEnvironmentWrite), s.ExcludedBy(ScopeEnvironmentBlockedRead)),
+		s.ScopePermission("write", ScopeEnvironmentWrite, s.GrantSpec{
 			Description:      "Add, edit, clone and remove environments",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 1,
-		}),
-
-		s.Block("read_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeEnvironmentBlockedRead),
-			DelegatableSince: 4,
-		}),
-		s.Block("write_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeEnvironmentBlockedWrite),
-			ImpliedBy:        []string{"read_blocked"},
-			DelegatableSince: 4,
-		}),
-
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")),
-			s.AnswersScope(string(ScopeEnvironmentRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("write", s.Rel("writer"),
-			s.AnswersScope(string(ScopeEnvironmentWrite)), s.ExcludedBy("write_blocked")),
+		}, s.ExcludedBy(ScopeEnvironmentBlockedWrite)),
 	)
 }
 
@@ -306,59 +234,39 @@ func environmentType() s.TypeDecl {
 func riskPolicyType() s.TypeDecl {
 	return s.NewType("risk_policy", s.StoredKind(ResourceKindRiskPolicy), s.GrantSurface(riskPolicySurface),
 		s.SelectorKeys(SelectorKeyServerIdentity, SelectorKeyServerURL),
-		s.Grant("included", s.GrantSpec{
-			StoredAs:         string(ScopeRiskPolicyEvaluate),
+		s.Grant(ScopeRiskPolicyEvaluate, s.GrantSpec{
 			Description:      "Apply the policy",
 			DelegatableSince: 1,
 		}),
-		s.Grant("bypassed", s.GrantSpec{
-			StoredAs:    string(ScopeRiskPolicyBypass),
-			Description: "Skip the policy",
-		}),
-		s.Grant("blocker", s.GrantSpec{
-			StoredAs:    string(ScopeRiskPolicyBlock),
-			Description: "Block with the policy",
-		}),
+		s.Permission("evaluate", s.Minus(s.Rel(ScopeRiskPolicyEvaluate), s.Rel(ScopeRiskPolicyBypass)),
+			s.AnswersScope(ScopeRiskPolicyEvaluate)),
 
-		s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")),
-			s.AnswersScope(string(ScopeRiskPolicyEvaluate))),
-		s.Permission("bypass", s.Rel("bypassed"), s.AnswersScope(string(ScopeRiskPolicyBypass))),
-		s.Permission("block", s.Rel("blocker"), s.AnswersScope(string(ScopeRiskPolicyBlock))),
+		s.ScopePermission("bypass", ScopeRiskPolicyBypass, s.GrantSpec{Description: "Skip the policy"}),
+		s.ScopePermission("block", ScopeRiskPolicyBlock, s.GrantSpec{Description: "Block with the policy"}),
 	)
 }
 
 // skillType declares skills.
 func skillType() s.TypeDecl {
 	return s.NewType("skill", s.Parent("project"), s.GrantSurface(accessSurface),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:         string(ScopeSkillRead),
+		s.Block(ScopeSkillBlockedRead, s.BlockSpec{DelegatableSince: 4}),
+		s.Block(ScopeSkillBlockedWrite, s.BlockSpec{
+			ImpliedBy:        s.Scopes(ScopeSkillBlockedRead),
+			DelegatableSince: 4,
+		}),
+
+		s.ScopePermission("read", ScopeSkillRead, s.GrantSpec{
 			Description:      "Read skills",
 			DefaultFor:       adminAndMember,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 1,
-		}),
-		s.Grant("writer", s.GrantSpec{
-			StoredAs:         string(ScopeSkillWrite),
+		}, s.AlsoGrantedBy(ScopeSkillWrite), s.ExcludedBy(ScopeSkillBlockedRead)),
+		s.ScopePermission("write", ScopeSkillWrite, s.GrantSpec{
 			Description:      "Change skills",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 1,
-		}),
-
-		s.Block("read_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeSkillBlockedRead),
-			DelegatableSince: 4,
-		}),
-		s.Block("write_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeSkillBlockedWrite),
-			ImpliedBy:        []string{"read_blocked"},
-			DelegatableSince: 4,
-		}),
-
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")),
-			s.AnswersScope(string(ScopeSkillRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("write", s.Rel("writer"),
-			s.AnswersScope(string(ScopeSkillWrite)), s.ExcludedBy("write_blocked")),
+		}, s.ExcludedBy(ScopeSkillBlockedWrite)),
 
 		s.Alternatives("project_or_skill_read", s.AlternativesSpec{
 			Options: []s.PermissionRef{
@@ -375,35 +283,24 @@ func skillType() s.TypeDecl {
 func assistantType() s.TypeDecl {
 	return s.NewType("assistant", s.Parent("project"), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:         string(ScopeAssistantRead),
+		s.Block(ScopeAssistantBlockedRead, s.BlockSpec{DelegatableSince: 4}),
+		s.Block(ScopeAssistantBlockedWrite, s.BlockSpec{
+			ImpliedBy:        s.Scopes(ScopeAssistantBlockedRead),
+			DelegatableSince: 4,
+		}),
+
+		s.ScopePermission("read", ScopeAssistantRead, s.GrantSpec{
 			Description:      "Read assistants",
 			DefaultFor:       adminAndMember,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 3,
-		}),
-		s.Grant("writer", s.GrantSpec{
-			StoredAs:         string(ScopeAssistantWrite),
+		}, s.AlsoGrantedBy(ScopeAssistantWrite), s.ExcludedBy(ScopeAssistantBlockedRead)),
+		s.ScopePermission("write", ScopeAssistantWrite, s.GrantSpec{
 			Description:      "Change assistants",
 			DefaultFor:       adminOnly,
 			AnchoredAt:       orgProjectAndSelf,
 			DelegatableSince: 3,
-		}),
-
-		s.Block("read_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeAssistantBlockedRead),
-			DelegatableSince: 4,
-		}),
-		s.Block("write_blocked", s.BlockSpec{
-			StoredAs:         string(ScopeAssistantBlockedWrite),
-			ImpliedBy:        []string{"read_blocked"},
-			DelegatableSince: 4,
-		}),
-
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")),
-			s.AnswersScope(string(ScopeAssistantRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("write", s.Rel("writer"),
-			s.AnswersScope(string(ScopeAssistantWrite)), s.ExcludedBy("write_blocked")),
+		}, s.ExcludedBy(ScopeAssistantBlockedWrite)),
 	)
 }
 
@@ -411,14 +308,11 @@ func assistantType() s.TypeDecl {
 func inferenceType() s.TypeDecl {
 	return s.NewType("inference", s.Parent("project"), s.GrantSurface(accessSurface),
 		s.SelectorKeys(SelectorKeyProjectID),
-		s.Grant("executor", s.GrantSpec{
-			StoredAs:         string(ScopeInferenceExecute),
+		s.ScopePermission("execute", ScopeInferenceExecute, s.GrantSpec{
 			Description:      "Run inference through Speakeasy as a workload",
 			AnchoredAt:       []string{"organization", "project"},
 			DelegatableSince: 6,
 		}),
-
-		s.Permission("execute", s.Rel("executor"), s.AnswersScope(string(ScopeInferenceExecute))),
 	)
 }
 
@@ -426,19 +320,14 @@ func inferenceType() s.TypeDecl {
 // grants only; the service decides ownership.
 func chatType() s.TypeDecl {
 	return s.NewType("chat", s.Parent("project"), s.GrantSurface(accessSurface),
-		s.Grant("reader", s.GrantSpec{
-			StoredAs:    string(ScopeChatRead),
+		s.ScopePermission("read_grant", ScopeChatRead, s.GrantSpec{
 			Description: "Read session transcripts",
 			AnchoredAt:  orgProjectAndSelf,
 			Sensitive:   true,
-		}),
-		s.Grant("writer", s.GrantSpec{
-			StoredAs:    string(ScopeChatWrite),
+		}, s.AlsoGrantedBy(ScopeChatWrite)),
+		s.ScopePermission("write_grant", ScopeChatWrite, s.GrantSpec{
 			Description: "Change session transcripts",
 			AnchoredAt:  orgProjectAndSelf,
 		}),
-
-		s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.AnswersScope(string(ScopeChatRead))),
-		s.Permission("write_grant", s.Rel("writer"), s.AnswersScope(string(ScopeChatWrite))),
 	)
 }

@@ -66,9 +66,9 @@ func (e Expr) Guard() string { return e.guard }
 // When.
 func (e Expr) Operands() []Expr { return slices.Clone(e.operands) }
 
-// Rel matches grants of the relation declared with Grant on the same type.
-func Rel(relation string) Expr {
-	return newExpr(OpRel, relation, "", "", nil)
+// Rel matches grants of a scope declared with Grant on the same type.
+func Rel[S ScopeName](scope S) Expr {
+	return newExpr(OpRel, string(scope), "", "", nil)
 }
 
 // Union matches when any branch matches.

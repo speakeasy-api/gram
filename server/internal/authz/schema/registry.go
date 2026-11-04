@@ -45,9 +45,6 @@ type ScopeDefinition struct {
 	// Type is the declared type that owns the scope.
 	Type string
 
-	// Relation is the Grant or Block name on Type.
-	Relation string
-
 	// ResourceKind is the selector resource_kind stored grants carry.
 	ResourceKind string
 
@@ -460,7 +457,6 @@ func compileScope(t *TypeDecl, r relationDecl) ScopeDefinition {
 	return ScopeDefinition{
 		Name:             r.storedAs,
 		Type:             t.name,
-		Relation:         r.name,
 		ResourceKind:     resourceKind(t),
 		Block:            r.kind == relationBlock,
 		Matching:         matching,
