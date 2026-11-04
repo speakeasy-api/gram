@@ -24,10 +24,10 @@ func (s *RefreshService) recordRefresh(
 	trigger remotesessionmetrics.RefreshTrigger,
 	outcome remotesessionmetrics.RefreshOutcome,
 	err error,
-) {
+) bool {
 	what, ok := refreshHappened(outcome, client, err)
 	if !ok {
-		return
+		return false
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
@@ -53,9 +53,11 @@ func (s *RefreshService) recordRefresh(
 	}
 	if !attribution.attempt.IsZero() {
 		s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
-		return
+		return false
 	}
-	s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
+	accepted := s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
+	_, failed := what.(mcpconnectionattempts.Code)
+	return accepted && failed
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.
@@ -140,6 +142,9 @@ func refreshTunnelFailure(outcome remotesessionmetrics.RefreshOutcome, err error
 		return mcpconnectionattempts.CodeInternalError, true
 	}
 	if outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
+		if code, ok := tunnelrouting.FailureHappened("", err); ok {
+			return code, true
+		}
 		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	}
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.statusCode == http.StatusBadGateway {

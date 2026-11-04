@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -80,14 +85,14 @@ func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
 	}
 }
 
-// A 502 the tunnel forwarded came from the provider, and a busy tunnel is also a tunnel outage.
+// A forwarded 502 came from the provider; gateway status distinguishes capacity and routing faults.
 func TestRefreshHappened_BadGatewayFollowsTheTunnelStatus(t *testing.T) {
 	t.Parallel()
 
 	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
 		"":                                mcpconnectionattempts.CodeProviderServerError,
-		wire.TunnelErrorTunnelBusy:        mcpconnectionattempts.CodeTunnelUnavailable,
+		wire.TunnelErrorTunnelBusy:        mcpconnectionattempts.CodeTunnelAtCapacity,
 		wire.TunnelErrorRouteLookupFailed: mcpconnectionattempts.CodeInternalError,
 	} {
 		what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeUpstreamError, client, &TokenRefreshError{statusCode: http.StatusBadGateway, tunnelError: tunnelError})
@@ -179,4 +184,49 @@ func TestRefreshHappened_TruncatedBodyPrecedesTunnelOutage(t *testing.T) {
 			require.False(t, ok)
 		}
 	}
+}
+
+func TestRefreshHappened_ExhaustedTunnelPreservesGatewayCause(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status string
+		want   mcpconnectionattempts.Code
+	}{
+		{wire.TunnelErrorTunnelBusy, mcpconnectionattempts.CodeTunnelAtCapacity},
+		{wire.TunnelErrorActiveCheckFailed, mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			t.Parallel()
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(tunnelrouting.ErrorHeader, tc.status)
+				w.WriteHeader(http.StatusBadGateway)
+			}))
+			defer gateway.Close()
+			routes := route.NewRouteTable()
+			require.NoError(t, routes.Publish(t.Context(), "tunnel", gateway.URL, time.Minute))
+			tunnels := tunnelrouting.NewHTTPClient(routes, "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), []string{"127.0.0.0/8"})
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.example.com/token", nil)
+			require.NoError(t, err)
+			_, err = tunnels.Do(req, "tunnel")
+			require.ErrorIs(t, err, tunnelrouting.ErrNoTunnelRoute)
+			// This is the unchanged wrapping applied by postRefreshGrant.
+			failure := fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
+			outcome := refreshOutcomeForError(t.Context(), failure)
+			require.Equal(t, remotesessionmetrics.RefreshOutcomeUnreachable, outcome)
+			require.ErrorIs(t, &RefreshError{Outcome: outcome, err: failure}, ErrRemoteSessionUnavailable)
+			client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+			what, ok := refreshHappened(outcome, client, failure)
+			require.True(t, ok)
+			require.Equal(t, tc.want, what)
+		})
+	}
+}
+
+func TestRefreshFailureRecorded_UnmarkedErrors(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeDeferred, remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeRefreshed, remotesessionmetrics.RefreshOutcomeUpstreamError} {
+		require.False(t, RefreshFailureRecorded(&RefreshError{Outcome: outcome, err: errors.New("unrecorded")}))
+	}
+	require.False(t, RefreshFailureRecorded(nil))
+	require.False(t, RefreshFailureRecorded(fmt.Errorf("unrelated: %w", ErrRemoteSessionUnavailable)))
 }

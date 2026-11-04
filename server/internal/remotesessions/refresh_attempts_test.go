@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -92,6 +93,10 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 			serverID := uuid.New()
 			scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, serverID, mcpconnectionattempts.AppDCR)
 			_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+			require.Equal(t, refreshErr != nil, remotesessions.RefreshFailureRecorded(refreshErr))
+			if refreshErr != nil {
+				require.True(t, remotesessions.RefreshFailureRecorded(fmt.Errorf("wrapped: %w", refreshErr)))
+			}
 			if tc.misconfigured {
 				require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionMisconfigured)
 				require.NotErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable)
@@ -131,7 +136,8 @@ func TestRefreshNow_ZeroAttributionWritesNoRow(t *testing.T) {
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 
-	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	require.False(t, remotesessions.RefreshFailureRecorded(refreshErr))
 	rec.RequireNothing()
 }
 
@@ -148,7 +154,8 @@ func TestRefreshNow_JoinsACarriedAttempt(t *testing.T) {
 	require.NoError(t, err)
 
 	attempt := mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR))
-	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)).InAttempt(attempt))
+	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)).InAttempt(attempt))
+	require.False(t, remotesessions.RefreshFailureRecorded(refreshErr))
 
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, attempt.ID(), row.AttemptID)
@@ -261,4 +268,34 @@ func TestRefreshNow_DetachedInvalidClientKeepsDynamicRemedy(t *testing.T) {
 	require.NoError(t, refresher.DrainRefreshes(ctx))
 	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeRefreshInvalidClient)
 	require.Len(t, rec.Rows(), 1)
+}
+
+func TestRefreshFailureRecorded_CachedOutageDoesNotReuseProvenance(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "recorded-cooldown", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	rec := mcpconnectionattemptstest.New(t)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), testenv.NewMemoryCache())
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	attribution := remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR))
+	_, fresh := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
+	require.True(t, remotesessions.RefreshFailureRecorded(fresh))
+	_, cached := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
+	var failure *remotesessions.RefreshError
+	require.ErrorAs(t, cached, &failure)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
+	require.ErrorIs(t, cached, remotesessions.ErrRemoteSessionUnavailable)
+	require.False(t, remotesessions.RefreshFailureRecorded(cached))
+	require.False(t, remotesessions.RefreshFailureRecorded(fmt.Errorf("wrapped: %w", cached)))
+	require.Len(t, rec.Rows(), 1)
+}
+func TestRefreshFailureRecorded_NoRecorder(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "recorded-no-recorder", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
+	remotesessions.WithRefreshConnectionRecorder(nil)(refresher)
+	_, err := refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)))
+	require.Error(t, err)
+	require.False(t, remotesessions.RefreshFailureRecorded(err))
 }
