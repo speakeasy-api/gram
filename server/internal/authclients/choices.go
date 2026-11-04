@@ -40,7 +40,7 @@ func (s *Service) ListMcpServerAuthClientChoices(ctx context.Context, payload *g
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, server.ID.String(), server.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(server.ProjectID.String(), server.ID.String()).Connect()); err != nil {
 		return nil, err
 	}
 

@@ -226,9 +226,7 @@ internal/authclients/audience.go,SetPrincipalLevel,writer,ValidatePrincipal,,,1,
 internal/authclients/audience.go,clientGrants,loader,ListGrantsForResource,,,1,M5 AIS-863
 internal/authclients/audience.go,saveAudience,writer,PatchPrincipalGrants,,,2,M5 AIS-863
 internal/authclients/audience.go,takeOver,writer,MarkAuthPermissionTakenOverTx,,,1,M5 AIS-863
-internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,check,MCPCheck,ScopeMCPConnect,Require,1,M5 AIS-863
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,projection,IsAgentKeyAuthClientType,,,1,X1 AIS-873
-internal/authclients/impl.go,*Service.require,check,Check,scope,Require,1,M5 AIS-863
 internal/background/activities/custom_domain_health.go,*CustomDomainHealth.NotifyOrgAdmins,loader,ResolveOrganizationAdminEmails,,,1,O5 AIS-840
 internal/background/activities/directory_review_emails.go,*DirectoryReviewEmails.sendOne,loader,ResolveOrganizationAdminEmails,,,1,O3 AIS-839
 internal/background/activities/process_workos_org_events.go,handleOrganizationUpsert,writer,SeedPersonalAuthClientDefaultTx,,,1,X1 AIS-873

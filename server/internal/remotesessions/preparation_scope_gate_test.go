@@ -107,7 +107,7 @@ func TestPrepareEMA_ActualAdminEnableCompletesUnderContention(t *testing.T) {
 	go func() { _, err := ti.service.PrepareIdentityChaining(ctx, in); prepared <- err }()
 	prepPID := waitForBlockedPreparationPID(t, ctx, ti, blockerPID)
 	logger := testenv.NewLogger(t)
-	admin := authclients.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(), testenv.NewEncryptionClient(t))
+	admin := authclients.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), audit.NewLogger(), testenv.NewEncryptionClient(t))
 	updated := make(chan error, 1)
 	go func() {
 		_, err := admin.UpdateAuthClient(ctx, &authclientsgen.UpdateAuthClientPayload{ID: typed.String(), Enabled: new(true)})
