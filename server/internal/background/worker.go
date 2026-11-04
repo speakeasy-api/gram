@@ -126,7 +126,6 @@ type WorkerOptions struct {
 	FunctionsDeployer functions.Deployer
 	FunctionsVersion  functions.RunnerVersion
 	RagService        *rag.ToolsetVectorStore
-	MCPRegistryClient *externalmcp.RegistryClient
 	MCPCatalog        *externalmcp.CatalogService
 	TelemetryLogger   *telemetry.Logger
 	ClickhouseConn    clickhouse.Conn
@@ -198,7 +197,6 @@ func ForDeploymentProcessing(
 	assetStorage assets.BlobStore,
 	enc *encryption.Client,
 	deployer functions.Deployer,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	validator, err := mcpregistry.LoadValidator()
@@ -218,8 +216,7 @@ func ForDeploymentProcessing(
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
 		FunctionsVersion:               "local", // Test deployers don't use baked versions
-		MCPRegistryClient:              mcpRegistryClient,
-		MCPCatalog:                     externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
+		MCPCatalog:                     externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator))),
 		AuditLogger:                    auditLogger,
 		RemoteSessionAssertionSigner:   nil,
 		IssuerKeySweeper:               nil,
@@ -339,7 +336,6 @@ func NewTemporalWorker(
 		FunctionsDeployer:              nil,
 		FunctionsVersion:               "",
 		RagService:                     nil,
-		MCPRegistryClient:              nil,
 		TelemetryLogger:                nil,
 		MeterReadConn:                  nil,
 		TelemetryRepo:                  nil,
@@ -398,7 +394,6 @@ func NewTemporalWorker(
 			FunctionsDeployer:              conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:               conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:                     conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:              conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			MCPCatalog:                     conv.Default(o.MCPCatalog, opts.MCPCatalog),
 			TelemetryLogger:                conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			MeterReadConn:                  conv.Default(o.MeterReadConn, opts.MeterReadConn),
@@ -508,7 +503,6 @@ func NewTemporalWorker(
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
 		opts.RagService,
-		opts.MCPRegistryClient,
 		opts.MCPCatalog,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
