@@ -3,9 +3,11 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -32,10 +34,16 @@ type PluginConfig struct {
 	// AgentKey marks HooksAPIKey as an agent identity's own key, so it
 	// outranks a cached personal sign-in (see Config.AgentKey).
 	AgentKey bool
-	// TranscriptOnly bakes transcript_only into speakeasy.json, so the binary
-	// ships the session transcript on Stop and relays nothing else.
+	// TranscriptOnly renders a Stop-only package and bakes transcript_only
+	// into speakeasy.json, so the binary ships the session transcript on Stop
+	// and relays nothing else. Claude Code only.
 	TranscriptOnly bool
 }
+
+// ErrTranscriptOnlyProvider rejects a transcript-only package for a provider
+// other than Claude Code: transcript shipping reads only Claude Code's
+// transcript file.
+var ErrTranscriptOnlyProvider = errors.New("transcript-only mode supports only claude-code")
 
 const pluginName = "speakeasy-observability"
 
@@ -58,6 +66,11 @@ const configFileName = "speakeasy.json"
 // receives a .pi/extensions module usable as a project directory (or copied
 // into ~/.pi/agent).
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
+	// Rejected before anything is written, so no credential-bearing file is
+	// left behind.
+	if cfg.TranscriptOnly && provider != "claude-code" && provider != "claude" {
+		return fmt.Errorf("%w, not %q", ErrTranscriptOnlyProvider, provider)
+	}
 	// Pi is rendered here rather than by agenthooks/install: it has no hook
 	// config dialect to render, only a TypeScript extension module, and the
 	// frame protocol that module speaks is this package's own.
@@ -92,6 +105,11 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 	}
 	if err := install.Install(ctx, manifest(target.Provider, cfg, dir), target); err != nil {
 		return err
+	}
+	// The Stop-only manifest is already the exact event set, with no
+	// Notification to copy into ConfigChange.
+	if cfg.TranscriptOnly {
+		return nil
 	}
 	return alignPublishedHookEvents(target.Provider, dir)
 }
@@ -144,6 +162,10 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 	// before_agent_run; the relay reports the user prompt from llm_input.
 	if provider == agenthooks.ProviderOpenClaw {
 		hooks = append(hooks, observe(agenthooks.KindModelRequest))
+	}
+	// A transcript-only binary handles Stop alone, so register nothing else.
+	if cfg.TranscriptOnly {
+		hooks = slices.DeleteFunc(hooks, func(h install.HookSpec) bool { return h.Kind != agenthooks.KindStop })
 	}
 	return install.Manifest{
 		Command:  []string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},

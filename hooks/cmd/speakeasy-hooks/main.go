@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -79,7 +80,7 @@ func runInstall(args []string) int {
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
-	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the Claude Cowork mode)")
+	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the Claude Cowork mode; claude-code only)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -107,6 +108,9 @@ func runInstall(args []string) int {
 		TranscriptOnly: *transcriptOnly,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
+		if errors.Is(err, relay.ErrTranscriptOnlyProvider) {
+			return 2
+		}
 		return 1
 	}
 	return 0

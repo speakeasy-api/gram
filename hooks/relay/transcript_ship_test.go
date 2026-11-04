@@ -548,7 +548,7 @@ func TestLoadConfigIgnoresTranscriptOnlyEnv(t *testing.T) {
 }
 
 // TestWritePluginBakesTranscriptOnly: `speakeasy-hooks install
-// --transcript-only` is how local testing reaches the Cowork mode now that no
+// --transcript-only` is how local testing reaches the Cowork mode, since no
 // environment variable can switch it on.
 func TestWritePluginBakesTranscriptOnly(t *testing.T) {
 	t.Parallel()
@@ -563,5 +563,29 @@ func TestWritePluginBakesTranscriptOnly(t *testing.T) {
 		fc, err := readFileConfig(filepath.Join(dir, configFileName))
 		require.NoError(t, err)
 		require.Equal(t, transcriptOnly, fc.TranscriptOnly)
+	}
+}
+
+// TestWritePluginRejectsTranscriptOnlyForOtherProviders: transcript shipping
+// reads only Claude Code's transcript, so any other provider is refused before
+// a credential-bearing speakeasy.json is written.
+func TestWritePluginRejectsTranscriptOnlyForOtherProviders(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"cursor", "codex", "opencode", "copilot", "openclaw", "pi"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			err := WritePlugin(t.Context(), provider, dir, PluginConfig{
+				ServerURL:      "https://gram.test",
+				ProjectSlug:    "default",
+				HooksAPIKey:    "shared-key",
+				BinaryPath:     "/tmp/speakeasy-hooks",
+				TranscriptOnly: true,
+			})
+			require.ErrorIs(t, err, ErrTranscriptOnlyProvider)
+			entries, err := os.ReadDir(dir)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+		})
 	}
 }

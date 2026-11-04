@@ -1,10 +1,11 @@
 # Hooks Service
 
-The hooks service supports three hook entry points:
+The hooks service supports four hook entry points:
 
 - Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses for session capture and policy enforcement.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
+- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop in transcript-only mode (the Claude Cowork package). See [Transcript Upload](#transcript-upload).
 
 ## Unified Ingest
 
@@ -69,6 +70,20 @@ fail-open or fail-closed policy.
 To omit local subscriptions, clients must support discovery and approve the upload
 destination and credential forwarding. Go SDK hosts use `AuthorizeConfiguration`;
 without approval, discovery skips the **entire backend**, including inline-text events.
+
+## Transcript Upload
+
+`POST /transcript` uses the same hooks-scoped key and project selection as
+`/ahp`. The body's `schema_version` selects the transcript format;
+`claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
+This endpoint is the one exception to dispatching on canonical feature events:
+the backend parses the provider's own transcript format, because a
+transcript-only install relays no per-event hooks to translate.
+
+Each entry's uuid keys its rows (`external_message_id` prefixed
+`claude-transcript:`), so a re-sent line is never stored twice. The response
+`{"stored": n}` is the acknowledgement the binary waits for before it advances
+its read offset.
 
 ## Legacy Compatibility
 

@@ -277,9 +277,9 @@ func readTranscriptChunk(path string, offset int64) (transcriptChunk, error) {
 
 // readTranscriptLine reads one line through its newline and returns its
 // length in the file. The bytes are valid only until the next read. A line
-// longer than transcriptMaxLineBytes is read to its newline without being
-// held, and comes back nil. io.EOF means the file ends inside a line that is
-// still being written.
+// longer than transcriptMaxLineBytes is held only up to that cap, then read
+// through its newline and comes back nil. io.EOF means the file ends inside a
+// line that is still being written.
 func readTranscriptLine(r *bufio.Reader) ([]byte, int64, error) {
 	fragment, err := r.ReadSlice('\n')
 	size := int64(len(fragment))
