@@ -1433,7 +1433,9 @@ func generateClaudeCoworkObservabilityPluginFlat(files map[string][]byte, cfg Ge
 	return generateClaudeHooksPluginInDir(files, "", cfg, claudePluginMeta{
 		Name:        ClaudeObservabilitySlug(cfg) + "-cowork",
 		DisplayName: cfg.OrgName + " Cowork Observability",
-		Description: "Speakeasy observability for " + cfg.OrgName + " in Claude Cowork. Ships each session's transcript to your team's Speakeasy dashboard.",
+		// Installing this alongside the standard Claude package would store
+		// each Cowork turn twice, once from each package.
+		Description: "Speakeasy observability for " + cfg.OrgName + " in Claude Cowork. Ships each session's transcript to your team's Speakeasy dashboard. Replaces the standard Speakeasy observability plugin in Claude's admin plugin settings; do not install both.",
 		Version:     hooksManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",

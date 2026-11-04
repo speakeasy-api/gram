@@ -73,6 +73,13 @@ without approval, discovery skips the **entire backend**, including inline-text 
 
 ## Transcript Upload
 
+The Claude Cowork package that ships these transcripts replaces the standard
+Claude observability plugin in Claude's admin plugin settings. An organization
+must not require both there: both run in the Cowork VM and write the same
+session, the standard plugin as per-event rows and the Cowork package as
+`claude-transcript:` rows, so every turn would be stored twice. Device-agent
+distribution of the standard plugin still covers Claude Code.
+
 `POST /transcript` uses the same hooks-scoped key and project selection as
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.

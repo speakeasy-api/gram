@@ -4566,6 +4566,7 @@ func TestGenerateClaudeCoworkObservabilityPluginPackage(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/plugin.json"], &meta))
 	require.Equal(t, ClaudeObservabilitySlug(cfg)+"-cowork", meta.Name)
+	require.Contains(t, meta.Description, "do not install both")
 
 	var hooks claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files["hooks/hooks.json"], &hooks))
