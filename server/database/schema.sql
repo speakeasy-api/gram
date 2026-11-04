@@ -16583,7 +16583,7 @@ COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confi
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
-COMMENT ON COLUMN registry_promotion_candidates.docs_outcome IS 'How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL on rows resolved before this was recorded means requested.
+COMMENT ON COLUMN registry_promotion_candidates.docs_outcome IS 'How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL with docs_queued_at set means requested (resolved before this was recorded); NULL with docs_queued_at NULL means delivery has not resolved yet.
 @access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_review_since IS 'When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
 @access: confidential';
