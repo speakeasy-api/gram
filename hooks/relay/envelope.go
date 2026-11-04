@@ -178,7 +178,7 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 		Raw:  nil,
 	}
 	if len(base.Raw) > 0 {
-		payload.Raw = scrubRawPayload(base.Raw)
+		payload.Raw = scrubRawPayload(base.Raw, base.Provider)
 	}
 	if isEmptyData(data) {
 		payload.Data = nil
@@ -194,7 +194,7 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 // returned verbatim; a rewritten payload is re-encoded, so its key order and
 // whitespace may normalize while all other values stay intact. The OpenClaw
 // shim's mcpServers list is dropped.
-func scrubRawPayload(raw json.RawMessage) json.RawMessage {
+func scrubRawPayload(raw json.RawMessage, provider agenthooks.Provider) json.RawMessage {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return raw
@@ -226,8 +226,8 @@ func scrubRawPayload(raw json.RawMessage) json.RawMessage {
 	redactField("command", redactCommand)
 	// The OpenClaw shim lists every configured MCP server on each tool frame.
 	// data.mcp already carries the one the call reached, so the echo does not
-	// repeat the whole list.
-	if _, ok := obj[openclawMCPServersField]; ok {
+	// repeat the whole list. Other providers' payloads keep the field.
+	if _, ok := obj[openclawMCPServersField]; ok && provider == agenthooks.ProviderOpenClaw {
 		delete(obj, openclawMCPServersField)
 		changed = true
 	}
