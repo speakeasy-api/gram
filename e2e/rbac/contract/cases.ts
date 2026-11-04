@@ -176,6 +176,31 @@ async function deleteMcpServer(ctx: CaseContext, fx: Fixture): Promise<void> {
   await deleteToolset(ctx, fx);
 }
 
+async function createAssistant(ctx: CaseContext): Promise<Fixture> {
+  const ts = await createToolset(ctx, ctx.world.projectSlug);
+  const created = await ctx.admin.ok<{
+    id?: string;
+    assistant?: { id: string };
+  }>("POST", "/rpc/assistants.create", {
+    body: {
+      name: ctx.unique("rbac-e2e-assistant"),
+      model: "openai/gpt-4o-mini",
+      instructions: "Answer briefly.",
+      toolsets: [{ toolset_slug: ts["toolsetSlug"] }],
+    },
+  });
+  return { ...ts, assistantId: created.assistant?.id ?? created.id ?? "" };
+}
+
+async function deleteAssistant(ctx: CaseContext, fx: Fixture): Promise<void> {
+  if (fx["assistantId"]) {
+    await ctx.admin.call("DELETE", "/rpc/assistants.delete", {
+      query: { id: fx["assistantId"] },
+    });
+  }
+  await deleteToolset(ctx, fx);
+}
+
 // --- the contract ----------------------------------------------------------
 
 export const CASES: ContractCase[] = [
@@ -206,6 +231,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       ...sessionOnly,
@@ -234,6 +260,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       ...sessionOnly,
@@ -268,6 +295,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       ...sessionOnly,
@@ -288,6 +316,7 @@ export const CASES: ContractCase[] = [
       member: 200,
       reader: 200,
       blocked: 200,
+      elsewhere: 200,
       norole: 404,
       outsider: 404,
       anonymous: unauthenticated,
@@ -314,6 +343,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -332,6 +362,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -349,6 +380,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -368,6 +400,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -389,6 +422,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 200,
@@ -411,6 +445,7 @@ export const CASES: ContractCase[] = [
       member: 200,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 200,
@@ -432,6 +467,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 204,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 204,
@@ -472,6 +508,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 200,
@@ -497,6 +534,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 200,
@@ -521,13 +559,17 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: 200,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: unauthenticated,
       consumerKey: unauthenticated,
       anonymous: unauthenticated,
     },
-    note: "Cloning is a session-only endpoint, so API keys are not authenticated for it.",
+    note:
+      "Cloning is a session-only endpoint, so API keys are not authenticated for it. " +
+      "The elsewhere persona may clone in a project its MCP grants do not cover, because " +
+      "the clone check names no project; every other MCP row denies it.",
   },
   {
     slice: "mcp",
@@ -549,6 +591,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: 200,
+      elsewhere: deny,
       norole: noProjectAccess,
       outsider: noProjectAccess,
       producerKey: 200,
@@ -641,6 +684,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -658,6 +702,7 @@ export const CASES: ContractCase[] = [
       member: 201,
       reader: 201,
       blocked: 201,
+      elsewhere: 201,
       norole: 201,
       outsider: 201,
       ...sessionOnly,
@@ -665,6 +710,89 @@ export const CASES: ContractCase[] = [
     note:
       "Any organization member may register an agent they own, so every user persona is allowed. " +
       "Agents have no delete endpoint, so each run leaves these behind under unique names.",
+  },
+
+  {
+    slice: "agents",
+    name: "read an assistant",
+    method: "GET",
+    path: "/rpc/assistants.get",
+    project: "default",
+    prepare: createAssistant,
+    request: (_ctx, fx) => ({ query: { id: fx["assistantId"]! } }),
+    cleanup: (ctx, fx) => deleteAssistant(ctx, fx),
+    expect: {
+      admin: 200,
+      member: 200,
+      reader: deny,
+      blocked: deny,
+      elsewhere: deny,
+      norole: deny,
+      outsider: deny,
+      anonymous: unauthenticated,
+    },
+  },
+  {
+    slice: "agents",
+    name: "update an assistant",
+    method: "POST",
+    path: "/rpc/assistants.update",
+    project: "default",
+    prepare: createAssistant,
+    request: (_ctx, fx) => ({
+      body: { id: fx["assistantId"], instructions: "Answer in one line." },
+    }),
+    cleanup: (ctx, fx) => deleteAssistant(ctx, fx),
+    expect: {
+      admin: 200,
+      member: deny,
+      reader: deny,
+      blocked: deny,
+      elsewhere: deny,
+      norole: deny,
+      outsider: deny,
+      anonymous: unauthenticated,
+    },
+  },
+  {
+    slice: "agents",
+    name: "list an assistant's execution profiles",
+    method: "GET",
+    path: "/rpc/assistants.listExecutionProfiles",
+    project: "default",
+    prepare: createAssistant,
+    request: (_ctx, fx) => ({ query: { assistant_id: fx["assistantId"]! } }),
+    cleanup: (ctx, fx) => deleteAssistant(ctx, fx),
+    expect: {
+      admin: 200,
+      member: 200,
+      reader: deny,
+      blocked: deny,
+      elsewhere: deny,
+      norole: deny,
+      outsider: deny,
+      anonymous: unauthenticated,
+    },
+  },
+  {
+    slice: "agents",
+    name: "delete an assistant",
+    method: "DELETE",
+    path: "/rpc/assistants.delete",
+    project: "default",
+    prepare: createAssistant,
+    request: (_ctx, fx) => ({ query: { id: fx["assistantId"]! } }),
+    cleanup: (ctx, fx) => deleteAssistant(ctx, fx),
+    expect: {
+      admin: 200,
+      member: deny,
+      reader: deny,
+      blocked: deny,
+      elsewhere: deny,
+      norole: deny,
+      outsider: deny,
+      anonymous: unauthenticated,
+    },
   },
 
   // Access administration ---------------------------------------------------
@@ -699,6 +827,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,
@@ -722,6 +851,7 @@ export const CASES: ContractCase[] = [
       member: deny,
       reader: deny,
       blocked: deny,
+      elsewhere: deny,
       norole: deny,
       outsider: deny,
       anonymous: unauthenticated,

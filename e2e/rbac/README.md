@@ -50,7 +50,8 @@ cannot reach: organization invites and API keys, project create/update/delete
 including a block (`project:blocked_write` refuses the default project but not
 the sandbox), toolset create/read/update/clone/delete and MCP server create/update including
 key scopes, an MCP client's `tools/list` and `tools/call` through the gateway,
-assistant and agent creation, role creation and role reassignment. Each row
+assistant create/read/update/delete and execution profiles, agent
+registration, role creation and role reassignment. Each row
 lists the status every persona must get; rows create their own fixtures and
 clean up after themselves.
 
@@ -101,6 +102,12 @@ endorsements.
   `Gram-Project` header is resolved.
 - `projects.get` for a project the caller cannot see answers 404, which hides
   that it exists.
+- The `elsewhere` persona, whose MCP grants are bounded to the sandbox
+  project, can clone toolsets in the default project and list its MCP
+  endpoints, meta, remote and unproxied servers (`toolsets.clone`,
+  `mcpEndpoints.list`, `metaMcp.list`, `remoteMcp.listServers`,
+  `unproxiedMcp.listServers`), and so opens the default project's MCP page.
+  Those checks name no project. Every other MCP row denies it.
 - Any organization member can register an agent they own; `agents.create` is
   allowed for every user persona.
 - Several organization endpoints answer 403 even to `admin`
