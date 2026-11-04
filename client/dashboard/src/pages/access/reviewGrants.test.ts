@@ -36,7 +36,7 @@ const catalogue = scopeCatalogue([
     subScopes: ["org:read", "chat:read"],
     exclusionScope: "org:blocked_admin" as ScopeDefinition["exclusionScope"],
   }),
-  def("org:blocked_read", "Blocked: view organization", {
+  def("org:blocked_read", "Exception: view organization", {
     visibility: "internal" as ScopeDefinition["visibility"],
   }),
   def("project:read", "View projects"),

@@ -39,7 +39,7 @@ vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
 vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
     catalogue: scopeCatalogue(state.scopes === "ready" ? definitions : []),
-    workflows: [],
+    tasks: [],
     isLoading: state.scopes === "loading",
     isError: state.scopes === "error",
     refetch: state.refetchScopes,
