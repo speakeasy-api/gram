@@ -1113,9 +1113,12 @@ func TestListToolUsageTraces_ExcludesStoredNonToolHookEvents(t *testing.T) {
 				return len(result.Traces) == 2
 			})
 
+			// Each tool call is its own trace of one row: a prompt event
+			// traces per session, so it never joins a tool call's trace.
 			names := make([]string, 0, len(result.Traces))
 			for _, trace := range result.Traces {
 				names = append(names, trace.ToolName)
+				require.Equal(t, uint64(1), trace.LogCount, trace.ToolName)
 			}
 			require.ElementsMatch(t, []string{"exec", "read"}, names)
 		})
