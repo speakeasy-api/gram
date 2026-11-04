@@ -1038,7 +1038,7 @@ const (
 )
 
 func (a chatAccess) operation(chat repo.GetChatRow) authz.Operation {
-	ref := authz.Chat(chat.OrganizationID, chat.ProjectID.String(), chat.ID.String())
+	ref := authz.Chat(chat.ID.String())
 	if a == chatAccessWrite {
 		return ref.Write()
 	}

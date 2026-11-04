@@ -492,6 +492,56 @@
       ]
     },
     {
+      "name": "allow_project_grant_rejects_project_level_check_for_other_project",
+      "contract": "permissive_allow_matching",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:write",
+          "resource_id": "proj_2",
+          "dimensions": { "project_id": "proj_2" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:write",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "*",
+            "project_id": "proj_1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "allow_project_grant_matches_project_level_check_in_its_project",
+      "contract": "permissive_allow_matching",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:write",
+          "resource_id": "proj_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:write",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "*",
+            "project_id": "proj_1"
+          }
+        }
+      ]
+    },
+    {
       "name": "allow_wildcard_kind_matches_any_kind",
       "contract": "permissive_allow_matching",
       "caller": "human",
@@ -693,6 +743,36 @@
         {
           "principal": "role:organization:role_fixture",
           "scope": "mcp:blocked_connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "*",
+            "project_id": "proj_1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "block_project_block_applies_to_project_level_check_in_its_project",
+      "contract": "strict_block_matching",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:write",
+          "resource_id": "proj_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:write",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_write",
           "selector": {
             "resource_kind": "mcp",
             "resource_id": "*",

@@ -429,7 +429,7 @@ func TestServiceDisableBetweenAuthorizationAndWriteIsRejected(t *testing.T) {
 
 	f, ctx := newMCPEnableFixture(t, "assistants_attach_enable_interleaved")
 	connectCtx := f.connectCtx(t, ctx)
-	canEnableMCP, err := f.svc.requireAttachmentAccess(connectCtx, "org-test", f.projectID, toolsetRefs(f.enabled), nil)
+	canEnableMCP, err := f.svc.requireAttachmentAccess(connectCtx, f.projectID, toolsetRefs(f.enabled), nil)
 	require.NoError(t, err)
 	f.disable(t, f.enabled.ID)
 
