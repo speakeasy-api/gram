@@ -12,8 +12,19 @@ export async function pageAs(
     ignoreHTTPSErrors: true,
     storageState: storageStateFile(persona),
   });
-  return context.newPage();
+  const page = await context.newPage();
+  const errors: string[] = [];
+  pageErrors.set(page, errors);
+  page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(`console: ${msg.text()}`);
+  });
+  return page;
 }
+
+// Script errors and console errors per page, reported when a gate fails: a
+// blank page is a crash, and these say which.
+const pageErrors = new WeakMap<Page, string[]>();
 
 // The copy every page-level permission gate renders.
 export const ACCESS_DENIED = "You don't have permission to view this page.";
@@ -35,7 +46,7 @@ async function withPageContext(
       .innerText({ timeout: 2_000 })
       .catch(() => "<no body>");
     throw new Error(
-      `${(err as Error).message}\n\nPage: ${page.url()}\nShowing: ${text.replace(/\s+/g, " ").slice(0, 400)}`,
+      `${(err as Error).message}\n\nPage: ${page.url()}\nShowing: ${text.replace(/\s+/g, " ").slice(0, 400)}\nErrors:\n${(pageErrors.get(page) ?? []).slice(0, 10).join("\n").slice(0, 2000)}`,
     );
   }
 }
