@@ -13,7 +13,18 @@ func TestUnconfirmedRefreshCheck(t *testing.T) {
 	for _, reason := range []identitychaining.Reason{identitychaining.ReasonTransientFailure, identitychaining.ReasonProviderUnavailable, identitychaining.ReasonUnknownRejection} {
 		require.Equal(t, upstreamRefreshCheckFailed, unconfirmedRefreshCheck(reason), reason)
 	}
-	for _, reason := range []identitychaining.Reason{identitychaining.ReasonConfigurationRequired, identitychaining.ReasonStaleConfiguration, identitychaining.ReasonInvalidClient} {
+	for _, reason := range []identitychaining.Reason{
+		identitychaining.ReasonConfigurationRequired,
+		identitychaining.ReasonStaleConfiguration,
+		identitychaining.ReasonBindingNotReady,
+		identitychaining.ReasonInvalidTarget,
+		identitychaining.ReasonScopePolicyDenied,
+		identitychaining.ReasonAccessDenied,
+		identitychaining.ReasonInvalidClient,
+		identitychaining.ReasonMalformedAssertion,
+		identitychaining.ReasonInsufficientScope,
+		identitychaining.ReasonIneligibleIdentity,
+	} {
 		require.Equal(t, upstreamRefreshUnverified, unconfirmedRefreshCheck(reason), reason)
 	}
 }
@@ -28,6 +39,10 @@ func TestInboundRefreshHappened(t *testing.T) {
 		"refresh_token_expired":                 mcpconnectionattempts.CodeRefreshTokenExpired,
 		"sign_in_revoked":                       mcpconnectionattempts.CodeSignInRevoked,
 		"refresh_token_revoked":                 mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"refresh_token_replay_session_mismatch": mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"refresh_token_replay_rejected":         mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"tool_selection_malformed":              mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"tool_selection_resource_mismatch":      mcpconnectionattempts.CodeRefreshTokenRevoked,
 		"agent_admission_denied":                mcpconnectionattempts.CodeNoServerAccess,
 		"agent_admission_unavailable":           mcpconnectionattempts.CodeInternalError,
 		"upstream_reconnect_required":           mcpconnectionattempts.CodeUpstreamReconnectRequired,
