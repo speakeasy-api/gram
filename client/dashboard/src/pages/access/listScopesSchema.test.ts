@@ -19,7 +19,7 @@ describe("listScopes response schema", () => {
         },
         {
           slug: "plugin:blocked_write",
-          label: "Blocked: publish plugins",
+          label: "Exception: publish plugins",
           description: "Exclude plugin content changes",
           resource_type: "project",
           category: "plugin",

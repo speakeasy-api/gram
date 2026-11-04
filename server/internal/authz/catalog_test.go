@@ -47,10 +47,10 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		visibility, ok := ScopeVisibilityFor(entry.Scope)
 		require.True(t, ok)
 		if visibility == ScopeVisibilityInternal {
-			require.True(t, strings.HasPrefix(entry.Label, "Blocked: "), "%s: internal scopes are labelled as blocks", entry.Scope)
+			require.True(t, strings.HasPrefix(entry.Label, "Exception: "), "%s: internal scopes are labelled as exceptions", entry.Scope)
 			require.False(t, entry.Sensitive(), "%s: exception scopes withdraw access and are never sensitive", entry.Scope)
 		} else {
-			require.False(t, strings.HasPrefix(entry.Label, "Blocked: "), "%s: visible scopes are not labelled as blocks", entry.Scope)
+			require.False(t, strings.HasPrefix(entry.Label, "Exception: "), "%s: visible scopes are not labelled as exceptions", entry.Scope)
 		}
 	}
 }
