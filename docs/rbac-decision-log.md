@@ -103,7 +103,6 @@ Review follow-ups adopted on #8442 (each fails closed):
 4. **A worker without a client resolves with the engine.** Test workers and commands that build no client keep the old behaviour. That fallback row is owned by X1 in the inventory. _If reversed:_ every worker would have to build a client, including test helpers.
 5. **The identity-provider `authorize` helper takes an operation, not a scope.** Callers pass `authz.OrganizationRef.Administer` or `authz.OrganizationRef.Read`, so no scope is mapped locally. _If reversed:_ map the scope as product features does.
 6. **Device-integration handlers have no service tests.** Their twelve checks are organization read and administer on the active organization. No shadow or parity test runs these handlers. The ticket asks for characterization tests before gates change; none were added, because each check is a one-line swap from `ScopeOrgRead`/`ScopeOrgAdmin` to the same organization operation, and the client corpus pins that both operations answer like those scopes. _If reversed:_ add handler tests that exercise each gate for an admin, a reader and an outsider before this lands.
-6. **Device-integration handlers have no service tests.** Their thirteen checks are organization read and administer on the active organization, which the client and shadow corpora already cover. No new evidence was added for them.
 
 ## O4 (AIS-844): external credentials, keys, session issuers and key sets
 
