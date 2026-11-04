@@ -9,6 +9,16 @@ import { CASES, type CaseContext } from "./cases.ts";
 const world = lazyWorld();
 let counter = 0;
 
+async function isTemporaryFault(res: APIResponse): Promise<boolean> {
+  if (res.status() < 500) return false;
+  try {
+    const body = JSON.parse(await res.text()) as { temporary?: boolean };
+    return body.temporary === true;
+  } catch {
+    return false;
+  }
+}
+
 for (const c of CASES) {
   test.describe(`${c.slice} › ${c.name}`, () => {
     for (const [persona, status] of Object.entries(c.expect) as [
@@ -34,17 +44,22 @@ for (const c of CASES) {
           fx = c.prepare ? await c.prepare(ctx) : {};
           const { query, body } = c.request ? c.request(ctx, fx) : {};
           const api = new ApiClient(request, credentialFor(world, persona));
-          res = await api.call(c.method, c.path, {
-            project,
-            ...(query ? { query } : {}),
-            ...(body === undefined ? {} : { body }),
-            ...(c.bearer
-              ? {
-                  bearer: true,
-                  headers: { Accept: "application/json, text/event-stream" },
-                }
-              : {}),
-          });
+          const send = () =>
+            api.call(c.method, c.path, {
+              project,
+              ...(query ? { query } : {}),
+              ...(body === undefined ? {} : { body }),
+              ...(c.bearer
+                ? {
+                    bearer: true,
+                    headers: { Accept: "application/json, text/event-stream" },
+                  }
+                : {}),
+            });
+          res = await send();
+          // A fault the server marks temporary, such as lock contention with
+          // background work, says nothing about authorization: retry it once.
+          if (await isTemporaryFault(res)) res = await send();
           expect(
             res.status(),
             `${c.method} ${c.path} as ${persona}: ${(await res.text()).slice(0, 300)}`,
