@@ -105,8 +105,12 @@ import {
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
+  isCostUnknown,
+  totalTokensFor,
+  UNKNOWN_COST_EXPLANATION,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { UnknownCost } from "./UnknownCost";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
@@ -171,15 +175,6 @@ function findingKey(r: RiskResult): string {
 
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
-}
-
-function totalTokensFor(chat: {
-  totalTokens?: number;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-}): number {
-  if (chat.totalTokens && chat.totalTokens > 0) return chat.totalTokens;
-  return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
 // ChatDetailErrorFallback is the defensive backstop for unexpected
@@ -312,6 +307,7 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
   const {
     costPerUnit: workUnitsCostPerUnit,
     tokensPerUnit: workUnitsTokensPerUnit,
@@ -342,7 +338,14 @@ function SessionSummary({
                   {formatUsageCost(chat.totalCost!)}
                 </span>
               )}
-              {hasCost && tokens > 0 && (
+              {/* A bare dash, not the tooltip one: it sits inside the popover
+                  trigger, and the popover says why the cost is missing. */}
+              {costUnknown && (
+                <span className="tabular-nums" aria-label="Unknown cost">
+                  —
+                </span>
+              )}
+              {(hasCost || costUnknown) && tokens > 0 && (
                 <span aria-hidden className="text-muted-foreground/40">
                   |
                 </span>
@@ -416,6 +419,11 @@ function SessionSummary({
             <MetaRow label="Total cost">
               {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
             </MetaRow>
+            {costUnknown && (
+              <p className="text-muted-foreground py-1.5 text-xs">
+                {UNKNOWN_COST_EXPLANATION}
+              </p>
+            )}
             {chat.totalInputTokens !== undefined && (
               <MetaRow label="Input tokens">
                 {chat.totalInputTokens.toLocaleString()}
@@ -471,6 +479,7 @@ function ChatDetailMetadataBadges({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -509,6 +518,11 @@ function ChatDetailMetadataBadges({
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {costUnknown && (
+        <HeaderMetadataBadge>
+          <UnknownCost />
         </HeaderMetadataBadge>
       )}
       {tokens > 0 && (
