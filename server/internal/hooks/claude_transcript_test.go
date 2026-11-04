@@ -173,6 +173,43 @@ func TestClaudeTranscriptEndpointStoresIdempotently(t *testing.T) {
 	require.NoError(t, err, "the chat is created in the authenticated project")
 }
 
+// TestClaudeTranscriptEndpointStripsNUL: Postgres rejects NUL in text and
+// jsonb, so a NUL escape in any field an entry carries into a row must not
+// fail the write, or the binary would resend the batch on every Stop.
+func TestClaudeTranscriptEndpointStripsNUL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	sessionID := uuid.NewString()
+	lines := []string{
+		`{"type":"user","uuid":"u-1","timestamp":"2026-11-03T10:00:00Z","message":{"role":"user","content":"list\u0000 the files"}}`,
+		`{"type":"assistant","uuid":"a-1","timestamp":"2026-11-03T10:00:01Z","message":{"id":"msg\u0000_1","model":"claude\u0000-opus-5-5","role":"assistant","content":[{"type":"tool_use","id":"toolu\u0000_1","name":"Ba\u0000sh","input":{"command":"printf '\u0000'"}}]}}`,
+		`{"type":"user","uuid":"u-2","timestamp":"2026-11-03T10:00:02Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu\u0000_1","content":"a\u0000.txt"}]}}`,
+	}
+	require.Equal(t, int64(3), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, claudeTranscriptUploadBody(sessionID, lines), ahpAuthHeaders)))
+
+	chatID := sessionIDToUUID(sessionID)
+	messages, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+	require.Equal(t, "list the files", messages[0].Content)
+	require.Equal(t, "claude-opus-5-5", messages[1].Model.String)
+	require.Equal(t, "msg_1", messages[1].MessageID.String)
+	// The tool input travels as a JSON string, so its NUL escape is stored
+	// escaped and kept.
+	require.JSONEq(t, `[{"id":"toolu_1","type":"function","function":{"name":"Bash","arguments":"{\"command\":\"printf '\\u0000'\"}"}}]`, string(messages[1].ToolCalls))
+	require.Equal(t, "toolu_1", messages[2].ToolCallID.String)
+	require.Equal(t, "a.txt", messages[2].Content)
+
+	chatRow, err := chatrepo.New(ti.conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, "list the files", chatRow.Title.String)
+}
+
 func TestClaudeTranscriptEndpointSkipsWhenCaptureDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

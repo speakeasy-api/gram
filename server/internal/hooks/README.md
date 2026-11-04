@@ -92,10 +92,19 @@ settled, and resends anything unsettled on the next Stop:
   413 too large) settles the batch as dropped. The server would reject it
   the same way on every retry, so those lines are lost for good. The binary's
   debug log records the status.
-- 401, 403, 404, 405, 408, 429, 5xx, transport failures, and a 2xx without
-  the acknowledgement leave the batch queued for retry. Credentials,
-  throttling, and routing can recover, and a 2xx from anything but this
-  endpoint must not count as stored.
+- A 5xx leaves the batch queued, but a batch answered 5xx on three Stops in
+  a row, with no other answer between them, is dropped, so one entry the
+  server cannot store does not hold the offset forever. Only the lines the
+  batch held at its first failure are dropped; lines appended since are
+  sent again.
+- 401, 403, 404, 405, 408, 429, transport failures, and a 2xx without the
+  acknowledgement leave the batch queued for retry without limit.
+  Credentials, throttling, and routing can recover, and a 2xx from anything
+  but this endpoint must not count as stored.
+
+A batch carries at most 500 entries, which store in about a second, so a
+long transcript replayed from offset zero advances, and persists its
+offset, a batch at a time within one Stop's 15-second budget.
 
 ## Legacy Compatibility
 

@@ -8,9 +8,12 @@ package relay
 //
 // The transcript file is its own durable queue: a per-transcript byte offset
 // advances only once the server has settled a chunk, so a failed upload is
-// retried from the same offset on the next Stop. The server keys rows by the
-// transcript entry's uuid, which makes every re-send — a retry, or a fresh VM
-// that has lost its state and starts again from offset zero — idempotent.
+// retried from the same offset on the next Stop. A chunk the server keeps
+// answering with a 5xx is dropped after transcriptMaxServerErrors Stops, so
+// one entry it cannot store does not hold the queue forever. The server keys
+// rows by the transcript entry's uuid, which makes every re-send — a retry, or
+// a fresh VM that has lost its state and starts again from offset zero —
+// idempotent.
 
 import (
 	"bufio"
@@ -50,10 +53,17 @@ const (
 	// larger body 413, which settles the chunk and drops the line.
 	transcriptMaxLineBytes = 8 << 20
 
-	// transcriptMaxEntries is the server's per-upload entry cap
-	// (claudeTranscriptMaxEntries); a larger chunk would be answered 413 and
-	// dropped the same way.
-	transcriptMaxEntries = 20000
+	// transcriptBatchEntries bounds the entries in one upload. The server
+	// stores about one row per entry, a couple of milliseconds each, so a
+	// batch stores in about a second: a long transcript replayed from offset
+	// zero advances, and persists its offset, a batch at a time well within
+	// transcriptShipBudget. The server's own cap (claudeTranscriptMaxEntries)
+	// is far higher.
+	transcriptBatchEntries = 500
+
+	// transcriptMaxServerErrors is how many Stops in a row a chunk may be
+	// answered with a 5xx before it is dropped.
+	transcriptMaxServerErrors = 3
 
 	// transcriptReadBufferBytes (64 KiB) holds typical transcript lines whole;
 	// longer lines are assembled from buffer-sized fragments.
@@ -149,7 +159,32 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 		Entries:       nil,
 	}
 
+	// One client for every batch, so later batches reuse the connection.
+	client := &http.Client{
+		Transport: ingestTransport(),
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Timeout: 0,
+		Jar:     nil,
+	}
+
 	marker := transcriptHighWaterPath(path)
+	// send uploads chunk and returns the offset to resume from, or false when
+	// the chunk stays queued for the next Stop.
+	send := func(chunk transcriptChunk) (int64, bool) {
+		upload.OffsetStart, upload.OffsetEnd, upload.Entries = chunk.start, chunk.end, chunk.entries
+		status, err := postTranscript(ctx, client, c, upload)
+		r.debugf("transcript upload session=%s offset=%d-%d entries=%d status=%d err=%v", sessionID, chunk.start, chunk.end, len(chunk.entries), status, err)
+		if transcriptUploadSettled(status) {
+			return chunk.end, true
+		}
+		dropTo, drop := recordUnsettledTranscriptChunk(marker, chunk, status)
+		if drop {
+			r.debugf("transcript batch dropped after %d server errors session=%s offset=%d-%d", transcriptMaxServerErrors, sessionID, chunk.start, dropTo)
+		}
+		return dropTo, drop
+	}
 	ship := func() {
 		offset := readTranscriptHighWater(marker)
 		for ctx.Err() == nil {
@@ -168,15 +203,14 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 			if chunk.end == chunk.start {
 				return
 			}
+			next := chunk.end
 			if len(chunk.entries) > 0 {
-				upload.OffsetStart, upload.OffsetEnd, upload.Entries = chunk.start, chunk.end, chunk.entries
-				status, err := postTranscript(ctx, c, upload)
-				r.debugf("transcript upload session=%s offset=%d-%d entries=%d status=%d err=%v", sessionID, chunk.start, chunk.end, len(chunk.entries), status, err)
-				if !transcriptUploadSettled(status) {
+				var settled bool
+				if next, settled = send(chunk); !settled {
 					return
 				}
 			}
-			offset = chunk.end
+			offset = next
 			writeTranscriptHighWater(marker, offset)
 		}
 	}
@@ -208,7 +242,8 @@ func transcriptAdapter(base *agenthooks.Event) string {
 // those chunks stay queued with transport failures and 5xx. The endpoint
 // never answers 404 or 405 itself: those come from a request routed
 // elsewhere (an ingress without the route, or a server that predates it), so
-// those chunks stay queued too.
+// those chunks stay queued too. recordUnsettledTranscriptChunk bounds the 5xx
+// retries.
 func transcriptUploadSettled(status int) bool {
 	switch {
 	case status >= 200 && status < 300:
@@ -226,7 +261,7 @@ func transcriptUploadSettled(status int) bool {
 
 // readTranscriptChunk reads complete lines from offset, up to
 // transcriptChunkBytes of them whether shipped or skipped, and keeps the
-// conversation entries among them, at most transcriptMaxEntries. An entry
+// conversation entries among them, at most transcriptBatchEntries. An entry
 // that would push a chunk already carrying entries past the budget starts the
 // next one, so an upload holds at most the budget or a single line. A
 // trailing line without its newline is still being written and is left for
@@ -252,7 +287,7 @@ func readTranscriptChunk(path string, offset int64) (transcriptChunk, error) {
 	chunk := transcriptChunk{start: offset, end: offset, entries: nil}
 	reader := bufio.NewReaderSize(f, transcriptReadBufferBytes)
 	limit := chunk.start + transcriptChunkBytes
-	for chunk.end < limit && len(chunk.entries) < transcriptMaxEntries {
+	for chunk.end < limit && len(chunk.entries) < transcriptBatchEntries {
 		line, size, err := readTranscriptLine(reader)
 		if errors.Is(err, io.EOF) {
 			// A partial line is still being written; leave it for later.
@@ -325,7 +360,7 @@ func transcriptConversationEntry(line []byte) (json.RawMessage, bool) {
 // endpoint's JSON acknowledgement: a request routed anywhere else (a proxy or
 // a single-page app answering every path) could answer 200 without storing
 // anything, and moving the offset past it would lose those lines for good.
-func postTranscript(ctx context.Context, c creds, upload transcriptUpload) (int, error) {
+func postTranscript(ctx context.Context, client *http.Client, c creds, upload transcriptUpload) (int, error) {
 	var compressed bytes.Buffer
 	gz := gzip.NewWriter(&compressed)
 	enc := json.NewEncoder(gz)
@@ -351,14 +386,6 @@ func postTranscript(ctx context.Context, c creds, upload transcriptUpload) (int,
 		req.Header.Set("Gram-Project", c.Project)
 	}
 
-	client := &http.Client{
-		Transport: ingestTransport(),
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Timeout: 0,
-		Jar:     nil,
-	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("send transcript upload: %w", err)
@@ -405,9 +432,53 @@ func readTranscriptHighWater(marker string) int64 {
 	return offset
 }
 
+// writeTranscriptHighWater moves the offset, which also ends any run of
+// server errors counted against the chunk at the old one.
 func writeTranscriptHighWater(marker string, offset int64) {
 	if marker == "" {
 		return
 	}
 	_ = atomicWriteCacheFile(marker, []byte(strconv.FormatInt(offset, 10)))
+	_ = os.Remove(transcriptServerErrorsPath(marker))
+}
+
+// transcriptServerErrorsPath holds "<start> <end> <count>": how many Stops in a
+// row the chunk starting at start has been answered with a 5xx, and where that
+// chunk ended when it first failed. It sits beside the offset marker and is
+// guarded by the same lock. The start keeps a file a failed removal left
+// behind from counting against a later chunk.
+func transcriptServerErrorsPath(marker string) string {
+	return marker + ".failures"
+}
+
+// recordUnsettledTranscriptChunk records an unsettled answer to chunk and
+// reports whether the chunk has now been answered with a 5xx on
+// transcriptMaxServerErrors Stops in a row, so the caller drops it. The chunk
+// grows as the session goes on, but the entry the server fails on was already
+// in it at the first failure, so only that much is dropped: the offset to
+// resume from is where the chunk ended then. Any other unsettled answer can
+// recover without the chunk changing: it ends the run and is retried without
+// limit. Without a marker nothing is counted.
+func recordUnsettledTranscriptChunk(marker string, chunk transcriptChunk, status int) (int64, bool) {
+	if marker == "" {
+		return 0, false
+	}
+	path := transcriptServerErrorsPath(marker)
+	if status < 500 || status > 599 {
+		_ = os.Remove(path)
+		return 0, false
+	}
+	end, count := chunk.end, 1
+	if b, err := os.ReadFile(path); err == nil {
+		var start, firstEnd int64
+		var n int
+		if _, err := fmt.Sscanf(string(b), "%d %d %d", &start, &firstEnd, &n); err == nil && start == chunk.start && firstEnd > start {
+			end, count = min(end, firstEnd), n+1
+		}
+	}
+	if count >= transcriptMaxServerErrors {
+		return end, true
+	}
+	_ = atomicWriteCacheFile(path, fmt.Appendf(nil, "%d %d %d", chunk.start, end, count))
+	return 0, false
 }

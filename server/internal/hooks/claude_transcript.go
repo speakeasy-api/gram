@@ -61,12 +61,13 @@ const (
 	claudeTranscriptMaxDecodedBytes = 32 << 20
 
 	// claudeTranscriptMaxEntries bounds the entries in one upload. The binary
-	// batches about 4 MiB of transcript per upload, far fewer entries than
-	// this at real entry sizes, and stops a chunk at the same cap.
+	// sends far fewer: it ends a batch at transcriptBatchEntries (in
+	// hooks/relay) or about 4 MiB of transcript.
 	claudeTranscriptMaxEntries = 20000
 
 	// claudeTranscriptPersistTimeout bounds the detached write of one upload.
-	// A full upload is a few thousand rows, which store well within it.
+	// A batch from the binary (transcriptBatchEntries in hooks/relay) stores
+	// well within it.
 	claudeTranscriptPersistTimeout = 30 * time.Second
 )
 
@@ -423,6 +424,11 @@ type claudeTranscriptRow struct {
 // bookkeeping entry type are skipped. A mixed entry splits into one row per
 // role the conversation readers understand: user text, assistant text, an
 // assistant tool call, or a tool result. Undecodable entries are skipped.
+//
+// Every string decoded into a row has its NUL bytes removed: Postgres rejects
+// NUL in text and jsonb, so one "\u0000" escape would fail the whole upload
+// on every retry. The chat writer strips only some of the columns, and the
+// tool call ids and names land inside jsonb.
 func claudeTranscriptRows(entries []json.RawMessage, now time.Time) []claudeTranscriptRow {
 	var rows []claudeTranscriptRow
 	for _, raw := range entries {
@@ -481,18 +487,20 @@ func claudeTranscriptEntryRows(line claudeTranscriptLine, blocks []claudeTranscr
 	for _, block := range blocks {
 		switch block.Type {
 		case "text":
-			if strings.TrimSpace(block.Text) != "" {
-				texts = append(texts, block.Text)
+			if text := conv.StripNUL(block.Text); strings.TrimSpace(text) != "" {
+				texts = append(texts, text)
 			}
 		case "tool_use":
 			if line.Type != "assistant" {
 				continue
 			}
+			// The input stays raw: as a JSON string inside arguments, any NUL
+			// escape in it is stored escaped, which jsonb accepts.
 			calls, err := json.Marshal([]claudeTranscriptToolCall{{
-				ID:   block.ID,
+				ID:   conv.StripNUL(block.ID),
 				Type: "function",
 				Function: claudeTranscriptToolFunction{
-					Name:      block.Name,
+					Name:      conv.StripNUL(block.Name),
 					Arguments: string(conv.DefaultSlice(block.Input, json.RawMessage("{}"))),
 				},
 			}})
@@ -507,13 +515,13 @@ func claudeTranscriptEntryRows(line claudeTranscriptLine, blocks []claudeTranscr
 			if line.Type != "user" {
 				continue
 			}
-			content := claudeTranscriptToolResultText(block.Content)
+			content := conv.StripNUL(claudeTranscriptToolResultText(block.Content))
 			if strings.TrimSpace(content) == "" {
 				continue
 			}
 			row := claudeTranscriptBaseRow(line, "tool")
 			row.content = content
-			row.toolCallID = block.ToolUseID
+			row.toolCallID = conv.StripNUL(block.ToolUseID)
 			rows = append(rows, row)
 		}
 	}
@@ -539,8 +547,8 @@ func claudeTranscriptBaseRow(line claudeTranscriptLine, role string) claudeTrans
 		createdAt:    time.Time{},
 	}
 	if line.Type == "assistant" {
-		row.model = strings.TrimSpace(line.Message.Model)
-		row.messageID = strings.TrimSpace(line.Message.ID)
+		row.model = strings.TrimSpace(conv.StripNUL(line.Message.Model))
+		row.messageID = strings.TrimSpace(conv.StripNUL(line.Message.ID))
 	}
 	return row
 }

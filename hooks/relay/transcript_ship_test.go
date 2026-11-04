@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -98,6 +99,11 @@ func (ts *transcriptServer) setStatus(status func(n int) int) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.status = status
+}
+
+// respond answers every request with code.
+func (ts *transcriptServer) respond(code int) {
+	ts.setStatus(func(int) int { return code })
 }
 
 func (ts *transcriptServer) setBody(body func(n int) []byte) {
@@ -233,6 +239,132 @@ func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
+// transcriptMarker is the offset marker shipTranscript keeps for transcript.
+func transcriptMarker(t *testing.T, transcript string) string {
+	t.Helper()
+	// The marker is keyed by the validated path, as shipTranscript sees it.
+	validated, err := validateClaudeTranscriptPath(transcript)
+	require.NoError(t, err)
+	return transcriptHighWaterPath(validated)
+}
+
+// TestTranscriptOnlyDropsBatchAfterRepeatedServerErrors: a batch answered 5xx
+// on transcriptMaxServerErrors Stops in a row is dropped, so a batch the
+// server can never store does not hold back everything after it. Only what
+// the batch held at its first failure is dropped; lines appended since are
+// sent again.
+func TestTranscriptOnlyDropsBatchAfterRepeatedServerErrors(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.respond(http.StatusServiceUnavailable)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
+	marker := transcriptMarker(t, transcript)
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	appendTranscript(t, transcript, transcriptLater)
+	for range transcriptMaxServerErrors - 2 {
+		invokeClaude(t, cfg, claudeStop(transcript))
+	}
+	require.Equal(t, int64(0), readTranscriptHighWater(marker))
+	// The last server error drops the batch, and the line appended after its
+	// first failure goes out again as the next batch, which fails once.
+	invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, int64(len(transcriptUser+transcriptAssistant)), readTranscriptHighWater(marker))
+
+	ts.respond(http.StatusOK)
+	invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, int64(len(transcriptUser+transcriptAssistant+transcriptLater)), readTranscriptHighWater(marker))
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, transcriptMaxServerErrors+2)
+	require.Equal(t, []string{"u-1", "a-1"}, entryUUIDs(t, uploads[0]))
+	for _, upload := range uploads[1:transcriptMaxServerErrors] {
+		require.Equal(t, []string{"u-1", "a-1", "u-2"}, entryUUIDs(t, upload))
+	}
+	for _, upload := range uploads[transcriptMaxServerErrors:] {
+		require.Equal(t, []string{"u-2"}, entryUUIDs(t, upload), "only the line after the dropped batch is sent")
+	}
+}
+
+// TestTranscriptOnlyCountsServerErrorsPerBatch: a stored batch moves the
+// offset, so server errors the batch before it drew do not count against the
+// next one.
+func TestTranscriptOnlyCountsServerErrorsPerBatch(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser)
+	marker := transcriptMarker(t, transcript)
+
+	ts.respond(http.StatusServiceUnavailable)
+	for range transcriptMaxServerErrors - 1 {
+		invokeClaude(t, cfg, claudeStop(transcript))
+	}
+	ts.respond(http.StatusOK)
+	invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, int64(len(transcriptUser)), readTranscriptHighWater(marker))
+	require.NoFileExists(t, transcriptServerErrorsPath(marker), "moving the offset clears the count")
+
+	appendTranscript(t, transcript, transcriptLater)
+	ts.respond(http.StatusServiceUnavailable)
+	for range transcriptMaxServerErrors - 1 {
+		invokeClaude(t, cfg, claudeStop(transcript))
+	}
+	require.Equal(t, int64(len(transcriptUser)), readTranscriptHighWater(marker), "the next batch starts its own count")
+}
+
+// TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure: credentials, routing,
+// and transport failures recover without the batch changing, so they retry
+// without limit and break a run of server errors.
+func TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure(t *testing.T) {
+	for name, fail := range map[string]func(ts *transcriptServer){
+		"unauthorized": func(ts *transcriptServer) {
+			ts.respond(http.StatusUnauthorized)
+		},
+		// A 2xx without the acknowledgement is reported as status 0, like a
+		// transport failure.
+		"unacknowledged": func(ts *transcriptServer) {
+			ts.respond(http.StatusOK)
+			ts.setBody(func(int) []byte { return []byte("<!doctype html><html></html>") })
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			ts := newTranscriptServer(t)
+			cfg := transcriptOnlyConfig(t, ts.URL)
+			transcript := claudeTranscriptFile(t)
+			appendTranscript(t, transcript, transcriptUser)
+			marker := transcriptMarker(t, transcript)
+
+			serverError := func() {
+				ts.setBody(nil)
+				ts.respond(http.StatusInternalServerError)
+			}
+
+			fail(ts)
+			for range 2 * transcriptMaxServerErrors {
+				invokeClaude(t, cfg, claudeStop(transcript))
+			}
+			require.Equal(t, int64(0), readTranscriptHighWater(marker))
+
+			// Server errors either side of a recoverable failure are not in a row.
+			for range transcriptMaxServerErrors - 1 {
+				serverError()
+				invokeClaude(t, cfg, claudeStop(transcript))
+				fail(ts)
+				invokeClaude(t, cfg, claudeStop(transcript))
+			}
+			serverError()
+			invokeClaude(t, cfg, claudeStop(transcript))
+			require.Equal(t, int64(0), readTranscriptHighWater(marker))
+			uploads, _ := ts.recorded()
+			require.Len(t, uploads, 4*transcriptMaxServerErrors-1)
+		})
+	}
+}
+
 // TestTranscriptOnlyRecordsRestartOfReplacedFile: once a file shorter than the
 // stored offset restarts shipping from zero, a failed upload must not leave
 // the old offset behind, or the retry would resume mid-file after the
@@ -249,10 +381,7 @@ func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
 	cfg := transcriptOnlyConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
-	// The marker is keyed by the validated path, as shipTranscript sees it.
-	validated, err := validateClaudeTranscriptPath(transcript)
-	require.NoError(t, err)
-	marker := transcriptHighWaterPath(validated)
+	marker := transcriptMarker(t, transcript)
 	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o700))
 	writeTranscriptHighWater(marker, 10_000)
 
@@ -436,17 +565,51 @@ func TestReadTranscriptChunkCountsSkippedLines(t *testing.T) {
 	require.Equal(t, int64(len(bookkeeping)+len(transcriptUser)), chunks[3].end)
 }
 
-// TestReadTranscriptChunkStopsAtServerEntryCap: a chunk never carries more
-// entries than the server accepts in one upload.
-func TestReadTranscriptChunkStopsAtServerEntryCap(t *testing.T) {
+// TestReadTranscriptChunkStopsAtBatchEntryCap: a chunk of small entries ends at
+// transcriptBatchEntries, long before the byte budget.
+func TestReadTranscriptChunkStopsAtBatchEntryCap(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "t.jsonl")
-	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat(`{"type":"user","uuid":"u"}`+"\n", transcriptMaxEntries+1)), 0o600))
+	line := `{"type":"user","uuid":"u"}` + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat(line, transcriptBatchEntries+1)), 0o600))
 
 	chunks := readTranscriptChunks(t, path, 0)
 	require.Len(t, chunks, 2)
-	require.Len(t, chunks[0].entries, transcriptMaxEntries)
+	require.Len(t, chunks[0].entries, transcriptBatchEntries)
 	require.Len(t, chunks[1].entries, 1)
+	require.Equal(t, int64(transcriptBatchEntries*len(line)), chunks[0].end)
+}
+
+// TestTranscriptOnlyShipsBacklogInBatches: a long transcript, such as a fresh
+// VM replaying from offset zero, goes up in contiguous uploads of at most
+// transcriptBatchEntries entries within one Stop, each persisting the offset.
+func TestTranscriptOnlyShipsBacklogInBatches(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	var content strings.Builder
+	var want []string
+	for i := range 2*transcriptBatchEntries + 7 {
+		id := "u-" + strconv.Itoa(i)
+		content.WriteString(paddedTranscriptLine("user", id, 128, "x"))
+		want = append(want, id)
+	}
+	appendTranscript(t, transcript, content.String())
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 3)
+	var shipped []string
+	for i, upload := range uploads {
+		require.Len(t, upload.Entries, []int{transcriptBatchEntries, transcriptBatchEntries, 7}[i])
+		if i > 0 {
+			require.Equal(t, uploads[i-1].OffsetEnd, upload.OffsetStart)
+		}
+		shipped = append(shipped, entryUUIDs(t, upload)...)
+	}
+	require.Equal(t, want, shipped)
+	require.Equal(t, int64(content.Len()), uploads[2].OffsetEnd)
 }
 
 // TestReadTranscriptChunkDefersEntryPastBudget: an entry that would push a
