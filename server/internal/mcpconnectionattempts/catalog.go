@@ -171,7 +171,7 @@ func resultFor(outcome Outcome) Result {
 var (
 
 	// App signs in to Speakeasy.
-	CodeCIMDAdmissionDenied      = define("cimd_admission_denied", OutcomeBlocked, WhoAdmin, "Your organization does not allow this app to connect this way.", "Ask for this app to be allowed.")
+	CodeCIMDAdmissionDenied      = define("cimd_admission_denied", OutcomeBlocked, WhoAdmin, "This server does not allow this app to connect this way.", "Ask for this app to be allowed.")
 	CodeAIToolBlocked            = define("ai_tool_blocked", OutcomeBlocked, WhoAdmin, "Your organization has blocked this AI app.", "Use an approved app, or ask for this one to be approved.")
 	CodeNotOrgMember             = define("not_org_member", OutcomeBlocked, WhoAdmin, "This account is not a member of the organization.", "Ask to be added to the organization.")
 	CodeNoServerAccess           = define("no_server_access", OutcomeBlocked, WhoAdmin, "This account does not have access to this server.", "Ask for access to the server.")
@@ -190,7 +190,7 @@ var (
 	CodeCodeNotFoundOrExpired    = define("code_not_found_or_expired", OutcomeFailed, WhoApp, "The app took too long to finish signing in, or tried twice.", "Try connecting again.")
 	CodeServerNotFound           = define("server_not_found", OutcomeFailed, WhoPerson, "We could not find a server at this address.", "Check the address. If it looks right, ask your admin.")
 	CodeExpired                  = define("expired", OutcomeFailed, WhoPerson, "This sign-in has expired.", "Start connecting again.")
-	CodeSessionChanged           = define("session_changed", OutcomeFailed, WhoPerson, "This sign-in was continued with a different account or browser.", "Start again with the same account and browser.")
+	CodeSessionChanged           = define("session_changed", OutcomeFailed, WhoPerson, "We could not match this sign-in to the account and browser it was meant for.", "Start again in one browser with cookies on, using the right account.")
 	CodeClientAuthFailed         = define("client_authentication_failed", OutcomeFailed, WhoApp, "The app could not prove its identity.", "Update the app, or report the problem to its makers.")
 	CodeSignInProviderError      = define("sign_in_provider_error", OutcomeFailed, WhoProvider, "The sign-in service sent back an error.", "Try again. If it keeps happening, check the sign-in service.")
 	CodeReviewCanceled           = define("review_canceled", OutcomeDeclined, WhoPerson, "The tool review was canceled, so your tools did not change.", "Connect again if you still want the changes.")

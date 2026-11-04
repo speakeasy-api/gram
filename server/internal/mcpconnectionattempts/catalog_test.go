@@ -268,13 +268,13 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		mustSay    []string
 		mustNotSay []string
 	}{
-		{CodeSessionChanged, WhoPerson, []string{"account", "browser"}, []string{"finished"}},
+		{CodeSessionChanged, WhoPerson, []string{"account", "browser", "cookies"}, []string{"finished", "different"}},
 		{CodeConnectionChanged, WhoPerson, []string{"ask your admin"}, []string{"was changed", "still exists"}},
 		{CodeExpired, WhoPerson, []string{"expired"}, []string{"10", "minutes", "took"}},
 		{CodeProviderOAuthInvalidScope, WhoAdmin, []string{"access"}, []string{"permissions"}},
 		{CodeConsentNotApproved, WhoPerson, []string{"needs your approval"}, []string{"have not approved"}},
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
-		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list"}},
+		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
 	}
 	for _, tc := range cases {
