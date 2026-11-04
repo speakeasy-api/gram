@@ -45,3 +45,14 @@ func TestBuildTitleContextSkipsPureEnvelopeMessages(t *testing.T) {
 
 	require.Empty(t, strings.TrimSpace(buildTitleContext(messages)))
 }
+
+func TestTitleIsUpForGrabsLeavesCronJobTitles(t *testing.T) {
+	t.Parallel()
+
+	messages := []repo.ChatMessage{{
+		Role:    "user",
+		Content: "[cron:4a39cac2-54ab-4ef2-8c81-147832084a86 skill-collection-review-main] Review the skill collection.",
+	}}
+
+	require.False(t, titleIsUpForGrabs("Cron: skill-collection-review-main", messages))
+}

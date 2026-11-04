@@ -148,3 +148,19 @@ func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", stored.Title.String)
 }
+
+// An OpenClaw cron run opens with a "[cron:<uuid> <job>]" envelope. The chat is
+// named after the job, and that name is not a stand-in title generation would
+// replace.
+func TestCanonicalChatTitle_NamesOpenClawCronRunsAfterTheJob(t *testing.T) {
+	t.Parallel()
+
+	text := "[cron:4a39cac2-54ab-4ef2-8c81-147832084a86 skill-collection-review-main] Review the skill collection."
+	payload := canonicalIngestPayload("openclaw", "prompt.submitted", "cron-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	title := canonicalChatTitle(payload, "", "openclaw")
+	require.Equal(t, "Cron: skill-collection-review-main", title)
+	require.False(t, chat.IsPlaceholderTitle(title))
+	require.False(t, chat.IsDerivedTitle(title, text))
+}

@@ -760,6 +760,7 @@ WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.title_manually_set,
     c.session_surface,
     c.user_id,
     c.external_user_id,
@@ -913,6 +914,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.title_manually_set,
     cc.session_surface,
     cc.user_id,
     cc.external_user_id,
@@ -942,6 +944,7 @@ limited_chats AS (
   SELECT
     fc.id,
     fc.title,
+    fc.title_manually_set,
     fc.user_id,
     fc.external_user_id,
     fc.created_at,
@@ -982,6 +985,7 @@ page_chats AS (
   SELECT
     lc.id,
     lc.title,
+    lc.title_manually_set,
     lc.user_id,
     lc.external_user_id,
     lc.created_at,
@@ -1063,6 +1067,7 @@ chat_attribution AS (
 SELECT
   lc.id,
   lc.title,
+  lc.title_manually_set,
   lc.user_id,
   lc.external_user_id,
   lc.source,
@@ -1231,7 +1236,7 @@ LEFT JOIN agents acting_agent ON acting_agent.id = c.agent_id
 WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
-SELECT id, title FROM chats
+SELECT id, title, title_manually_set FROM chats
 WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
@@ -2018,8 +2023,10 @@ SELECT
   l.device_hostname,
   l.created_at,
   pc.title AS parent_title,
+  COALESCE(pc.title_manually_set, FALSE)::boolean AS parent_title_manually_set,
   (pc.id IS NOT NULL)::boolean AS parent_captured,
   cc.title AS child_title,
+  COALESCE(cc.title_manually_set, FALSE)::boolean AS child_title_manually_set,
   (cc.id IS NOT NULL)::boolean AS child_captured
 FROM chat_session_links l
 -- The caller's visibility predicate lives in the JOIN conditions, so an end

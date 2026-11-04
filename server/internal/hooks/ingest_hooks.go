@@ -2316,8 +2316,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
-// Apart from a channel label the result is a stand-in that title generation
-// later replaces.
+// Apart from a channel label or a cron job name the result is a stand-in that
+// title generation later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2333,6 +2333,9 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 				title = "Claude Tag coordination"
 			}
 		}
+	}
+	if cronTitle, ok := chat.CronJobTitle(title); ok {
+		return cronTitle
 	}
 	return chat.DerivedTitle(title)
 }
