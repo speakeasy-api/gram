@@ -785,6 +785,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -977,6 +978,7 @@ const (
 	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
 	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
 	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1707,6 +1709,10 @@ func SlogAgentBuildOS(v string) slog.Attr {
 
 func SlogAgentBuildArch(v string) slog.Attr {
 	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
@@ -3054,6 +3060,11 @@ func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(Wo
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
 }
 
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }

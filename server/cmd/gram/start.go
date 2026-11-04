@@ -315,8 +315,9 @@ func restoreLocalPluginRepositories(
 // (POST /mcp/{mcpSlug}).
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
-// terminationGracePeriodSeconds in Kubernetes, which must be set above this
-// value for the full window to be honored.
+// terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
+// this plus probeDrainTimeout plus its 15s upstream refresh drain, about 95s,
+// so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
 // relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
@@ -1491,6 +1492,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
+			mux.Use(middleware.DenialHeaders())
 			// LiteLLM dispatch must run before canonical OTLP ingest because
 			// the metrics path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
@@ -1580,6 +1582,7 @@ func newStartCommand() *cli.Command {
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)
 			}
+			hooks.AttachTranscript(mux, hooksService)
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)

@@ -11,8 +11,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// WaitIdentityRestatements blocks until every detached identity restatement has finished.
-func (s *RefreshService) WaitIdentityRestatements() { s.restatements.Wait() }
+// WaitIdentityRestatements blocks until every detached refresh and identity restatement has finished.
+func (s *RefreshService) WaitIdentityRestatements() {
+	s.refreshes.Wait()
+	s.restatements.Wait()
+}
 
 func (m *ChallengeManager) WaitIdentityRestatements() { m.refresher.WaitIdentityRestatements() }
 

@@ -4470,11 +4470,12 @@ func marshalAgentAgentCrashReportToAgentCrashReportRequestBody(v *agent.AgentCra
 // type *AgentCrashBuildRequestBody from a value of type *agent.AgentCrashBuild.
 func marshalAgentAgentCrashBuildToAgentCrashBuildRequestBody(v *agent.AgentCrashBuild) *AgentCrashBuildRequestBody {
 	res := &AgentCrashBuildRequestBody{
-		Binary:  v.Binary,
-		Version: v.Version,
-		Channel: v.Channel,
-		Os:      v.Os,
-		Arch:    v.Arch,
+		Binary:    v.Binary,
+		Version:   v.Version,
+		Channel:   v.Channel,
+		Os:        v.Os,
+		Arch:      v.Arch,
+		OsVersion: v.OsVersion,
 	}
 
 	return res
@@ -4549,11 +4550,12 @@ func marshalAgentCrashReportRequestBodyToAgentAgentCrashReport(v *AgentCrashRepo
 // type *agent.AgentCrashBuild from a value of type *AgentCrashBuildRequestBody.
 func marshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v *AgentCrashBuildRequestBody) *agent.AgentCrashBuild {
 	res := &agent.AgentCrashBuild{
-		Binary:  v.Binary,
-		Version: v.Version,
-		Channel: v.Channel,
-		Os:      v.Os,
-		Arch:    v.Arch,
+		Binary:    v.Binary,
+		Version:   v.Version,
+		Channel:   v.Channel,
+		Os:        v.Os,
+		Arch:      v.Arch,
+		OsVersion: v.OsVersion,
 	}
 
 	return res

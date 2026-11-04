@@ -1014,8 +1014,9 @@ type issuerGateAuthentication struct {
 	surface              mcpmetrics.Surface
 	subject              urn.SessionSubject
 
-	// refreshableUserSession reports that the bearer was a Speakeasy-minted user
-	// session from a refreshable grant, not an assistant-runtime token, an
+	// refreshableUserSession reports that the bearer was a Speakeasy-minted
+	// user_sessions row, for a user or an anonymous subject, from a refreshable
+	// grant, not an assistant-runtime token, an
 	// agent API key, or a resource-scoped session. Only such a client can
 	// act on invalid_token by refreshing and then reauthorizing.
 	refreshableUserSession bool
@@ -1246,7 +1247,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 			return recoveryErr
 		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
-		return writeRemoteSessionReconnectChallenge(w, authentication)
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
@@ -1276,7 +1277,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
-		return writeRemoteSessionReconnectChallenge(w, authentication)
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	default:
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
@@ -1308,28 +1309,50 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogToolsetMCPSlug(endpoint.Slug),
 		attr.SlogMcpURL(authentication.mcpURL),
 		attr.SlogOAuthFailureReason(reason),
+		attr.SlogUserSessionSubjectKind(string(authentication.subject.Kind)),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
-// upstream remote session is missing or its grant is gone, which only the user
-// reconnecting it at {routeBase}/{slug}/connect repairs. RFC 6750 reads a 401
-// without an error code as "no credentials presented", so clients replay the
-// token they hold indefinitely; invalid_token makes them refresh, which the
-// token endpoint refuses for the same reason, and then reauthorize through the
-// consent page that reconnects the upstream. Only a user session from a
-// refreshable grant can follow that path. Every other caller keeps the bare
-// challenge, since telling it to discard a credential it cannot replace, or an
+// upstream remote session is missing or its grant is gone, which only the
+// person reconnecting it at {routeBase}/{slug}/connect repairs. Without an error
+// code, clients tend to replay the token they hold indefinitely; RFC 6750 section
+// 3.1 lets invalid_token prompt a refresh, which the token endpoint refuses for
+// the same reason, and clients then reauthorize through the consent page that
+// reconnects the upstream. Only a refreshable user or anonymous session whose
+// subject can reauthorize can follow that path. Every other caller keeps the
+// challenge with no error code, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
 // strand it.
-func writeRemoteSessionReconnectChallenge(w http.ResponseWriter, authentication *issuerGateAuthentication) error {
+func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
-	if authentication.refreshableUserSession && authentication.subject.Kind == urn.SessionSubjectKindUser {
+	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {
 		errorCode = oautherr.CodeInvalidToken
 	}
 	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
 	return writeChallenge(w, header, remoteSessionReconnectDescription)
+}
+
+// subjectReauthorizesToReconnect reports a person at the client who can repair
+// a connection on the consent page. Enforced auth clients can offer an anonymous
+// subject no personal connection, so the request is not told to reauthorize.
+// The auth client resolver still decides its refresh and may refuse it, which
+// sends the client to reauthorize anyway.
+func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizationID string, subject urn.SessionSubject) bool {
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser:
+		return true
+	case urn.SessionSubjectKindAnonymous:
+		enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "read auth enforcement for an anonymous reconnect; not asking it to reauthorize", attr.SlogError(err))
+			return false
+		}
+		return !enforced
+	default:
+		return false
+	}
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.

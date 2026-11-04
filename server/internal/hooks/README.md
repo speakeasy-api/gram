@@ -1,10 +1,11 @@
 # Hooks Service
 
-The hooks service supports three hook entry points:
+The hooks service supports four hook entry points:
 
 - Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses for session capture and policy enforcement.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
+- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop when the standard Claude plugin runs inside Claude's Cowork VM. See [Transcript Upload](#transcript-upload).
 
 ## Unified Ingest
 
@@ -69,6 +70,55 @@ fail-open or fail-closed policy.
 To omit local subscriptions, clients must support discovery and approve the upload
 destination and credential forwarding. Go SDK hosts use `AuthorizeConfiguration`;
 without approval, discovery skips the **entire backend**, including inline-text events.
+
+## Transcript Upload
+
+The standard Claude plugin switches modes by itself. Claude's admin plugin
+settings install it in Claude Code and in the Cowork VM alike. When Claude Code
+reports the Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT=remote_cowork`, which
+every hook process inherits), the binary relays no per-event hook, so no policy
+is enforced there, and ships the transcript from Stop instead. Everywhere else
+it relays per-event hooks as before. Every event of a session reads the same
+environment, so a session never mixes per-event rows with `claude-transcript:`
+rows.
+
+Capture needs both halves deployed: a pinned hooks binary that includes the
+Cowork mode, and an ingress rule forwarding `/transcript` to the server.
+Production ingress routes only listed prefixes to the server; without the
+rule, uploads are answered by the dashboard and stay queued in the VM.
+
+`POST /transcript` uses the same hooks-scoped key and project selection as
+`/ahp`. The body's `schema_version` selects the transcript format;
+`claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
+This endpoint is the one exception to dispatching on canonical feature events:
+the backend parses the provider's own transcript format, because inside the
+Cowork VM the binary relays no per-event hooks to translate.
+
+Each entry's uuid keys its rows (`external_message_id` prefixed
+`claude-transcript:`), so a re-sent line is never stored twice.
+
+The binary advances its read offset past a batch only once the batch is
+settled, and resends anything unsettled on the next Stop:
+
+- A 2xx carrying the `{"stored": n}` acknowledgement settles the batch as
+  stored.
+- Any other 4xx (400 malformed body, 409 session owned by another project,
+  413 too large) settles the batch as dropped. The server would reject it
+  the same way on every retry, so those lines are lost for good. The binary's
+  debug log records the status.
+- A 5xx leaves the batch queued, but a batch answered 5xx on three Stops in
+  a row, with no other answer between them, is dropped, so one entry the
+  server cannot store does not hold the offset forever. Only the lines the
+  batch held at its first failure are dropped; lines appended since are
+  sent again.
+- 401, 403, 404, 405, 408, 429, transport failures, and a 2xx without the
+  acknowledgement leave the batch queued for retry without limit.
+  Credentials, throttling, and routing can recover, and a 2xx from anything
+  but this endpoint must not count as stored.
+
+A batch carries at most 500 entries, which store in about a second, so a
+long transcript replayed from offset zero advances, and persists its
+offset, a batch at a time within one Stop's 15-second budget.
 
 ## Legacy Compatibility
 
