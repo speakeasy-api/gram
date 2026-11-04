@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -149,6 +150,9 @@ type RefreshService struct {
 
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
+
+	// connections records each refresh's outcome; nil records nothing.
+	connections *mcpconnectionattempts.Recorder
 	// refreshes tracks request-path refreshes, which can outlive their caller.
 	refreshes sync.WaitGroup
 }
@@ -190,6 +194,11 @@ func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner
 	return func(s *RefreshService) { s.assertions = signer }
 }
 
+// WithRefreshConnectionRecorder records each refresh's outcome.
+func WithRefreshConnectionRecorder(recorder *mcpconnectionattempts.Recorder) RefreshOption {
+	return func(s *RefreshService) { s.connections = recorder }
+}
+
 // NewRefreshService builds the service; without a guardian policy no enricher
 // is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, opts ...RefreshOption) *RefreshService {
@@ -206,6 +215,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		enricher:       nil,
 		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
+		connections:    nil,
 		refreshes:      sync.WaitGroup{},
 	}
 	for _, opt := range opts {
@@ -297,6 +307,9 @@ func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListO
 	return resource
 }
 
+// errRefreshTunnelTransport marks a refresh with no transport to its identity provider's tunnel.
+var errRefreshTunnelTransport = errors.New("remotesessions: no tunnel transport for refresh")
+
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
 // errRefreshLeaseLost marks a holder whose lease expired before its POST.
@@ -371,6 +384,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
+		s.recordRefresh(ctx, attribution, sess, client, trigger, outcome, err)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
@@ -437,10 +451,12 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 	issuerURL := client.IssuerUrl
 	if postLockClient != nil {
 		issuerURL = postLockClient.IssuerUrl
+		client = *postLockClient
 	}
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, issuerURL, trigger, outcome)
+		s.recordRefresh(ctx, attribution, sess, client, trigger, outcome, err)
 		var tokenErr *TokenRefreshError
 		if postLockClient != nil && errors.As(err, &tokenErr) {
 			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
@@ -461,6 +477,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 	}
 	result.IssuerURL = issuerURL
 	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
+	s.recordRefresh(ctx, attribution, sess, client, trigger, result.Outcome, nil)
 	return result, nil
 }
 
