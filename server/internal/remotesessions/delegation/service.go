@@ -168,13 +168,17 @@ func (s *Service) encrypt(value string) (string, error) {
 	}
 	return encrypted, nil
 }
+
+// errCredentialDecryption preserves local fault attribution without exposing encrypted values.
+var errCredentialDecryption = errors.New("stored credential could not be decrypted")
+
 func (s *Service) decrypt(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
 	decrypted, err := s.enc.Decrypt(value)
 	if err != nil {
-		return "", ErrConfiguration
+		return "", errors.Join(ErrConfiguration, errCredentialDecryption)
 	}
 	return decrypted, nil
 }
@@ -590,7 +594,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
 		return Assertion{}, ErrTemporary
 	}
 	if c.claim != claim {
@@ -616,18 +620,30 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
+		code := mcpconnectionattempts.CodeRenewalMisconfigured
+		if errors.Is(err, errCredentialDecryption) {
+			code = mcpconnectionattempts.CodeInternalError
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
 		return Assertion{}, ErrTemporary
 	}
 	if !marked {
 		return Assertion{}, ErrTemporary
 	}
 	refreshStarted = true
+	// From the POST onward, even a panic or local persistence failure is a
+	// renewal outcome. Keep the spent claim held; recording must not retry it.
+	renewalDecided := false
+	defer func() {
+		if !renewalDecided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	result, refreshErr := s.refreshIdentity(ctx, p, refresh, subject, nonce)
 	// The caller's timeout must not prevent recording rotation or quarantining
 	// an ambiguous generation. This bounded write is still CAS protected.
@@ -657,9 +673,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 				}
 			}
 		}
+		renewalDecided = true
 		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, refreshErr)
 	}
 	if result == nil || result.Credentials == nil {
+		renewalDecided = true
 		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous})
 	}
 	next := c
@@ -691,6 +709,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if identity := result.Identity; identity != nil {
 		defer identity.DiscardCredentials()
 		if identity.SubjectID() != subject || identity.IssuerURL() != p.IssuerURL() {
+			renewalDecided = true
 			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity})
 		}
 		if identity.Expiration().After(s.now()) {
@@ -735,26 +754,36 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if !ok {
+		renewalDecided = true // A newer callback or revocation owns the outcome.
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
+		renewalDecided = true
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeInternalError)
 		return Assertion{}, ErrTemporary
 	}
 	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
+		renewalDecided = true
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	if next.status == "configuration_failure" {
+		renewalDecided = true
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+		renewalDecided = true
 		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
+	assertion, err := s.assertion(next)
+	if err != nil {
+		return Assertion{}, err
+	}
+	renewalDecided = true
 	s.recordRenewal(persistCtx, b, mcpconnectionattempts.ResultRenewed)
-	return s.assertion(next)
+	return assertion, nil
 }
 
 // Authorizers must use a stable configuration/reauthentication error for a

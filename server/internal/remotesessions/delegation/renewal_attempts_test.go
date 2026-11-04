@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -216,7 +217,7 @@ func TestRenewal_PostClaimSetupRecordsExactlyOnce(t *testing.T) {
 		{name: "registration changed", changed: true, wantErr: ErrStaleRegistration, want: mcpconnectionattempts.CodeReauthenticationRequired},
 		{name: "empty retained refresh", secret: "refresh", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
 		{name: "missing retained subject", secret: "subject", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
-		{name: "unreadable retained nonce", secret: "nonce", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured},
+		{name: "unreadable retained nonce", secret: "nonce", wantErr: ErrConfiguration, want: mcpconnectionattempts.CodeInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -298,7 +299,7 @@ func TestRenewal_PrePOSTStoreFaults(t *testing.T) {
 			if name == "superseded claim" || name == "mark conflict" {
 				rec.RequireNothing()
 			} else {
-				row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable)
+				row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeInternalError)
 				require.Len(t, rec.Rows(), 1)
 				require.Equal(t, b.IssuerID.String(), row.RemoteSessionIssuerID)
 				require.Equal(t, b.ClientID.String(), row.RemoteSessionClientID)
@@ -309,4 +310,64 @@ func TestRenewal_PrePOSTStoreFaults(t *testing.T) {
 			require.Equal(t, "old-refresh", delegationPlain(t, s, store.rows[b].refresh))
 		})
 	}
+}
+
+func TestRenewal_PostPOSTInternalFaults(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"panic", "encryption", "finish", "assertion decrypt", "superseded"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			rec := mcpconnectionattemptstest.New(t)
+			s.connections = rec.Recorder
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			originalEncryption := s.enc
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				switch name {
+				case "panic":
+					panic("fixture refresh panic")
+				case "encryption":
+					s.enc = &encryption.Client{}
+				case "finish":
+					store.finishError = errors.New("fixture store unavailable")
+				case "assertion decrypt":
+					s.store = renewalFinishHookStore{delegationStore: store, after: func() { s.enc = &encryption.Client{} }}
+				case "superseded":
+					c := store.rows[b]
+					c.generation++
+					store.rows[b] = c
+				}
+				return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+			}
+			if name == "panic" {
+				require.PanicsWithValue(t, "fixture refresh panic", func() { _, _ = s.Resolve(t.Context(), b, allow) })
+			} else {
+				_, err := s.Resolve(t.Context(), b, allow)
+				require.Error(t, err)
+			}
+			if name == "superseded" {
+				rec.RequireNothing()
+			} else {
+				row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeInternalError)
+				require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+				require.Len(t, rec.Rows(), 1)
+			}
+			s.enc = originalEncryption
+			if name != "assertion decrypt" {
+				require.NotEqual(t, uuid.Nil, store.rows[b].claim, "never release a potentially spent refresh")
+				require.Equal(t, "old-refresh", delegationPlain(t, s, store.rows[b].refresh))
+			}
+		})
+	}
+}
+
+type renewalFinishHookStore struct {
+	delegationStore
+	after func()
+}
+
+func (s renewalFinishHookStore) finish(ctx context.Context, b Binding, generation int64, claim uuid.UUID, next delegationCredential) (bool, error) {
+	ok, err := s.delegationStore.finish(ctx, b, generation, claim, next)
+	s.after()
+	return ok, err
 }
