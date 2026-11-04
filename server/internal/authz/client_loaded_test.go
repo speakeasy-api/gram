@@ -112,4 +112,6 @@ func TestClientLoadedPoliciesRefuseCredentialTransports(t *testing.T) {
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, "agent_fixture")
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(context.Background(), authCtx, actor, contextvalues.PrincipalCredential{})
 	require.Error(t, client.RequireLoaded(ctx, loaded, Project(fixtureOrgID, "proj_1").Read()))
+	_, err := client.EvaluateLoaded(ctx, loaded, Project(fixtureOrgID, "proj_1").Read())
+	require.Error(t, err)
 }
