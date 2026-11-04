@@ -10084,11 +10084,23 @@ func marshalAccessDirectoryReviewItemToDirectoryReviewItemResponseBody(v *access
 func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDefinition) *ScopeDefinitionResponseBody {
 	res := &ScopeDefinitionResponseBody{
 		Slug:           v.Slug,
+		Label:          v.Label,
 		Description:    v.Description,
 		ResourceType:   v.ResourceType,
+		Category:       v.Category,
+		Sensitive:      v.Sensitive,
+		Sensitivity:    v.Sensitivity,
 		Visibility:     v.Visibility,
 		AgentEligible:  v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
+	}
+	if v.SubScopes != nil {
+		res.SubScopes = make([]string, len(v.SubScopes))
+		for i, val := range v.SubScopes {
+			res.SubScopes[i] = val
+		}
+	} else {
+		res.SubScopes = []string{}
 	}
 
 	return res
