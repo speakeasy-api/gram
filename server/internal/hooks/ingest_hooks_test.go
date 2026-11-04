@@ -1884,6 +1884,150 @@ func TestCanonicalTelemetryRows_AttributesOpenClawMCPResultToServer(t *testing.T
 	require.Equal(t, "speakeasy__execute_tool", rows[0].attrs[attr.ToolNameKey])
 }
 
+// Tool-call analytics count hook rows by a non-empty tool name, so prompt,
+// lifecycle, and unknown events must not borrow their event name as one.
+func TestCanonicalTelemetryRows_LeavesNonToolEventsUnnamed(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	authCtx := &contextvalues.AuthContext{ProjectID: &projectID, ActiveOrganizationID: "org-non-tool"}
+	tests := []struct {
+		name      string
+		adapter   string
+		eventType string
+		hookEvent string
+	}{
+		{name: "it leaves an OpenClaw prompt unnamed", adapter: "openclaw", eventType: "prompt.submitted", hookEvent: "UserPromptSubmit"},
+		{name: "it leaves an OpenClaw session start unnamed", adapter: "openclaw", eventType: "session.started", hookEvent: "SessionStart"},
+		{name: "it leaves an assistant response unnamed", adapter: "openclaw", eventType: "assistant.responded", hookEvent: "AfterAgentResponse"},
+		{name: "it leaves an unknown Kit event type unnamed", adapter: "kit", eventType: "prompt", hookEvent: "prompt"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			payload := canonicalIngestPayload(tc.adapter, tc.eventType, "non-tool-session")
+			payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("summarize the repo")}}
+
+			var s Service
+			rows := s.canonicalTelemetryRows(t.Context(), payload, authCtx, &SessionMetadata{}, tc.adapter, time.Now(), "")
+			require.Len(t, rows, 1)
+			require.Empty(t, rows[0].toolName)
+			require.NotContains(t, rows[0].attrs, attr.ToolNameKey)
+			require.Equal(t, tc.hookEvent, rows[0].attrs[attr.HookEventKey], "the event name stays on gram.hook.event")
+		})
+	}
+}
+
+// One OpenClaw session with a prompt and two tool calls, ingested end to end,
+// reports exactly two tool calls: the prompt and session start are not tool
+// calls, and the MCP call is attributed to its server.
+func TestIngest_OpenClawSessionCountsOnlyToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "openclaw-count-" + uuid.NewString()
+	start := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	at := func(offset time.Duration) *string {
+		return new(start.Add(offset).Format(time.RFC3339Nano))
+	}
+	toolEvent := func(eventType, callID, toolName string, output any, offset time.Duration) *gen.IngestPayload {
+		payload := canonicalIngestPayload("openclaw", eventType, sessionID)
+		payload.Event.OccurredAt = at(offset)
+		payload.Data = &gen.HookIngestData{
+			ToolCall: &gen.HookToolCallData{
+				ID:     &callID,
+				Name:   &toolName,
+				Input:  map[string]any{"query": "status"},
+				Output: output,
+			},
+		}
+		return payload
+	}
+
+	started := canonicalIngestPayload("openclaw", "session.started", sessionID)
+	started.Event.OccurredAt = at(0)
+	prompt := canonicalIngestPayload("openclaw", "prompt.submitted", sessionID)
+	prompt.Event.OccurredAt = at(time.Second)
+	prompt.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("check the deploy status")}}
+	mcpResult := map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "deployed"}},
+		"details": map[string]any{"mcpServer": "speakeasy", "mcpTool": "execute_tool"},
+	}
+	nativeResult := map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "ok"}},
+		"details": map[string]any{"exitCode": 0},
+	}
+	events := []*gen.IngestPayload{
+		started,
+		prompt,
+		toolEvent("tool.requested", "call-mcp", "speakeasy__execute_tool", nil, 2*time.Second),
+		toolEvent("tool.completed", "call-mcp", "speakeasy__execute_tool", mcpResult, 3*time.Second),
+		toolEvent("tool.requested", "call-exec", "exec", nil, 4*time.Second),
+		toolEvent("tool.completed", "call-exec", "exec", nativeResult, 5*time.Second),
+	}
+	for _, payload := range events {
+		result, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, "allow", result.Decision)
+	}
+
+	// Wait for every row so the trace query sees the whole session.
+	require.Eventually(t, func() bool {
+		logs, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     start.Add(-time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         20,
+		})
+		return err == nil && len(logs) == len(events)
+	}, 5*time.Second, 50*time.Millisecond, "expected one telemetry row per event")
+
+	// A free-text query forces the raw telemetry_logs path; the session's chat
+	// id is on every row, so it keeps the same rows.
+	for name, query := range map[string]string{"summary path": "", "raw path": sessionIDToUUID(sessionID).String()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			traces, err := chClient.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
+				GramProjectID: authCtx.ProjectID.String(),
+				TimeStart:     start.Add(-time.Minute).UnixNano(),
+				TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+				Query:         query,
+				SortOrder:     "desc",
+				Limit:         10,
+			})
+			require.NoError(t, err)
+			require.Len(t, traces, 2, "only the two tool calls count: %+v", traces)
+
+			byTool := map[string]telemetryrepo.ToolUsageTraceSummary{}
+			for _, trace := range traces {
+				byTool[trace.ToolName] = trace
+			}
+			mcpCall, ok := byTool["speakeasy__execute_tool"]
+			require.True(t, ok)
+			require.Equal(t, uint64(2), mcpCall.LogCount)
+			// trace_summaries keeps tool_source with any(), so only the raw
+			// path is guaranteed to see the server named on the post-call row.
+			if query != "" {
+				require.Equal(t, telemetryrepo.ToolUsageTargetTypeShadowMCP, mcpCall.TargetType)
+				require.Equal(t, "speakeasy", mcpCall.TargetID)
+			}
+
+			nativeCall, ok := byTool["exec"]
+			require.True(t, ok)
+			require.Equal(t, telemetryrepo.ToolUsageTargetTypeLocalTool, nativeCall.TargetType)
+			require.Equal(t, uint64(2), nativeCall.LogCount)
+		})
+	}
+}
+
 func TestMergeSourceAttributesDoesNotOverrideCanonicalFields(t *testing.T) {
 	t.Parallel()
 	base := map[attr.Key]any{attr.ProjectIDKey: "canonical-project"}
