@@ -216,7 +216,7 @@ function OwnSessionsNotice(): JSX.Element | null {
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
-      Only your own sessions and those of agents you own are shown.{" "}
+      Only your own sessions and those of agents you own or can edit are shown.{" "}
       <code className="font-mono">chat:read</code> is required to view other
       members&apos; sessions.
       {hasScope("org:admin") && (

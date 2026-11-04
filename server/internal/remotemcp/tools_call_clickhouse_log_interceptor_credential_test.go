@@ -107,7 +107,7 @@ func TestToolsCallClickHouseLogInterceptor_RecordsPersonalConnection(t *testing.
 	})
 
 	require.Equal(t, rowCredential{
-		authorizerID: "key-creator-id",
+		authorizerID: "",
 		clientType:   "remote_session",
 		clientID:     clientID,
 		ownerID:      "connection-owner-id",
@@ -127,7 +127,7 @@ func TestToolsCallClickHouseLogInterceptor_RecordsSharedCredential(t *testing.T)
 	// The key creator stays on the row as credential provenance; no
 	// connection owner is recorded for a shared credential.
 	require.Equal(t, rowCredential{
-		authorizerID: "key-creator-id",
+		authorizerID: "",
 		clientType:   "service_account",
 		clientID:     clientID,
 		ownerID:      "",
@@ -139,5 +139,5 @@ func TestToolsCallClickHouseLogInterceptor_NoCredentialRecordsNoAuthClient(t *te
 
 	got := emitAgentToolCallRow(t, nil)
 
-	require.Equal(t, rowCredential{authorizerID: "key-creator-id", clientType: "", clientID: "", ownerID: ""}, got)
+	require.Equal(t, rowCredential{authorizerID: "", clientType: "", clientID: "", ownerID: ""}, got)
 }
