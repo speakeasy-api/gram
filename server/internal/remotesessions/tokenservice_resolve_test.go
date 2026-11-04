@@ -140,7 +140,7 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
 	require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID)
@@ -156,7 +156,7 @@ func TestResolveAuthorization_InvalidRequestIsNotReportedAsMissingAuthorization(
 	require.NotNil(t, authCtx.ProjectID)
 
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
-	_, err := mgr.ResolveAuthorization(ctx, uuid.Nil, authCtx.ActiveOrganizationID, uuid.New(), uuid.New(), urn.NewUserSubject("resolve-invalid-subject"), "")
+	_, err := mgr.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, uuid.Nil, authCtx.ActiveOrganizationID, uuid.New(), uuid.New(), urn.NewUserSubject("resolve-invalid-subject"), "")
 	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
 	require.NotErrorIs(t, err, remotesessions.ErrNoValidToken)
 }
@@ -186,7 +186,7 @@ func TestResolveAuthorization_ResolvesReviewedIssuerBinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	authorization, err := mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, subject, "")
+	authorization, err := mgr.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "authorization-access-token", authorization.AccessToken)
 	require.Equal(t, session.ID, authorization.RemoteSessionID)
@@ -194,7 +194,7 @@ func TestResolveAuthorization_ResolvesReviewedIssuerBinding(t *testing.T) {
 	require.Equal(t, clientID, authorization.RemoteSessionClientID)
 	require.Equal(t, remoteIssuerID, authorization.RemoteSessionIssuerID)
 
-	_, err = mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, uuid.New(), subject, "")
+	_, err = mgr.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, uuid.New(), subject, "")
 	require.ErrorIs(t, err, remotesessions.ErrNoRemoteSessionClientBinding)
 }
 
@@ -210,7 +210,7 @@ func TestResolveAuthorization_MissingSessionReturnsErrNoValidToken(t *testing.T)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-authorization-missing")
 	_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-authorization-missing")
 
-	_, err := mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, urn.NewUserSubject("resolve-authorization-missing-subject"), "")
+	_, err := mgr.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, urn.NewUserSubject("resolve-authorization-missing-subject"), "")
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 }
 
@@ -227,7 +227,7 @@ func TestResolveAccessTokens_NoClientsReturnsNil(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-empty")
 	subject := urn.NewUserSubject("resolve-empty-subject")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Nil(t, tokens)
 }
@@ -247,7 +247,7 @@ func TestResolveAccessTokens_MissingSessionReturnsErrNoValidToken(t *testing.T) 
 	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-missing")
 
 	subject := urn.NewUserSubject("resolve-missing-subject")
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
@@ -279,7 +279,7 @@ func TestResolveAccessTokens_ExpiredAuthorizationRejectsUnexpiredAccessToken(t *
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
@@ -315,7 +315,7 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: uuid.MustParse(clientID)}}, tokenCredentials(tokens))
 }
@@ -362,7 +362,7 @@ func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing
 		require.NoError(t, err)
 	}
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
 		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientA},
@@ -402,7 +402,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
 		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientA},
@@ -410,7 +410,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 
 	// The strict variant still refuses the same shape, pinning that partial
 	// resolution changed nothing for direct-endpoint callers.
-	_, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	_, err = mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 }
 
@@ -430,7 +430,7 @@ func TestResolveAvailableAccessTokens_AllUnlinkedResolvesEmpty(t *testing.T) {
 	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-partial-empty")
 
 	subject := urn.NewUserSubject("resolve-partial-empty-subject")
-	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Empty(t, tokens)
 }

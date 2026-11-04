@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,7 @@ type validationTarget struct {
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
 func (s *Service) validateRemoteSession(
 	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -83,7 +85,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, r, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -92,6 +94,7 @@ func (s *Service) validateRemoteSession(
 // keepalive through its claim lease and per-host limiter.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -113,7 +116,7 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
@@ -374,9 +377,11 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		discoveryMode: "progressive",
-		projectID:     endpoint.ProjectID,
-		metaServerID:  endpoint.MetaMcpServerID.UUID,
+		skippedUpstreams: nil,
+		request:          nil,
+		discoveryMode:    "progressive",
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent keys reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: endpoint.IsOrganizationGateway(),

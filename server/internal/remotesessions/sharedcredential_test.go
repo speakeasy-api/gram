@@ -220,7 +220,7 @@ func TestRefreshRemoteSession_SiblingIssuerRefreshesSharedCredential(t *testing.
 	subject := seedRefreshableSharedSession(t, ctx, ti, provenance, clientID, "shared-refresh-sibling")
 	sibling := bindSiblingIssuer(t, ctx, ti, clientID, "usi-shared-refresh-sibling-b")
 
-	result, err := newDisconnectChallengeManager(t, ti).RefreshRemoteSession(ctx, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, sibling, clientID)
+	result, err := newDisconnectChallengeManager(t, ti).RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, sibling, clientID)
 	require.NoError(t, err, "a sibling issuer bound to the same client must be able to refresh the shared credential")
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "sibling-refreshed-access", result.AccessToken)
@@ -256,7 +256,7 @@ func TestRefreshRemoteSession_OrgLevelClientBindingAuthorizes(t *testing.T) {
 
 	mgr := newDisconnectChallengeManager(t, ti)
 
-	result, err := mgr.RefreshRemoteSession(ctx, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, usi, clientID)
+	result, err := mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, usi, clientID)
 	require.NoError(t, err, "the org-level client arm of the binding probe must authorize the refresh")
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "org-refreshed-access", result.AccessToken)
@@ -292,7 +292,7 @@ func TestSharedCredentialLifecycle_WrongProjectRejected(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n, "a foreign project must not disconnect the credential")
 
-	_, err = mgr.RefreshRemoteSession(ctx, fx.subject, foreignProject, fx.organizationID, fx.userIssuerID, fx.clientID)
+	_, err = mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, foreignProject, fx.organizationID, fx.userIssuerID, fx.clientID)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionNotRefreshable, "a foreign project must not spend the refresh grant")
 
 	_, err = repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
@@ -312,7 +312,7 @@ func TestRefreshRemoteSession_UnboundIssuerFailsClosed(t *testing.T) {
 	fx := seedRevocableSession(t, ctx, ti, "shared-refresh-unbound", "", "s3cret", true)
 	unbound := createUserSessionIssuer(t, ctx, ti.conn, "usi-x-shared-refresh-unbound")
 
-	_, err := newDisconnectChallengeManager(t, ti).RefreshRemoteSession(ctx, fx.subject, fx.projectID, authCtx.ActiveOrganizationID, unbound, fx.clientID)
+	_, err := newDisconnectChallengeManager(t, ti).RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, authCtx.ActiveOrganizationID, unbound, fx.clientID)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionNotRefreshable, "an unbound issuer must not be able to spend the shared refresh grant")
 }
 
