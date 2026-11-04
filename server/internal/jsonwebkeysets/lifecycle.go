@@ -27,7 +27,7 @@ import (
 // then locks the set, re-verifies the backing key is still the one the JWK was
 // minted from, and inserts.
 func (s *Service) PublishKey(ctx context.Context, payload *gensvc.PublishKeyPayload) (*gensvc.JSONWebKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gensvc.RevokeKeyPayloa
 func (s *Service) beginKeyTransition(ctx context.Context, rawID string) (*contextvalues.AuthContext, *slog.Logger, repo.JsonWebKey, pgx.Tx, error) {
 	var noKey repo.JsonWebKey
 
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, logger, noKey, nil, err
 	}

@@ -208,8 +208,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	// signs with the algorithm the fixture key records and verify succeeds.
 	kms := newStubSigningClients(t, jose.ES256)
 
-	svc := externalkeys.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpIdentity, kms.Factory, features, ratelimit.NewRedisStore(redisClient))
-	credSvc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpIdentity, features, ratelimit.NewRedisStore(redisClient))
+	svc := externalkeys.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger, gcpIdentity, kms.Factory, features, ratelimit.NewRedisStore(redisClient))
+	credSvc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger, gcpIdentity, features, ratelimit.NewRedisStore(redisClient))
 
 	ti := &testInstance{
 		service:     svc,

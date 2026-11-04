@@ -200,7 +200,7 @@ func newTestServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Contex
 	// paths; the default answers impersonation and ambient offline.
 	gcpResolver := gcpauth.NewStubResolver()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	svc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpauth.NewIdentity(gcpResolver), features, ratelimit.NewRedisStore(redisClient))
+	svc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger, gcpauth.NewIdentity(gcpResolver), features, ratelimit.NewRedisStore(redisClient))
 
 	ti := &testInstance{
 		service:     svc,

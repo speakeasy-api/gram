@@ -146,7 +146,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 		t.Cleanup(func() { _ = down.Close() })
 		mintStore = ratelimit.NewRedisStore(down)
 	}
-	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, mintStore)
+	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), gate, manager, mintStore)
 	return ctx, &testInstance{gate: gate, service: service, conn: conn, flags: flags, orgID: orgID, providersFail: providersFail, flagsStaleFor: flagsStaleFor}
 }
 

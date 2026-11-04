@@ -45,8 +45,9 @@ func TestGetClientDelegationStatusSigningKeyLifecycle(t *testing.T) {
 			redisClient, err := infra.NewRedisClient(t, 0)
 			require.NoError(t, err)
 			logger := testenv.NewLogger(t)
+			keysEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 			keys := jsonwebkeysets.NewService(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, ti.sessionManager,
-				authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(), nil, nil, ti.features, ratelimit.NewRedisStore(redisClient))
+				keysEngine, authztest.NewParityClient(t, keysEngine), audit.NewLogger(), nil, nil, ti.features, ratelimit.NewRedisStore(redisClient))
 			if transition == "retire" {
 				_, err = keys.RetireKey(ctx, &keysgen.RetireKeyPayload{ID: keyID.String()})
 			} else {
