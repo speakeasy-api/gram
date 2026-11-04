@@ -157,10 +157,10 @@ func (m *catalogServerMeta) UnmarshalJSON(data []byte) error {
 	type typedMeta catalogServerMeta
 	var decoded typedMeta
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
+		return fmt.Errorf("decode catalog metadata: %w", err)
 	}
 	if err := json.Unmarshal(data, &decoded.Raw); err != nil {
-		return err
+		return fmt.Errorf("decode raw catalog metadata: %w", err)
 	}
 	*m = catalogServerMeta(decoded)
 	return nil
