@@ -159,14 +159,22 @@ func GatewayFailureRejection(resp *http.Response) *proxy.RejectError {
 
 // FailureHappened says what a tunnel error status means. Empty means the tunnel forwarded the answer,
 // so a 502 without a status came from the server behind it.
-func FailureHappened(tunnelError string) (mcpconnectionattempts.Code, bool) {
+func FailureHappened(tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
+	if tunnelError == "" {
+		for _, err := range causes {
+			if status, ok := errors.AsType[*gatewayStatusError](err); ok {
+				tunnelError = status.status
+				break
+			}
+		}
+	}
 	switch tunnelError {
 	case "":
 		return none, false
 	case wire.TunnelErrorTunnelBusy:
-		return mcpconnectionattempts.CodeTunnelUnavailable, true
-	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed, wire.TunnelErrorInvalidRoute:
+		return mcpconnectionattempts.CodeTunnelAtCapacity, true
+	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed, wire.TunnelErrorInvalidRoute, wire.TunnelErrorActiveCheckFailed:
 		return mcpconnectionattempts.CodeInternalError, true
 	default:
 		return mcpconnectionattempts.CodeTunnelUnavailable, true

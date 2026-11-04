@@ -1,7 +1,11 @@
 package mcp
 
 import (
+	"errors"
+	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -33,6 +37,8 @@ func TestInboundRefreshHappened(t *testing.T) {
 	t.Parallel()
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
+		"resource_mismatch":                     mcpconnectionattempts.CodeResourceMismatch,
+		"agent_credential_invalid":              mcpconnectionattempts.CodeRefreshTokenRevoked,
 		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
 		"refresh_token_unknown_or_already_used": mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
 		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
@@ -52,7 +58,7 @@ func TestInboundRefreshHappened(t *testing.T) {
 		require.True(t, ok, reason)
 		require.Equal(t, want, code, reason)
 	}
-	for _, reason := range []string{"invalid_request", "resource_mismatch"} {
+	for _, reason := range []string{"invalid_request"} {
 		_, ok := inboundRefreshHappened(reason)
 		require.False(t, ok, reason)
 	}
@@ -62,3 +68,26 @@ func TestInboundRefreshHappened(t *testing.T) {
 }
 
 // The wrapper carries a code without changing what the gateway answers or how it is matched.
+
+func TestAgentRefreshAdmissionReason(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err    error
+		reason string
+	}{
+		{oops.C(oops.CodeUnauthorized), "agent_credential_invalid"},
+		{oops.C(oops.CodeForbidden), "agent_admission_denied"},
+		{errors.New("dependency unavailable"), "agent_admission_unavailable"},
+		{oops.C(oops.CodeUnexpected), "agent_admission_unavailable"},
+	} {
+		require.Equal(t, tc.reason, agentAdmissionRejection(tc.err))
+	}
+}
+
+func TestReplayLookupFailureReason(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"refresh_token_revoked", "sign_in_revoked"} {
+		require.Equal(t, missing, replayLookupFailureReason(fmt.Errorf("lookup: %w", pgx.ErrNoRows), missing))
+		require.Equal(t, "refresh_token_replay_lookup_failed", replayLookupFailureReason(errors.New("database unavailable"), missing))
+	}
+}
