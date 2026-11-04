@@ -10,7 +10,7 @@ vi.mock("@gram/client/react-query/grants.js", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
-  useSession: () => ({ session: "test-session" }),
+  useSession: () => ({ session: "test-session", user: { id: "user-test" } }),
 }));
 
 afterEach(() => {
