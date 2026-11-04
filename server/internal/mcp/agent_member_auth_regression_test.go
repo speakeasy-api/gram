@@ -1,9 +1,9 @@
 package mcp_test
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"bytes"
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
