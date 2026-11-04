@@ -117,3 +117,13 @@ Review follow-ups adopted on #8442 (each fails closed):
 5. **The chat service receives the client beside the engine.** The engine still builds `auth.Auth` and answers the collection checks C3 migrates.
 6. **`Chat(chatID)` takes only the chat ID.** Following M1's constructor shape, the organization and project are not arguments: chat grants never name them, and the per-chat gate has already checked the chat's project against the request.
 7. **The turn stream now runs the sensitive-content gate.** Review found that `HandleTurnStream` keeps its own chat lookup and so skipped the impersonation gate every other transcript read applies through `loadAuthorizedChat`. This was true before the migration. The fix is three lines, applies the same independent gate before the lookup, and cannot act as an existence oracle because it does not depend on the chat. _If reversed:_ drop the call and track the gap separately.
+
+## C3 (AIS-872): chat visibility, summaries and trends
+
+### Decided without reviewer input
+
+1. **C3 goes ahead of Q1 for its point checks.** Q1 owns the chat collection queries (the SQL that narrows listings to the caller's own and owned-agent sessions) and has no call site in the inventory. C3's call sites are point decisions: whether the caller may read every chat in the project, and project read for session summaries. They do not touch the SQL, so they migrate now and Q1 stays independent. _If reversed:_ hold C3 until Q1 has characterised the collection queries; nothing here would change.
+2. **"Read every chat in the project" is `Project(...).ReadChats()`.** Today it is `chat:read` with the project ID as the resource. The constructor reproduces that request exactly, on the chat type's `read_grant`. _Worth simplifying later:_ a project permission such as `project.read_chats` would name the meaning instead of overloading a chat ID with a project ID, but it changes which grants match.
+3. **`ShouldEnforce` goes through the client.** The trend and visibility paths branch on whether RBAC is enforced at all before deciding. They call `Client.ShouldEnforce`, which forwards to the engine, so the chat service's only remaining engine use is building `auth.Auth`. _If reversed:_ call the engine's `ShouldEnforce` again; nothing else changes.
+4. **The sensitive-content gate in `ReadableConversations` stays** as an independent gate, as in C1.
+5. **`ReadableConversations` uses `MatchMany`** and maps results by position, so a repeated ID keeps its own answer.

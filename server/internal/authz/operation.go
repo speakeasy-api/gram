@@ -249,6 +249,13 @@ func (m MCPServerRef) Connect() Operation {
 	return newOperation("mcp_server", "connect", m.id, m.dimensions())
 }
 
+// ReadChats asks for a grant to read every chat session in the project, for
+// views that aggregate or list sessions beyond the caller's own. Chat grants
+// that name the project ID as their resource answer it.
+func (p ProjectRef) ReadChats() Operation {
+	return newOperation("chat", "read_grant", p.id, nil)
+}
+
 // ChatRef names one chat session in its project for typed operations.
 type ChatRef struct {
 	id string
@@ -288,5 +295,6 @@ func typedOperations() []Operation {
 		project.ReadSkills(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		Chat("chat").Read(), Chat("chat").Write(),
+		project.ReadChats(),
 	}
 }

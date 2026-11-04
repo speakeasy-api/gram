@@ -523,12 +523,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -642,10 +637,10 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	// Unlike chat listing, which degrades to own-session visibility, this is an
 	// org-wide aggregate: when RBAC is enforced, callers without chat:read get
 	// nothing rather than a narrowed view.
-	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+	if enforce, err := s.authzClient.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		allowed, err := s.authzClient.Evaluate(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID).ReadChats())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
@@ -984,10 +979,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// diagnostics UI and misleading admins into granting chat:read — the very
 	// coupling this path must avoid.
 	canReadAllSessions := false
-	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+	if enforce, err := s.authzClient.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		allowed, err := s.authzClient.Evaluate(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).ReadChats())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
@@ -1072,7 +1067,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// First-party project credentials read any session in their project: the
 	// dashboard session, the managed-assistant runtime, and a direct API key,
 	// which the RBAC engine already treats as self-scoped (see
-	// authz.Engine.ShouldEnforce).
+	// authz.Client.ShouldEnforce).
 	//
 	// A chat-session token minted via an API key restores that key's APIKeyID
 	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
@@ -1108,7 +1103,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	}
 
 	// Gate dashboard access on chat:read or chat:write. The check is a no-op
-	// unless RBAC is enforced for the request (see authz.Engine.ShouldEnforce —
+	// unless RBAC is enforced for the request (see authz.Client.ShouldEnforce —
 	// API-key and sessionless callers are exempt). Members can always reach
 	// sessions they own, so bypass the scope check for the owner; reaching
 	// anyone else's session requires an explicit grant, which no system role
