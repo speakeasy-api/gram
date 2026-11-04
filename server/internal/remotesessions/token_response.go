@@ -60,22 +60,8 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response fields: %w", err)
 	}
-	// Some providers encode expires_in as a string, including zero-padded values.
-	// Both forms must be non-negative integers that fit int and time.Duration
-	// when converted to seconds; missing and null retain the zero default.
-	raw := bytes.TrimSpace(response.ExpiresIn)
-	if len(raw) > 0 && string(raw) != "null" {
-		value := string(raw)
-		if raw[0] == '"' {
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return fmt.Errorf("decode token response expires_in: %w", err)
-			}
-		}
-		seconds, err := strconv.Atoi(value)
-		if err != nil || seconds < 0 || int64(seconds) > int64((1<<63-1)/time.Second) {
-			return errors.New("token response expires_in must be an integer within range")
-		}
-		decoded.ExpiresIn = seconds
+	if seconds := decodeLifetime(response.ExpiresIn); seconds != nil && usableLifetime(*seconds) && *seconds <= int64(^uint(0)>>1) {
+		decoded.ExpiresIn = int(*seconds)
 	}
 	decoded.RefreshTokenTimeout = decodeLifetime(response.RefreshTokenTimeout)
 	decoded.AuthorizationExpiresIn = decodeLifetime(response.AuthorizationExpiresIn)

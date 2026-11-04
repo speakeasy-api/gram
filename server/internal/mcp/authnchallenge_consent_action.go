@@ -274,6 +274,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		case errors.Is(err, errValidationRateLimited):
 			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
+		case errors.Is(err, errRemoteSessionNoUsableCredential):
+			http.Redirect(w, r, backURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
 		case err != nil:
 			return err
 		}

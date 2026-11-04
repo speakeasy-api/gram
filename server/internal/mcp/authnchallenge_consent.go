@@ -626,6 +626,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if failed := r.URL.Query().Get("validate_failed"); failed != "" {
+		for i := range cards {
+			// An expired or unconnected card already names its action.
+			if cards[i].ClientID == failed && cards[i].Connected {
+				cards[i].ValidationNotice = noWorkingSignInMessage
+			}
+		}
+	}
 
 	// A gateway's page approves the gateway and lists its servers; the
 	// services it shows are those of one server, on that server's connect

@@ -33,10 +33,12 @@ func TestTokenResponseExpiresIn(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a"}`), &omitted))
 	require.Zero(t, omitted.ExpiresIn)
 	for _, value := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
-		t.Run("invalid_"+value, func(t *testing.T) {
+		t.Run("unusable_"+value, func(t *testing.T) {
 			t.Parallel()
 			var response tokenResponse
-			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+value+`}`), &response))
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+value+`}`), &response))
+			require.Zero(t, response.ExpiresIn)
+			require.Equal(t, "a", response.AccessToken)
 		})
 	}
 }
@@ -62,11 +64,12 @@ func TestTokenResponseWireExpiresIn(t *testing.T) {
 		}
 	}
 	for _, raw := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
-		t.Run("invalid_"+raw, func(t *testing.T) {
+		t.Run("unusable_"+raw, func(t *testing.T) {
 			t.Parallel()
-			wire := tokenResponseWire{ExpiresIn: 42}
-			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+raw+`}`), &wire))
-			require.Equal(t, 42, wire.ExpiresIn)
+			var wire tokenResponseWire
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
+			require.Zero(t, wire.ExpiresIn)
+			require.Equal(t, "a", wire.AccessToken)
 		})
 	}
 }

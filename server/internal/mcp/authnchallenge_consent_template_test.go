@@ -807,6 +807,7 @@ func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {
 	hint := strings.Index(html, "Connect or reconnect a service above to give access.")
 	require.NotEqual(t, -1, hint)
 	require.Contains(t, html[hint-100:hint], "data-agent-self-only")
+	require.Greater(t, hint, strings.Index(html, `value="deny"`), "the hint sits below the button row")
 }
 
 func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {

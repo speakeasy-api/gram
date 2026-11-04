@@ -1190,13 +1190,7 @@ func TestServeConsentAction_ValidateRefusesExpiredGrant(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
 
-	_, err := postValidate(t, fx, fx.clientID)
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Reconnect this service.")
-	require.Empty(t, fx.member.drain(), "no probe reached the member")
+	requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 	require.Empty(t, validationCounts(t, fx.reader))
 }
 

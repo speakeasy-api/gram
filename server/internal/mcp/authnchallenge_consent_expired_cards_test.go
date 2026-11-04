@@ -186,6 +186,15 @@ func TestConsentAgentApproval_AttachedConnectionIsNotJudgedByCards(t *testing.T)
 	_, err = testrepo.New(ti.conn).InsertAttachmentFixture(ctx, testrepo.InsertAttachmentFixtureParams{ProjectID: fx.target.ProjectID, OrganizationID: fx.orgID, PrincipalID: agent.ID, UserSessionIssuerID: fx.target.UserSessionIssuerID, RemoteSessionClientID: client, RemoteSessionID: source.ID, GrantGeneration: source.GrantGeneration, AttachedBySubjectID: owner.String()})
 	require.NoError(t, err)
 
+	setAccessExpiry := func(at pgtype.Timestamptz) {
+		require.NoError(t, remotesessions_repo.New(ti.conn).SetRemoteSessionAccessExpiresAt(ctx, remotesessions_repo.SetRemoteSessionAccessExpiresAtParams{AccessExpiresAt: at, ID: source.ID, ProjectID: conv.ToNullUUID(fx.target.ProjectID)}))
+	}
+	setAccessExpiry(conv.ToPGTimestamptz(time.Now().Add(-time.Hour)))
+	_, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
+	require.ErrorAs(t, err, &shareable, "an expired attached connection is refused")
+	require.Equal(t, oops.CodeConflict, shareable.Code)
+	setAccessExpiry(pgtype.Timestamptz{})
+
 	w, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
@@ -252,10 +261,7 @@ func TestServeConsentAction_ValidateExpiredGrantNamesTheCause(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
 
-	_, err := postValidate(t, fx, fx.clientID)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.ErrorContains(t, shareable.Unwrap(), "no usable credential")
+	requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 
 	output := logs.String()
 	require.Contains(t, output, "access token has expired and the grant has no refresh token")
@@ -263,11 +269,25 @@ func TestServeConsentAction_ValidateExpiredGrantNamesTheCause(t *testing.T) {
 }
 
 const (
-	verifyConnectMessage   = "Connect this service before verifying it."
-	verifyReconnectMessage = "Reconnect this service."
-	verifyNoSignInMessage  = "We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator."
+	verifyNotConnectedCard = ">Not connected</span"
+	verifyExpiredCard      = ">Expired — reconnect to continue</span"
+	verifyNoSignInNotice   = "data-validation-notice >We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator.</span"
 	verifyUnservedMessage  = "This connection can't be checked here."
 )
+
+// requireVerifyNotice posts Verify and checks it returns to the card showing want and probed nothing.
+func requireVerifyNotice(t *testing.T, fx validationFixture, clientID uuid.UUID, want string) {
+	t.Helper()
+	w, err := postValidate(t, fx, clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	location := w.Header().Get("Location")
+	require.Equal(t, consentPagePath(fx)+"&validate_failed="+clientID.String(), location)
+	require.Contains(t, renderConsentAt(t, fx, location), want)
+	if fx.member != nil {
+		require.Empty(t, fx.member.drain(), "no probe reached the member")
+	}
+}
 
 // requireVerifyRefused posts Verify and checks the message and that nothing was probed.
 func requireVerifyRefused(t *testing.T, fx validationFixture, clientID uuid.UUID, message string) {
@@ -348,7 +368,7 @@ func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 			require.NoError(t, err)
 			storeVerifyGrant(t, ctx, fx, conv.ToPGText(refresh), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-			requireVerifyRefused(t, fx, fx.clientID, verifyNoSignInMessage)
+			requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
 			page := renderConsent(t, fx)
 			require.Contains(t, page, `data-validate-link`, "the card still offers Verify, so trying again is possible")
 			require.Contains(t, page, `value="disconnect"`)
@@ -372,8 +392,8 @@ func TestServeConsentAction_VerifyUnfixableByRetryKeepsNextSteps(t *testing.T) {
 		require.NoError(t, err)
 		storeVerifyGrant(t, ctx, fx, conv.ToPGText(refresh), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-		requireVerifyRefused(t, fx, fx.clientID, verifyNoSignInMessage)
-		requireVerifyRefused(t, fx, fx.clientID, verifyNoSignInMessage)
+		requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
+		requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
 		require.Contains(t, renderConsent(t, fx), `value="disconnect"`)
 	})
 
@@ -382,7 +402,7 @@ func TestServeConsentAction_VerifyUnfixableByRetryKeepsNextSteps(t *testing.T) {
 		ctx, fx := seedMetaValidationFixture(t, "verify-unreadable-"+uuid.NewString()[:8])
 		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-		requireVerifyRefused(t, fx, fx.clientID, verifyNoSignInMessage)
+		requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
 		page := renderConsent(t, fx)
 		require.Contains(t, page, `value="disconnect"`)
 		require.NotContains(t, page, `data-connect-link`, "a connected card has no Reconnect button to point at")
@@ -418,7 +438,7 @@ func TestServeConsentAction_VerifyLapsedGrantAsksToReconnect(t *testing.T) {
 			storeVerifyGrant(t, ctx, fx, refresh, tc.refreshExpires, tc.authorizationExpires)
 
 			// A page opened before the grant lapsed still has Verify on it.
-			requireVerifyRefused(t, fx, fx.clientID, verifyReconnectMessage)
+			requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 			page := normalizeSpaces(renderConsent(t, fx))
 			require.Regexp(t, `data-connect-link > Reconnect`, page)
 		})
@@ -441,7 +461,7 @@ func TestServeConsentAction_VerifyInvalidGrantAsksToReconnect(t *testing.T) {
 	require.NoError(t, err)
 	storeVerifyGrant(t, ctx, fx, conv.ToPGText(refresh), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-	requireVerifyRefused(t, fx, fx.clientID, verifyReconnectMessage)
+	requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 	require.Regexp(t, `data-connect-link > Reconnect`, normalizeSpaces(renderConsent(t, fx)))
 }
 
@@ -455,8 +475,8 @@ func TestServeConsentAction_VerifyNeverConnectedAsksToConnect(t *testing.T) {
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, client)
 	createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "verify-never-other", "https://never.example.com/mcp", conv.ToNullUUID(issuer), 1)
 
-	requireVerifyRefused(t, fx, client, verifyConnectMessage)
 	fx.server = "verify-never-other"
+	requireVerifyNotice(t, fx, client, verifyNotConnectedCard)
 	require.Regexp(t, `data-connect-link > Connect`, normalizeSpaces(renderConsent(t, fx)))
 }
 
