@@ -38,7 +38,7 @@ The RFC lets the engine and scope tables go only after production shadow compari
     - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
     - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
 
-## Readability follow-ups (approved by Tiago on 2026-11-04)
+## Readability follow-ups (2026-11-04)
 
 - ~~Hierarchical resource handles, `authz.Project(org, p).MCPServer(id)`.~~ Dropped (#8540 closed): the flat constructors already take the project as a required argument and are easier to find from `authz.` autocomplete.
 - Scope-keyed grants and the one-line `s.ScopePermission`: #8541.
