@@ -391,7 +391,7 @@ func TestConnectionOutcome_PostSignInCheckGotNoAnswer(t *testing.T) {
 	rec.RequireNotEnded()
 }
 
-// A first-time member reads not_connected, on the project and the organization gateway. It has no choice to be stale.
+// A first-time member reads not_connected on the project gateway. It has no choice to be stale.
 func TestConnectionOutcome_FirstTimeMemberIsNotConnected(t *testing.T) {
 	t.Parallel()
 

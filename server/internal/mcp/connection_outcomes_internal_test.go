@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -181,7 +182,7 @@ func TestTokenClientRefusal(t *testing.T) {
 	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable)
 	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
-	require.Equal(t, "client.example.com", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
 }
 
 func TestRecordListingFailures(t *testing.T) {
@@ -405,4 +406,36 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 func tokenRequest(t *testing.T) *http.Request {
 	t.Helper()
 	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
+}
+
+func TestRecordIDPAuthorityRefusal(t *testing.T) {
+	t.Parallel()
+	for _, unavailable := range []bool{true, false} {
+		rec := mcpconnectionattemptstest.New(t)
+		service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+		endpoint, state := directEndpoint(), openState()
+		err := errors.New("authority changed")
+		if unavailable {
+			err = networkingress.ErrAuthorityUnavailable
+		}
+		for range 2 {
+			service.recordIDPAuthorityRefusal(t.Context(), testenv.NewLogger(t), endpoint, state, mcpconnectionattempts.FromRequest(nil), err)
+		}
+		require.NoError(t, service.attemptEndings.drain(t.Context()))
+		if unavailable {
+			rec.RequireStep(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeInternalError)
+		} else {
+			require.Len(t, rec.Rows(), 1)
+			rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeConnectionChanged)
+		}
+	}
+}
+
+func TestRecordRemoteSessionVerdict_SetupFailure(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder}
+	member := uuid.New()
+	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), remotesessions.Client{}, validationTarget{setupFailed: true, memberID: member}, uuid.New(), remotesessions.ValidationOutcomeUnknown, remotesessionmetrics.ValidationTriggerVerify)
+	require.Equal(t, member.String(), rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
 }

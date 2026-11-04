@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -283,6 +284,15 @@ func firstPartyCardsDone(cards []remoteSessionCard) bool {
 
 // endChainedFirstParty ends a first-party attempt once a chained check leaves nothing to do. It never touches the response.
 func (s *Service) endChainedFirstParty(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, checked uuid.UUID) {
+	if challengeState.connectionAttempt(endpoint).IsZero() {
+		return
+	}
+	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		s.endChainedFirstPartyInBackground(ctx, logger, fromRequest, endpoint, challengeState, checked)
+	})
+}
+
+func (s *Service) endChainedFirstPartyInBackground(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, checked uuid.UUID) {
 	if challengeState.CodeReconnect.undecidedOrCanceled() {
 		return
 	}
@@ -305,7 +315,7 @@ func (s *Service) endChainedFirstParty(ctx context.Context, logger *slog.Logger,
 		}
 	}
 	if firstPartyConnected(gateway, cards) {
-		s.endAttemptOnce(ctx, logger, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
+		s.claimAttemptEnding(ctx, logger, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
 	}
 }
 
@@ -353,7 +363,17 @@ func (a *attemptEndings) drain(ctx context.Context) error {
 // endAttemptOnce ends an attempt from a path that can repeat, off the request path.
 // If the marker can't be read or too many are waiting, the attempt stays open rather than ending twice.
 func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
-	if attempt.IsZero() || s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
+	if attempt.IsZero() {
+		return
+	}
+	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
+	})
+}
+
+// runAttemptEnding bounds all ending work, including readiness reads, off the response path.
+func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) {
+	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
 		return
 	}
 	select {
@@ -366,19 +386,25 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	s.attemptEndings.wg.Go(func() {
 		defer cancel()
 		defer func() { <-s.attemptEndings.slots }()
-		won, err := s.userSessionRefreshReplayCoordination.Add(claimCtx, attemptEndMarker(attempt), connectionAttemptEndTTL)
-		if err != nil {
-			logger.WarnContext(claimCtx, "claim connection attempt ending", attr.SlogError(err))
-			return
-		}
-		if won {
-			s.connections.End(claimCtx, attempt, step, what, opts...)
-		}
+		work(claimCtx)
 	})
 }
 
+func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+	won, err := s.userSessionRefreshReplayCoordination.Add(ctx, attemptEndMarker(attempt), connectionAttemptEndTTL)
+	if err != nil {
+		logger.WarnContext(ctx, "claim connection attempt ending", attr.SlogError(err))
+		return
+	}
+	if won {
+		s.connections.End(ctx, attempt, step, what, opts...)
+	}
+}
+
 // recordRemoteLoginRefusal records a provider callback refused before its login
-// state is spent. Only a parent that is gone ends the attempt.
+// state is spent. A missing parent ends the attempt. The browser preflight also
+// ends an expired reconnect lifetime, even if the same request has a browser or
+// session mismatch: no browser can complete that expired connection anymore.
 func (s *Service) recordRemoteLoginRefusal(r *http.Request, remote remotesessions.RemoteLoginState, err error) {
 	ctx := r.Context()
 	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))
@@ -480,7 +506,11 @@ func (s *Service) recordRemoteSessionVerdict(
 	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
 		return
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, verdictHappened(verdict, target.tunnelID.Valid),
+	what := verdictHappened(verdict, target.tunnelID.Valid)
+	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
+		what = mcpconnectionattempts.CodeMemberToolsMissing
+	}
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what,
 		fromRequest,
 		mcpconnectionattempts.Detail(string(trigger)),
 		mcpconnectionattempts.Member(target.memberID),
@@ -537,4 +567,14 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeNoServerAccess, true
 	}
 	return mcpconnectionattempts.CodeMemberToolsMissing, true
+}
+
+// recordIDPAuthorityRefusal keeps dependency outages retryable but ends a revoked authority once.
+func (s *Service) recordIDPAuthorityRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, request mcpconnectionattempts.Option, err error) {
+	code, detail := remotesessions.AuthorityHappened(err)
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		s.connections.Step(ctx, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, code, detail, request)
+		return
+	}
+	s.endAttemptOnce(ctx, logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, code, detail, request)
 }

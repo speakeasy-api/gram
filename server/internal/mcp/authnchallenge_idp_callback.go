@@ -129,8 +129,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	authorityStarted := time.Now()
 	if err := endpoint.ValidateGlobalChallenge(ctx, s.db, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, err)
-		authorityCode, authorityDetail := remotesessions.AuthorityHappened(err)
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, authorityCode, authorityDetail, mcpconnectionattempts.FromRequest(r))
+		s.recordIDPAuthorityRefusal(ctx, logger, endpoint, challengeState, mcpconnectionattempts.FromRequest(r), err)
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
@@ -538,7 +537,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				if err != nil {
 					return failFederationDependency(err, "Login is unavailable. Restart login")
 				}
-				return onward(s.startFederatedLogin(w, r, &challengeState, current))
+				if err := s.startFederatedLogin(w, r, &challengeState, current); err != nil {
+					return failFederationDependency(err, "Federated login is unavailable. Restart login or contact your administrator")
+				}
+				return onward(nil)
 			}
 		}
 	}

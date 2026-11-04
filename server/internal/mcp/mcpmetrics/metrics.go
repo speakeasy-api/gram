@@ -178,10 +178,13 @@ type Metrics struct {
 	// The companion Datadog monitor can therefore alert on a clean signal
 	// (failed/started, or completed/(completed+failed)) instead of per-URL
 	// status.
-	oauthFlowStartedCounter      metric.Int64Counter
-	oauthFlowCompletedCounter    metric.Int64Counter
-	oauthFlowFailedCounter       metric.Int64Counter
-	oauthFlowDeclinedCounter     metric.Int64Counter
+	oauthFlowStartedCounter   metric.Int64Counter
+	oauthFlowCompletedCounter metric.Int64Counter
+	oauthFlowFailedCounter    metric.Int64Counter
+	oauthFlowDeclinedCounter  metric.Int64Counter
+
+	// connectionRefusalsWithoutRow counts requests with no proof of a real flow.
+	// These write no connection attempt row and are not OAuth flow endings.
 	connectionRefusalsWithoutRow metric.Int64Counter
 
 	// oauthRefreshTokenReplayServedCounter counts refresh responses served from

@@ -200,8 +200,8 @@ func TestConnectionOutcome_AuthorizeRefusals(t *testing.T) {
 		status int
 	}{
 		"redirect mismatch": {func(q url.Values) { q.Set("redirect_uri", "http://other.example/cb") }, mcpconnectionattempts.CodeRedirectURIMismatch, http.StatusBadRequest},
-		"resource mismatch": {func(q url.Values) { q.Set("resource", "https://other.example/mcp") }, mcpconnectionattempts.CodeResourceMismatch, http.StatusBadRequest},
-		"missing pkce":      {func(q url.Values) { q.Del("code_challenge") }, mcpconnectionattempts.CodeInvalidRequest, http.StatusBadRequest},
+		"resource mismatch": {func(q url.Values) { q.Set("resource", "https://other.example/mcp") }, mcpconnectionattempts.CodeResourceMismatch, http.StatusFound},
+		"missing pkce":      {func(q url.Values) { q.Del("code_challenge") }, mcpconnectionattempts.CodeInvalidRequest, http.StatusFound},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -216,7 +216,7 @@ func TestConnectionOutcome_AuthorizeRefusals(t *testing.T) {
 			rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
 			w := httptest.NewRecorder()
 			require.NoError(t, ti.service.HandleAuthorize(w, req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
-			require.NotEqual(t, http.StatusInternalServerError, w.Code)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
 
 			rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
 			require.Len(t, rec.Rows(), 1)
@@ -242,7 +242,7 @@ func TestConnectionOutcome_AuthorizeAdmissionDenied(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeCIMDAdmissionDenied)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeBlocked), row.Outcome)
-	require.Equal(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), row.AppKey)
 }
 
 func TestConnectionOutcome_SignIn(t *testing.T) {
@@ -690,7 +690,31 @@ func TestConnectionOutcome_ConcurrentRequestsEndOnce(t *testing.T) {
 		stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
 		loc := postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
 		form := codeGrantForm(client, loc.Query().Get("code"), verifier)
-		race(4, func() { postForm(t, ti, toolset.McpSlug.String, "token", form) })
+		type result struct {
+			err    error
+			status int
+		}
+		results := make(chan result, 4)
+		requestCtx := t.Context()
+		race(4, func() {
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+			w := httptest.NewRecorder()
+			err := ti.service.HandleToken(w, req.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, rctx)))
+			results <- result{err: err, status: w.Code}
+		})
+		close(results)
+		succeeded := 0
+		for result := range results {
+			require.NoError(t, result.err)
+			require.Contains(t, []int{http.StatusOK, http.StatusBadRequest}, result.status)
+			if result.status == http.StatusOK {
+				succeeded++
+			}
+		}
+		require.Equal(t, 1, succeeded)
 		rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
 		rec.RequireOneAttempt()
 	})
@@ -879,9 +903,10 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 	for name, tc := range map[string]struct {
 		mutate func(ds *cimdDocServer)
 		what   mcpconnectionattempts.Code
+		status int
 	}{
-		"metadata invalid": {func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" }, mcpconnectionattempts.CodeCIMDMetadataInvalid},
-		"fetch failed":     {func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError }, mcpconnectionattempts.CodeCIMDFetchFailed},
+		"metadata invalid": {func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" }, mcpconnectionattempts.CodeCIMDMetadataInvalid, http.StatusBadRequest},
+		"fetch failed":     {func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError }, mcpconnectionattempts.CodeCIMDFetchFailed, http.StatusServiceUnavailable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -894,7 +919,7 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 			q := url.Values{"response_type": {"code"}, "client_id": {ds.clientID}, "redirect_uri": {ds.srv.URL + "/callback"}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil))
-			require.Contains(t, []int{http.StatusBadRequest, http.StatusServiceUnavailable}, w.Code, w.Body.String())
+			require.Equal(t, tc.status, w.Code, w.Body.String())
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
 			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
@@ -905,8 +930,8 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 	}
 }
 
-// An expired code reconnect is expired, however wrong the browser looks.
-func TestConnectionOutcome_ExpiredReviewIsNotAWrongBrowser(t *testing.T) {
+// An expired code reconnect ends once, even when its consent page is reloaded.
+func TestConnectionOutcome_ExpiredReviewEndsOnce(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
