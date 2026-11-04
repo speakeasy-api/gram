@@ -35,26 +35,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  analyse:
-    name: analyse
-    # Nothing runs until SPEAKEASY_ORG_ID is set.
-    # - Forks are skipped rather than left to fail: GitHub gives their jobs no
-    #   OIDC token and no secrets.
-    # - Pull requests that bots open are not reviewed (Dependabot's also run
-    #   like a fork's), and a bot's push is skipped because claude-code-action
-    #   refuses a bot actor.
-    # No write-access check: on this public repository, opening a pull
-    # request from one of its branches takes write access to the branch or
-    # membership of the organization, and a push takes write access.
-    # claude-code-action also refuses an actor without write access, but only
-    # after the job has connected to Speakeasy.
+  # Nothing runs until the SPEAKEASY_ORG_ID secret is set. A job's if: cannot
+  # read secrets, so this job reads it in a step and reports whether to review.
+  # - Forks are skipped rather than left to fail: GitHub gives their jobs no
+  #   OIDC token and no secrets.
+  # - Pull requests that bots open are not reviewed (Dependabot's also run
+  #   like a fork's), and a bot's push is skipped because claude-code-action
+  #   refuses a bot actor.
+  # No write-access check: on this public repository, opening a pull request
+  # from one of its branches takes write access to the branch or membership of
+  # the organization, and a push takes write access. claude-code-action also
+  # refuses an actor without write access, but only after the job has
+  # connected to Speakeasy.
+  enabled:
+    name: enabled
     if: >-
-      vars.SPEAKEASY_ORG_ID != '' &&
       github.event.pull_request.state == 'open' &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.type != 'Bot' &&
       github.event.sender.type != 'Bot'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 2
+    permissions: {}
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check the review is set up
+        id: check
+        env:
+          SPEAKEASY_ORG_ID: ${{ secrets.SPEAKEASY_ORG_ID }}
+        run: |
+          if [ -n "$SPEAKEASY_ORG_ID" ]; then
+            echo "enabled=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::The SPEAKEASY_ORG_ID secret is not set, so the perf review is off."
+          fi
+
+  analyse:
+    name: analyse
+    needs: enabled
+    if: needs.enabled.outputs.enabled == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
@@ -111,7 +133,7 @@ jobs:
       - name: Connect to Speakeasy
         uses: speakeasy-api/device-agent-action@dd6623b6476a66ffbd2402bb874cbc5445b12493 # v0.1.2
         with:
-          organization-id: ${{ vars.SPEAKEASY_ORG_ID }}
+          organization-id: ${{ secrets.SPEAKEASY_ORG_ID }}
           project: default # hook events land in this Speakeasy project
           # The first speakeasyd with GitHub Actions support. Switch both to a
           # stable release once one has it.
@@ -133,11 +155,12 @@ jobs:
         with:
           # Workload identity federation: the action exchanges a GitHub OIDC
           # token (audience https://api.anthropic.com) for a short-lived Claude
-          # API token, so no API key is stored. These are IDs, not secrets.
-          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
-          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
-          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
-          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }} # only needed when the rule targets several workspaces
+          # API token, so no API key is stored. The IDs are kept as secrets so
+          # public run logs mask them.
+          anthropic_federation_rule_id: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ secrets.ANTHROPIC_WORKSPACE_ID }} # only needed when the rule targets several workspaces
           # The job's read-only token. Without it the action exchanges for the
           # Claude app token, which has contents/pull-requests/issues write.
           github_token: ${{ github.token }}
