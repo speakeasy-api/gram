@@ -28,11 +28,10 @@ import (
 
 // Federation errors deliberately omit upstream response bodies and credentials.
 var (
-	ErrFederatedConfiguration     = errors.New("federated identity provider configuration is unavailable or invalid")
-	ErrFederatedSignerUnavailable = errors.New("federated assertion signer is temporarily unavailable")
-	ErrFederatedSigning           = errors.New("federated identity provider signing failed")
-	ErrFederatedUnavailable       = errors.New("federated identity provider is temporarily unavailable")
-	ErrFederatedIdentity          = errors.New("federated identity provider authentication failed")
+	ErrFederatedConfiguration = errors.New("federated identity provider configuration is unavailable or invalid")
+	ErrFederatedSigning       = errors.New("federated identity provider signing failed")
+	ErrFederatedUnavailable   = errors.New("federated identity provider is temporarily unavailable")
+	ErrFederatedIdentity      = errors.New("federated identity provider authentication failed")
 )
 
 // FederatedProvider is a request-local snapshot, never a decrypted-secret cache.
