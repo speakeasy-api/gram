@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
@@ -304,19 +303,6 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
 		attempt.fail(http.StatusUnauthorized, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
-	}
-
-	// Agent gateway and organization keys name no project, and a stored
-	// gateway can front members from other projects. Member admission above
-	// authorized this member, so its tool runs in the member's project, as a
-	// call to the member's own endpoint would after authorization. The auth
-	// context is copied so sibling member calls cannot inherit this binding.
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && (authCtx.ProjectID == nil || *authCtx.ProjectID != inputs.projectID) {
-		memberProjectID := inputs.projectID
-		memberAuth := *authCtx
-		memberAuth.ProjectID = &memberProjectID
-		memberAuth.ProjectSlug = conv.PtrEmpty(member.projectSlug)
-		ctx = contextvalues.SetAuthContext(ctx, &memberAuth)
 	}
 
 	// The outer request's _meta rides along: the member dispatch serves the
