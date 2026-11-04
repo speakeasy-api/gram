@@ -30,6 +30,8 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 	require.NoError(t, err)
 
 	declared := []Scope{
+		ScopeAssistantBlockedRead, ScopeAssistantBlockedWrite, ScopeAssistantRead, ScopeAssistantWrite,
+		ScopeChatRead, ScopeChatWrite,
 		ScopeLogRead,
 		ScopeMCPAuth, ScopeMCPBlockedAuth, ScopeMCPBlockedConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite,
 		ScopeMCPConnect, ScopeMCPRead, ScopeMCPWrite,
@@ -37,6 +39,7 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 		ScopePluginBlockedWrite, ScopePluginWrite,
 		ScopeProjectBlockedRead, ScopeProjectBlockedWrite, ScopeProjectRead, ScopeProjectWrite,
 		ScopeRiskPolicyBlock, ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate,
+		ScopeSkillBlockedRead, ScopeSkillBlockedWrite, ScopeSkillRead, ScopeSkillWrite,
 	}
 	var compiledNames []Scope
 	for _, scope := range reg.Scopes() {

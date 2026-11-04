@@ -33,12 +33,7 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return err
 	}
 	if s.turnStream == nil {
@@ -56,6 +51,13 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	// loadAuthorizedChat so every failure reads as "not found" — it is reachable
 	// via CORS, and a distinct unauthorized response would be an existence
 	// oracle.
+	//
+	// Streaming a chat exposes its content, so the sensitive-content gate that
+	// loadAuthorizedChat applies runs here too. It does not depend on the chat,
+	// so it reveals nothing about which chats exist.
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return fmt.Errorf("authorize turn stream: %w", err)
+	}
 	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "chat not found")

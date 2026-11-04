@@ -101,7 +101,7 @@ func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeB
 		nil,
 		newTestAuditLogger(),
 		testIdentityService,
-		newTestAuthzEngine(t, conn),
+		newTestAuthzClient(t, conn),
 	)
 }
 

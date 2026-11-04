@@ -169,6 +169,50 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// ReadSkills asks to read the project's skills. Skill grants are stored
+// against the project ID, so the operation targets the project rather than
+// one skill.
+func (p ProjectRef) ReadSkills() Operation {
+	return newOperation("skill", "read", p.id, nil)
+}
+
+// AssistantRef names one assistant in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant bounded to
+// one project never matches an assistant in another.
+type AssistantRef struct {
+	projectID string
+	id        string
+}
+
+// Assistant names an assistant. The caller must have verified that the
+// assistant belongs to the project.
+func Assistant(projectID, assistantID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: assistantID}
+}
+
+// AssistantsInProject names the assistants of a project as a whole, for
+// operations that are not about one existing assistant, such as creating
+// one. Grants for these operations are stored with the project's ID as the
+// resource, so the reference uses the project ID as the assistant ID and
+// also carries it as the project dimension.
+func AssistantsInProject(projectID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: projectID}
+}
+
+func (a AssistantRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: a.projectID}
+}
+
+// Read asks to read the assistant.
+func (a AssistantRef) Read() Operation {
+	return newOperation("assistant", "read", a.id, a.dimensions())
+}
+
+// Write asks to change the assistant.
+func (a AssistantRef) Write() Operation {
+	return newOperation("assistant", "write", a.id, a.dimensions())
+}
+
 // MCPServerRef names one MCP server in its project for typed operations.
 // Every operation carries the project as a dimension, so a grant or block
 // bounded to one project never matches a server in another.
@@ -230,6 +274,30 @@ func (p ProjectRef) ReadOrEditMCPServer(serverID string) Operation {
 	)
 }
 
+// ChatRef names one chat session in its project for typed operations.
+type ChatRef struct {
+	id string
+}
+
+// Chat names a chat session. The caller must have loaded the chat and
+// verified that it belongs to the request's project.
+func Chat(chatID string) ChatRef {
+	return ChatRef{id: chatID}
+}
+
+// Read asks for a grant to read the chat's transcript. Session owners and
+// the owners of an agent-only session read without one; the caller decides
+// ownership before asking.
+func (c ChatRef) Read() Operation {
+	return newOperation("chat", "read_grant", c.id, nil)
+}
+
+// Write asks for a grant to change or delete the chat. Session owners change
+// their own sessions without one; the caller decides ownership before asking.
+func (c ChatRef) Write() Operation {
+	return newOperation("chat", "write_grant", c.id, nil)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -246,5 +314,8 @@ func typedOperations() []Operation {
 		project.ReadToolLogs(),
 		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(),
 		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Bypass(),
+		project.ReadSkills(),
+		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
+		Chat("chat").Read(), Chat("chat").Write(),
 	}
 }
