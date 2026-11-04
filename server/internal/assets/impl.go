@@ -63,7 +63,7 @@ type Service struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	auth           *auth.Auth
-	authz          *authz.Engine
+	authzClient    *authz.Client
 	storage        BlobStore
 	jwtSecret      string
 
@@ -90,6 +90,7 @@ func NewService(
 	storage BlobStore,
 	jwtSecret string,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
@@ -100,7 +101,7 @@ func NewService(
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
+		authzClient:    authzClient,
 		storage:        storage,
 		jwtSecret:      jwtSecret,
 		chatSessions:   chatSessions,

@@ -95,6 +95,7 @@ func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Polic
 
 	auditLogger := audit.NewLogger()
 
+	assetsEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := assets.NewService(logger,
 		tracerProvider,
 		guardianPolicy,
@@ -103,12 +104,8 @@ func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Polic
 		chatSessionsManager,
 		storage,
 		"test-jwt-secret",
-		authz.NewEngine(logger,
-			conn,
-
-			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient()),
-
+		assetsEngine,
+		authztest.NewParityClient(t, assetsEngine),
 		auditLogger,
 	)
 	repository := repo.New(conn)

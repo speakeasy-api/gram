@@ -409,7 +409,7 @@ func NewActivities(
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),
 		runOktaApplicationSync:           activities.NewRunOktaApplicationSync(oktaApplicationSyncer),
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy),
+		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy, authzClient),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),

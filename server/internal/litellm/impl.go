@@ -47,20 +47,20 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      authorizer
-	hooks     HookIngester
-	calls     *callcache.Cache
-	traces    *TraceProcessor
-	metrics   *MetricProcessor
-	health    *HealthProcessor
-	db        *pgxpool.Pool
-	telemetry telemetryrepo.CHTX
-	instances *InstanceResolver
-	authz     *authz.Engine
-	audit     *audit.Logger
-	keyPrefix string
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	auth        authorizer
+	hooks       HookIngester
+	calls       *callcache.Cache
+	traces      *TraceProcessor
+	metrics     *MetricProcessor
+	health      *HealthProcessor
+	db          *pgxpool.Pool
+	telemetry   telemetryrepo.CHTX
+	instances   *InstanceResolver
+	authzClient *authz.Client
+	audit       *audit.Logger
+	keyPrefix   string
 }
 
 var (
@@ -68,22 +68,22 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:    logger.With(attr.SlogComponent("litellm")),
-		auth:      auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:     hookIngester,
-		calls:     calls,
-		traces:    traces,
-		metrics:   metrics,
-		health:    health,
-		db:        db,
-		telemetry: telemetryDB,
-		instances: instances,
-		authz:     authzEngine,
-		audit:     auditLogger,
-		keyPrefix: auth.APIKeyPrefix(environment),
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:      logger.With(attr.SlogComponent("litellm")),
+		auth:        auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:       hookIngester,
+		calls:       calls,
+		traces:      traces,
+		metrics:     metrics,
+		health:      health,
+		db:          db,
+		telemetry:   telemetryDB,
+		instances:   instances,
+		authzClient: authzClient,
+		audit:       auditLogger,
+		keyPrefix:   auth.APIKeyPrefix(environment),
 	}
 }
 

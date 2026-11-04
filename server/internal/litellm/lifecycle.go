@@ -279,7 +279,7 @@ func (s *Service) requireInstanceAdmin(ctx context.Context) (*contextvalues.Auth
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, uuid.Nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, uuid.Nil, err
 	}
 	return authCtx, *authCtx.ProjectID, nil

@@ -47,7 +47,7 @@ type Service struct {
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
 	auth                 *auth.Auth
-	authz                *authz.Engine
+	authzClient          *authz.Client
 	enc                  *encryption.Client
 	audit                *audit.Logger
 	admission            *ExpansionAdmission
@@ -59,20 +59,20 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
-	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
+	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, authzClient, enc, auditLogger, admission, requester, nil, health)
 }
 
 // NewServiceWithPublication configures the optional durable publication invalidator.
 // A nil requester preserves the dormant producer behavior.
-func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
+func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
 		logger:               logger,
 		db:                   db,
 		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
+		authzClient:          authzClient,
 		enc:                  enc,
 		audit:                auditLogger,
 		admission:            admission,
@@ -105,12 +105,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) authorize(ctx context.Context, operation func(authz.OrganizationRef) authz.Operation) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, operation(authz.Organization(authCtx.ActiveOrganizationID))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -127,7 +127,7 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 }
 
 func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngressResult, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func validateHostname(hostname string) error {
 }
 
 func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 }
 
 func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 }
 
 func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCredentialsPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +372,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 }
 
 func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPayload) (*gen.NetworkIngressDeleteImpact, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPay
 }
 
 func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload) error {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return err
 	}
@@ -442,7 +442,7 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 }
 
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

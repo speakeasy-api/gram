@@ -177,7 +177,6 @@ internal/aiintegrations/impl.go,*Service.ListSchedules,check,Check,ScopeOrgRead,
 internal/aiintegrations/impl.go,*Service.RetrySchedule,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
 internal/aiintegrations/impl.go,*Service.SetScheduleEnabled,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
 internal/aiintegrations/impl.go,*Service.UpsertConfig,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
-internal/assets/organizationhandlers.go,*Service.UploadOrganizationImage,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/assistantidentity/actor.go,CheckActor,check,Check,ScopeProjectRead,,1,AS1 AIS-860
 internal/assistantidentity/actor.go,CheckActor,engine,EvaluateLoadedGrants,,,1,AS1 AIS-860
 internal/assistantidentity/actor.go,CheckActor,loader,LoadGrants,,,1,AS1 AIS-860
@@ -229,8 +228,7 @@ internal/authclients/audience.go,takeOver,writer,MarkAuthPermissionTakenOverTx,,
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,check,MCPCheck,ScopeMCPConnect,Require,1,M5 AIS-863
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,projection,IsAgentKeyAuthClientType,,,1,X1 AIS-873
 internal/authclients/impl.go,*Service.require,check,Check,scope,Require,1,M5 AIS-863
-internal/background/activities/custom_domain_health.go,*CustomDomainHealth.NotifyOrgAdmins,loader,ResolveOrganizationAdminEmails,,,1,O5 AIS-840
-internal/background/activities/directory_review_emails.go,*DirectoryReviewEmails.organizationAdministratorEmails,loader,ResolveOrganizationAdminEmails,,,1,X1 AIS-873
+internal/background/activities/organization_administrators.go,organizationAdministratorEmails,loader,ResolveOrganizationAdminEmails,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleOrganizationUpsert,writer,SeedPersonalAuthClientDefaultTx,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleOrganizationUpsert,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleRoleDeleted,writer,DeleteRoleGrants,,,1,O2 AIS-838
@@ -247,15 +245,6 @@ internal/chat/impl.go,*Service.loadAuthorizedChat,gate,CheckSensitiveContentAcce
 internal/chat/impl.go,chatAccess.check,check,ChatReadCheck,,,1,C1 AIS-869
 internal/chat/impl.go,chatAccess.check,check,ChatWriteCheck,,,1,C1 AIS-869
 internal/chat/turnstream_http.go,*Service.HandleTurnStream,check,Check,ScopeProjectRead,Require,1,C1 AIS-869
-internal/customdomains/impl.go,*Service.CheckHealth,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.CreateDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.DeleteDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.GetDomain,check,Check,ScopeOrgRead,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.ListDomains,check,Check,ScopeOrgRead,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.ListMcpEndpoints,check,Check,ScopeOrgRead,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.ListRootMcpServers,check,Check,ScopeOrgRead,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.SetRootMcpEndpoint,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
-internal/customdomains/impl.go,*Service.UpdateDomain,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/dashboards/impl.go,*Service.authorize,check,Check,scope,Require,1,P4 AIS-846
 internal/dashboards/impl.go,*Service.requireOwnerOrWrite,check,Check,ScopeProjectWrite,Require,1,P4 AIS-846
 internal/dataexports/impl.go,*Service.CreateDestination,check,Check,ScopeOrgAdmin,Require,1,O7 AIS-841
@@ -323,7 +312,6 @@ internal/keys/update_policy.go,*Service.UpdateKeyPolicy,writer,PatchPrincipalGra
 internal/keys/update_policy.go,*Service.UpdateKeyPolicy,writer,TakeOverPrincipalPolicyTx,,,1,AG2 AIS-857
 internal/killswitches/authorized_service.go,*AuthorizedService.requireCustomerAdmin,engine,RequireUserOrganizationScope,,,1,O2 AIS-838
 internal/launcher/impl.go,*Service.Judge,check,Check,ScopeOrgRead,Require,1,X3 AIS-875
-internal/litellm/lifecycle.go,*Service.requireInstanceAdmin,check,Check,ScopeOrgAdmin,Require,1,O5 AIS-840
 internal/mcp/agent_session.go,*Service.admitAgentSession,engine,PrepareContext,,,1,M3 AIS-861
 internal/mcp/authclientresolve.go,mandatoryPermitter.Permitted,engine,PrepareMandatory,,,1,M5 AIS-863
 internal/mcp/authnchallenge.go,*Service.validateUserSessionToken,loader,AdmittedWorkloadAgent,,,1,M3 AIS-861
@@ -428,7 +416,6 @@ internal/modelkeys/impl.go,*Service.DeleteKey,check,Check,ScopeProjectWrite,Requ
 internal/modelkeys/impl.go,*Service.ListKeys,check,Check,ScopeProjectRead,Require,1,P5 AIS-848
 internal/modelkeys/impl.go,*Service.SetKeyEnabled,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
 internal/modelkeys/impl.go,*Service.UpsertKey,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
-internal/networkingress/impl.go,*Service.authorize,check,Check,scope,Require,1,O5 AIS-840
 internal/oktaresourceconnections/impl.go,*Service.authorize,check,Check,ScopeOrgAdmin,Require,1,M2 AIS-865
 internal/oktaresourceconnections/impl.go,*Service.readable,check,MCPCheck,ScopeMCPRead,,1,M2 AIS-865
 internal/oktaserversuggestions/impl.go,*Service.authorize,check,Check,ScopeOrgAdmin,Require,1,M2 AIS-865

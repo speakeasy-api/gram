@@ -137,7 +137,8 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
 	enc := testenv.NewEncryptionClient(t)
-	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
+	ingressEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, ingressEngine, authztest.NewParityClient(t, ingressEngine), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
 
 	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug}
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureNetworkIngress)
