@@ -4071,7 +4071,11 @@ WHERE m.project_id = @project_id::uuid
        OR (octet_length(m.content) <= 131072 AND m.content ILIKE @pattern ESCAPE '\')
        OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE @pattern ESCAPE '\')
        OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE @pattern ESCAPE '\')
-       OR c.title ILIKE @pattern ESCAPE '\')
+       OR c.title ILIKE @pattern ESCAPE '\'
+       -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
+       -- so a search for the shown title matches it too.
+       OR (NOT c.title_manually_set
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE @pattern ESCAPE '\'))
   AND (@participant_id::text = ''
        OR (@participant_provider::text = '' AND m.user_id = @participant_id)
        OR EXISTS (

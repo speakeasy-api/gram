@@ -626,6 +626,12 @@ func TestChatSearchNamesStoredCronEnvelopesAfterTheirJob(t *testing.T) {
 	require.Len(t, output.Hits, 1)
 	require.Equal(t, "Cron: weekly-skill-review", output.Hits[0].ChatTitle)
 
+	// The title as shown matches too, though the stored envelope reads otherwise.
+	output, err = f.service.Search(ctx, f.principal, f.search("Cron: weekly-skill"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Equal(t, anchor.String(), output.Hits[0].MessageID)
+
 	read, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
 	require.NoError(t, err)
 	require.Equal(t, "Cron: weekly-skill-review", read.ChatTitle)
