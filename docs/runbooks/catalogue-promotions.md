@@ -67,13 +67,21 @@ Suggestions never overwrite edits on refresh. Guide status and retry information
 remain visible through the Published filter after promotion.
 
 When the shared endpoint matches exactly one existing setup guide, the form
-suggests that guide's slug. Under the slug field, the form warns when the slug
-already belongs to a guide, because publishing then links to that guide and
-requests no new one. Keep the slug only for the same provider. The check uses
-the guides embedded in the server (`setupguides.PinnedVersion`), so it can lag
-the docs repository's `main`; delivery rechecks GitHub before requesting a
-guide. The Admin MCP promotion preview shows the same check as "Existing setup
-guide". Neither blocks publication.
+suggests that guide's slug. Under the slug field, the form shows one of three
+messages as the slug is edited:
+
+- **Neutral note:** the slug is the guide for this server's endpoint.
+  Publishing links to that guide and requests no new one, which is expected.
+- **Amber warning:** another guide already uses the slug. Publishing would
+  still link to that guide and request no new one, so keep the slug only if it
+  is the same provider.
+- **Muted hint:** no guide uses the slug, so publishing requests a new guide.
+  The hint names the pinned guides version.
+
+The check uses the guides embedded in the server (`setupguides.PinnedVersion`),
+so it can lag the docs repository's `main`; delivery rechecks GitHub before
+requesting a guide. The Admin MCP promotion preview shows the same check as
+"Existing setup guide". Neither blocks publication.
 
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
