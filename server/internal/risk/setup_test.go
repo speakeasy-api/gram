@@ -307,8 +307,10 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	if ti.riskPublisher == nil {
 		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
+	// Shadow mode keeps the parity client, so a disagreement fails the test
+	// instead of only being logged.
 	authorization := authztest.NewParityClient(t, authzEngine)
-	if ti.authzMode != nil {
+	if ti.authzMode != nil && *ti.authzMode != authz.MigrationModeShadow {
 		authorization = authztest.NewClientInMode(t, authzEngine, *ti.authzMode)
 	}
 	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, authorization, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {

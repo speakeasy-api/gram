@@ -59,7 +59,11 @@ func TestAuthorizationModesAgree(t *testing.T) {
 			}
 
 			engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-			core := policycore.New(ti.conn).WithAuthorization(authztest.NewClientInMode(t, engine, mode))
+			coreAuthorization := authztest.NewParityClient(t, engine)
+			if mode != authz.MigrationModeShadow {
+				coreAuthorization = authztest.NewClientInMode(t, engine, mode)
+			}
+			core := policycore.New(ti.conn).WithAuthorization(coreAuthorization)
 			list := func(principal policycore.MCPPrincipal) []string {
 				t.Helper()
 				policies, err := core.ListEnabledForMCP(ctx, organizationID, *authCtx.ProjectID, policycore.MCPTarget{
