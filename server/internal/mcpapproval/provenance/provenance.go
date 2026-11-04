@@ -31,10 +31,15 @@ func Read(meta any) Provenance {
 	if err != nil {
 		return zero
 	}
-	var doc metaDocument
-	if json.Unmarshal(encoded, &doc) != nil {
+	var namespaces map[string]json.RawMessage
+	if json.Unmarshal(encoded, &namespaces) != nil {
 		return zero
 	}
+	var doc metaDocument
+	// Optional namespaces are independent; type errors leave invalid fields
+	// unknown without discarding valid evidence from the other namespace.
+	_ = json.Unmarshal(namespaces["io.modelcontextprotocol.registry/official"], &doc.Version)
+	_ = json.Unmarshal(namespaces["com.speakeasy.ai/registry"], &doc.Publication)
 	// The native registry owns its publication time; publishers can write the
 	// official namespace, so it only fills in when the registry records none.
 	published := parseTime(doc.Publication.PublishedAt)

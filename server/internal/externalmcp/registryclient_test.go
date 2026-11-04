@@ -983,3 +983,27 @@ func TestProjectServerDetailsRemoteSelection(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectListServer_PreservesOpaqueMetadata(t *testing.T) {
+	t.Parallel()
+	const metadata = `{
+		"io.modelcontextprotocol.registry/official": {
+			"status": "active",
+			"publishedAt": "2026-01-01T00:00:00Z",
+			"updatedAt": "2026-02-01T00:00:00Z"
+		},
+		"example.com/extension": {"nested": ["opaque", 42, true]},
+		"com.pulsemcp/server-version": {"supportsDcr": true, "isReadOnly": true, "toolCount": 12}
+	}`
+	var entry serverEntry
+	require.NoError(t, json.Unmarshal([]byte(`{"server":{"name":"example/server"},"_meta":`+metadata+`}`), &entry))
+	server, err := projectListServer(uuid.New(), entry)
+	require.NoError(t, err)
+	encoded, err := json.Marshal(server.Meta)
+	require.NoError(t, err)
+	require.JSONEq(t, metadata, string(encoded))
+	require.False(t, server.SupportsDcr)
+	require.Equal(t, "unknown", *server.AuthSetup)
+	require.Nil(t, server.IsReadOnly)
+	require.Nil(t, server.ToolCount)
+}

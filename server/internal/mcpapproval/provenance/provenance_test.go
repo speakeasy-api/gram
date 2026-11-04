@@ -52,3 +52,36 @@ func TestLatestMetadataDoesNotAffectFacts(t *testing.T) {
 		require.Equal(t, baseline, got)
 	}
 }
+
+func TestMalformedNamespacesPreserveOtherEvidence(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		meta string
+		want provenance.Provenance
+	}{
+		{
+			name: "malformed registry publication falls back to official",
+			meta: `{"com.speakeasy.ai/registry":{"publishedAt":42},"io.modelcontextprotocol.registry/official":{"status":"active","publishedAt":"2026-06-01T00:00:00Z","updatedAt":"2026-08-01T00:00:00Z"}}`,
+			want: provenance.Provenance{
+				Status:      "active",
+				PublishedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+				UpdatedAt:   time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "malformed official lifecycle preserves registry publication",
+			meta: `{"io.modelcontextprotocol.registry/official":{"status":42,"updatedAt":false},"com.speakeasy.ai/registry":{"publishedAt":"2026-07-01T00:00:00Z"}}`,
+			want: provenance.Provenance{
+				PublishedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var meta any
+			require.NoError(t, json.Unmarshal([]byte(tt.meta), &meta))
+			require.Equal(t, tt.want, provenance.Read(meta))
+		})
+	}
+}

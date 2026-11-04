@@ -145,10 +145,25 @@ type serverEntry struct {
 }
 
 type catalogServerMeta struct {
+	// Raw preserves opaque metadata; only the typed fields inform capabilities.
+	Raw map[string]any `json:"-"`
 	// Catalog contains only staff-curated public capabilities.
 	Catalog *catalogCapabilities `json:"com.speakeasy.ai/catalog,omitempty"`
 
 	Version serverMetaVersion `json:"io.modelcontextprotocol.registry/official"`
+}
+
+func (m *catalogServerMeta) UnmarshalJSON(data []byte) error {
+	type typedMeta catalogServerMeta
+	var decoded typedMeta
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &decoded.Raw); err != nil {
+		return err
+	}
+	*m = catalogServerMeta(decoded)
+	return nil
 }
 
 type serverMetaVersion struct {
@@ -576,7 +591,11 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		})
 	}
 
-	meta, err := toCacheSafeAny(&s.Meta)
+	var metadata any = &s.Meta
+	if s.Meta.Raw != nil {
+		metadata = s.Meta.Raw
+	}
+	meta, err := toCacheSafeAny(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("convert meta: %w", err)
 	}
