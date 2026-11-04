@@ -18,8 +18,12 @@ const (
 	RuntimeScopeRegistryVersion5 RuntimeScopeRegistryVersion = 5
 
 	RuntimeScopeRegistryVersion6 RuntimeScopeRegistryVersion = 6
+	// RuntimeScopeRegistryVersion7 registers the same scopes as version 6. It
+	// exists for DelegatedPolicyVersion7, whose implication closure no longer
+	// derives mcp:connect from mcp:read or mcp:write.
+	RuntimeScopeRegistryVersion7 RuntimeScopeRegistryVersion = 7
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion6
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion7
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained

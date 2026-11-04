@@ -76,7 +76,9 @@ func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	server := uuid.NewString()
 	summary := summarizeMCPConnect([]*accessgen.RoleGrant{
 		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, Tool: new("list_tasks")}}},
-		{Scope: string(authz.ScopeMCPRead), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, ProjectID: &project, Disposition: &readOnly}}},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, ProjectID: &project, Disposition: &readOnly}}},
+		// mcp:read does not imply connect, so it adds no connect rule.
+		{Scope: string(authz.ScopeMCPRead), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource}}},
 	})
 	require.False(t, summary.AllServers)
 	require.Equal(t, 1, summary.ProjectRules)
