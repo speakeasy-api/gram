@@ -205,6 +205,23 @@ func (m MCPServerRef) Connect() Operation {
 	return newOperation("mcp_server", "connect", m.id, m.dimensions())
 }
 
+// CallTool asks to connect to the server for one tool. A grant or block
+// limited to other tools does not decide it. When disposition is not empty the
+// request also names that disposition, so a grant or block limited to other
+// dispositions does not decide it either. With an empty disposition, ordinary
+// allows limited to a disposition still match, while blocks and direct
+// exceptions limited to one match strictly and do not apply.
+func (m MCPServerRef) CallTool(tool, disposition string) Operation {
+	dimensions := m.dimensions()
+	if tool != "" {
+		dimensions[SelectorKeyTool] = tool
+	}
+	if disposition != "" {
+		dimensions[SelectorKeyDisposition] = disposition
+	}
+	return newOperation("mcp_server", "connect", m.id, dimensions)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -216,6 +233,6 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
-		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
+		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 	}
 }

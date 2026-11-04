@@ -1253,7 +1253,7 @@ func newStartCommand() *cli.Command {
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 				BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 				ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
-				RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
+				RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AuthzClient: authzClient, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
@@ -1806,7 +1806,7 @@ func newStartCommand() *cli.Command {
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, temporalEnv, pluginsGitHub != nil).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit))
-			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission, mcpService.CodeModeAvailable).
+			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, temporalEnv, networkIngressAdmission, mcpService.CodeModeAvailable).
 				WithDistributionAdmission(distributionAdmission).WithPluginPublisher(pluginsPublishSignaler).WithPublicationRequests(publicationEmit))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -52,7 +53,7 @@ func TestFilterToolsByMCPConnect_StopsAfterCancel(t *testing.T) {
 		tools[i] = &toolListEntry{Name: fmt.Sprintf("tool_%d", i)}
 	}
 
-	_, err := filterToolsByMCPConnect(ctx, testenv.NewLogger(t), engine, toolsetID, uuid.NewString(), tools)
+	_, err := filterToolsByMCPConnect(ctx, testenv.NewLogger(t), authztest.NewClient(t, engine), toolsetID, uuid.NewString(), tools)
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 1, *checks)

@@ -338,18 +338,14 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			continue
 		}
 		values := trueAnnotationValues(base.Annotations)
-		if s.authz != nil && private {
+		if s.authzClient != nil && private {
 			// Vocabulary order matches the RBAC disposition collapse, so the
 			// first true hint IS the disposition dimension tools/list uses.
 			disposition := ""
 			if len(values) > 0 {
 				disposition = values[0]
 			}
-			if rerr := s.authz.Require(ctx, authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
-				Tool:        base.Name,
-				Disposition: disposition,
-				ProjectID:   endpoint.ProjectID.String(),
-			})); rerr != nil {
+			if rerr := s.authzClient.Require(ctx, authz.MCPServer(endpoint.ProjectID.String(), connectResourceID).CallTool(base.Name, disposition)); rerr != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(rerr, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 					roleHidden = append(roleHidden, base.Name)

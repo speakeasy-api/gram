@@ -89,7 +89,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	codeModeEnabled := &atomic.Bool{}
 	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
-	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, codeModeSelection)
+	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), auditLogger, nil, networkaccess.DenyAllChecker{}, codeModeSelection)
 
 	return ctx, &testInstance{
 		codeModeEnabled: codeModeEnabled,
