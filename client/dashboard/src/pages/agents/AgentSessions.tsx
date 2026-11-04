@@ -31,11 +31,16 @@ export type AgentSessionRow = {
   keyPrefix?: string;
   clientName?: string;
   /**
-   * The person who approved this session, or who issued the key behind a key
-   * row. A session a federated platform opened has none. Not who the agent is
-   * upstream: each server decides that with its own sign-in.
+   * The person who approved this session. A session a federated platform
+   * opened has none. Not who the agent is upstream: each server decides that
+   * with its own sign-in.
    */
   authorizerUserId?: string;
+  /**
+   * For a key row, the person who issued the key. Issuing it let the agent
+   * connect; the agent does not act on their behalf.
+   */
+  keyIssuerUserId?: string;
   issuerSlug?: string;
   refreshExpiresAt?: Date;
   createdAt: Date;
@@ -219,27 +224,14 @@ export function AgentSessionsSection({
     {
       key: "authorizerUserId",
       // The person who approved the session, so a reader never revokes
-      // someone's delegation without being told whose it was. Not who the
-      // agent is upstream: each server decides that with its own sign-in.
-      header: "Authorized by",
+      // someone's delegation without being told whose it was, or who issued
+      // the key. Not who the agent acts for: each server decides that with
+      // its own sign-in, so the verb says which of the two this person did.
+      header: "Person",
       width: "1fr",
-      render: (session) =>
-        session.authorizerUserId ? (
-          <IdentityLink identifier={{ userId: session.authorizerUserId }}>
-            {nameFor(session.authorizerUserId)}
-          </IdentityLink>
-        ) : (
-          <TooltipProvider>
-            <SimpleTooltip tooltip="No person is on record for this connection: the agent connected with its own key or its platform's identity. On each server it then signs in however that server is set up, with a shared credential or a connection assigned to the agent.">
-              <span
-                tabIndex={0}
-                className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
-              >
-                No one
-              </span>
-            </SimpleTooltip>
-          </TooltipProvider>
-        ),
+      render: (session) => (
+        <ConnectionPerson session={session} nameFor={nameFor} />
+      ),
     },
     {
       key: "issuerSlug",
@@ -448,6 +440,9 @@ export function AgentSessionsSection({
               {selected.authorizerUserId
                 ? ` Authorized by ${nameFor(selected.authorizerUserId)}.`
                 : ""}
+              {selected.keyIssuerUserId
+                ? ` Issued by ${nameFor(selected.keyIssuerUserId)}.`
+                : ""}
             </Text>
           )}
           {revokeError && (
@@ -479,5 +474,51 @@ function sessionIsExpired(session: AgentSessionRow, now: number): boolean {
   return (
     session.refreshExpiresAt !== undefined &&
     session.refreshExpiresAt.getTime() <= now
+  );
+}
+
+/**
+ * Who let the agent make this connection, with the verb saying how: they
+ * issued its key, or they approved its session. Neither says whom the agent
+ * acts for on a server; that is the credential each server signs it in with.
+ */
+function ConnectionPerson({
+  session,
+  nameFor,
+}: {
+  session: AgentSessionRow;
+  nameFor: (id: string) => string;
+}): JSX.Element {
+  if (session.keyIssuerUserId) {
+    return (
+      <span>
+        Issued by{" "}
+        <IdentityLink identifier={{ userId: session.keyIssuerUserId }}>
+          {nameFor(session.keyIssuerUserId)}
+        </IdentityLink>
+      </span>
+    );
+  }
+  if (session.authorizerUserId) {
+    return (
+      <span>
+        Authorized by{" "}
+        <IdentityLink identifier={{ userId: session.authorizerUserId }}>
+          {nameFor(session.authorizerUserId)}
+        </IdentityLink>
+      </span>
+    );
+  }
+  return (
+    <TooltipProvider>
+      <SimpleTooltip tooltip="No person is on record for this connection: the agent connected with its platform's identity. On each server it then signs in however that server is set up, with a shared credential or a connection assigned to the agent.">
+        <span
+          tabIndex={0}
+          className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
+        >
+          No one
+        </span>
+      </SimpleTooltip>
+    </TooltipProvider>
   );
 }
