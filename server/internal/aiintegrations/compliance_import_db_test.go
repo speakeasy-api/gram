@@ -360,6 +360,45 @@ func TestImportDiscoveredChatsKeepsFeedClientForSameRunListRevisit(t *testing.T)
 	}
 }
 
+func TestImportDiscoveredChatsRelabelsMobileChatOnListRevisit(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _, cfg, projectID, _ := complianceImportFixture(t)
+
+	const mobileUA = "Claude com.anthropic.claude/1.260416.20 (Android 35)"
+	server := complianceMessagesServer(t, map[string]map[string]anthropicapi.ChatMessagesPage{
+		"chat_mobile": {
+			"": complianceMessagesPage("chat_mobile", "Mobile chat", "msg_cur_1",
+				complianceMessage("msg_1", "user", "hello from my phone", "2026-07-14T09:01:00Z"),
+			),
+			"msg_cur_1": complianceMessagesPage("chat_mobile", "Mobile chat", "msg_cur_2",
+				complianceMessage("msg_2", "user", "one more thing", "2026-07-14T09:30:00Z"),
+			),
+		},
+	})
+	client := anthropicapi.New(svc.guardianPolicy, anthropicapi.WithBaseURL(server.URL), anthropicapi.WithAPIKey("anthropic-key"))
+
+	// Run one stamps the chat the way the classifier did before it knew the
+	// mobile apps: the Android user agent read as Claude web.
+	legacy := complianceFeedDiscovery("chat_mobile", mobileUA)
+	legacy.client.source = "claude-chat-web"
+	runComplianceImport(ctx, t, svc, client, cfg, legacy)
+
+	// Run two: the chat list brings the chat back with a new message, which
+	// is classified from the stored user agent rather than the stale source.
+	runComplianceImport(ctx, t, svc, client, cfg, complianceListDiscovery("chat_mobile", "Mobile chat", "list_cur_1"))
+
+	chatID := importedChatID(ctx, t, svc, cfg, "chat_mobile")
+	messages, err := chatrepo.New(svc.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+	require.Equal(t, "claude-chat-web", messages[0].Source.String, "stored rows are not rewritten")
+	require.Equal(t, "msg_2", messages[1].ExternalMessageID.String)
+	require.Equal(t, "claude-chat-mobile", messages[1].Source.String)
+	require.Equal(t, mobileUA, messages[1].UserAgent.String)
+	require.Equal(t, "203.0.113.9", messages[1].IpAddress.String)
+}
+
 func TestConnectedUserResolverMatchesMixedCaseStoredEmail(t *testing.T) {
 	t.Parallel()
 

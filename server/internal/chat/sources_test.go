@@ -13,6 +13,7 @@ func TestCanonicalizeSources_CollapsesAliasesAndDropsEmpty(t *testing.T) {
 		"claude",
 		"Claude Chat Desktop",
 		"Claude Chat Web",
+		"claude-chat-mobile",
 		"claude-code",
 		"ClaudeCode",
 		"claude-code-desktop",
@@ -27,7 +28,7 @@ func TestCanonicalizeSources_CollapsesAliasesAndDropsEmpty(t *testing.T) {
 		"claude-code",
 	})
 
-	require.Equal(t, []string{"chatgpt", "claude", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
+	require.Equal(t, []string{"chatgpt", "claude", "claude-chat-mobile", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
 }
 
 func TestSourceAliases_OpenClawPassesThroughUnaliased(t *testing.T) {

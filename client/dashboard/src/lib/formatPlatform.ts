@@ -8,6 +8,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-chat-desktop": "Claude Chat Desktop",
   "claude-web": "Claude Chat Web",
   "claude-chat-web": "Claude Chat Web",
+  // The Claude iOS and Android apps, split from web and desktop by the
+  // Anthropic compliance import's user-agent classification.
+  "claude-chat-mobile": "Claude Mobile App",
   claudecode: "Claude Code",
   "claude-code": "Claude Code",
   // Claude Code's web surface, reported by Anthropic's inference hooks rather

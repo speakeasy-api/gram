@@ -12,7 +12,10 @@ import (
 var sourceAliases = map[string][]string{
 	"claude":          {"claude", "claude-desktop", "claude-chat-desktop", "Claude Chat Desktop"},
 	"claude-chat-web": {"claude-chat-web", "claude-chat", "Claude Chat Web"},
-	"claude-code":     {"claude-code", "ClaudeCode"},
+	// The Claude iOS and Android apps, told apart from web and desktop by the
+	// compliance import's user-agent classification.
+	"claude-chat-mobile": {"claude-chat-mobile"},
+	"claude-code":        {"claude-code", "ClaudeCode"},
 	// Inference hook sessions from Claude.ai web and Claude Code web land under
 	// claude-chat-web and claude-code-web respectively. claude-chat is an alias
 	// retained for the analytics polling pipeline which already uses that slug.
