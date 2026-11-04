@@ -330,10 +330,10 @@ LEFT JOIN LATERAL (
     , coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
   FROM device_agent_state_reports r
   WHERE r.organization_id = d.organization_id
+    -- report-match:begin
     AND (
       ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
       OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
-          -- report-match:begin
           -- The email fallback never takes a report that came from another machine:
           -- one naming a different serial, or a different OS family.
           AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
@@ -346,13 +346,13 @@ LEFT JOIN LATERAL (
               WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
               WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
             END, LOWER(r.os)) = LOWER(r.os)))
-          -- report-match:end
     )
   ORDER BY
       coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
     , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
     , r.reported_at DESC
   LIMIT 1
+    -- report-match:end
 ) rpt ON TRUE
 LEFT JOIN device_agent_syncs served
   ON served.organization_id = d.organization_id
@@ -597,10 +597,10 @@ mdm AS (
       , coalesce($3::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
     FROM device_agent_state_reports r
     WHERE r.organization_id = d.organization_id
+      -- report-match:begin
       AND (
         ($3::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
         OR (NOT ($3::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
-            -- report-match:begin
             -- The email fallback never takes a report that came from another machine:
             -- one naming a different serial, or a different OS family.
             AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
@@ -613,13 +613,13 @@ mdm AS (
                 WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
                 WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
               END, LOWER(r.os)) = LOWER(r.os)))
-            -- report-match:end
       )
     ORDER BY
         coalesce($3::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
       , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
       , r.reported_at DESC
     LIMIT 1
+      -- report-match:end
   ) rpt ON TRUE
   LEFT JOIN device_agent_syncs served
     ON served.organization_id = d.organization_id
@@ -1344,10 +1344,10 @@ mdm AS (
       , coalesce($9::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
     FROM device_agent_state_reports r
     WHERE r.organization_id = d.organization_id
+      -- report-match:begin
       AND (
         ($9::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
         OR (NOT ($9::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
-            -- report-match:begin
             -- The email fallback never takes a report that came from another machine:
             -- one naming a different serial, or a different OS family.
             AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
@@ -1360,13 +1360,13 @@ mdm AS (
                 WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
                 WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
               END, LOWER(r.os)) = LOWER(r.os)))
-            -- report-match:end
       )
     ORDER BY
         coalesce($9::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
       , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
       , r.reported_at DESC
     LIMIT 1
+      -- report-match:end
   ) rpt ON TRUE
   LEFT JOIN device_agent_syncs served
     ON served.organization_id = d.organization_id
@@ -1953,10 +1953,10 @@ LEFT JOIN LATERAL (
     , coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
   FROM device_agent_state_reports r
   WHERE r.organization_id = d.organization_id
+    -- report-match:begin
     AND (
       ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
       OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email)
-          -- report-match:begin
           -- The email fallback never takes a report that came from another machine:
           -- one naming a different serial, or a different OS family.
           AND (r.serial_number IS NULL OR LOWER(r.serial_number) = LOWER(d.serial_number))
@@ -1969,13 +1969,13 @@ LEFT JOIN LATERAL (
               WHEN LOWER(d.os_name) IN ('ios', 'ipados', 'iphone', 'ipad', 'tvos', 'visionos') THEN 'ios'
               WHEN LOWER(d.os_name) LIKE 'android%' THEN 'android'
             END, LOWER(r.os)) = LOWER(r.os)))
-          -- report-match:end
     )
   ORDER BY
       coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
     , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
     , r.reported_at DESC
   LIMIT 1
+    -- report-match:end
 ) rpt ON TRUE
 LEFT JOIN device_agent_syncs served
   ON served.organization_id = d.organization_id
