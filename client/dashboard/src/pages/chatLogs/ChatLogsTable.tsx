@@ -16,6 +16,8 @@ import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
+import { isCostUnknown } from "@/pages/chatLogs/claudeUsage";
+import { UnknownCost } from "@/pages/chatLogs/UnknownCost";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
@@ -393,6 +395,13 @@ function SessionTitleCell({
       />
     </div>
   );
+}
+
+/** The session's cost, or a dash when its agent does not report cost. */
+function CostCellValue({ chat }: { chat: ChatOverview }): JSX.Element | null {
+  if (isCostUnknown(chat)) return <UnknownCost />;
+  if (chat.totalCost === undefined || chat.totalCost <= 0) return null;
+  return <span className="tabular-nums">${chat.totalCost.toFixed(4)}</span>;
 }
 
 /** The product the session ran in, and the Slack channel when it had one. */
@@ -815,11 +824,7 @@ export function ChatLogsTable({
       width: "110px",
       render: ({ session: chat }) => (
         <Cell
-          primary={
-            chat.totalCost !== undefined && chat.totalCost > 0 ? (
-              <span className="tabular-nums">${chat.totalCost.toFixed(4)}</span>
-            ) : null
-          }
+          primary={<CostCellValue chat={chat} />}
           // Work analysis is spend per unit of work delivered, so it reads
           // against the cost rather than in a column of its own that is
           // empty for every organization not running the analysis.
