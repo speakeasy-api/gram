@@ -53,7 +53,7 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
-			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup}
+			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup, RetryAfter: 0}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
 		if result == nil {
@@ -78,7 +78,7 @@ func delegationRefreshError(err error) error {
 	}
 	var failure *FederatedRefreshError
 	if !errors.As(err, &failure) {
-		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous}
+		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous, RetryAfter: 0}
 	}
 	kind := delegation.RefreshAmbiguous
 	switch failure.Kind {
@@ -100,7 +100,7 @@ func delegationRefreshError(err error) error {
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
 	}
-	return &delegation.RefreshError{Kind: kind}
+	return &delegation.RefreshError{Kind: kind, RetryAfter: failure.RetryAfter}
 }
 
 type delegationProvider struct{ p *FederatedProvider }

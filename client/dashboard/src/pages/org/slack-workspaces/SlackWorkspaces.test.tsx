@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactNode } from "react";
@@ -27,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   toolApprovals: false,
   missingScopes: [] as string[],
+  setDefaultProject: vi.fn(),
+  defaultProjectId: undefined as string | undefined,
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({
@@ -63,7 +66,13 @@ vi.mock("nuqs", async (original) => {
   };
 });
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ slug: mocks.organizationSlug }),
+  useOrganization: () => ({
+    slug: mocks.organizationSlug,
+    projects: [
+      { id: "project-beta", name: "Beta", slug: "beta" },
+      { id: "project-alpha", name: "Alpha", slug: "alpha" },
+    ],
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
@@ -95,6 +104,7 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   generation: mocks.generation,
                   grantedScopes: [],
                   missingScopes: mocks.missingScopes,
+                  defaultProjectId: mocks.defaultProjectId,
                   updatedAt: "2026-01-01T00:00:00Z",
                   memberCount: 0,
                   directoryStatus: "never_synced",
@@ -140,6 +150,13 @@ vi.mock(
     }),
   }),
 );
+vi.mock("@gram/client/react-query/setSlackDirectoryDefaultProject.js", () => ({
+  useSetSlackDirectoryDefaultProjectMutation: () => ({
+    mutate: mocks.setDefaultProject,
+    isPending: false,
+    error: null,
+  }),
+}));
 
 vi.mock("@gram/client/react-query/syncSlackDirectory.js", () => ({
   useSyncSlackDirectoryMutation: () => ({
@@ -169,7 +186,14 @@ function show(search = "") {
   return { ...view, refresh: () => view.rerender(tree()) };
 }
 
+// Radix scrolls the selected option into view in browsers; jsdom lacks it.
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  "scrollIntoView",
+);
+
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
   mocks.admin = true;
   mocks.organizationSlug = "example";
   mocks.configured = true;
@@ -178,10 +202,20 @@ beforeEach(() => {
   mocks.generation = "generation-one";
   mocks.toolApprovals = false;
   mocks.missingScopes = [];
+  mocks.defaultProjectId = undefined;
 });
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      Element.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
 });
 
 it("does not fetch workspace data for a non-admin", () => {
@@ -241,6 +275,56 @@ it.each([
   expect(mocks.invalidate).toHaveBeenCalled();
   expect(screen.getByText(message)).toBeTruthy();
   expect(screen.getByRole("button", { name: /dismiss|close/i })).toBeTruthy();
+});
+
+it("shows the workspace default project with a None option", () => {
+  mocks.defaultProjectId = "project-alpha";
+  show();
+  const trigger = screen.getByRole("combobox", { name: "Default project" });
+  expect(trigger.textContent).toContain("Alpha");
+  expect(
+    screen.getByText(
+      "Project whose assistant answers @Speakeasy mentions and DMs in this workspace.",
+    ),
+  ).toBeTruthy();
+});
+it("shows None when no default project is set", () => {
+  show();
+  expect(
+    screen.getByRole("combobox", { name: "Default project" }).textContent,
+  ).toContain("None");
+});
+
+it("saves the chosen default project for the workspace", async () => {
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "Beta" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: {
+          id: "connection-one",
+          projectId: "project-beta",
+        },
+      },
+    }),
+  );
+});
+
+it("clears the default project when None is chosen", async () => {
+  mocks.defaultProjectId = "project-alpha";
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "None" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: { id: "connection-one" },
+      },
+    }),
+  );
 });
 
 it("disconnects the generation the administrator confirmed", () => {

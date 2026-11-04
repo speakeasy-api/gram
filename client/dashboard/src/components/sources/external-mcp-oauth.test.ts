@@ -32,10 +32,10 @@ describe("externalMcpOAuthConfigStatus", () => {
     expect(status(undefined)).toBe("not-external-mcp");
   });
 
-  it("needs no OAuth when the catalog says another auth type or has no entry", () => {
+  it("distinguishes explicit no-auth from missing catalog evidence", () => {
     expect(status("docs")).toBe("not-required");
-    expect(status("unlisted")).toBe("not-required");
-    expect(status("missing-from-deployment")).toBe("not-required");
+    expect(status("unlisted")).toBe("unknown");
+    expect(status("missing-from-deployment")).toBe("unknown");
   });
 
   it("requires setup for a catalog OAuth server with neither an OAuth server nor an issuer", () => {
@@ -43,6 +43,9 @@ describe("externalMcpOAuthConfigStatus", () => {
   });
 
   it("is configured by an external OAuth server or a sign-in issuer", () => {
+    expect(status("docs", { hasOAuthServer: true })).toBe("configured");
+    expect(status("unlisted", { hasSessionIssuer: true })).toBe("configured");
+    expect(status("unlisted", { hasOAuthServer: true })).toBe("configured");
     expect(status("linear", { hasOAuthServer: true })).toBe("configured");
     expect(status("linear", { hasSessionIssuer: true })).toBe("configured");
   });
