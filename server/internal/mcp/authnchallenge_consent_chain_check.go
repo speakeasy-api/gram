@@ -141,6 +141,59 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+// consentChainedUpstreamToken exchanges the consent's sign-in for the direct upstream's credential, as gateway consent discovery does.
+func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clientID uuid.UUID) *remotesessions.UpstreamToken {
+	if s.identityChainer == nil {
+		return nil
+	}
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		logger.WarnContext(ctx, "list clients for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	clients := subjectConnectedClients(bound)
+	_, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve routing for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	chained := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	var requests []identitychaining.Request
+	switch {
+	case clientID != uuid.Nil:
+		requests = chained[clientID]
+	case len(chained) == 1:
+		for _, r := range chained {
+			requests = r
+		}
+	}
+	if len(requests) != 1 {
+		return nil
+	}
+	signInID := uuid.Nil
+	if challengeState.SignInID != nil {
+		signInID = *challengeState.SignInID
+	}
+	token, outcome := s.identityChainer.AcquireConsent(ctx, requests[0], signInID)
+	if !outcome.Succeeded() {
+		logger.InfoContext(ctx, "consent tool inventory could not use identity chaining",
+			attr.SlogReason(string(outcome.Reason)),
+			attr.SlogIdentityChainingProvider(string(outcome.Provider)),
+		)
+		return nil
+	}
+	return &remotesessions.UpstreamToken{
+		Token:                              token.Value(),
+		Resource:                           "",
+		CredentialOwner:                    remotesessions.CredentialOwnerSubject,
+		RemoteSessionClientID:              uuid.Nil,
+		RemoteSessionID:                    uuid.Nil,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                nil,
+	}
+}
+
 // retireDeniedConsentCredentials erases the vendor credentials this sign-in's
 // consent pages stored that no grant adopted, as of the denial. An exchange
 // already in flight can still store one afterwards; only another eligible

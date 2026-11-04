@@ -23,8 +23,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -46,7 +50,7 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer := seedChainedConsentEndpoint(t, "aim524-deferred-page")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 
 	page := renderToolsIsland(t, fx)
 	require.Contains(t, page, inventoryDeferredAttr)
@@ -55,6 +59,64 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 	// The transport still answers "not connected"; the page flag is what
 	// turns that answer into the deferred state.
 	requireConsentInventoryConflict(t, fx)
+}
+
+// chainUnavailable is an identity provider exchange that cannot run yet.
+func chainUnavailable(context.Context, identitychaining.Request) identitychaining.Outcome {
+	return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false, Provider: ""}
+}
+
+// A company sign-in that the identity provider accepts loads the tool picker
+// before approval, with the exchanged credential.
+func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var bearers []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		bearers = append(bearers, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_thing","inputSchema":{"type":"object"}}]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, fx := standaloneConsent(t, "chained-picker", upstream.URL, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		remoteServer, err := remotemcp_repo.New(ti.conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{ID: uuid.New(), ProjectID: projectID, TransportType: "sse", Url: upstream.URL})
+		require.NoError(t, err)
+		// Public, so the inventory needs no access grant.
+		server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug), RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID), Visibility: "public", UserSessionIssuerID: conv.ToNullUUID(issuerID)})
+		require.NoError(t, err)
+		return server.ID
+	})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "chained-picker", "", []uuid.UUID{fx.shared})
+	g := setConsentGovernor(t, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA), upstream.URL)
+	g.token = "chained-token"
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Gram-Consent-State", fx.stateID)
+	req.Header.Set("Gram-Consent-Csrf", "csrf-token")
+	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+	w := httptest.NewRecorder()
+	require.NoError(t, fx.ti.service.ServeConsentMCP(w, req, fx.endpoint))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"get_thing"`)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{"Bearer chained-token"}, bearers)
+	require.Len(t, g.acquired, 1)
+	require.Equal(t, fx.clientA, g.acquired[0].RemoteSessionClientID.UUID)
 }
 
 func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
@@ -122,7 +184,7 @@ func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 
 	requireConsentInventoryConflict(t, fx)
 	deferred := logRecords(t, logs, deferredConflictLog)
@@ -136,7 +198,7 @@ func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-prefill")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
 
 	requireConsentInventoryConflict(t, fx)

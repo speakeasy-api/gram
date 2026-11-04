@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,7 @@ type consentGovernor struct {
 	usable     bool
 	refresh    identitychaining.RefreshDecision
 	acquire    func(context.Context, identitychaining.Request) identitychaining.Outcome
+	token      string
 	mu         sync.Mutex
 	requests   []identitychaining.Request
 	acquired   []identitychaining.Request
@@ -74,7 +76,7 @@ func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Requ
 		g.t.Error("consent rendering must never acquire a chained token")
 		return identitychaining.Token{}, identitychaining.Outcome{}
 	}
-	return identitychaining.Token{}, acquire(ctx, req)
+	return identitychaining.NewTokenForTest(g.token, time.Now().Add(time.Hour)), acquire(ctx, req)
 }
 
 func (g *consentGovernor) seen() []identitychaining.Request {
@@ -85,7 +87,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}

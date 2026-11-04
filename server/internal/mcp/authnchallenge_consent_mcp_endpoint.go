@@ -421,6 +421,7 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
 	backendIssuerID := serverRow.RemoteSessionIssuerID
+	var chosenClient uuid.UUID
 	switch {
 	case auth == nil:
 		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
@@ -428,6 +429,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:
 		backendIssuerID = auth.choice.remoteSessionIssuerID
+		chosenClient = auth.choice.clientID.UUID
 		tokens, err = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject,
@@ -435,6 +437,13 @@ func (s *Service) serveConsentProxiedMCP(
 		})
 	default:
 		err = errConsentConfigurationChanged
+	}
+	// As at runtime, a typed auth client that resolved serves its own material, never a chained identity.
+	var chained *remotesessions.UpstreamToken
+	if errors.Is(err, remotesessions.ErrNoValidToken) && (auth == nil || auth.outcome == authClientLegacy) {
+		if chained = s.consentChainedUpstreamToken(ctx, logger, endpoint, challengeState, chosenClient); chained != nil {
+			err = nil
+		}
 	}
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
@@ -457,14 +466,19 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
-	var routeErr *upstreamRoutingError
-	switch {
-	case errors.As(err, &routeErr):
-		// routeUpstreamToken already logged the structured detail.
-		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
+	var upstreamToken remotesessions.UpstreamToken
+	if chained != nil {
+		upstreamToken = *chained
+	} else {
+		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
+		var routeErr *upstreamRoutingError
+		switch {
+		case errors.As(err, &routeErr):
+			// routeUpstreamToken already logged the structured detail.
+			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
+		}
 	}
 
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
