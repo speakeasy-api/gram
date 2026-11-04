@@ -277,7 +277,7 @@ func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToo
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.authzClient != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
