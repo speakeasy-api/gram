@@ -1561,8 +1561,6 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 
 	filename := "observability"
 	switch payload.Platform {
-	case "claude-cowork":
-		filename = "observability-claude-cowork"
 	case "cursor":
 		filename = "observability-cursor"
 	case "codex":
@@ -1795,7 +1793,6 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
 				BrowserLogin:     false,
 				InstallFailOpen:  false,
-				TranscriptOnly:   false,
 			}
 			observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
 			if err != nil {
@@ -3662,7 +3659,6 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		IsDefaultProject: s.isDefaultProject(ctx, projectID),
 		BrowserLogin:     false,
 		InstallFailOpen:  false,
-		TranscriptOnly:   false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

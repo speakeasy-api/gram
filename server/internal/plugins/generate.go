@@ -133,10 +133,6 @@ type GenerateConfig struct {
 	// installation — a verified installed binary always runs, and a checksum
 	// mismatch never executes the artifact under either policy.
 	InstallFailOpen bool
-	// TranscriptOnly bakes transcript_only into speakeasy.json, switching the
-	// hooks binary to shipping the session transcript on Stop and relaying
-	// nothing else. Only the Claude Cowork package sets it.
-	TranscriptOnly bool
 }
 
 // PublishedHooksFiles renders the complete hooks (observability) subtree the
@@ -164,7 +160,6 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		BrowserLogin:     false,
 		InstallFailOpen:  false,
-		TranscriptOnly:   false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -218,7 +213,6 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		// locally, so it stays on here regardless of the publish default.
 		BrowserLogin:    true,
 		InstallFailOpen: false,
-		TranscriptOnly:  false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -544,12 +538,6 @@ var ClaudeObservabilityHookEvents = []string{
 	"SubagentStop",
 	"Notification",
 }
-
-// ClaudeCoworkObservabilityHookEvents are the only events the Claude Cowork
-// package registers. Claude's unified Chat/Cowork mode runs plugin hooks only
-// inside the Cowork VM, so the package ships the session transcript from Stop
-// instead of relaying per-event hooks.
-var ClaudeCoworkObservabilityHookEvents = []string{"Stop"}
 
 // CursorObservabilityHookEvents are Cursor's native hook event names (per
 // server/design/hooks/design.go:58). Cursor uses different event names
@@ -1412,7 +1400,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	if name == "" {
 		name = ClaudeObservabilitySlug(cfg)
 	}
-	return generateClaudeHooksPluginInDir(files, subdir, cfg, claudePluginMeta{
+	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
 		DisplayName: cfg.OrgName + " Observability",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
@@ -1420,33 +1408,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
-	}, ClaudeObservabilityHookEvents)
-}
-
-// generateClaudeCoworkObservabilityPluginFlat emits the Claude Cowork package
-// at the zip root. An organization administrator uploads it in Claude's admin
-// plugin settings, because Cowork loads only plugins registered to the
-// Anthropic account. It registers Stop alone and bakes transcript_only, so the
-// hooks binary ships the session transcript each turn and relays nothing else.
-func generateClaudeCoworkObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	cfg.TranscriptOnly = true
-	return generateClaudeHooksPluginInDir(files, "", cfg, claudePluginMeta{
-		Name:        ClaudeObservabilitySlug(cfg) + "-cowork",
-		DisplayName: cfg.OrgName + " Cowork Observability",
-		// Installing this alongside the standard Claude package would store
-		// each Cowork turn twice, once from each package.
-		Description: "Speakeasy observability for " + cfg.OrgName + " in Claude Cowork. Ships each session's transcript to your team's Speakeasy dashboard. Replaces the standard Speakeasy observability plugin in Claude's admin plugin settings; do not install both.",
-		Version:     hooksManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  nil,
-	}, ClaudeCoworkObservabilityHookEvents)
-}
-
-// generateClaudeHooksPluginInDir writes a Claude plugin that runs the hooks
-// binary on the given events, with its runtime config and bootstrap script.
-func generateClaudeHooksPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig, meta claudePluginMeta, events []string) error {
-	pluginJSON, err := marshalJSON(meta)
+	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
 	}
@@ -1457,8 +1419,8 @@ func generateClaudeHooksPluginInDir(files map[string][]byte, subdir string, cfg 
 	// hooks manifest at the plugin root, Claude registers the plugin silently
 	// but never wires the hooks up.
 	//
-	hookEvents := make(map[string][]claudeHookMatcher, len(events))
-	for _, event := range events {
+	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
+	for _, event := range ClaudeObservabilityHookEvents {
 		timeoutSeconds := 60
 		var timeout *int
 		if event == "SessionStart" {
@@ -2478,10 +2440,6 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "claude":
 		if err := generateClaudeObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
-		}
-	case "claude-cowork":
-		if err := generateClaudeCoworkObservabilityPluginFlat(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude cowork observability plugin: %w", err)
 		}
 	case "cursor":
 		if err := generateCursorObservabilityPluginFlat(files, cfg); err != nil {

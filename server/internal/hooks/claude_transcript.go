@@ -2,8 +2,8 @@ package hooks
 
 // Claude transcript intake. Claude's unified Chat/Cowork mode runs plugin
 // hooks only inside the Cowork VM, where the per-event hooks cannot be relied
-// on to describe the whole session. The Cowork distribution of the Speakeasy
-// hooks binary therefore registers only the Stop hook and, each time it
+// on to describe the whole session. When the standard Claude plugin's hooks
+// binary runs there, it relays no per-event hook and instead, each time Stop
 // fires, uploads the transcript lines written since its last successful
 // upload. This endpoint stores those lines as the session's chat history.
 //

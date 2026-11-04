@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -38,7 +37,7 @@ func main() {
 			// login accepts the same deployment flags as the hook path
 			// (--config, --server-url, --project, --org) so the nudge can
 			// point it at the plugin's identity instead of the prod defaults.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", TranscriptOnly: false, ConfigError: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
@@ -46,7 +45,7 @@ func main() {
 			// Pi drives hooks from a long-lived TypeScript extension rather
 			// than a process per event, so its events arrive as NDJSON frames
 			// on stdin for the lifetime of one Pi session.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", TranscriptOnly: false, ConfigError: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
 			os.Exit(relay.RunPiCommand(context.Background(), relay.LoadConfig(flagCfg), rest))
 		case "drain":
 			// Replays the offline payload spool (see relay/drain.go). Takes
@@ -62,7 +61,7 @@ func main() {
 	// speakeasy.json via --config. Read the deployment flags without mutating
 	// argv: agenthooks tolerates unknown flags, and its --async re-exec
 	// forwards argv to the detached worker, which must keep --config.
-	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", TranscriptOnly: false, ConfigError: ""}, os.Args[1:])
+	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
 
 	agenthooks.Main(relay.NewRunner(cfg))
@@ -80,7 +79,6 @@ func runInstall(args []string) int {
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
-	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the Claude Cowork mode; claude-code only)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -97,20 +95,16 @@ func runInstall(args []string) int {
 		}
 	}
 	if err := relay.WritePlugin(context.Background(), *provider, *dir, relay.PluginConfig{
-		ServerURL:      *serverURL,
-		SiteURL:        *siteURL,
-		ProjectSlug:    *project,
-		OrgID:          *org,
-		HooksAPIKey:    relay.Env("HOOKS_ORG_KEY"),
-		BrowserLogin:   *browserLogin,
-		BinaryPath:     binaryPath,
-		AgentKey:       false, // the environment's org key is shared, never an agent's
-		TranscriptOnly: *transcriptOnly,
+		ServerURL:    *serverURL,
+		SiteURL:      *siteURL,
+		ProjectSlug:  *project,
+		OrgID:        *org,
+		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
+		BrowserLogin: *browserLogin,
+		BinaryPath:   binaryPath,
+		AgentKey:     false, // the environment's org key is shared, never an agent's
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
-		if errors.Is(err, relay.ErrTranscriptOnlyProvider) {
-			return 2
-		}
 		return 1
 	}
 	return 0

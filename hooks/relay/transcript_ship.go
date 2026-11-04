@@ -1,10 +1,11 @@
 package relay
 
-// Transcript shipping for the Claude Cowork distribution. Claude's unified
-// Chat/Cowork mode runs plugin hooks only inside the Cowork VM, so that
-// distribution registers just the Stop hook (Config.TranscriptOnly) and, each
-// time it fires, uploads the transcript lines written since the last
-// successful upload to the dedicated transcript endpoint.
+// Transcript shipping for Claude's Cowork VM. Claude's unified Chat/Cowork
+// mode runs plugin hooks only inside the Cowork VM, where the per-event hooks
+// cannot be relied on to describe the whole session. When the standard Claude
+// plugin runs there (coworkTranscriptMode), the relay relays no per-event hook
+// and instead, each time Stop fires, uploads the transcript lines written
+// since the last successful upload to the dedicated transcript endpoint.
 //
 // The transcript file is its own durable queue: a per-transcript byte offset
 // advances only once the server has settled a chunk, so a failed upload is
@@ -103,12 +104,6 @@ type transcriptChunk struct {
 	entries []json.RawMessage
 }
 
-// onTranscriptStop is the only handler registered in transcript-only mode.
-func (r *Relay) onTranscriptStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
-	r.shipTranscript(ctx, e)
-	return agenthooks.Finish(), nil
-}
-
 // shipTranscript uploads the transcript lines added since the last settled
 // upload. Every failure is logged and swallowed: a missed upload is retried on
 // the next Stop, and the hook must never disturb the session.
@@ -133,12 +128,6 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 	path, err := validateClaudeTranscriptPath(base.Session.TranscriptPath)
 	if err != nil {
 		r.debugf("transcript skipped: %v", err)
-		return
-	}
-	// Claude's admin plugin settings install the package in Claude Code as
-	// well as Cowork, so everywhere but the Cowork VM the hook does nothing.
-	if !coworkRuntime(base, path) {
-		r.debugf("transcript skipped: not running in Claude Cowork")
 		return
 	}
 	c, ok := resolveAuth(r.cfg)
@@ -237,20 +226,28 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 	withFileLock(marker, ship)
 }
 
-// coworkRuntime reports whether the hook runs in Claude's Cowork VM. Claude
-// Code names its surface in CLAUDE_CODE_ENTRYPOINT ("remote_cowork" in the
-// Cowork VM, "cli" in a terminal) and stamps the same value on each transcript
-// line as "entrypoint", which covers a hook environment without the variable.
-// agenthooks reports the Cowork VM as the remote variant, which Claude Code on
-// the web shares, so the variant alone cannot tell them apart.
-func coworkRuntime(base *agenthooks.Event, transcriptPath string) bool {
-	if base.Variant == agenthooks.VariantCowork {
-		return true
+// coworkTranscriptMode reports whether a Claude Code event fires inside
+// Claude's Cowork VM, where the relay ships the session transcript from Stop
+// and relays no per-event hook. Claude Code names its surface in
+// CLAUDE_CODE_ENTRYPOINT ("remote_cowork" in the Cowork VM, "cli" in a
+// terminal) and stamps the same value on each transcript line as
+// "entrypoint", which covers a hook environment without the variable. Every
+// event of a session reads the same answer, so one session never mixes
+// per-event rows with transcript rows. agenthooks reports the Cowork VM as the
+// remote variant, which Claude Code on the web shares, so the variant cannot
+// decide.
+func coworkTranscriptMode(base *agenthooks.Event) bool {
+	if base.Provider != agenthooks.ProviderClaudeCode {
+		return false
 	}
 	if entrypoint := strings.TrimSpace(os.Getenv("CLAUDE_CODE_ENTRYPOINT")); entrypoint != "" {
 		return coworkEntrypoint(entrypoint)
 	}
-	return coworkEntrypoint(transcriptEntrypoint(transcriptPath))
+	path, err := validateClaudeTranscriptPath(base.Session.TranscriptPath)
+	if err != nil {
+		return false
+	}
+	return coworkEntrypoint(transcriptEntrypoint(path))
 }
 
 func coworkEntrypoint(entrypoint string) bool {

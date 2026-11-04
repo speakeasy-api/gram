@@ -64,14 +64,6 @@ type Config struct {
 	// login nudge can point the sign-in command at the same deployment identity
 	// instead of the production defaults.
 	ConfigPath string
-	// TranscriptOnly switches the binary to the Claude Cowork distribution's
-	// mode: it ships the session transcript on every Stop hook to the
-	// dedicated transcript endpoint and relays no other event. Policy is not
-	// enforced in this mode; it exists for observability where Claude runs
-	// plugin hooks only inside the Cowork VM. It is read from speakeasy.json
-	// alone, never the environment: anyone who can set an environment variable
-	// on an ordinary install could otherwise switch policy enforcement off.
-	TranscriptOnly bool
 	// ConfigError records a failure to read an explicitly referenced
 	// speakeasy.json. The deployment identity is unknown, so events must not
 	// fall back to the default server where a cached key could route them to
@@ -92,8 +84,6 @@ type FileConfig struct {
 	AgentKey     bool   `json:"agent_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
-	// TranscriptOnly is set only by the Claude Cowork distribution.
-	TranscriptOnly bool `json:"transcript_only,omitempty"`
 }
 
 // SplitInlineFlags extracts the deployment flags from a hook command's argv and
@@ -105,7 +95,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", TranscriptOnly: false, ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -121,7 +111,6 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.AgentKey = fc.AgentKey
 				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
-				cfg.TranscriptOnly = fc.TranscriptOnly
 			} else {
 				cfg.ConfigError = err.Error()
 			}

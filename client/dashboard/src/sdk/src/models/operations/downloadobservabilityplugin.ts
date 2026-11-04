@@ -19,7 +19,6 @@ export type DownloadObservabilityPluginSecurity = {
  */
 export const Platform = {
   Claude: "claude",
-  ClaudeCowork: "claude-cowork",
   Cursor: "cursor",
   Codex: "codex",
   Opencode: "opencode",

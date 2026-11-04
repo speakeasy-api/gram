@@ -8,7 +8,6 @@
 #USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude, opencode or copilot" default="claude"
 #USAGE flag "--model <model>" help="Model to launch Claude Code with, e.g. haiku or opus (claude only)" default=""
 #USAGE flag "--prompt <text>" help="Run one headless turn with this prompt and exit, instead of an interactive session (claude only)" default=""
-#USAGE flag "--transcript-only" help="Install the Claude Cowork mode (claude only, implies --local). It ships transcripts only inside the Cowork VM, so a terminal session checks that the hook stays a no-op"
 
 set -euo pipefail
 
@@ -19,18 +18,6 @@ case "${usage_agent:-claude}" in
     exit 2
     ;;
 esac
-
-# Transcript-only mode is Claude's Cowork distribution and needs a binary
-# built from this checkout, so it implies --local.
-transcript_only_args=()
-if [ "${usage_transcript_only:-}" = "true" ]; then
-  if [ "${usage_agent:-claude}" != "claude" ]; then
-    echo "hooks:test: --transcript-only is only supported with --agent claude" >&2
-    exit 2
-  fi
-  usage_local=true
-  transcript_only_args=(--transcript-only)
-fi
 
 # --model and --prompt are Claude Code's own flags. OpenCode and Copilot spell
 # both differently, so refuse rather than launch an interactive session that
@@ -258,8 +245,7 @@ elif [ "${usage_local:-}" = "true" ]; then
     --site-url="$GRAM_SITE_URL" \
     --project="$project_slug" \
     --browser-login \
-    --binary="$hooks_binary" \
-    ${transcript_only_args[@]+"${transcript_only_args[@]}"}
+    --binary="$hooks_binary"
   echo ""
   # bash 3.2 (macOS) treats an empty array as unset under `set -u`, so the
   # expansion is guarded rather than bare.

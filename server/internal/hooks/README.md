@@ -5,7 +5,7 @@ The hooks service supports four hook entry points:
 - Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses for session capture and policy enforcement.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
-- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop in transcript-only mode (the Claude Cowork package). See [Transcript Upload](#transcript-upload).
+- Transcript upload: `/transcript` stores session transcripts that the hooks binary ships on each Stop when the standard Claude plugin runs inside Claude's Cowork VM. See [Transcript Upload](#transcript-upload).
 
 ## Unified Ingest
 
@@ -73,25 +73,21 @@ without approval, discovery skips the **entire backend**, including inline-text 
 
 ## Transcript Upload
 
-The Claude Cowork package that ships these transcripts replaces the standard
-Claude observability plugin in Claude's admin plugin settings. An organization
-must not require both there: both run in the Cowork VM and write the same
-session, the standard plugin as per-event rows and the Cowork package as
-`claude-transcript:` rows, so every turn would be stored twice. Device-agent
-distribution of the standard plugin still covers Claude Code.
-
-Claude's admin plugin settings install the package in Claude Code as well as
-Cowork. The binary ships transcripts only when Claude Code reports a Cowork
-entrypoint (`CLAUDE_CODE_ENTRYPOINT`, or the transcript's own `entrypoint`
-field, is `remote_cowork` in the Cowork VM); everywhere else the hook does
-nothing.
+The standard Claude plugin switches modes by itself. Claude's admin plugin
+settings install it in Claude Code and in the Cowork VM alike. When Claude Code
+reports a Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT`, or the transcript's own
+`entrypoint` field, is `remote_cowork` in the Cowork VM), the binary relays no
+per-event hook, so no policy is enforced there, and ships the transcript from
+Stop instead. Everywhere else it relays per-event hooks as before. Every event
+of a session reads the same entrypoint, so a session never mixes per-event
+rows with `claude-transcript:` rows.
 
 `POST /transcript` uses the same hooks-scoped key and project selection as
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
 This endpoint is the one exception to dispatching on canonical feature events:
-the backend parses the provider's own transcript format, because a
-transcript-only install relays no per-event hooks to translate.
+the backend parses the provider's own transcript format, because inside the
+Cowork VM the binary relays no per-event hooks to translate.
 
 Each entry's uuid keys its rows (`external_message_id` prefixed
 `claude-transcript:`), so a re-sent line is never stored twice.

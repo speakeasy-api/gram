@@ -867,22 +867,14 @@ func TestLoginCommandCarriesConfig(t *testing.T) {
 
 func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 	tests := []struct {
-		provider       string
-		transcriptOnly bool
-		path           string
-		want           []string
+		provider string
+		path     string
+		want     []string
 	}{
 		{
 			provider: "claude",
 			path:     filepath.Join("hooks", "hooks.json"),
 			want:     []string{"ConfigChange", "Notification", "PostToolUse", "PostToolUseFailure", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"},
-		},
-		{
-			// A transcript-only binary handles Stop alone.
-			provider:       "claude",
-			transcriptOnly: true,
-			path:           filepath.Join("hooks", "hooks.json"),
-			want:           []string{"Stop"},
 		},
 		{
 			provider: "cursor",
@@ -901,21 +893,16 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		name := tt.provider
-		if tt.transcriptOnly {
-			name += "-transcript-only"
-		}
-		t.Run(name, func(t *testing.T) {
+		t.Run(tt.provider, func(t *testing.T) {
 			dir := t.TempDir()
 			err := WritePlugin(t.Context(), tt.provider, dir, PluginConfig{
-				ServerURL:      "https://gram.test",
-				ProjectSlug:    "default",
-				OrgID:          "org-1",
-				HooksAPIKey:    "shared-key",
-				AgentKey:       false,
-				BrowserLogin:   false,
-				BinaryPath:     "/tmp/speakeasy-hooks",
-				TranscriptOnly: tt.transcriptOnly,
+				ServerURL:    "https://gram.test",
+				ProjectSlug:  "default",
+				OrgID:        "org-1",
+				HooksAPIKey:  "shared-key",
+				AgentKey:     false,
+				BrowserLogin: false,
+				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
 			require.NoError(t, err)
 			var doc struct {

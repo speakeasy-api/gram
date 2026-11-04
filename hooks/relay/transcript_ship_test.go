@@ -132,14 +132,12 @@ func appendTranscript(t *testing.T, path, text string) {
 	require.NoError(t, f.Close())
 }
 
-// transcriptOnlyConfig configures the Cowork package as Claude's Cowork VM
-// runs it: transcript-only, with Claude Code's Cowork entrypoint.
-func transcriptOnlyConfig(t *testing.T, serverURL string) Config {
+// coworkConfig configures the relay as the standard Claude plugin runs inside
+// Claude's Cowork VM, which reports Claude Code's Cowork entrypoint.
+func coworkConfig(t *testing.T, serverURL string) Config {
 	t.Helper()
 	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
-	cfg := authedConfig(t, serverURL)
-	cfg.TranscriptOnly = true
-	return cfg
+	return authedConfig(t, serverURL)
 }
 
 func invokeClaude(t *testing.T, cfg Config, payload map[string]any) agenthookstest.Result {
@@ -180,10 +178,10 @@ const (
 	transcriptLater     = `{"type":"user","uuid":"u-2","message":{"role":"user","content":"thanks"}}` + "\n"
 )
 
-func TestTranscriptOnlyShipsNewLinesOnEachStop(t *testing.T) {
+func TestCoworkShipsNewLinesOnEachStop(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 
 	// The last line is still being written: no trailing newline.
@@ -220,7 +218,7 @@ func TestTranscriptOnlyShipsNewLinesOnEachStop(t *testing.T) {
 	require.Equal(t, int32(2), ts.requests.Load())
 }
 
-func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
+func TestCoworkRetriesUnsettledUpload(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
 	ts.setStatus(func(n int) int {
@@ -229,7 +227,7 @@ func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
 		}
 		return http.StatusOK
 	})
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
 
@@ -251,16 +249,16 @@ func transcriptMarker(t *testing.T, transcript string) string {
 	return transcriptHighWaterPath(validated)
 }
 
-// TestTranscriptOnlyDropsBatchAfterRepeatedServerErrors: a batch answered 5xx
+// TestCoworkDropsBatchAfterRepeatedServerErrors: a batch answered 5xx
 // on transcriptMaxServerErrors Stops in a row is dropped, so a batch the
 // server can never store does not hold back everything after it. Only what
 // the batch held at its first failure is dropped; lines appended since are
 // sent again.
-func TestTranscriptOnlyDropsBatchAfterRepeatedServerErrors(t *testing.T) {
+func TestCoworkDropsBatchAfterRepeatedServerErrors(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
 	ts.respond(http.StatusServiceUnavailable)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
 	marker := transcriptMarker(t, transcript)
@@ -290,13 +288,13 @@ func TestTranscriptOnlyDropsBatchAfterRepeatedServerErrors(t *testing.T) {
 	}
 }
 
-// TestTranscriptOnlyCountsServerErrorsPerBatch: a stored batch moves the
+// TestCoworkCountsServerErrorsPerBatch: a stored batch moves the
 // offset, so server errors the batch before it drew do not count against the
 // next one.
-func TestTranscriptOnlyCountsServerErrorsPerBatch(t *testing.T) {
+func TestCoworkCountsServerErrorsPerBatch(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 	marker := transcriptMarker(t, transcript)
@@ -318,10 +316,10 @@ func TestTranscriptOnlyCountsServerErrorsPerBatch(t *testing.T) {
 	require.Equal(t, int64(len(transcriptUser)), readTranscriptHighWater(marker), "the next batch starts its own count")
 }
 
-// TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure: credentials, routing,
+// TestCoworkNeverDropsBatchOnRecoverableFailure: credentials, routing,
 // and transport failures recover without the batch changing, so they retry
 // without limit and break a run of server errors.
-func TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure(t *testing.T) {
+func TestCoworkNeverDropsBatchOnRecoverableFailure(t *testing.T) {
 	for name, fail := range map[string]func(ts *transcriptServer){
 		"unauthorized": func(ts *transcriptServer) {
 			ts.respond(http.StatusUnauthorized)
@@ -336,7 +334,7 @@ func TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			ts := newTranscriptServer(t)
-			cfg := transcriptOnlyConfig(t, ts.URL)
+			cfg := coworkConfig(t, ts.URL)
 			transcript := claudeTranscriptFile(t)
 			appendTranscript(t, transcript, transcriptUser)
 			marker := transcriptMarker(t, transcript)
@@ -368,11 +366,11 @@ func TestTranscriptOnlyNeverDropsBatchOnRecoverableFailure(t *testing.T) {
 	}
 }
 
-// TestTranscriptOnlyRecordsRestartOfReplacedFile: once a file shorter than the
+// TestCoworkRecordsRestartOfReplacedFile: once a file shorter than the
 // stored offset restarts shipping from zero, a failed upload must not leave
 // the old offset behind, or the retry would resume mid-file after the
 // replacement grows past it.
-func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
+func TestCoworkRecordsRestartOfReplacedFile(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
 	ts.setStatus(func(n int) int {
@@ -381,7 +379,7 @@ func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
 		}
 		return http.StatusOK
 	})
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 	marker := transcriptMarker(t, transcript)
@@ -398,14 +396,14 @@ func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
 	require.Equal(t, []string{"u-1", "big", "u-2"}, entryUUIDs(t, uploads[1]))
 }
 
-// TestTranscriptOnlyRecordsRestartOfUnfinishedReplacement: a replacement
+// TestCoworkRecordsRestartOfUnfinishedReplacement: a replacement
 // holding only a line still being written ships nothing, but its restart must
 // still be recorded, or once that line grows past the old offset the next Stop
 // would resume inside it and skip it.
-func TestTranscriptOnlyRecordsRestartOfUnfinishedReplacement(t *testing.T) {
+func TestCoworkRecordsRestartOfUnfinishedReplacement(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	shipped := transcriptUser + transcriptAssistant
 	appendTranscript(t, transcript, shipped)
@@ -424,14 +422,14 @@ func TestTranscriptOnlyRecordsRestartOfUnfinishedReplacement(t *testing.T) {
 	require.Equal(t, []string{"r-1", "u-2"}, entryUUIDs(t, uploads[1]))
 }
 
-// TestTranscriptOnlyKeepsChunkWithoutAcknowledgement: a 200 that is not the
+// TestCoworkKeepsChunkWithoutAcknowledgement: a 200 that is not the
 // endpoint's acknowledgement, such as a single-page app answering an
 // unrouted path, must not move the offset.
-func TestTranscriptOnlyKeepsChunkWithoutAcknowledgement(t *testing.T) {
+func TestCoworkKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
 	ts.setBody(func(int) []byte { return []byte("<!doctype html><html></html>") })
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 
@@ -445,10 +443,10 @@ func TestTranscriptOnlyKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
-func TestTranscriptOnlyRelaysNoOtherEvent(t *testing.T) {
+func TestCoworkRelaysNoOtherEvent(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 
@@ -462,18 +460,6 @@ func TestTranscriptOnlyRelaysNoOtherEvent(t *testing.T) {
 		require.Equal(t, 0, res.ExitCode, res.Stderr)
 	}
 	require.Equal(t, int32(0), ts.requests.Load())
-}
-
-func TestTranscriptShippingOffWithoutFlag(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	ts := newTranscriptServer(t)
-	cfg := authedConfig(t, ts.URL)
-	transcript := claudeTranscriptFile(t)
-	appendTranscript(t, transcript, transcriptUser)
-
-	invokeClaude(t, cfg, claudeStop(transcript))
-	uploads, _ := ts.recorded()
-	require.Empty(t, uploads, "the default distribution never uploads transcripts")
 }
 
 func TestTranscriptUploadSettled(t *testing.T) {
@@ -583,13 +569,13 @@ func TestReadTranscriptChunkStopsAtBatchEntryCap(t *testing.T) {
 	require.Equal(t, int64(transcriptBatchEntries*len(line)), chunks[0].end)
 }
 
-// TestTranscriptOnlyShipsBacklogInBatches: a long transcript, such as a fresh
+// TestCoworkShipsBacklogInBatches: a long transcript, such as a fresh
 // VM replaying from offset zero, goes up in contiguous uploads of at most
 // transcriptBatchEntries entries within one Stop, each persisting the offset.
-func TestTranscriptOnlyShipsBacklogInBatches(t *testing.T) {
+func TestCoworkShipsBacklogInBatches(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	var content strings.Builder
 	var want []string
@@ -659,12 +645,12 @@ func TestReadTranscriptChunkHoldsBackUnterminatedLongLine(t *testing.T) {
 	require.Equal(t, []string{"u-2"}, chunkEntryUUIDs(t, chunks))
 }
 
-// TestTranscriptOnlyCrossesBookkeepingWithoutUploading: chunks holding only
+// TestCoworkCrossesBookkeepingWithoutUploading: chunks holding only
 // bookkeeping lines advance the offset without a request.
-func TestTranscriptOnlyCrossesBookkeepingWithoutUploading(t *testing.T) {
+func TestCoworkCrossesBookkeepingWithoutUploading(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	bookkeeping := bookkeepingRun(2)
 	appendTranscript(t, transcript, bookkeeping+transcriptUser)
@@ -676,13 +662,13 @@ func TestTranscriptOnlyCrossesBookkeepingWithoutUploading(t *testing.T) {
 	require.Equal(t, []string{"u-1"}, entryUUIDs(t, uploads[0]))
 }
 
-// TestTranscriptOnlyMaxLineFitsServerBodyCap: the longest line the binary
+// TestCoworkMaxLineFitsServerBodyCap: the longest line the binary
 // ships, inside its envelope, stays under the server's body cap even
 // uncompressed. The line is all <, which HTML escaping would grow sixfold.
-func TestTranscriptOnlyMaxLineFitsServerBodyCap(t *testing.T) {
+func TestCoworkMaxLineFitsServerBodyCap(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := coworkConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, paddedTranscriptLine("user", "big", transcriptMaxLineBytes, "<"))
 
@@ -692,93 +678,32 @@ func TestTranscriptOnlyMaxLineFitsServerBodyCap(t *testing.T) {
 	require.Equal(t, []string{"big"}, entryUUIDs(t, uploads[0]))
 }
 
-func TestSplitInlineFlagsReadsTranscriptOnly(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(t.TempDir(), "speakeasy.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"server_url":"https://app.example.test","project":"default","transcript_only":true}`), 0o600))
-	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + path})
-	require.True(t, cfg.TranscriptOnly)
-
-	b, err := json.Marshal(FileConfig{ServerURL: "https://app.example.test", Project: "default"})
-	require.NoError(t, err)
-	require.NotContains(t, string(b), "transcript_only", "the flag is omitted unless set, so other distributions render unchanged")
-}
-
-// TestLoadConfigIgnoresTranscriptOnlyEnv: transcript-only mode turns policy
-// enforcement off, so only the packaged speakeasy.json may enable it.
-func TestLoadConfigIgnoresTranscriptOnlyEnv(t *testing.T) {
-	for _, name := range []string{"SPEAKEASY_AI_HOOKS_TRANSCRIPT_ONLY", "GRAM_HOOKS_TRANSCRIPT_ONLY"} {
-		t.Setenv(name, "true")
-	}
-	require.False(t, LoadConfig(Config{}).TranscriptOnly)
-}
-
-// TestWritePluginBakesTranscriptOnly: `speakeasy-hooks install
-// --transcript-only` is how local testing reaches the Cowork mode, since no
-// environment variable can switch it on.
-func TestWritePluginBakesTranscriptOnly(t *testing.T) {
-	t.Parallel()
-	for _, transcriptOnly := range []bool{true, false} {
-		dir := t.TempDir()
-		require.NoError(t, WritePlugin(t.Context(), "claude", dir, PluginConfig{
-			ServerURL:      "https://gram.test",
-			ProjectSlug:    "default",
-			BinaryPath:     "/tmp/speakeasy-hooks",
-			TranscriptOnly: transcriptOnly,
-		}))
-		fc, err := readFileConfig(filepath.Join(dir, configFileName))
-		require.NoError(t, err)
-		require.Equal(t, transcriptOnly, fc.TranscriptOnly)
-	}
-}
-
-// TestWritePluginRejectsTranscriptOnlyForOtherProviders: transcript shipping
-// reads only Claude Code's transcript, so any other provider is refused before
-// a credential-bearing speakeasy.json is written.
-func TestWritePluginRejectsTranscriptOnlyForOtherProviders(t *testing.T) {
-	t.Parallel()
-	for _, provider := range []string{"cursor", "codex", "opencode", "copilot", "openclaw", "pi"} {
-		t.Run(provider, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			err := WritePlugin(t.Context(), provider, dir, PluginConfig{
-				ServerURL:      "https://gram.test",
-				ProjectSlug:    "default",
-				HooksAPIKey:    "shared-key",
-				BinaryPath:     "/tmp/speakeasy-hooks",
-				TranscriptOnly: true,
-			})
-			require.ErrorIs(t, err, ErrTranscriptOnlyProvider)
-			entries, err := os.ReadDir(dir)
-			require.NoError(t, err)
-			require.Empty(t, entries)
-		})
-	}
-}
-
-// TestTranscriptOnlyNoOpsOutsideCowork: Claude's admin plugin settings install
-// the Cowork package in Claude Code too, where it must do nothing.
-func TestTranscriptOnlyNoOpsOutsideCowork(t *testing.T) {
+// TestStopOutsideCoworkRelaysToIngest: outside Claude's Cowork VM, Stop is
+// relayed to ingest as before and no transcript is uploaded, even when the
+// transcript itself names Cowork.
+func TestStopOutsideCoworkRelaysToIngest(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	cfg := transcriptOnlyConfig(t, ts.URL)
+	cfg := authedConfig(t, ts.URL)
 	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, `{"type":"user","uuid":"u-1","entrypoint":"remote_cowork","message":{"role":"user","content":"hi"}}`+"\n")
 
 	res := invokeClaude(t, cfg, claudeStop(transcript))
 	require.Equal(t, 0, res.ExitCode, res.Stderr)
-	require.Equal(t, int32(0), ts.requests.Load(), "the hook environment names Claude Code, which wins over the transcript")
+	uploads, _ := ts.recorded()
+	require.Empty(t, uploads, "the hook environment names Claude Code, which wins over the transcript")
+	require.Positive(t, ts.requests.Load(), "Stop still reaches ingest")
 }
 
-// TestTranscriptOnlyReadsEntrypointFromTranscript: without
+// TestCoworkReadsEntrypointFromTranscript: without
 // CLAUDE_CODE_ENTRYPOINT in the hook environment, the transcript's own
 // entrypoint decides.
-func TestTranscriptOnlyReadsEntrypointFromTranscript(t *testing.T) {
+func TestCoworkReadsEntrypointFromTranscript(t *testing.T) {
 	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "cli": false, "": false} {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		ts := newTranscriptServer(t)
-		cfg := transcriptOnlyConfig(t, ts.URL)
+		cfg := coworkConfig(t, ts.URL)
 		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "")
 		transcript := claudeTranscriptFile(t)
 		line := map[string]any{"type": "user", "uuid": "u-1", "message": map[string]any{"role": "user", "content": "hi"}}

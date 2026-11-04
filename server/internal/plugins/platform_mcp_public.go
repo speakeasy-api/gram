@@ -89,7 +89,6 @@ func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string, 
 		BrowserLogin:     false,
 		HooksOrgName:     "",
 		InstallFailOpen:  false,
-		TranscriptOnly:   false,
 	}
 
 	files := make(map[string][]byte)
