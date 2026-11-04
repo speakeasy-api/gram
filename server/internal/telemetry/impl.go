@@ -178,7 +178,14 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 		to = payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.ReadToolLogs, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadToolLogs()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +271,14 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.ReadToolLogs, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadToolLogs()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +345,14 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.Read, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +486,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.Read, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1211,7 +1239,14 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		}
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.Read, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, &filter.From, &filter.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1836,22 +1871,23 @@ type searchParams struct {
 	timeEnd        int64
 }
 
-// prepareTelemetrySearch authorizes the caller for operation on the active
-// project, then validates and prepares common search parameters. Endpoints that
-// return individual tool calls or raw log records pass
-// authz.ProjectRef.ReadToolLogs, since those rows carry every member's tool
-// arguments, results, and prompts; aggregate and per-person summary endpoints
-// pass authz.ProjectRef.Read.
-func (s *Service) prepareTelemetrySearch(ctx context.Context, operation func(authz.ProjectRef) authz.Operation, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
+// project names the project a request runs in, from its auth context.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
+}
 
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, err
-	}
-
+// prepareTelemetrySearch validates and prepares common search parameters for
+// a caller already authorized on the active project. Endpoints that return
+// individual tool calls or raw log records require ReadToolLogs on the
+// project first, since those rows carry every member's tool arguments,
+// results, and prompts; aggregate and per-person summary endpoints require
+// Read.
+func (s *Service) prepareTelemetrySearch(ctx context.Context, authCtx *contextvalues.AuthContext, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
@@ -3869,7 +3905,14 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	logger := s.logger
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.ReadToolLogs, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadToolLogs()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}
@@ -4740,7 +4783,14 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
-	params, err := s.prepareTelemetrySearch(ctx, authz.ProjectRef.ReadToolLogs, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadToolLogs()); err != nil {
+		return nil, err
+	}
+	params, err := s.prepareTelemetrySearch(ctx, authCtx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
 	}

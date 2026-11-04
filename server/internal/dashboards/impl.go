@@ -120,18 +120,16 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize resolves the project a request runs in and checks a scope on it.
-// Membership is project:read, which every member holds: making a dashboard
-// is not an administrative act.
-func (s *Service) authorize(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
+// project names the project a request runs in, from its auth context.
+// Callers then check an operation on it; membership is project:read, which
+// every member holds: making a dashboard is not an administrative act.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, err
-	}
-	return authCtx, nil
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
 }
 
 // requireOwnerOrWrite lets a dashboard's creator change it with membership
@@ -146,8 +144,11 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 // ListDashboards lists the project's dashboards, most recently updated
 // first, each with its cards.
 func (s *Service) ListDashboards(ctx context.Context, _ *gen.ListDashboardsPayload) (*gen.ListDashboardsResult, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	queries := repo.New(s.db)
@@ -205,8 +206,11 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 // ReadBuiltInDashboard returns the built-in dashboard with this slug, if the
 // caller may read the project and every card of it.
 func (s *Service) ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.BuiltInDashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	page, ok := builtInBySlug(slug)
@@ -225,8 +229,11 @@ func (s *Service) ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.B
 
 // GetDashboard returns one dashboard with its cards and saved filters.
 func (s *Service) GetDashboard(ctx context.Context, payload *gen.GetDashboardPayload) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -255,8 +262,11 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 // CreateDashboardInTx makes an empty dashboard inside the caller's
 // transaction, audited in it. The caller commits.
 func (s *Service) CreateDashboardInTx(ctx context.Context, dbtx pgx.Tx, name string, description *string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	if authCtx.UserID == "" {
@@ -535,8 +545,11 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 // transaction. A non-empty expectedVersion refuses the copy with
 // ErrStaleVersion when the source has changed since that version.
 func (s *Service) DuplicateDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	if authCtx.UserID == "" {
@@ -614,8 +627,11 @@ func (s *Service) DuplicateBuiltInDashboard(ctx context.Context, payload *gen.Du
 // DuplicateBuiltInDashboardInTx copies a built-in dashboard inside the
 // caller's transaction. The caller commits.
 func (s *Service) DuplicateBuiltInDashboardInTx(ctx context.Context, dbtx pgx.Tx, slug string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	if authCtx.UserID == "" {
@@ -802,8 +818,11 @@ func (s *Service) DeleteDashboard(ctx context.Context, payload *gen.DeleteDashbo
 // transaction. A non-empty expectedVersion refuses the deletion with
 // ErrStaleVersion when the dashboard has changed since that version.
 func (s *Service) DeleteDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) error {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return err
 	}
 	id, err := uuid.Parse(rawID)
@@ -890,8 +909,11 @@ func (s *Service) edit(ctx context.Context, rawID string, kind editKind, apply c
 // has not changed since, apply the change, audit before and after. The
 // caller commits.
 func (s *Service) editInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string, kind editKind, apply change) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(rawID)

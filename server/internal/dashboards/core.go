@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/dashboards"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dashboards/repo"
@@ -73,8 +72,11 @@ type Detail struct {
 // widgets its cards show. The caller needs project:read.
 func (s *Service) ReadDashboard(ctx context.Context, rawID string) (Detail, error) {
 	var zero Detail
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return zero, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return zero, err
 	}
 	id, err := uuid.Parse(rawID)
@@ -105,8 +107,11 @@ func (s *Service) ReadDashboard(ctx context.Context, rawID string) (Detail, erro
 // caller's transaction, so it sees what a write there just placed. The caller
 // needs project:read.
 func (s *Service) CardWidgetsInTx(ctx context.Context, dbtx pgx.Tx, rawID string) (map[string]CardWidget, error) {
-	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(rawID)

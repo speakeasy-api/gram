@@ -13,7 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -25,7 +24,14 @@ import (
 )
 
 func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggestionsPayload) (*gen.ListSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +422,14 @@ func approvalContent(
 }
 
 func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSuggestionPayload) (*gen.ApproveSkillSuggestionResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +464,14 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 }
 
 func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +572,14 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 }
 
 func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +645,14 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 }
 
 func (s *Service) ListSuggestionFeedback(ctx context.Context, payload *gen.ListSuggestionFeedbackPayload) (*gen.ListSkillSuggestionFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}

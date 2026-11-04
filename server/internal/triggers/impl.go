@@ -99,8 +99,11 @@ func (s *Service) ListTriggerDefinitions(ctx context.Context, _ *gen.ListTrigger
 }
 
 func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerInstancesPayload) (*gen.ListTriggerInstancesResult, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 
@@ -127,8 +130,11 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 }
 
 func (s *Service) ListTriggerEvents(ctx context.Context, payload *gen.ListTriggerEventsPayload) (*gen.ListTriggerEventsResult, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 
@@ -159,8 +165,11 @@ func (s *Service) ListTriggerEvents(ctx context.Context, payload *gen.ListTrigge
 }
 
 func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 
@@ -182,8 +191,11 @@ func (s *Service) GetTriggerInstance(ctx context.Context, payload *gen.GetTrigge
 }
 
 func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.CreateTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return nil, err
 	}
 
@@ -231,8 +243,11 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 }
 
 func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.UpdateTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return nil, err
 	}
 
@@ -308,8 +323,11 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 }
 
 func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.DeleteTriggerInstancePayload) error {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return err
 	}
 
@@ -337,8 +355,11 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 }
 
 func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return nil, err
 	}
 
@@ -357,8 +378,11 @@ func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTr
 }
 
 func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
-	authCtx, err := s.requireAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return nil, err
 	}
 
@@ -433,15 +457,14 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Service) requireAccess(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
+// project names the project a request runs in, from its auth context.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, err
-	}
-	return authCtx, nil
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
 }
 
 func normalizeTriggerStatus(status *string) string {
