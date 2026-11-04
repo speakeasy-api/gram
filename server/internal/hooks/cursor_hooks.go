@@ -554,6 +554,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,

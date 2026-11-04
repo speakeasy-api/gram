@@ -185,6 +185,7 @@ func TestHookDeviceTelemetryRecordsEndpointGeneration(t *testing.T) {
 	}{
 		{"ingest from binary", "/rpc/hooks.ingest", map[string]string{"X-Gram-Device-Binary-Version": "1.2.3"}, middleware.HookEndpointGenerationIngestBinary},
 		{"ingest from script", "/rpc/hooks.ingest", nil, middleware.HookEndpointGenerationIngestScript},
+		{"ingest with unusable version header", "/rpc/hooks.ingest", map[string]string{"X-Gram-Device-Binary-Version": "v\x01"}, middleware.HookEndpointGenerationIngestScript},
 		{"legacy claude without key", "/rpc/hooks.claude", nil, middleware.HookEndpointGenerationLegacyUnkeyed},
 		{"legacy claude with key", "/rpc/hooks.claude", map[string]string{"Gram-Key": "k"}, middleware.HookEndpointGenerationLegacyKeyed},
 		{"legacy cursor with device token", "/rpc/hooks.cursor", map[string]string{"Authorization": "Bearer t"}, middleware.HookEndpointGenerationLegacyKeyed},

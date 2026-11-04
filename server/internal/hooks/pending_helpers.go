@@ -672,7 +672,8 @@ func isDeltaTemporality(v any) bool {
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata, includeUnscoped bool) {
 	// Only hooks.claude buffers events, and the flush runs in a later
 	// request, so the endpoint generation comes from the buffer: unscoped
-	// buffers hold events that arrived without credentials.
+	// buffers hold events no credential tied to a project, either because
+	// none was sent or because it failed to authenticate.
 	s.flushPendingHookList(middleware.WithHookEndpointGeneration(ctx, middleware.HookEndpointGenerationLegacyKeyed), hookPendingCacheKey(metadata.ProjectID, sessionID), metadata)
 	if includeUnscoped {
 		s.flushPendingHookList(middleware.WithHookEndpointGeneration(ctx, middleware.HookEndpointGenerationLegacyUnkeyed), hookPendingCacheKey("", sessionID), metadata)

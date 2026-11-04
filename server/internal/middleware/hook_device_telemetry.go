@@ -60,7 +60,7 @@ const (
 func hookEndpointGeneration(r *http.Request) string {
 	switch r.URL.Path {
 	case "/rpc/hooks.ingest":
-		if r.Header.Get(wire.HeaderDeviceBinaryVersion) != "" {
+		if SanitizeDeviceValue(r.Header.Get(wire.HeaderDeviceBinaryVersion)) != "" {
 			return HookEndpointGenerationIngestBinary
 		}
 		return HookEndpointGenerationIngestScript

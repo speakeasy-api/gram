@@ -1,5 +1,4 @@
 ---
-"hooks": minor
 "server": patch
 ---
 
