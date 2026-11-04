@@ -36,12 +36,26 @@ import (
 const (
 	transcriptUploadPath = "/transcript"
 	transcriptSchemaV1   = "claude.transcript.v1"
-	// transcriptChunkBytes bounds the raw transcript bytes batched into one
-	// upload. Uploads are gzip-compressed, well under the server's body cap.
+	// transcriptChunkBytes (4 MiB) bounds the transcript bytes one chunk read
+	// consumes, shipped or skipped, so a long run of bookkeeping lines is
+	// crossed a chunk at a time with the Stop budget checked in between.
 	transcriptChunkBytes = 4 << 20
-	// transcriptMaxLineBytes bounds a single transcript line. A longer line (an
-	// enormous tool result) is skipped rather than blocking the offset forever.
-	transcriptMaxLineBytes  = 16 << 20
+	// transcriptMaxLineBytes (8 MiB) bounds a single transcript line. A longer
+	// line (an enormous tool result) is skipped rather than blocking the
+	// offset forever. A line at the cap plus its envelope stays under the
+	// server's 10 MiB body cap (claudeTranscriptMaxBodyBytes in
+	// server/internal/hooks) even uncompressed: the server would answer a
+	// larger body 413, which settles the chunk and drops the line.
+	transcriptMaxLineBytes = 8 << 20
+	// transcriptMaxEntries is the server's per-upload entry cap
+	// (claudeTranscriptMaxEntries); a larger chunk would be answered 413 and
+	// dropped the same way.
+	transcriptMaxEntries = 20000
+	// transcriptReadBufferBytes (64 KiB) holds typical transcript lines whole;
+	// longer lines are assembled from buffer-sized fragments.
+	transcriptReadBufferBytes = 64 << 10
+	// transcriptResponseLimit (64 KiB) bounds how much of a response is read;
+	// the acknowledgement is a few bytes of JSON.
 	transcriptResponseLimit = 64 << 10
 )
 
@@ -142,6 +156,12 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 			if chunk.end == chunk.start {
 				return
 			}
+			if chunk.start != offset {
+				// The file was replaced. Record the restart now: if this upload
+				// fails and the new file then grows past the old offset, a retry
+				// from there would land mid-line and skip what precedes it.
+				writeTranscriptHighWater(marker, chunk.start)
+			}
 			if len(chunk.entries) > 0 {
 				upload.OffsetStart, upload.OffsetEnd, upload.Entries = chunk.start, chunk.end, chunk.entries
 				status, err := postTranscript(ctx, c, upload)
@@ -179,12 +199,16 @@ func transcriptAdapter(base *agenthooks.Event) string {
 // transcriptUploadSettled reports whether the server has answered a chunk for
 // good, so the offset may move past it. A definitive 4xx would be rejected
 // identically on every retry; credentials and throttling can recover, so
-// those chunks stay queued with transport failures and 5xx.
+// those chunks stay queued with transport failures and 5xx. The endpoint
+// never answers 404 or 405 itself: those come from a request routed
+// elsewhere (an ingress without the route, or a server that predates it), so
+// those chunks stay queued too.
 func transcriptUploadSettled(status int) bool {
 	switch {
 	case status >= 200 && status < 300:
 		return true
 	case status == http.StatusUnauthorized, status == http.StatusForbidden,
+		status == http.StatusNotFound, status == http.StatusMethodNotAllowed,
 		status == http.StatusRequestTimeout, status == http.StatusTooManyRequests:
 		return false
 	case status >= 400 && status < 500:
@@ -195,7 +219,10 @@ func transcriptUploadSettled(status int) bool {
 }
 
 // readTranscriptChunk reads complete lines from offset, up to
-// transcriptChunkBytes, and keeps the conversation entries among them. A
+// transcriptChunkBytes of them whether shipped or skipped, and keeps the
+// conversation entries among them, at most transcriptMaxEntries. An entry
+// that would push a chunk already carrying entries past the budget starts the
+// next one, so an upload holds at most the budget or a single line. A
 // trailing line without its newline is still being written and is left for
 // the next Stop. A file shorter than offset was replaced, so it is read again
 // from the start; the server deduplicates what it already holds.
@@ -217,10 +244,10 @@ func readTranscriptChunk(path string, offset int64) (transcriptChunk, error) {
 	}
 
 	chunk := transcriptChunk{start: offset, end: offset, entries: nil}
-	reader := bufio.NewReaderSize(f, 64<<10)
-	var batched int
-	for {
-		line, err := reader.ReadBytes('\n')
+	reader := bufio.NewReaderSize(f, transcriptReadBufferBytes)
+	limit := chunk.start + transcriptChunkBytes
+	for chunk.end < limit && len(chunk.entries) < transcriptMaxEntries {
+		line, size, err := readTranscriptLine(reader)
 		if errors.Is(err, io.EOF) {
 			// A partial line is still being written; leave it for later.
 			return chunk, nil
@@ -228,23 +255,43 @@ func readTranscriptChunk(path string, offset int64) (transcriptChunk, error) {
 		if err != nil {
 			return chunk, fmt.Errorf("read transcript: %w", err)
 		}
-		size := len(line)
-		if size > transcriptMaxLineBytes {
-			chunk.end += int64(size)
-			continue
-		}
-		if batched > 0 && batched+size > transcriptChunkBytes {
+		// Lines that are not shipped are consumed where they stand: deferring
+		// them to the next chunk would only read them again.
+		entry, ok := transcriptConversationEntry(line)
+		if ok && len(chunk.entries) > 0 && chunk.end+size > limit {
 			return chunk, nil
 		}
-		chunk.end += int64(size)
-		if entry, ok := transcriptConversationEntry(line); ok {
+		chunk.end += size
+		if ok {
 			chunk.entries = append(chunk.entries, entry)
-			batched += size
-		}
-		if batched >= transcriptChunkBytes {
-			return chunk, nil
 		}
 	}
+	return chunk, nil
+}
+
+// readTranscriptLine reads one line through its newline and returns its
+// length in the file. The bytes are valid only until the next read. A line
+// longer than transcriptMaxLineBytes is read to its newline without being
+// held, and comes back nil. io.EOF means the file ends inside a line that is
+// still being written.
+func readTranscriptLine(r *bufio.Reader) ([]byte, int64, error) {
+	fragment, err := r.ReadSlice('\n')
+	size := int64(len(fragment))
+	if !errors.Is(err, bufio.ErrBufferFull) {
+		// The whole line fits the reader's buffer.
+		return fragment, size, err
+	}
+	line := bytes.Clone(fragment)
+	for errors.Is(err, bufio.ErrBufferFull) {
+		fragment, err = r.ReadSlice('\n')
+		size += int64(len(fragment))
+		if size <= transcriptMaxLineBytes {
+			line = append(line, fragment...)
+		} else {
+			line = nil
+		}
+	}
+	return line, size, err
 }
 
 // transcriptConversationEntry keeps the user and assistant entries the
@@ -273,14 +320,14 @@ func transcriptConversationEntry(line []byte) (json.RawMessage, bool) {
 // a single-page app answering every path) could answer 200 without storing
 // anything, and moving the offset past it would lose those lines for good.
 func postTranscript(ctx context.Context, c creds, upload transcriptUpload) (int, error) {
-	body, err := json.Marshal(upload)
-	if err != nil {
-		return 0, fmt.Errorf("encode transcript upload: %w", err)
-	}
 	var compressed bytes.Buffer
 	gz := gzip.NewWriter(&compressed)
-	if _, err := gz.Write(body); err != nil {
-		return 0, fmt.Errorf("compress transcript upload: %w", err)
+	enc := json.NewEncoder(gz)
+	// Escaping <, > and & grows them sixfold, which could push a line at
+	// transcriptMaxLineBytes past the server's body cap.
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(upload); err != nil {
+		return 0, fmt.Errorf("encode transcript upload: %w", err)
 	}
 	if err := gz.Close(); err != nil {
 		return 0, fmt.Errorf("compress transcript upload: %w", err)

@@ -8,24 +8,34 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// transcriptServerMaxBodyBytes is the server's request body cap
+// (claudeTranscriptMaxBodyBytes in server/internal/hooks). The test server
+// applies it to the decompressed body, since the binary's line cap promises
+// an upload fits even uncompressed.
+const transcriptServerMaxBodyBytes = 10 << 20
 
 // transcriptServer records transcript uploads and counts every request, so a
 // test can prove that nothing besides the upload reached the server.
 type transcriptServer struct {
 	*httptest.Server
-	mu       sync.Mutex
-	uploads  []transcriptUpload
-	headers  []http.Header
 	requests atomic.Int32
-	status   func(n int) int
+	// mu guards everything below: the handler goroutine reads the responders
+	// while a test swaps them between requests.
+	mu      sync.Mutex
+	uploads []transcriptUpload
+	headers []http.Header
+	status  func(n int) int
 	// body, when set, replaces the endpoint's JSON acknowledgement.
 	body func(n int) []byte
 }
@@ -39,20 +49,35 @@ func newTranscriptServer(t *testing.T) *transcriptServer {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		// assert, not require: FailNow must not run off the test goroutine.
 		gz, err := gzip.NewReader(r.Body)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		body, err := io.ReadAll(gz)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if len(body) > transcriptServerMaxBodyBytes {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
 		var upload transcriptUpload
-		require.NoError(t, json.Unmarshal(body, &upload))
+		if !assert.NoError(t, json.Unmarshal(body, &upload)) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		ts.mu.Lock()
 		ts.uploads = append(ts.uploads, upload)
 		ts.headers = append(ts.headers, r.Header.Clone())
+		statusFn, bodyFn := ts.status, ts.body
 		ts.mu.Unlock()
-		status := ts.status(n)
-		if ts.body != nil {
+		status := statusFn(n)
+		if bodyFn != nil {
 			w.WriteHeader(status)
-			_, _ = w.Write(ts.body(n))
+			_, _ = w.Write(bodyFn(n))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -67,6 +92,18 @@ func (ts *transcriptServer) recorded() ([]transcriptUpload, []http.Header) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	return append([]transcriptUpload(nil), ts.uploads...), append([]http.Header(nil), ts.headers...)
+}
+
+func (ts *transcriptServer) setStatus(status func(n int) int) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.status = status
+}
+
+func (ts *transcriptServer) setBody(body func(n int) []byte) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.body = body
 }
 
 // claudeTranscriptFile creates a transcript under a temporary Claude config
@@ -177,12 +214,12 @@ func TestTranscriptOnlyShipsNewLinesOnEachStop(t *testing.T) {
 func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	ts.status = func(n int) int {
+	ts.setStatus(func(n int) int {
 		if n == 1 {
 			return http.StatusServiceUnavailable
 		}
 		return http.StatusOK
-	}
+	})
 	cfg := transcriptOnlyConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
@@ -196,19 +233,52 @@ func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 
+// TestTranscriptOnlyRecordsRestartOfReplacedFile: once a file shorter than the
+// stored offset restarts shipping from zero, a failed upload must not leave
+// the old offset behind, or the retry would resume mid-file after the
+// replacement grows past it.
+func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.setStatus(func(n int) int {
+		if n == 1 {
+			return http.StatusServiceUnavailable
+		}
+		return http.StatusOK
+	})
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser)
+	// The marker is keyed by the validated path, as shipTranscript sees it.
+	validated, err := validateClaudeTranscriptPath(transcript)
+	require.NoError(t, err)
+	marker := transcriptHighWaterPath(validated)
+	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o700))
+	writeTranscriptHighWater(marker, 10_000)
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, int64(0), readTranscriptHighWater(marker), "the restart is recorded although the upload failed")
+	appendTranscript(t, transcript, paddedTranscriptLine("user", "big", 20_000, "x")+transcriptLater)
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2)
+	require.Equal(t, []string{"u-1", "big", "u-2"}, entryUUIDs(t, uploads[1]))
+}
+
 // TestTranscriptOnlyKeepsChunkWithoutAcknowledgement: a 200 that is not the
 // endpoint's acknowledgement, such as a single-page app answering an
 // unrouted path, must not move the offset.
 func TestTranscriptOnlyKeepsChunkWithoutAcknowledgement(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)
-	ts.body = func(int) []byte { return []byte("<!doctype html><html></html>") }
+	ts.setBody(func(int) []byte { return []byte("<!doctype html><html></html>") })
 	cfg := transcriptOnlyConfig(t, ts.URL)
 	transcript := claudeTranscriptFile(t)
 	appendTranscript(t, transcript, transcriptUser)
 
 	invokeClaude(t, cfg, claudeStop(transcript))
-	ts.body = nil
+	ts.setBody(nil)
 	invokeClaude(t, cfg, claudeStop(transcript))
 	invokeClaude(t, cfg, claudeStop(transcript))
 
@@ -258,6 +328,8 @@ func TestTranscriptUploadSettled(t *testing.T) {
 		http.StatusRequestEntityTooLarge:         true,
 		http.StatusUnauthorized:                  false,
 		http.StatusForbidden:                     false,
+		http.StatusNotFound:                      false,
+		http.StatusMethodNotAllowed:              false,
 		http.StatusRequestTimeout:                false,
 		http.StatusTooManyRequests:               false,
 		http.StatusInternalServerError:           false,
@@ -278,6 +350,154 @@ func TestReadTranscriptChunkRestartsWhenFileShrinks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(0), chunk.start)
 	require.Len(t, chunk.entries, 1)
+}
+
+// paddedTranscriptLine returns a transcript line of exactly size bytes,
+// newline included, whose content is fill repeated.
+func paddedTranscriptLine(entryType, uuid string, size int, fill string) string {
+	head := `{"type":"` + entryType + `","uuid":"` + uuid + `","message":{"role":"user","content":"`
+	tail := `"}}` + "\n"
+	return head + strings.Repeat(fill, size-len(head)-len(tail)) + tail
+}
+
+// readTranscriptChunks reads path chunk by chunk from offset until a read
+// makes no progress.
+func readTranscriptChunks(t *testing.T, path string, offset int64) []transcriptChunk {
+	t.Helper()
+	var chunks []transcriptChunk
+	for {
+		chunk, err := readTranscriptChunk(path, offset)
+		require.NoError(t, err)
+		if chunk.end == chunk.start {
+			return chunks
+		}
+		chunks = append(chunks, chunk)
+		offset = chunk.end
+	}
+}
+
+// bookkeepingRun returns n chunk budgets' worth of 64 KiB bookkeeping lines.
+func bookkeepingRun(n int) string {
+	line := paddedTranscriptLine("api-request-blob", "b", 64<<10, "x")
+	return strings.Repeat(line, n*transcriptChunkBytes/len(line))
+}
+
+func chunkEntryUUIDs(t *testing.T, chunks []transcriptChunk) []string {
+	t.Helper()
+	var entries []json.RawMessage
+	for _, chunk := range chunks {
+		entries = append(entries, chunk.entries...)
+	}
+	return entryUUIDs(t, transcriptUpload{Entries: entries})
+}
+
+// TestReadTranscriptChunkCountsSkippedLines: skipped bookkeeping lines count
+// toward the chunk budget, so a long run of them is crossed in bounded chunks
+// that carry nothing.
+func TestReadTranscriptChunkCountsSkippedLines(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	bookkeeping := bookkeepingRun(3)
+	require.NoError(t, os.WriteFile(path, []byte(bookkeeping+transcriptUser), 0o600))
+
+	chunks := readTranscriptChunks(t, path, 0)
+	require.Len(t, chunks, 4)
+	for _, chunk := range chunks {
+		require.LessOrEqual(t, chunk.end-chunk.start, int64(transcriptChunkBytes))
+	}
+	require.Equal(t, []string{"u-1"}, chunkEntryUUIDs(t, chunks))
+	require.Len(t, chunks[3].entries, 1, "only the last chunk carries an entry")
+	require.Equal(t, int64(len(bookkeeping)+len(transcriptUser)), chunks[3].end)
+}
+
+// TestReadTranscriptChunkStopsAtServerEntryCap: a chunk never carries more
+// entries than the server accepts in one upload.
+func TestReadTranscriptChunkStopsAtServerEntryCap(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat(`{"type":"user","uuid":"u"}`+"\n", transcriptMaxEntries+1)), 0o600))
+
+	chunks := readTranscriptChunks(t, path, 0)
+	require.Len(t, chunks, 2)
+	require.Len(t, chunks[0].entries, transcriptMaxEntries)
+	require.Len(t, chunks[1].entries, 1)
+}
+
+// TestReadTranscriptChunkDefersEntryPastBudget: an entry that would push a
+// chunk already carrying entries past the budget starts the next chunk.
+func TestReadTranscriptChunkDefersEntryPastBudget(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	content := paddedTranscriptLine("api-request-blob", "b", 3<<20, "x") +
+		paddedTranscriptLine("user", "a", 512<<10, "x") +
+		paddedTranscriptLine("user", "c", 1<<20, "x")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	chunks := readTranscriptChunks(t, path, 0)
+	require.Len(t, chunks, 2)
+	require.Equal(t, []string{"a"}, chunkEntryUUIDs(t, chunks[:1]))
+	require.Equal(t, []string{"c"}, chunkEntryUUIDs(t, chunks[1:]))
+}
+
+func TestReadTranscriptChunkSkipsOversizedLine(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	content := transcriptUser + paddedTranscriptLine("user", "big", transcriptMaxLineBytes+1, "x") + transcriptLater
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	chunks := readTranscriptChunks(t, path, 0)
+	require.Equal(t, []string{"u-1", "u-2"}, chunkEntryUUIDs(t, chunks))
+	require.Equal(t, int64(len(content)), chunks[len(chunks)-1].end)
+}
+
+// TestReadTranscriptChunkHoldsBackUnterminatedLongLine: an oversized line
+// that is still being written keeps the offset in front of it until its
+// newline lands, and is then skipped.
+func TestReadTranscriptChunkHoldsBackUnterminatedLongLine(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "t.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(transcriptUser+strings.Repeat("x", transcriptMaxLineBytes+1)), 0o600))
+
+	chunks := readTranscriptChunks(t, path, 0)
+	require.Equal(t, []string{"u-1"}, chunkEntryUUIDs(t, chunks))
+	require.Equal(t, int64(len(transcriptUser)), chunks[len(chunks)-1].end)
+
+	appendTranscript(t, path, "\n"+transcriptLater)
+	chunks = readTranscriptChunks(t, path, int64(len(transcriptUser)))
+	require.Equal(t, []string{"u-2"}, chunkEntryUUIDs(t, chunks))
+}
+
+// TestTranscriptOnlyCrossesBookkeepingWithoutUploading: chunks holding only
+// bookkeeping lines advance the offset without a request.
+func TestTranscriptOnlyCrossesBookkeepingWithoutUploading(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	bookkeeping := bookkeepingRun(2)
+	appendTranscript(t, transcript, bookkeeping+transcriptUser)
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.Equal(t, int64(len(bookkeeping)), uploads[0].OffsetStart)
+	require.Equal(t, []string{"u-1"}, entryUUIDs(t, uploads[0]))
+}
+
+// TestTranscriptOnlyMaxLineFitsServerBodyCap: the longest line the binary
+// ships, inside its envelope, stays under the server's body cap even
+// uncompressed. The line is all <, which HTML escaping would grow sixfold.
+func TestTranscriptOnlyMaxLineFitsServerBodyCap(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, paddedTranscriptLine("user", "big", transcriptMaxLineBytes, "<"))
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 1, "the test server rejects a body over the cap")
+	require.Equal(t, []string{"big"}, entryUUIDs(t, uploads[0]))
 }
 
 func TestSplitInlineFlagsReadsTranscriptOnly(t *testing.T) {

@@ -12,6 +12,7 @@ package hooks
 // are idempotent.
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -47,14 +49,20 @@ const (
 	// external_message_id so they cannot collide with other import sources.
 	claudeTranscriptIDPrefix = "claude-transcript:"
 
-	// claudeTranscriptMaxBodyBytes bounds the request body as sent, which is
-	// usually gzip-compressed.
+	// claudeTranscriptMaxBodyBytes (10 MiB) bounds the request body as sent,
+	// which is usually gzip-compressed. The hooks binary sizes its longest
+	// line (transcriptMaxLineBytes in hooks/relay) to fit under it.
 	claudeTranscriptMaxBodyBytes = 10 << 20
-	// claudeTranscriptMaxDecodedBytes bounds the decompressed body so a small
-	// compressed request cannot expand without limit.
+	// claudeTranscriptMaxDecodedBytes (32 MiB) bounds the decompressed body so
+	// a small compressed request cannot expand without limit.
 	claudeTranscriptMaxDecodedBytes = 32 << 20
-	claudeTranscriptMaxEntries      = 20000
-	claudeTranscriptPersistTimeout  = 30 * time.Second
+	// claudeTranscriptMaxEntries bounds the entries in one upload. The binary
+	// batches about 4 MiB of transcript per upload, far fewer entries than
+	// this at real entry sizes, and stops a chunk at the same cap.
+	claudeTranscriptMaxEntries = 20000
+	// claudeTranscriptPersistTimeout bounds the detached write of one upload.
+	// A full upload is a few thousand rows, which store well within it.
+	claudeTranscriptPersistTimeout = 30 * time.Second
 )
 
 // claudeTranscriptUpload is the request body: a contiguous run of raw
@@ -70,9 +78,45 @@ type claudeTranscriptUpload struct {
 	UserEmail string `json:"user_email"`
 	// OffsetStart and OffsetEnd are the byte range of the transcript file the
 	// entries were read from. Diagnostic only.
-	OffsetStart int64             `json:"offset_start"`
-	OffsetEnd   int64             `json:"offset_end"`
-	Entries     []json.RawMessage `json:"entries"`
+	OffsetStart int64                   `json:"offset_start"`
+	OffsetEnd   int64                   `json:"offset_end"`
+	Entries     claudeTranscriptEntries `json:"entries"`
+}
+
+// errClaudeTranscriptTooManyEntries rejects an upload carrying more than
+// claudeTranscriptMaxEntries entries.
+var errClaudeTranscriptTooManyEntries = errors.New("too many entries")
+
+// claudeTranscriptEntries decodes the entries array one element at a time
+// and gives up past claudeTranscriptMaxEntries, so a body packed with
+// millions of tiny values is rejected without materializing them.
+type claudeTranscriptEntries []json.RawMessage
+
+func (e *claudeTranscriptEntries) UnmarshalJSON(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	tok, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("read entries: %w", err)
+	}
+	if tok == nil { // null: no entries
+		return nil
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '[' {
+		return errors.New("entries must be an array")
+	}
+	var entries claudeTranscriptEntries
+	for dec.More() {
+		if len(entries) == claudeTranscriptMaxEntries {
+			return errClaudeTranscriptTooManyEntries
+		}
+		var entry json.RawMessage
+		if err := dec.Decode(&entry); err != nil {
+			return fmt.Errorf("read entry: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	*e = entries
+	return nil
 }
 
 type claudeTranscriptResult struct {
@@ -137,7 +181,7 @@ func readClaudeTranscriptUpload(w http.ResponseWriter, r *http.Request) (*claude
 		if err != nil {
 			return nil, statusForBodyError(err), fmt.Errorf("open gzip body: %w", err)
 		}
-		defer func() { _ = gz.Close() }()
+		defer o11y.NoLogDefer(func() error { return gz.Close() })
 		body = gz
 	}
 	raw, err := io.ReadAll(io.LimitReader(body, claudeTranscriptMaxDecodedBytes+1))
@@ -150,6 +194,9 @@ func readClaudeTranscriptUpload(w http.ResponseWriter, r *http.Request) (*claude
 
 	var upload claudeTranscriptUpload
 	if err := json.Unmarshal(raw, &upload); err != nil {
+		if errors.Is(err, errClaudeTranscriptTooManyEntries) {
+			return nil, http.StatusRequestEntityTooLarge, errClaudeTranscriptTooManyEntries
+		}
 		return nil, http.StatusBadRequest, fmt.Errorf("decode body: %w", err)
 	}
 	upload.SessionID = strings.TrimSpace(upload.SessionID)
@@ -158,8 +205,6 @@ func readClaudeTranscriptUpload(w http.ResponseWriter, r *http.Request) (*claude
 		return nil, http.StatusBadRequest, errors.New("unsupported schema_version")
 	case upload.SessionID == "":
 		return nil, http.StatusBadRequest, errors.New("session_id is required")
-	case len(upload.Entries) > claudeTranscriptMaxEntries:
-		return nil, http.StatusRequestEntityTooLarge, errors.New("too many entries")
 	}
 	return &upload, 0, nil
 }

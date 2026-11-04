@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,11 +207,29 @@ func TestClaudeTranscriptEndpointRejectsInvalidRequests(t *testing.T) {
 	noSession := claudeTranscriptUploadBody("  ", nil)
 	require.Equal(t, http.StatusBadRequest, claudeTranscriptRequest(t, h, noSession, ahpAuthHeaders).Code)
 
-	tooMany := claudeTranscriptUploadBody(uuid.NewString(), make([]string, claudeTranscriptMaxEntries+1))
-	entries := make([]json.RawMessage, claudeTranscriptMaxEntries+1)
-	for i := range entries {
-		entries[i] = json.RawMessage(`{}`)
-	}
-	tooMany["entries"] = entries
+	badEntries := claudeTranscriptUploadBody(uuid.NewString(), nil)
+	badEntries["entries"] = "not an array"
+	require.Equal(t, http.StatusBadRequest, claudeTranscriptRequest(t, h, badEntries, ahpAuthHeaders).Code)
+
+	tooMany := claudeTranscriptUploadBody(uuid.NewString(), nil)
+	tooMany["entries"] = rawEntries(slices.Repeat([]string{"{}"}, claudeTranscriptMaxEntries+1))
 	require.Equal(t, http.StatusRequestEntityTooLarge, claudeTranscriptRequest(t, h, tooMany, ahpAuthHeaders).Code)
+}
+
+// TestClaudeTranscriptEntriesStopPastCap: decoding gives up at the first entry
+// past the cap, so the rest of an oversized array is never materialized. The
+// malformed tail would fail any decoder that went on reading it.
+func TestClaudeTranscriptEntriesStopPastCap(t *testing.T) {
+	t.Parallel()
+	var entries claudeTranscriptEntries
+	require.NoError(t, entries.UnmarshalJSON([]byte("["+strings.Repeat("0,", claudeTranscriptMaxEntries-1)+"0]")))
+	require.Len(t, entries, claudeTranscriptMaxEntries)
+
+	entries = nil
+	pastCap := "[" + strings.Repeat("0,", claudeTranscriptMaxEntries) + "not json"
+	require.ErrorIs(t, entries.UnmarshalJSON([]byte(pastCap)), errClaudeTranscriptTooManyEntries)
+	require.Empty(t, entries)
+
+	require.NoError(t, entries.UnmarshalJSON([]byte("null")))
+	require.Empty(t, entries)
 }
