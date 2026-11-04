@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -138,7 +139,7 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 
 // recordMemberFailure records one gateway member's failed tool call.
 func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code) {
-	if errors.Is(ctx.Err(), context.Canceled) {
+	if what == (mcpconnectionattempts.Code{}) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request), s.gatewayReportedClient(ctx, gate))
@@ -148,7 +149,13 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+		if refresh, ok := errors.AsType[*remotesessions.RefreshError](err); ok && refresh.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageNone {
+			return mcpconnectionattempts.Code{}
+		}
+		if remotesessions.TokenEndpointCausedOutage(err) {
+			return mcpconnectionattempts.CodeRemoteSessionUnavailable
+		}
+		return remotesessions.ConnectionOutageHappened(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	case errors.Is(err, remotesessions.ErrNoValidToken):

@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -718,4 +719,34 @@ func TestGatewayUnknownCachedToolRecordsNothing(t *testing.T) {
 		require.Contains(t, response.Body.String(), remotemcp.ToolNotApprovedMessage)
 	}
 	rec.RequireNothing()
+}
+
+func TestFreshRefreshSuppressesOnlyDuplicateGateRow(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outage")
+	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	var calls atomic.Int32
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+	first, freshErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, freshErr)
+	rows := rec.Rows()
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+	second, cachedErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.EqualError(t, cachedErr, freshErr.Error())
+	require.Equal(t, first.Code, second.Code)
+	require.Equal(t, first.Body.String(), second.Body.String())
+	require.EqualValues(t, 1, calls.Load())
+	rows = rec.Rows()
+	require.Len(t, rows, 2)
+	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
 }

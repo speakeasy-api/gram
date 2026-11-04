@@ -232,7 +232,7 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	if outage {
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberReconnectURL(member))
 		if routeErr != nil {
-			routeErr = memberConnectionError{routeErr, mcpconnectionattempts.CodeRemoteSessionUnavailable}
+			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
 	if (routeErr != nil && !outage) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {

@@ -17,17 +17,22 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
@@ -96,7 +101,7 @@ func TestMemberNoCredentialHappened(t *testing.T) {
 
 	gate.skippedUpstreams = new(remotesessions.SkippedClients)
 	gate.skippedUpstreams.Note(project, issuer, uuid.New(), remotesessions.ErrRemoteSessionUnavailable)
-	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, gate.memberNoCredentialHappened(member))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, gate.memberNoCredentialHappened(member))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, gate.memberNoCredentialHappened(sibling), "another member on the issuer")
 
 	misconfigured := &metaGateContext{skippedUpstreams: new(remotesessions.SkippedClients)}
@@ -113,7 +118,7 @@ func TestMemberNoCredentialHappened(t *testing.T) {
 func TestResolveFailureHappened(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, resolveFailureHappened(remotesessions.ErrRemoteSessionUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, resolveFailureHappened(remotesessions.ErrRemoteSessionUnavailable))
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, resolveFailureHappened(remotesessions.ErrRemoteSessionMisconfigured))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, resolveFailureHappened(remotesessions.ErrNoValidToken))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, resolveFailureHappened(errors.New("database")))
@@ -365,9 +370,82 @@ func TestChainMetaMember_OutageCarriesRequestOutcome(t *testing.T) {
 		require.Empty(t, token)
 		failure, ok := errors.AsType[memberConnectionError](err)
 		require.True(t, ok, "outage must reach request recorder: %v", err)
-		require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, failure.code)
+		require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 		require.EqualError(t, err, original.Error())
 		_, unavailable := errors.AsType[memberUnavailableError](err)
 		require.True(t, unavailable, "preserve the member outage response")
+	}
+}
+
+func TestResolveOutageEvidence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		cause error
+		want  mcpconnectionattempts.Code
+	}{
+		{"unclassified store", remotesessions.ErrRemoteSessionUnavailable, mcpconnectionattempts.CodeInternalError},
+		{"token endpoint", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: 503}), mcpconnectionattempts.CodeRemoteSessionUnavailable},
+		{"signer", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{Signing: true}), mcpconnectionattempts.CodeInternalError},
+		{"lock contention", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, mcpconnectionattempts.Code{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.want, resolveFailureHappened(tc.cause)) })
+	}
+}
+
+func TestMemberFailureUsesSetupCause(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind proxy.ForwardSetupKind
+		want mcpconnectionattempts.Code
+	}{
+		{proxy.ForwardSetupCaller, mcpconnectionattempts.CodeInvalidRequest},
+		{proxy.ForwardSetupConfiguration, mcpconnectionattempts.CodeCredentialMisconfigured},
+		{proxy.ForwardSetupInternal, mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.want.String(), func(t *testing.T) {
+			t.Parallel()
+			cause := &proxy.ForwardSetupError{Kind: tc.kind, Err: errors.New("setup failed")}
+			err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: cause}, memberDial{}, metaMember{slug: "fixture"}, errors.New("SDK rejected"))
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok)
+			require.Equal(t, tc.want, failure.code)
+			require.EqualError(t, err, `server "fixture" did not answer: upstream unreachable or timed out`)
+		})
+	}
+}
+
+func TestMemberFailureExhaustedTunnelCause(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status string
+		want   mcpconnectionattempts.Code
+	}{
+		{wire.TunnelErrorTunnelBusy, mcpconnectionattempts.CodeTunnelAtCapacity},
+		{wire.TunnelErrorActiveCheckFailed, mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			t.Parallel()
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(tunnelrouting.ErrorHeader, tc.status)
+				w.WriteHeader(http.StatusBadGateway)
+			}))
+			t.Cleanup(gateway.Close)
+			routes := route.NewRouteTable()
+			require.NoError(t, routes.Publish(t.Context(), "tunnel", gateway.URL, time.Minute))
+			client := tunnelrouting.NewHTTPClient(routes, "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), []string{"127.0.0.0/8"})
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.example.com/token", nil)
+			require.NoError(t, err)
+			resp, cause := client.Do(req, "tunnel")
+			if resp != nil {
+				require.NoError(t, resp.Body.Close())
+			}
+			require.ErrorIs(t, cause, tunnelrouting.ErrNoTunnelRoute)
+			err = memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: cause}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.Join(errMemberUnroutable, cause))
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok)
+			require.Equal(t, tc.want, failure.code)
+			require.EqualError(t, err, `server "fixture" can't be reached right now`)
+		})
 	}
 }

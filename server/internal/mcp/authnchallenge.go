@@ -1294,25 +1294,25 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession, err)
 		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
 		// the client is told to retry the same request instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable, resolveFailureHappened(err), err)
 		return remoteSessionUnavailableError(w, err)
 	case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		// No authorization the caller performs supplies a self client's
 		// credential, so a challenge would only loop the client through
 		// reauthorization. Name the administrator instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured, err)
 		return clientCredentialMisconfiguredError(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
 		// can repair it instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured, err)
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
@@ -1321,7 +1321,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
@@ -1364,7 +1364,7 @@ func setOutageRetryAfter(w http.ResponseWriter) {
 // bearer token was accepted but whose upstream remote session was not. The
 // response itself is byte-identical to other rejections of the same status,
 // so this line is what tells them apart in production.
-func (s *Service) recordRemoteSessionRejection(ctx context.Context, authentication *issuerGateAuthentication, message, reason string, code mcpconnectionattempts.Code) {
+func (s *Service) recordRemoteSessionRejection(ctx context.Context, authentication *issuerGateAuthentication, message, reason string, code mcpconnectionattempts.Code, causes ...error) {
 	endpoint := authentication.endpoint
 	endpoint.LogWith(s.logger).WarnContext(ctx, message,
 		attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
@@ -1374,6 +1374,10 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogUserSessionSubjectKind(string(authentication.subject.Kind)),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+	// Only a fresh, admitted standalone refresh row replaces this gate row.
+	if code == (mcpconnectionattempts.Code{}) || remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+		return
+	}
 	// A caller that went away says nothing about the remote session.
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
