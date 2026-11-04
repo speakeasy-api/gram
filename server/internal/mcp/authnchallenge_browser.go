@@ -123,11 +123,12 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
 	var parentReconnect *CodeReconnectBinding
+	var parentWorkload *WorkloadReconnectBinding
 	defer func() {
 		if retErr == nil {
 			return
 		}
-		if parentReconnect.expired(time.Now()) {
+		if parentReconnect.expired(time.Now()) || parentWorkload.expired(time.Now()) {
 			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))...)
 			return
 		}
@@ -144,6 +145,7 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 		return fmt.Errorf("load parent login state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
 	parentReconnect = parent.CodeReconnect
+	parentWorkload = parent.WorkloadReconnect
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}

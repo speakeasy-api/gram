@@ -77,6 +77,9 @@ func validateCodeReconnectBinding(state AuthnChallengeState) error {
 	return nil
 }
 
+// errCodeReconnectTicketInvalid is a link that is not a live ticket any more.
+var errCodeReconnectTicketInvalid = errors.New("connection link is not a live ticket")
+
 func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndpoint, claim bool) (*CodeReconnectBinding, error) {
 	id := r.URL.Query().Get("code_reconnect")
 	if id == "" {
@@ -103,7 +106,7 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 		if b != nil && !claim {
 			s.recordTicketExpired(r, endpoint, state, mcpconnectionattempts.AppCodeMode)
 		}
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
+		return nil, oops.E(oops.CodeBadRequest, errCodeReconnectTicketInvalid, "invalid or expired connection request")
 	}
 	if err := endpoint.ValidateChallenge(r.Context(), state.Endpoint, state.UserSessionIssuerID); err != nil {
 		return nil, oauthAuthorityError(err)

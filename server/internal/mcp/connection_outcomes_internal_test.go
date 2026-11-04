@@ -48,7 +48,7 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
 	connected, stale, unset := uuid.New(), uuid.New(), uuid.New()
-	gap := authClientResolution{outcome: authClientGap, reason: authClientReasonNoAuthStale, clientID: uuid.New()}
+	gap := authClientResolution{outcome: authClientGap, reason: authClientReasonNoAuthStale}
 	view := &gatewayConsentView{
 		members: []metaMember{{serverID: stale, authClient: &gap}},
 		Servers: []gatewayServer{
@@ -64,9 +64,33 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 	row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn)
 	require.Equal(t, stale.String(), row.MemberID)
 	require.Equal(t, authClientReasonNoAuthStale, row.SubReason, "the gap that was only a debug log")
-	require.Equal(t, gap.clientID.String(), row.AuthClientID)
+	require.Empty(t, row.AuthClientID, "that reason names no auth client")
 	require.Equal(t, unset.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeUpstreamSignInNotSetUp).MemberID)
 	rec.RequireNotEnded()
+}
+
+func TestGatewayServerHappened_FirstConnectIsNotAStaleChoice(t *testing.T) {
+	t.Parallel()
+
+	noPick := func(reason string) *authClientResolution {
+		return &authClientResolution{outcome: authClientGap, reason: reason}
+	}
+	named := &authClientResolution{outcome: authClientGap, reason: authClientReasonClientDisabled, clientID: uuid.New()}
+	for name, tc := range map[string]struct {
+		status     gatewayServerStatus
+		authClient *authClientResolution
+		want       string
+	}{
+		"first connect, server requires auth":    {gatewayServerNotConnected, noPick(authClientReasonNoAuthForbidden), "not_connected"},
+		"first connect, clients not recorded":    {gatewayServerNotConnected, noPick(authClientReasonNoAuthStale), "not_connected"},
+		"not connected, the chosen client broke": {gatewayServerNotConnected, named, authClientReasonClientDisabled},
+		"lapsed connection keeps the gap":        {gatewayServerReconnect, noPick(authClientReasonNoAuthStale), authClientReasonNoAuthStale},
+		"not set up keeps the gap":               {gatewayServerNotSetUp, noPick(authClientReasonNoAuthStale), authClientReasonNoAuthStale},
+		"no access keeps its reason":             {gatewayServerNotConnected, &authClientResolution{outcome: authClientNoAccess, reason: authClientReasonNotPermitted}, authClientReasonNotPermitted},
+	} {
+		_, detail := gatewayServerHappened(tc.status, tc.authClient)
+		require.Equal(t, tc.want, detail, name)
+	}
 }
 
 func TestRecordConsentPage_ProblemIsAStepOnTheAttempt(t *testing.T) {
@@ -108,7 +132,7 @@ func TestVerdictHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.ResultAllowed), verdictHappened(remotesessions.ValidationOutcomeValid, false))
 	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeRejectedByMember), verdictHappened(remotesessions.ValidationOutcomeRejectedByMember, false))
 	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderRejected), verdictHappened(remotesessions.ValidationOutcomeInactive, false))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeMemberToolsMissing), verdictHappened(remotesessions.ValidationOutcomeUnknown, false))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, false))
 	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeTunnelUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, true))
 }
 
@@ -198,17 +222,42 @@ func TestAccessHappened(t *testing.T) {
 func TestNoReadyServerHappened(t *testing.T) {
 	t.Parallel()
 
-	waiting := &gatewayConsentView{Servers: []gatewayServer{{Status: gatewayServerNotConnected}, {Status: gatewayServerReconnect}}}
-	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn, noReadyServerHappened(waiting), "a first-time gateway connect blames nobody")
-	broken := &gatewayConsentView{Servers: []gatewayServer{{Status: gatewayServerNotConnected}, {Status: gatewayServerUnavailable}}}
-	require.Equal(t, mcpconnectionattempts.CodeMemberToolsMissing, noReadyServerHappened(broken))
+	view := func(statuses ...gatewayServerStatus) *gatewayConsentView {
+		servers := make([]gatewayServer, 0, len(statuses))
+		for _, status := range statuses {
+			servers = append(servers, gatewayServer{Status: status})
+		}
+		return &gatewayConsentView{Servers: servers}
+	}
+	for name, tc := range map[string]struct {
+		gateway *gatewayConsentView
+		want    mcpconnectionattempts.Code
+	}{
+		"waiting on sign-ins":          {view(gatewayServerNotConnected, gatewayServerReconnect), mcpconnectionattempts.CodeNeedsSignIn},
+		"chain pending can connect":    {view(gatewayServerChainPending), mcpconnectionattempts.CodeNeedsSignIn},
+		"no servers":                   {view(), mcpconnectionattempts.CodeResourceNotAvailable},
+		"no access to any":             {view(gatewayServerNoAccess, gatewayServerNoAccess), mcpconnectionattempts.CodeResourceNotAvailable},
+		"no access but one to connect": {view(gatewayServerNoAccess, gatewayServerNotConnected), mcpconnectionattempts.CodeNeedsSignIn},
+		"not set up":                   {view(gatewayServerNotSetUp), mcpconnectionattempts.CodeUpstreamSignInNotSetUp},
+		"not set up and one waiting":   {view(gatewayServerNotConnected, gatewayServerNotSetUp), mcpconnectionattempts.CodeUpstreamSignInNotSetUp},
+		"a real outage":                {view(gatewayServerNotConnected, gatewayServerUnavailable), mcpconnectionattempts.CodeMemberToolsMissing},
+	} {
+		require.Equal(t, tc.want, noReadyServerHappened(tc.gateway), name)
+	}
 }
 
 func TestRemoteLoginRefusalHappened(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(oops.E(oops.CodeUnauthorized, nil, "wrong browser")))
-	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errors.New("connection login does not match its link")))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryWrongLogin))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryNoBrowserBinding))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryOtherBrowser))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryBrowserUnconfirmed))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryOtherUser))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errRecoveryNotSignedIn))
+	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, remoteLoginRefusalHappened(errToolsetEndpointMismatch))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, remoteLoginRefusalHappened(errors.New("check connection user membership: down")))
 	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, remoteLoginRefusalHappened(errRecoveryNoAccess))
 	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, remoteLoginRefusalHappened(oops.E(oops.CodeForbidden, nil, "no")))
 	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, remoteLoginRefusalHappened(errRecoveryUnavailable))
@@ -218,7 +267,7 @@ func TestRemoteLoginRefusalHappened(t *testing.T) {
 func TestFederatedHappened(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, federatedHappened(remotesessions.ErrFederatedConfiguration))
+	require.Equal(t, mcpconnectionattempts.CodeConfigurationRequired, federatedHappened(remotesessions.ErrFederatedConfiguration))
 	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, federatedHappened(remotesessions.ErrFederatedUnavailable))
 	require.Equal(t, mcpconnectionattempts.CodeSignInProviderError, federatedHappened(remotesessions.ErrFederatedIdentity))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(remotesessions.ErrFederatedSigning))
@@ -239,7 +288,7 @@ func TestReconnectFailure(t *testing.T) {
 		"setup changed":    {errReconnectCatalogChanged, mcpconnectionattempts.CodeConnectionChanged, true},
 		"not frozen":       {errReconnectCatalogNotFrozen, mcpconnectionattempts.CodeConnectionChanged, true},
 		"config changed":   {errConsentConfigurationChanged, mcpconnectionattempts.CodeConnectionChanged, true},
-		"too large":        {errConnectionCatalogTooLarge, mcpconnectionattempts.CodeMemberToolsMissing, false},
+		"too large":        {errConnectionCatalogTooLarge, mcpconnectionattempts.CodeCatalogTooLarge, false},
 		"database down":    {errors.New("database down"), mcpconnectionattempts.CodeInternalError, false},
 	} {
 		code, _, terminal := reconnectFailure(tc.err)

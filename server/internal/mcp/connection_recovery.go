@@ -81,7 +81,13 @@ var (
 	errRecoveryLoginExpired = errors.New("connection login expired")
 	errRecoveryNotSignedIn  = errors.New("connection recovery requires a signed-in user")
 	errRecoveryOtherUser    = errors.New("connection recovery link belongs to another user")
-	errRecoveryNoAccess     = errors.New("connection recovery user may not use the client")
+
+	errRecoveryWrongLogin         = errors.New("connection login does not match its link")
+	errRecoveryNoBrowserBinding   = errors.New("connection login has no browser binding")
+	errRecoveryOtherBrowser       = errors.New("connection login callback is from another browser")
+	errRecoveryBrowserUnconfirmed = errors.New("connection login browser was not confirmed")
+
+	errRecoveryNoAccess = errors.New("connection recovery user may not use the client")
 	// errRecoveryUnavailable: the server no longer offers the link's client
 	// on the same registration, or the client cannot be used.
 	errRecoveryUnavailable = errors.New("connection recovery client is no longer available")
@@ -312,18 +318,18 @@ func (s *Service) validateConnectionRecoveryHopOwner(r *http.Request, state remo
 // browser passed the hop's confirm stop.
 func (s *Service) validateConnectionRecoveryBrowser(r *http.Request, login connectionRecovery) error {
 	if login.BrowserCookieID == "" || login.BrowserHash == "" {
-		return errors.New("connection login has no browser binding")
+		return errRecoveryNoBrowserBinding
 	}
 	cookie, err := r.Cookie(federationCookieName(login.BrowserCookieID))
 	if err != nil || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(login.BrowserHash)) != 1 {
-		return errors.New("connection login callback is from another browser")
+		return errRecoveryOtherBrowser
 	}
 	if !login.BrowserHop {
 		return nil
 	}
 	confirmed, err := s.remoteLoginHopCache.Get(r.Context(), "remoteLoginHop:"+remoteLoginHopConfirmedID(login.BrowserCookieID))
 	if err != nil || confirmed.Phase != remoteLoginHopConfirmed || !confirmed.ConnectionRecovery || confirmed.CookieID != login.BrowserCookieID || confirmed.ParentChallengeID != login.ID {
-		return errors.New("connection login browser was not confirmed")
+		return errRecoveryBrowserUnconfirmed
 	}
 	return nil
 }
@@ -345,7 +351,7 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	}
 	if remote.Subject == nil || remote.Subject.Kind != urn.SessionSubjectKindUser || remote.Subject.ID != login.UserID ||
 		remote.RemoteSessionClientID != login.RegistrationID || remote.OrganizationID != login.OrganizationID {
-		return true, errors.New("connection login does not match its link")
+		return true, errRecoveryWrongLogin
 	}
 	if err := s.validateConnectionRecoveryBrowser(r, login); err != nil {
 		return true, err

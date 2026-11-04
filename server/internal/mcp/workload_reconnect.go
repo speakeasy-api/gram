@@ -50,6 +50,10 @@ func (b *WorkloadReconnectBinding) authorize(userID string, impersonated bool, n
 	return nil
 }
 
+func (b *WorkloadReconnectBinding) expired(now time.Time) bool {
+	return b != nil && !now.Before(b.ExpiresAt)
+}
+
 // consumeWorkloadReconnect exchanges the opaque, single-use browser entry
 // ticket for the ordinary first-party challenge. No identity comes from URL
 // parameters; resource and owner were recorded after workload admission.

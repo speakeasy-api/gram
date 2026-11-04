@@ -1721,7 +1721,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidClient)
+		t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 
@@ -1732,7 +1732,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// whichever one they chose.
 	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
 	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeTunnelUnavailable)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
 	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
@@ -1750,7 +1750,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
-		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidClient)
+		t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
@@ -2050,7 +2050,7 @@ func providerErrorHappened(code string) mcpconnectionattempts.Code {
 	switch code {
 	case oautherr.CodeInvalidScope, oautherr.CodeUnauthorizedClient:
 		return mcpconnectionattempts.CodeProviderOAuthInvalidScope
-	case oautherr.CodeInvalidClient, oautherr.CodeInvalidRequest:
+	case oautherr.CodeInvalidClient:
 		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
 	case oautherr.CodeTemporarilyUnavailable:
 		return mcpconnectionattempts.CodeProviderUnavailable
@@ -2095,7 +2095,7 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 	case code == oautherr.CodeTemporarilyUnavailable, endpointErr.statusCode == http.StatusServiceUnavailable:
 		return mcpconnectionattempts.CodeProviderUnavailable
 	case endpointErr.statusCode/100 == 4:
-		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
+		return mcpconnectionattempts.CodeSignInProviderError
 	default:
 		return mcpconnectionattempts.CodeProviderServerError
 	}

@@ -73,7 +73,7 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
-	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeCanceled},
+	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch},
 	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled},

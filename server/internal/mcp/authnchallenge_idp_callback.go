@@ -256,7 +256,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				if federation.OfflineRequested && federation.ValidatedUserID != "" && federation.ValidatedIdentity != nil && q.Get("code") == "" {
 					optionalRefused = true
 				} else {
-					return finishFederation(mcpconnectionattempts.CodeCanceled, oops.CodeForbidden, nil, "Login was declined", true)
+					return finishFederation(mcpconnectionattempts.CodeProviderDenied, oops.CodeForbidden, nil, "Login was declined", true)
 				}
 			} else {
 				return finishFederation(mcpconnectionattempts.CodeSignInProviderError, oops.CodeGatewayError, errors.New("federated provider returned an error"), "Federated login failed. Contact your administrator", false)
@@ -276,7 +276,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		// anything else is config/IDP trouble.
 		if challengeState.FirstParty {
 			if idpErr == "access_denied" {
-				t.Refuse(ctx, mcpconnectionattempts.CodeCanceled)
+				t.Refuse(ctx, mcpconnectionattempts.CodeProviderDenied)
 				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
@@ -314,7 +314,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		// ...) points at IDP/config trouble. Both are terminal; bucket them
 		// accordingly before bouncing the error back to the client.
 		if idpErr == "access_denied" {
-			t.Refuse(ctx, mcpconnectionattempts.CodeCanceled)
+			t.Refuse(ctx, mcpconnectionattempts.CodeProviderDenied)
 			s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 		} else {
@@ -431,6 +431,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		logger.WarnContext(ctx, "workload reconnect owner authorization rejected", attr.SlogError(err))
+		if challengeState.WorkloadReconnect.expired(time.Now()) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}

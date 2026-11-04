@@ -41,7 +41,7 @@ const (
 func federatedHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrFederatedConfiguration):
-		return mcpconnectionattempts.CodeConnectionChanged
+		return mcpconnectionattempts.CodeConfigurationRequired
 	case errors.Is(err, remotesessions.ErrFederatedSigning):
 		return mcpconnectionattempts.CodeInternalError
 	case errors.Is(err, remotesessions.ErrFederatedIdentity):
@@ -84,7 +84,7 @@ func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedM
 		return
 	}
 	attempt := challengeState.connectionAttempt(endpoint)
-	if challengeState.CodeReconnect.expired(time.Now()) {
+	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) {
 		s.endAttemptOnce(ctx, s.logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
 		return
 	}
@@ -103,7 +103,7 @@ func reconnectFailure(err error) (mcpconnectionattempts.Code, mcpconnectionattem
 	case errors.Is(err, errReconnectCatalogChanged), errors.Is(err, errReconnectCatalogNotFrozen), errors.Is(err, errConsentConfigurationChanged):
 		return mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("catalog_setup"), true
 	case errors.Is(err, errConnectionCatalogTooLarge):
-		return mcpconnectionattempts.CodeMemberToolsMissing, mcpconnectionattempts.Detail("catalog_too_large"), false
+		return mcpconnectionattempts.CodeCatalogTooLarge, mcpconnectionattempts.Detail(""), false
 	default:
 		return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail(""), false
 	}
@@ -144,17 +144,34 @@ func accessHappened(err error) mcpconnectionattempts.Code {
 
 // noReadyServerHappened tells a first connect waiting on sign-ins from a real gateway problem.
 func noReadyServerHappened(gateway *gatewayConsentView) mcpconnectionattempts.Code {
+	waiting, notSetUp := false, false
 	for _, server := range gateway.Servers {
 		switch server.Status {
 		case gatewayServerNotConnected, gatewayServerReconnect, gatewayServerChainPending:
-		case gatewayServerUnavailable, gatewayServerNoAccess, gatewayServerNotSetUp, gatewayServerNoSignIn, gatewayServerConnected, gatewayServerChained:
+			waiting = true
+		case gatewayServerNotSetUp:
+			notSetUp = true
+		case gatewayServerNoAccess:
+		case gatewayServerUnavailable, gatewayServerNoSignIn, gatewayServerConnected, gatewayServerChained:
 			return mcpconnectionattempts.CodeMemberToolsMissing
 		}
 	}
-	if len(gateway.Servers) == 0 {
-		return mcpconnectionattempts.CodeMemberToolsMissing
+	switch {
+	case notSetUp:
+		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+	case waiting:
+		return mcpconnectionattempts.CodeNeedsSignIn
+	default:
+		return mcpconnectionattempts.CodeResourceNotAvailable
 	}
-	return mcpconnectionattempts.CodeNeedsSignIn
+}
+
+// ticketClaimHappened reads a failed claim of a connection link. Only a spent or lapsed link is expired.
+func ticketClaimHappened(err error) mcpconnectionattempts.Code {
+	if errors.Is(err, redisCache.ErrCacheMiss) || errors.Is(err, errCodeReconnectTicketInvalid) {
+		return mcpconnectionattempts.CodeExpired
+	}
+	return mcpconnectionattempts.CodeInternalError
 }
 
 // recordConsentPage records what a rendered consent page told the person.
@@ -205,9 +222,11 @@ func (s *Service) recordGatewayServerStatus(ctx context.Context, attempt mcpconn
 
 // gatewayServerHappened maps a server's consent status, and any gap in its
 // connection choice, to what it records. The detail is the status or the gap.
+// A member not connected yet with no client named has no choice to be stale.
 func gatewayServerHappened(status gatewayServerStatus, authClient *authClientResolution) (mcpconnectionattempts.Happened, string) {
 	detail := string(status)
-	if authClient != nil && (authClient.outcome == authClientGap || authClient.outcome == authClientNoAccess) {
+	firstConnect := status == gatewayServerNotConnected && authClient != nil && authClient.outcome == authClientGap && authClient.clientID == uuid.Nil
+	if authClient != nil && !firstConnect && (authClient.outcome == authClientGap || authClient.outcome == authClientNoAccess) {
 		detail = authClient.reason
 	}
 	switch status {
@@ -372,8 +391,10 @@ func remoteLoginRefusalHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, errRecoveryNoAccess):
 		return mcpconnectionattempts.CodeNoServerAccess
-	case errors.Is(err, errRecoveryUnavailable):
+	case errors.Is(err, errRecoveryUnavailable), errors.Is(err, errToolsetEndpointMismatch):
 		return mcpconnectionattempts.CodeConnectionChanged
+	case errors.Is(err, errRecoveryWrongLogin), errors.Is(err, errRecoveryNoBrowserBinding), errors.Is(err, errRecoveryOtherBrowser), errors.Is(err, errRecoveryBrowserUnconfirmed), errors.Is(err, errRecoveryOtherUser), errors.Is(err, errRecoveryNotSignedIn):
+		return mcpconnectionattempts.CodeSessionChanged
 	}
 	if failure, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch failure.Code {
@@ -385,17 +406,18 @@ func remoteLoginRefusalHappened(err error) mcpconnectionattempts.Code {
 			return mcpconnectionattempts.CodeInternalError
 		}
 	}
-	return mcpconnectionattempts.CodeSessionChanged
+	return mcpconnectionattempts.CodeInternalError
 }
 
 // recordTokenClientRefusal records /token refusing the client of an authorization
-// code. A client that never resolved is no proof of a real flow, so it has no row.
+// code. A client that never resolved is no proof of a real flow: a metric, never a row.
 func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID, reason string) {
 	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
 	what, recorded := tokenClientRefusalHappened(reason)
 	if !recorded || clientID == "" {
+		s.metrics.RecordConnectionRefusalWithoutRow(r.Context(), "token_"+reason)
 		return
 	}
 	app := mcpconnectionattempts.AppUnverified
@@ -481,7 +503,7 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 	if tunneled {
 		return mcpconnectionattempts.CodeTunnelUnavailable
 	}
-	return mcpconnectionattempts.CodeMemberToolsMissing
+	return mcpconnectionattempts.CodeProviderUnavailable
 }
 
 // recordListingFailures writes one row per member a Direct listing lost. Sign-ins not done yet are not failures.

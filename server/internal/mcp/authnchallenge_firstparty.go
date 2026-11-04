@@ -187,7 +187,6 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 			Prompt:          "",
 		})
 		if err != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeIDPUnavailable)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
@@ -198,9 +197,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if codeReconnect != nil {
 		claimed, err := s.codeReconnectTicket(r, endpoint, true)
 		if err != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+			t.Refuse(ctx, ticketClaimHappened(err))
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return err
 		}
 		if claimed == nil || *claimed != *codeReconnect {

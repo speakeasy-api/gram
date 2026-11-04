@@ -657,7 +657,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			focus = r.URL.Query().Get("server")
 		}
 		if len(focus) > maxFocusServerLength {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("focus_server_too_long"))
 			return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
 		}
 		view, focused, gerr := s.gatewayConsent(ctx, endpoint, challengeState, cards, focus)
@@ -878,6 +878,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 					}
 				}
 				if errors.Is(err, errConnectionCatalogTooLarge) {
+					consentProblem = mcpconnectionattempts.CodeCatalogTooLarge
 					approvalError.Message = "Tool definitions are too large to approve here. Ask an administrator to reduce the tool inventory."
 				}
 				if errors.Is(err, errConsentCaptureSuperseded) {
@@ -1141,7 +1142,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return nil
 		}
 		if action != "approve" || r.PostForm.Get("agent_id") != "" {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("review_action_invalid"))
 			return oops.E(oops.CodeBadRequest, nil, "approve or cancel this gateway review")
 		}
 	}
@@ -1232,7 +1233,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// A distinct action makes mixed-version consent POSTs fail closed: an
 		// older server rejects approve_agent instead of silently issuing a human
 		// grant while ignoring the newly introduced agent_id field.
-		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("agent_action_mismatch"))
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	// The credential the grant mints is the selected agent's for an agent
@@ -1328,7 +1329,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID == "" && !reuse {
 		toolSelection, err = chosenToolSelection(r.PostForm, boundInventory)
 		if err != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("tool_selection_invalid"))
 			return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
 		}
 	}
@@ -1342,15 +1343,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			catalogMode = toolfilter.CatalogMode(requested)
 		}
 		if catalogMode != toolfilter.CatalogModeLive && catalogMode != toolfilter.CatalogModeCached {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("catalog_mode_invalid"))
 			return oops.E(oops.CodeBadRequest, nil, "invalid tool catalog mode").LogWarn(ctx, logger)
 		}
 		if toolSelection != nil && len(toolSelection.LiveAnnotations()) > 0 {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("live_annotations_on_selection"))
 			return oops.E(oops.CodeBadRequest, nil, "Specific tools must use the tools captured at consent").LogWarn(ctx, logger)
 		}
 		if toolSelection != nil && catalogMode != toolfilter.CatalogModeCached {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("selection_needs_cached_catalog"))
 			return oops.E(oops.CodeBadRequest, nil, "Specific tools requires a cached catalog").LogWarn(ctx, logger)
 		}
 	}
@@ -1444,7 +1445,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
 		if err != nil {
 			if errors.Is(err, errConnectionCatalogTooLarge) {
-				t.Refuse(ctx, mcpconnectionattempts.CodeMemberToolsMissing, mcpconnectionattempts.Detail("catalog_too_large"))
+				t.Refuse(ctx, mcpconnectionattempts.CodeCatalogTooLarge)
 				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)
 			}
 			if errors.Is(err, errConsentConfigurationChanged) {

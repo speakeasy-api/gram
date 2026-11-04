@@ -281,7 +281,7 @@ func TestConnectionOutcome_SignIn(t *testing.T) {
 	t.Run("canceled at the sign-in page", func(t *testing.T) {
 		t.Parallel()
 		rec := serve(t, memberMock(), url.Values{"error": {"access_denied"}})
-		rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeCanceled)
+		rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeProviderDenied)
 	})
 	t.Run("sign-in service error", func(t *testing.T) {
 		t.Parallel()
@@ -430,7 +430,7 @@ func TestConnectionOutcome_RecoveryLinkEndsAtTheProvider(t *testing.T) {
 	rec.RequireOneAttempt()
 }
 
-func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T) {
+func TestConnectionOutcome_AuthorizeSignInLinkFailureEndsTheAttempt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLErr: context.DeadlineExceeded})
@@ -443,7 +443,7 @@ func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T
 	require.Error(t, ti.service.HandleAuthorize(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
 
 	rec.RequireStep(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
-	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeIDPUnavailable)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
 	rec.RequireOneAttempt()
 }
 

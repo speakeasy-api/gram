@@ -832,7 +832,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return rejectGrant(mcpconnectionattempts.CodeCodeNotFoundOrExpired, "code was issued to a different client", mcpconnectionattempts.Detail("code_client_mismatch"))
+		return rejectGrant(mcpconnectionattempts.CodeClientAuthFailed, "code was issued to a different client", mcpconnectionattempts.Detail("code_client_mismatch"))
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
@@ -880,7 +880,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if cerr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_admission_denied")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return rejectGrant(mcpconnectionattempts.CodeNoServerAccess, "agent authorization is no longer valid")
+			return rejectGrant(accessHappened(cerr), "agent authorization is no longer valid")
 		}
 		admissionTx, err = s.db.Begin(ctx)
 		if err != nil {
@@ -973,7 +973,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if toolPolicy != nil && toolPolicy.Catalog != nil {
 		catalog, err = s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, clientRow.ClientID), endpoint, subject, toolPolicy.Catalog, time.Now())
 		if errors.Is(err, errConnectionCatalogExpired) {
-			return rejectGrant(mcpconnectionattempts.CodeExpired, "approved tools expired; give consent again", mcpconnectionattempts.Detail("approved_tools_expired"))
+			return rejectGrant(mcpconnectionattempts.CodeConnectionCatalogExpired, "approved tools expired; give consent again", mcpconnectionattempts.Detail("approved_tools_expired"))
 		}
 		if err != nil {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("approved_tools_unavailable"))

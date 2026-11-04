@@ -349,7 +349,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			Prompt:          "",
 		})
 		if err != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeIDPUnavailable)
 			// A failure to build the IDP authorization URL typically means the
 			// issuer's IDP wiring is misconfigured — a config-class flow failure.
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
