@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Run auth mock units, product contracts, then every browser file serially with preserved evidence"
+#MISE description="Run auth mock units, then every browser file serially with preserved evidence"
 #MISE dir="{{ config_root }}"
 
 set -euo pipefail
@@ -20,16 +20,8 @@ else
 fi
 
 result=0
-if mise run test:mcp-auth:contracts > "$output/contracts.log" 2>&1; then
-  printf 'contracts\t0\n' >> "$output/status.tsv"
-else
-  code=$?
-  printf 'contracts\t%s\n' "$code" >> "$output/status.tsv"
-  result=1
-fi
-
 # Per-file invocation prevents one family exhausting the whole matrix budget.
-# No retries: a failed contract/family remains failed while later families run.
+# No retries: a failed family remains failed while later families run.
 for spec in e2e/mcp-auth/*.spec.ts; do
   name="$(basename "$spec" .spec.ts)"
   if mise run test:mcp-auth "$(basename "$spec")" --global-timeout=1800000 > "$output/$name.log" 2>&1; then

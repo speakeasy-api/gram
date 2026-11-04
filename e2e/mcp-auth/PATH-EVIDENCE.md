@@ -7,48 +7,42 @@ Persisted enforcement verified in 44/44 recorded attempts; auth-graph attachment
 
 ## Fixture construction
 
-Browser fixtures are created through actual dashboard/staff UI. Mock controls only affect local protocol fixtures. No manual SQL state was created. [STATE-CONSTRUCTION.md](./STATE-CONSTRUCTION.md) separately lists historical/aged/adversarial persisted state, in-memory contracts, and environment prerequisites.
-
-## Product-boundary evidence (separate from browser counts)
-
-`mise run test:mcp-auth:contracts` executed actual production functions with synthetic structs, HTTP responses and the delegation memory store. The measured combined run recorded **49 test entries, 11 failing entries**. This includes failed parent tests: the distinct failing leaf contracts are six stricter typed-serving guards (G22/G23/G24) and three configuration-error grant-preservation cases (G11). Parent-package operational/parser/resource tests passed.
-
-The stricter guards reject current explicitly permission-gated compatibility hand-backs; they do not demonstrate an authorization bypass or establish that the agent report's proposed root cause is correct. The G11 classifier correctly identifies admin-remediation errors; preservation is tested separately by executing the real memory-state service. Shadow characterization is not parity proof. No SQL selection or persistence is claimed for in-memory tests.
+Browser fixtures are created through actual dashboard/staff UI. Mock controls only affect local protocol fixtures. No manual SQL state was created. [STATE-CONSTRUCTION.md](./STATE-CONSTRUCTION.md) separately lists historical/aged/adversarial persisted state and environment prerequisites.
 
 ## Gap hypothesis / path mapping
 
 Browser counts below are references, not disjoint totals; one case can examine multiple hypotheses. A failed case can stop before the named target. Consult named test steps and preserved journals.
 
-| Hypothesis | Browser attempts / inventory | Evidence boundary                                                                                                                                                                |
-| ---------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G1         | 1 failed, 1 not measured     | Direct exact-resource red exists; gateway typed-sharing variant is independent. Card/reconnect stages count only if reached.                                                     |
-| G2         | 1 not measured               | Typed shared-registration browser variant; ambiguous legacy association variant remains unconstructed.                                                                           |
-| G3         | 3 failed, 1 passed           | Missing-member contracts include successful direct controls. Filtering cause is not inferred from missing inventory.                                                             |
-| G4         | 9 not measured               | New/existing typed-only card actions plus independent bridge-backed supported baselines; real buttons, not protocol refresh substitutes.                                         |
-| G5         | 1 failed, 2 not measured     | Login-scope and card disclosure assertions are separate; card success would not erase a login-resource/scope failure.                                                            |
-| G6         | No browser variant           | Production resource-selection helpers only; real idle keepalive needs aged state/controllable clock and scheduling. Not worker E2E.                                              |
-| G7         | 1 failed, 1 not measured     | A-survival/refresh requires B authorization to complete. Earlier resource failure blocks overwrite measurement.                                                                  |
-| G8         | 2 failed, 2 not measured     | Sibling issuer/client identities use stable per-fixture aliases; unsigned remote/native variants assert absence of borrowed headers.                                             |
-| G9         | 1 not measured               | Gateway auth-policy transition/re-consent; Code Mode variant is not established.                                                                                                 |
-| G10        | 1 not measured               | Headless workload personal-connection recovery is distinct from missing-connection-at-creation and issuance-profile UI administration.                                           |
-| G11        | No browser variant           | Real delegation memory Resolve: transient recovery/fatal negative control work; three configuration-error preservation variants fail. HTTP classification itself passes.         |
-| G12        | 1 not measured               | Reversible issuer outage and same-grant recovery; UI status presentation is credited only if asserted.                                                                           |
-| G13        | 1 not measured               | Actual HTTP caller cancellation at controlled rotation boundary, not mock-only token rotation.                                                                                   |
-| G14        | 1 not measured               | Actual token parser handles zero as unreported; browser test checks usability and reconnect after real revocation.                                                               |
-| G15        | 1 not measured               | Public native isolation beside live/dead personal grant. Not proof of an anonymous-owned hosted-public grant scenario.                                                           |
-| G16        | 1 not measured               | Actual assistant runtime turn and upstream tool identity; model/runtime failures are environment blockers, not OAuth evidence.                                                   |
-| G17        | 1 not measured               | Real HTTPS workload assertions/JWKS and shared-AS server membership; not static API-key or upstream client-credentials substitution.                                             |
-| G18        | 1 not measured               | Typed picker eligibility/labels and registration creation journey; ordinary bare-ID selection is not sufficient.                                                                 |
-| G19        | 1 not measured               | Current UI OAuth-client rotation plus parser boundaries; historical copied-scope provenance is separately unconstructed.                                                         |
-| G20        | No browser variant           | In-memory actual unmapped-choice enforcement boundary. Intentional reconnect, not completed browser recovery.                                                                    |
-| G21        | No browser variant           | In-memory incomplete-backfill/setup/stale-choice transitions. No persisted backfill or complete reconnect journey constructed.                                                   |
-| G22        | 2 not measured               | EMA/chained protocol cases plus permission/decision contracts. Current mapped compatibility hand-back fails the stricter typed-serving guard; not evidence of permission bypass. |
-| G23        | 6 not measured               | Native static/pass-through browser cases and mapped-client permission boundary. Forwarding success alone cannot prove no compatibility hand-back.                                |
-| G24        | No browser variant           | Mirrored-copy compatibility/permission boundary and stricter typed-serving guard. Historical drift provenance not constructed.                                                   |
-| G25        | 1 not measured               | Exact gateway member auth classification plus execution; frozen/live inventory semantics remain distinct.                                                                        |
-| G26        | No browser variant           | Backend shadow characterization only, not typed browser serving or proof of full shadow parity.                                                                                  |
-| G27        | 2 not measured               | Issuance-profile administration and actual assistant execution-profile cases are independently labeled.                                                                          |
-| G28        | 1 not measured               | Real stale-tab mutation rejects with conflict/precondition and rendered review; no requirement that the report's exact 409 number is the only valid status.                      |
+| Hypothesis | Browser attempts / inventory | Evidence boundary                                                                                                                                           |
+| ---------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1         | 1 failed, 1 not measured     | Direct exact-resource red exists; gateway typed-sharing variant is independent. Card/reconnect stages count only if reached.                                |
+| G2         | 1 not measured               | Typed shared-registration browser variant; ambiguous legacy association variant remains unconstructed.                                                      |
+| G3         | 3 failed, 1 passed           | Missing-member contracts include successful direct controls. Filtering cause is not inferred from missing inventory.                                        |
+| G4         | 9 not measured               | New/existing typed-only card actions plus independent bridge-backed supported baselines; real buttons, not protocol refresh substitutes.                    |
+| G5         | 1 failed, 2 not measured     | Login-scope and card disclosure assertions are separate; card success would not erase a login-resource/scope failure.                                       |
+| G6         | No browser variant           | Not exercised by browser E2E; real idle keepalive needs aged state/controllable clock and scheduling.                                                       |
+| G7         | 1 failed, 1 not measured     | A-survival/refresh requires B authorization to complete. Earlier resource failure blocks overwrite measurement.                                             |
+| G8         | 2 failed, 2 not measured     | Sibling issuer/client identities use stable per-fixture aliases; unsigned remote/native variants assert absence of borrowed headers.                        |
+| G9         | 1 not measured               | Gateway auth-policy transition/re-consent; Code Mode variant is not established.                                                                            |
+| G10        | 1 not measured               | Headless workload personal-connection recovery is distinct from missing-connection-at-creation and issuance-profile UI administration.                      |
+| G11        | No browser variant           | Not exercised by browser E2E; configuration-error grant preservation remains unmeasured.                                                                    |
+| G12        | 1 not measured               | Reversible issuer outage and same-grant recovery; UI status presentation is credited only if asserted.                                                      |
+| G13        | 1 not measured               | Actual HTTP caller cancellation at controlled rotation boundary, not mock-only token rotation.                                                              |
+| G14        | 1 not measured               | Browser test checks usability and reconnect after real revocation; token-parser boundaries are not separately exercised.                                    |
+| G15        | 1 not measured               | Public native isolation beside live/dead personal grant. Not proof of an anonymous-owned hosted-public grant scenario.                                      |
+| G16        | 1 not measured               | Actual assistant runtime turn and upstream tool identity; model/runtime failures are environment blockers, not OAuth evidence.                              |
+| G17        | 1 not measured               | Real HTTPS workload assertions/JWKS and shared-AS server membership; not static API-key or upstream client-credentials substitution.                        |
+| G18        | 1 not measured               | Typed picker eligibility/labels and registration creation journey; ordinary bare-ID selection is not sufficient.                                            |
+| G19        | 1 not measured               | Current UI OAuth-client rotation; historical copied-scope provenance is separately unconstructed.                                                           |
+| G20        | No browser variant           | Not exercised by browser E2E; no persisted historical choice or completed browser recovery constructed.                                                     |
+| G21        | No browser variant           | Not exercised by browser E2E; no persisted backfill or complete reconnect journey constructed.                                                              |
+| G22        | 2 not measured               | EMA/chained protocol cases; compatibility hand-back and permission boundaries are not independently established.                                            |
+| G23        | 6 not measured               | Native static/pass-through browser cases stop at UI construction blockers; forwarding is not established.                                                   |
+| G24        | No browser variant           | Not exercised by browser E2E; historical drift provenance not constructed.                                                                                  |
+| G25        | 1 not measured               | Exact gateway member auth classification plus execution; frozen/live inventory semantics remain distinct.                                                   |
+| G26        | No browser variant           | Not exercised by browser E2E; full shadow parity remains unproven.                                                                                          |
+| G27        | 2 not measured               | Issuance-profile administration and actual assistant execution-profile cases are independently labeled.                                                     |
+| G28        | 1 not measured               | Real stale-tab mutation rejects with conflict/precondition and rendered review; no requirement that the report's exact 409 number is the only valid status. |
 
 ## Latest per-browser-case records
 

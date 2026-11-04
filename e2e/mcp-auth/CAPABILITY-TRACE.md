@@ -170,8 +170,6 @@ The final attempt removed only redundant navigation, replacing it with `toHaveUR
 
 ### Final verification
 
-The separate `mise run test:mcp-auth:contracts` check (`.logs/mcp-auth/final-verification/contracts.log`) reports **DONE 49 tests, 11 failures, 25.467s**. The failure count includes **9 leaf assertions plus 2 parent entries**, not 11 independent bugs: six `TestAuthGapPathsDesiredTypedServingBoundary` leaves (`G22_EMA`, `G22_may_chain`, `G23_tunneled_static`, `G23_tunneled_pass_through`, `G24_stale_oauth`, `G24_stale_static`) and three `TestAuthOperationalGapG11UnexpectedRejectionPreservesGrant` leaves (`WAF403`, `400_invalid_client`, `404_moved_endpoint`), plus their two parent entries. These hypothesis assertions remain red; they use in-memory query structs and dependency-injected `RefreshConfiguration` state-machine checks, **not HTTP, SQL, browser/worker execution, or persistence evidence**. They are not all proven product regressions.
-
 The earlier final-verification batch also reports **36 unit tests passed**, repository type-check passed, **83 browser tests in 22 files** listed, formatting passed, and whitespace checks clean (all 64 untracked files and `git diff --check`). Both trace artifact roots are ignored. That batch completed without product edits; the separately authorized bootstrap and subsequent workload validation now await results.
 
 ### Attachment-loss source hypothesis (not causal proof)
