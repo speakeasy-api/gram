@@ -15,6 +15,7 @@ import (
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -149,7 +150,7 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 
 	t.Run("chat-scope API key stamps api_key", func(t *testing.T) {
 		t.Parallel()
-		keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit)
+		keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, authztest.NewClient(t, ti.authzEngine), ti.audit)
 		key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 			Name:   "chat-scope-key",
 			Scopes: []string{"chat"},
