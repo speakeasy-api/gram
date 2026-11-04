@@ -279,6 +279,7 @@ function CatalogInner() {
       </ResourceListPage>
 
       <AddServerDialog
+        openProviderSetup={!attachToGatewayId}
         servers={addingServers}
         projectSlug={project.slug}
         open={addingServers.length > 0}
