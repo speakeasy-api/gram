@@ -450,9 +450,10 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 		for name, tc := range map[string]struct {
 			fixable bool
 			remedy  string
+			message string
 		}{
-			"consent can fix it": {fixable: true, remedy: staleReconnectCopy},
-			"consent cannot":     {fixable: false, remedy: staleAdminCopy},
+			"consent can fix it": {fixable: true, remedy: staleReconnectCopy, message: "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection."},
+			"consent cannot":     {fixable: false, remedy: staleAdminCopy, message: "This server needs your administrator to finish setup or give you access."},
 		} {
 			t.Run(string(mode)+"/"+name, func(t *testing.T) {
 				t.Parallel()
@@ -471,8 +472,7 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					t.Helper()
 					refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 					require.True(t, ok, "got %v", err)
-					require.Contains(t, refused.Message, `"source"`)
-					require.Contains(t, refused.Message, tc.remedy)
+					require.Equal(t, tc.message, refused.Message)
 					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
 				}
 				ran := false
@@ -485,7 +485,8 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					search, searchErr := host.Search(runCtx, codemode.SearchArgs{Query: "", Server: "source", Limit: 10})
 					require.NoError(t, searchErr)
 					require.Len(t, search.FailedMembers, 1)
-					require.Contains(t, search.FailedMembers[0].Message, tc.remedy)
+					require.Equal(t, "source", search.FailedMembers[0].Server)
+					require.Equal(t, tc.message, search.FailedMembers[0].Message)
 					page, serversErr := host.Servers(runCtx, codemode.PageArgs{Server: "source", Verify: true})
 					require.NoError(t, serversErr)
 					require.Len(t, page.Items, 1)

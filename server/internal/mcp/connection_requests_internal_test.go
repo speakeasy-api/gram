@@ -312,6 +312,7 @@ func TestCallerSubjectPreservesAuthenticatedAgent(t *testing.T) {
 	agent := uuid.New()
 	for _, userID := range []string{"", "authorizing-human"} {
 		t.Run(userID, func(t *testing.T) {
+			t.Parallel()
 			ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: userID}, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.String()))
 			rec := mcpconnectionattemptstest.New(t)
 			rec.Recorder.Once(ctx, mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
@@ -344,6 +345,7 @@ func TestServerHeadersHaveCredential(t *testing.T) {
 		{name: "Authorization", want: false},
 	} {
 		t.Run(tc.name+tc.forwarded+tc.value, func(t *testing.T) {
+			t.Parallel()
 			got := serverHeadersHaveCredential([]remotemcp_repo.RemoteMcpServerHeader{{Name: tc.name, IsSecret: tc.secret, Value: pgtype.Text{String: tc.value, Valid: tc.value != ""}, ValueFromRequestHeader: pgtype.Text{String: tc.forwarded, Valid: tc.forwarded != ""}}})
 			require.Equal(t, tc.want, got)
 		})
