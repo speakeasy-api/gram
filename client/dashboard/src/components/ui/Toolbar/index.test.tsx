@@ -117,6 +117,18 @@ describe("Page.Toolbar.Search", () => {
     expect(input.value).toBe("");
   });
 
+  it("ends on the last value when repeated values echo in order", () => {
+    const { input, type, show } = setup();
+    type("a");
+    type("");
+    type("a");
+    show("a");
+    show("");
+    show("a");
+    expect(input.value).toBe("a");
+    expect(parent.sent).toEqual(["a", "", "a"]);
+  });
+
   it("adopts a value changed outside the input", () => {
     const { input, show } = setup();
     show("abc");

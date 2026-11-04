@@ -369,7 +369,6 @@ function MCPOverview() {
             <Page.Toolbar.Search
               value={search}
               onChange={setSearch}
-              debounceMs={150}
               placeholder="Search MCP servers..."
             />
             <Page.Toolbar.Filters
