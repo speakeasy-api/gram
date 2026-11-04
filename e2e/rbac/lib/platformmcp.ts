@@ -191,7 +191,8 @@ export function mcpOutcome(res: {
   if (res.status !== 200) return `http-${res.status}`;
   if (!res.answer) return "unreadable";
   if (res.answer.error) return "rpc-error";
-  if (!res.answer.result?.isError) return "ok";
+  if (!res.answer.result) return "no-result";
+  if (!res.answer.result.isError) return "ok";
   const text = (res.answer.result.content ?? [])
     .map((c) => c.text ?? "")
     .join(" ");

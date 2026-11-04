@@ -276,7 +276,7 @@ test.describe("platform mcp", () => {
           detail[persona] = toolErrorText(res.answer) || res.text.slice(0, 120);
         }
       } finally {
-        await admin.call("DELETE", "/rpc/projects.delete", {
+        await admin.ok("DELETE", "/rpc/projects.delete", {
           project: null,
           query: { id: created.project.id },
         });
