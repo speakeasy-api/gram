@@ -234,6 +234,32 @@ func (m MCPServerRef) Connect() Operation {
 	return newOperation("mcp_server", "connect", m.id, m.dimensions())
 }
 
+// ChatRef names one chat session in its project for typed operations.
+type ChatRef struct {
+	id string
+}
+
+// Chat names a chat session. The caller must have loaded the chat and
+// verified that it belongs to the project and the project to the
+// organization.
+func Chat(organizationID, projectID, chatID string) ChatRef {
+	_, _ = organizationID, projectID
+	return ChatRef{id: chatID}
+}
+
+// Read asks for a grant to read the chat's transcript. Session owners and
+// the owners of an agent-only session read without one; the caller decides
+// ownership before asking.
+func (c ChatRef) Read() Operation {
+	return newOperation("chat", "read_grant", c.id, nil)
+}
+
+// Write asks for a grant to change or delete the chat. Session owners change
+// their own sessions without one; the caller decides ownership before asking.
+func (c ChatRef) Write() Operation {
+	return newOperation("chat", "write_grant", c.id, nil)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -250,5 +276,7 @@ func typedOperations() []Operation {
 		MCPServer("organization", "project", "server").Read(),
 		MCPServer("organization", "project", "server").Edit(),
 		MCPServer("organization", "project", "server").Connect(),
+		Chat("organization", "project", "chat").Read(),
+		Chat("organization", "project", "chat").Write(),
 	}
 }

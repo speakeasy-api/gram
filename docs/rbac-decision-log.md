@@ -80,3 +80,13 @@ Review follow-ups adopted on #8442 (each fails closed):
 6. **`EvaluateLoaded` honours blocks while the engine decides.** Its old path uses `GrantsAuthorize`, the effective decision with exclusions, rather than `GrantsSatisfy`, which ignores blocks. That is what the registry evaluator answers, so shadow compares like with like. No current caller relied on block-blind answers for a blockable scope.
 7. **Agent selection moves to AG1.** `assistantidentity.(*Service).selectAgent` asks for `agent:authorize`, which the open owner-scoped agent PR (AIS-785) rewrites. The owner map now assigns it to AG1, which per the baseline waits for that PR.
 8. **Parity is proven by the service's own tests in shadow.** The assistants, assistant identity and Platform MCP assistant identity suites run with `authztest.NewParityClient`.
+
+## C1 (AIS-869): chat point reads, writes and the turn stream
+
+### Decided without reviewer input
+
+1. **The chat type declares its grant-backed permissions first; ownership stays in the service for now.** The RFC's `chat.read` is `read_grant ∪ Is(author) ∪ When(agent_only, Via(agent, is_owner))`. The agent type and its ownership facts belong to AG1, which waits for the open owner-scoped agent PR (AIS-785), and the inventory's dependency route says chat ownership switches together with agent ownership. This slice declares `read_grant` and `write_grant` with the RFC's names, and `Chat(...).Read()` and `.Write()` ask for them after the service has ruled out the owner and agent-owner cases exactly as before. _Follow-up:_ once AG1 declares `agent.is_owner`, declare the fact-reading `read` and `write`, load the chat's facts in `loadAuthorizedChat`, and point the constructors at them. _If reversed:_ wait for AG1 before migrating any chat call.
+2. **The constructors keep their names when the permission behind them changes.** `Chat(...).Read()` names what the handler asks, not how it is decided, so the follow-up changes no call site.
+3. **Chat grants are anchored at the organization, the project and the chat.** The stored selectors carry only `resource_kind` and `resource_id`, so a project-wide grant is expressed through the project-level operations C3 adds. Anchoring records where grants may be written; it changes no match.
+4. **The sensitive-content gate stays outside the registry.** `CheckSensitiveContentAccess` refuses impersonated sessions before any chat data is read. The migration inventory classes it as an independent gate with its own fixtures, so its row stays.
+5. **The chat service receives the client beside the engine.** The engine still builds `auth.Auth` and answers the collection checks C3 migrates.
