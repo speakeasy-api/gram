@@ -32,12 +32,12 @@ type Service struct {
 	db     *pgxpool.Pool
 	repo   *repo.Queries
 	auth   *auth.Auth
-	authz  *authz.Engine
+	authz  *authz.Client
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client) *Service {
 	logger = logger.With(attr.SlogComponent("resources"))
 
 	return &Service{
@@ -46,7 +46,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:     db,
 		repo:   repo.New(db),
 		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		authz:  authzClient,
 	}
 }
 
@@ -66,7 +66,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 

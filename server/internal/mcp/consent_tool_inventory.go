@@ -345,11 +345,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			if len(values) > 0 {
 				disposition = values[0]
 			}
-			if rerr := s.authz.Require(ctx, authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
-				Tool:        base.Name,
-				Disposition: disposition,
-				ProjectID:   endpoint.ProjectID.String(),
-			})); rerr != nil {
+			if rerr := s.authzClient.Require(ctx, authz.MCPServer(endpoint.ProjectID.String(), connectResourceID).CallTool(base.Name, disposition)); rerr != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(rerr, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 					roleHidden = append(roleHidden, base.Name)

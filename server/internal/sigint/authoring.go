@@ -112,17 +112,17 @@ func (s *Service) ReadAuthoringState(ctx context.Context) (AuthoringState, error
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	return s.authoringState(ctx, tx, authz.ScopeProjectRead)
+	return s.authoringState(ctx, tx, authz.ProjectRef.Read)
 }
 
-func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, scope authz.Scope) (AuthoringState, error) {
+func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, operation func(authz.ProjectRef) authz.Operation) (AuthoringState, error) {
 	var zero AuthoringState
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || auth == nil || auth.ProjectID == nil {
 		return zero, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, auth.ActiveOrganizationID, authz.Check{Scope: scope, ResourceKind: "", ResourceID: auth.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, auth.ActiveOrganizationID, operation(authz.Project(auth.ActiveOrganizationID, auth.ProjectID.String()))); err != nil {
 		return zero, err
 	}
 
@@ -181,7 +181,7 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	before, err := s.authoringState(ctx, tx, authz.ScopeProjectWrite)
+	before, err := s.authoringState(ctx, tx, authz.ProjectRef.Write)
 	if err != nil {
 		return zero, "", err
 	}
@@ -196,7 +196,7 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input AuthoringInput, expectedVersion string) (AuthoringResult, error) {
 	var result AuthoringResult
 
-	before, err := s.authoringState(ctx, tx, authz.ScopeProjectWrite)
+	before, err := s.authoringState(ctx, tx, authz.ProjectRef.Write)
 	if err != nil {
 		return result, err
 	}
@@ -242,7 +242,7 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 	if err != nil {
 		return result, err
 	}
-	result.State, err = s.authoringState(ctx, tx, authz.ScopeProjectWrite)
+	result.State, err = s.authoringState(ctx, tx, authz.ProjectRef.Write)
 	return result, err
 }
 

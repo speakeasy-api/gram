@@ -54,7 +54,7 @@ func TestPlatformMCPGetPluginUsesAuthorizedPublicationEvidence(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{{PrincipalUrn: "role:admin", Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)}})
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, pool, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil)
+	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), nil, nil, "test", "https://api.example.test", nil, nil)
 	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil)
 	limiter := allowingPlatformMCPBudget{}
 	inventory := platformmcp.NewPluginsService(pool, platformmcp.OperationBudget{Connection: limiter, Organization: limiter}, "test-key")

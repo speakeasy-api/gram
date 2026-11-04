@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
@@ -20,15 +21,19 @@ type Service struct {
 	issuerSpellings []string
 
 	audit *audit.Logger
+
+	// authz answers whether a user's own loaded grants allow an operation,
+	// such as delegating inference to a new agent.
+	authz *authz.Client
 }
 
 // New expects an issuer origin already checked with mcpauthz.ValidateIssuerOrigin,
 // the same origin the caller-assertion signer uses.
-func New(issuerURL string, auditLogger *audit.Logger) *Service {
+func New(issuerURL string, auditLogger *audit.Logger, authzClient *authz.Client) *Service {
 	issuer := strings.TrimRight(issuerURL, "/")
 	spellings := []string{issuer}
 	if canonical, err := issuerurl.Parse(issuer); err == nil {
 		spellings = canonical.MatchCandidates()
 	}
-	return &Service{issuer: issuer, jwksURI: issuer + jwks.Path, issuerSpellings: spellings, audit: auditLogger}
+	return &Service{issuer: issuer, jwksURI: issuer + jwks.Path, issuerSpellings: spellings, audit: auditLogger, authz: authzClient}
 }

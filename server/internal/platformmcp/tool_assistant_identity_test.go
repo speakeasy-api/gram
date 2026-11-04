@@ -181,7 +181,7 @@ func TestAssistantIdentityAPIAndMCPRequireSameProjectWrite(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := assistants.NewService(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &sessions.Manager{}, engine, nil, nil, nil)
+	management := assistants.NewService(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &sessions.Manager{}, engine, authztest.NewParityClient(t, engine), nil, nil, nil)
 	projectID, assistantID := uuid.New(), uuid.New()
 	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &projectID}
@@ -219,10 +219,11 @@ func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, engine)
 	tracer, meter := testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
-	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
-	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities, engine)
-	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, core, nil, nil)
+	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authztest.NewLoadedGrantsClient())
+	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities, authzClient)
+	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, authzClient, core, nil, nil)
 	service := NewAssistantIdentityService(management, NewPostgresReader(logger, db))
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)

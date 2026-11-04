@@ -13,23 +13,28 @@ import (
 // RolePluginsForResource is a read-only, batched projection of live plugin
 // contents and exact assignments, not proof of client delivery or authorization.
 // nil means undisclosed; an allocated empty slice means no matches.
-func RolePluginsForResource(ctx context.Context, db repo.DBTX, engine *authz.Engine, organizationID string, projectID, resourceID uuid.UUID, principals []string) ([]repo.ListRolePluginsForResourceRow, error) {
+func RolePluginsForResource(ctx context.Context, db repo.DBTX, client *authz.Client, organizationID string, projectID, resourceID uuid.UUID, principals []string) ([]repo.ListRolePluginsForResourceRow, error) {
 	if _, ok := authz.GrantsFromContext(ctx); !ok {
 		return nil, nil
 	}
-	admin, err := engine.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	organization := authz.Organization(organizationID)
+	admin, err := client.Evaluate(ctx, organization.Administer())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin assignment disclosure: %w", err)
 	}
 	if !admin {
 		return nil, nil
 	}
-	reader, err := engine.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	reader, err := client.Evaluate(ctx, organization.Read())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin read: %w", err)
 	}
-	if !reader && engine.RequirePluginWrite(ctx, organizationID, projectID.String()) != nil {
-		return nil, nil
+	if !reader {
+		// Any failure to confirm plugin publication leaves the matches
+		// undisclosed rather than failing the read.
+		if publisher, err := client.Evaluate(ctx, authz.Project(organizationID, projectID.String()).PublishPlugin()); err != nil || !publisher {
+			return nil, nil
+		}
 	}
 	roles := make([]string, 0, len(principals))
 	for _, principal := range principals {

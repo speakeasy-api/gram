@@ -35,7 +35,7 @@ func (s *Service) ListToolSchemaStaticValues(ctx context.Context, payload *gen.L
 		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolset.ID.String()).Read()); err != nil {
 		return nil, err
 	}
 

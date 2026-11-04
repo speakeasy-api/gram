@@ -695,7 +695,7 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
 	if err == nil && grant.session.Audience == InferenceResource {
-		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+		err = s.authzClient.Require(authorizationCtx, authz.Inference(grant.session.ProjectID.String()).Execute())
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
@@ -806,21 +806,21 @@ func retryAfterSeconds(d time.Duration) string {
 // writing challenge logs through the pool while the issuance transaction holds a
 // connection and issuer lock. The preflight checks record the normal challenge.
 func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
-	var checks []authz.Check
+	var ops []authz.Operation
 	if grant.endpoint != nil {
 		target, ok := agentAuthorizationTarget(grant.endpoint)
 		if !ok {
 			return errCredentialRejected
 		}
-		checks = append(checks, target.connectCheck())
+		ops = append(ops, target.connectOperation())
 	}
 	if grant.session.Audience == InferenceResource {
-		checks = append(checks, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+		ops = append(ops, authz.Inference(grant.session.ProjectID.String()).Execute())
 	}
-	if len(checks) == 0 {
+	if len(ops) == 0 {
 		return nil
 	}
-	allowed, err := s.authz.Evaluate(ctx, checks...)
+	allowed, err := s.authzClient.Evaluate(ctx, ops...)
 	if err != nil {
 		return fmt.Errorf("recheck workload grant authority: %w", err)
 	}

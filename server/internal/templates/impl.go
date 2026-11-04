@@ -48,7 +48,7 @@ type Service struct {
 	repo       *repo.Queries
 	variations *variations.Service
 	toolsets   ToolsetsService
-	authz      *authz.Engine
+	authz      *authz.Client
 	audit      *audit.Logger
 }
 
@@ -62,6 +62,7 @@ func NewService(
 	sessions *sessions.Manager,
 	toolsets ToolsetsService,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
@@ -72,9 +73,9 @@ func NewService(
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, auditLogger),
+		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, authzClient, auditLogger),
 		toolsets:   toolsets,
-		authz:      authzEngine,
+		authz:      authzClient,
 		audit:      auditLogger,
 	}
 }
@@ -101,7 +102,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +199,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -357,7 +358,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Write()); err != nil {
 		return err
 	}
 
@@ -465,7 +466,7 @@ func (s *Service) GetTemplate(ctx context.Context, payload *gen.GetTemplatePaylo
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -500,7 +501,7 @@ func (s *Service) ListTemplates(ctx context.Context, payload *gen.ListTemplatesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -520,7 +521,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -558,7 +559,7 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Read()); err != nil {
 		return nil, err
 	}
 

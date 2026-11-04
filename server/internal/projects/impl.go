@@ -42,7 +42,7 @@ type Service struct {
 	core     *Core
 	sessions *sessions.Manager
 	auth     *auth.Auth
-	authz    *authz.Engine
+	authz    *authz.Client
 	audit    *audit.Logger
 }
 
@@ -54,6 +54,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
@@ -68,7 +69,7 @@ func NewService(
 		core:     NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
+		authz:    authzClient,
 		audit:    auditLogger,
 	}
 }
@@ -105,7 +106,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").LogError(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: proj.ID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, proj.ID.String()).Read()); err != nil {
 		var shareableErr *oops.ShareableError
 		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
 			return nil, oops.C(oops.CodeNotFound)
@@ -136,7 +137,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(payload.OrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +202,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -263,28 +264,18 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
 
-	projectIDs := make([]string, 0, len(projects))
-	for _, project := range projects {
-		projectIDs = append(projectIDs, project.ID.String())
+	reads := make([]authz.Operation, len(projects))
+	for i, project := range projects {
+		reads[i] = authz.Project(payload.OrganizationID, project.ID.String()).Read()
 	}
-
-	checks := make([]authz.Check, len(projectIDs))
-	for i, id := range projectIDs {
-		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
-	}
-	allowedProjectIDs, err := s.authz.Filter(ctx, checks)
+	readable, err := s.authz.MatchMany(ctx, reads)
 	if err != nil {
 		return nil, err
 	}
 
-	allowedProjects := make(map[string]struct{}, len(allowedProjectIDs))
-	for _, projectID := range allowedProjectIDs {
-		allowedProjects[projectID] = struct{}{}
-	}
-
 	entries := make([]*gen.ProjectEntry, 0, len(projects))
-	for _, project := range projects {
-		if _, ok := allowedProjects[project.ID.String()]; !ok {
+	for i, project := range projects {
+		if !readable[i] {
 			continue
 		}
 
@@ -306,7 +297,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -372,7 +363,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -404,7 +395,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -446,7 +437,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return err
 	}
 
@@ -535,7 +526,7 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(payload.OrganizationID).Administer()); err != nil {
 		return err
 	}
 

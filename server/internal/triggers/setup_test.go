@@ -116,15 +116,17 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		cache.NoopCache,
-		assistantidentity.New("https://platform.example.invalid", auditLogger),
+		assistantidentity.New("https://platform.example.invalid", auditLogger, authztest.NewLoadedGrantsClient()),
 	)
 
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := triggers.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		app,
 		auditLogger,
 	)

@@ -25,7 +25,7 @@ import (
 )
 
 func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggestionsPayload) (*gen.ListSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +416,7 @@ func approvalContent(
 }
 
 func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSuggestionPayload) (*gen.ApproveSkillSuggestionResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 }
 
 func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +552,7 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 }
 
 func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +618,7 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 }
 
 func (s *Service) ListSuggestionFeedback(ctx context.Context, payload *gen.ListSuggestionFeedbackPayload) (*gen.ListSkillSuggestionFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
 	if err != nil {
 		return nil, err
 	}

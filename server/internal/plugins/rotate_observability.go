@@ -54,7 +54,7 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 	}
 
 	// Matches the observability plugin download, which also mints a hooks key.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 

@@ -78,11 +78,14 @@ const copySuffix = " (copy)"
 
 // Service serves dashboards: a project's layouts of saved widgets.
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Client
+	// engine answers analytics dataset checks, which are not typed
+	// operations yet.
+	engine  *authz.Engine
 	audit   *audit.Logger
 	catalog *analytics.Catalog
 	now     func() time.Time
@@ -91,14 +94,15 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("dashboards"))
 	return &Service{
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/dashboards"),
 		logger:  logger,
 		db:      db,
 		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
+		authz:   authzClient,
+		engine:  authzEngine,
 		audit:   auditLogger,
 		catalog: analytics.Default,
 		now:     time.Now,
@@ -119,12 +123,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // authorize resolves the project a request runs in and checks a scope on it.
 // Membership is project:read, which every member holds: making a dashboard
 // is not an administrative act.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) authorize(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -136,13 +140,13 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 	if creator := conv.FromPGText[string](dashboard.CreatedByUserID); creator != nil && *creator == authCtx.UserID {
 		return nil
 	}
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write())
 }
 
 // ListDashboards lists the project's dashboards, most recently updated
 // first, each with its cards.
 func (s *Service) ListDashboards(ctx context.Context, _ *gen.ListDashboardsPayload) (*gen.ListDashboardsResult, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +191,7 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 	if len(checks) == 0 {
 		return true, nil
 	}
-	allowed, err := s.authz.Evaluate(ctx, checks...)
+	allowed, err := s.engine.Evaluate(ctx, checks...)
 	if _, mapped := errors.AsType[*oops.ShareableError](err); mapped {
 		// The engine has already mapped and logged it.
 		return false, fmt.Errorf("check built-in dashboard access: %w", err)
@@ -201,7 +205,7 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 // ReadBuiltInDashboard returns the built-in dashboard with this slug, if the
 // caller may read the project and every card of it.
 func (s *Service) ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.BuiltInDashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +225,7 @@ func (s *Service) ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.B
 
 // GetDashboard returns one dashboard with its cards and saved filters.
 func (s *Service) GetDashboard(ctx context.Context, payload *gen.GetDashboardPayload) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +255,7 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 // CreateDashboardInTx makes an empty dashboard inside the caller's
 // transaction, audited in it. The caller commits.
 func (s *Service) CreateDashboardInTx(ctx context.Context, dbtx pgx.Tx, name string, description *string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +535,7 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 // transaction. A non-empty expectedVersion refuses the copy with
 // ErrStaleVersion when the source has changed since that version.
 func (s *Service) DuplicateDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -610,7 +614,7 @@ func (s *Service) DuplicateBuiltInDashboard(ctx context.Context, payload *gen.Du
 // DuplicateBuiltInDashboardInTx copies a built-in dashboard inside the
 // caller's transaction. The caller commits.
 func (s *Service) DuplicateBuiltInDashboardInTx(ctx context.Context, dbtx pgx.Tx, slug string) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -708,7 +712,7 @@ func (s *Service) copyInto(ctx context.Context, dbtx pgx.Tx, authCtx *contextval
 	copies := make(map[string]uuid.UUID, len(source.widgets))
 	for _, widget := range source.widgets {
 		if ds, ok := s.catalog.Dataset(widget.dataset); ok {
-			if err := widgets.RequireDataset(ctx, s.authz, ds); err != nil {
+			if err := widgets.RequireDataset(ctx, s.engine, ds); err != nil {
 				return nil, fmt.Errorf("check widget %q dataset: %w", widget.name, err)
 			}
 		}
@@ -798,7 +802,7 @@ func (s *Service) DeleteDashboard(ctx context.Context, payload *gen.DeleteDashbo
 // transaction. A non-empty expectedVersion refuses the deletion with
 // ErrStaleVersion when the dashboard has changed since that version.
 func (s *Service) DeleteDashboardInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string) error {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return err
 	}
@@ -886,7 +890,7 @@ func (s *Service) edit(ctx context.Context, rawID string, kind editKind, apply c
 // has not changed since, apply the change, audit before and after. The
 // caller commits.
 func (s *Service) editInTx(ctx context.Context, dbtx pgx.Tx, rawID, expectedVersion string, kind editKind, apply change) (*gen.Dashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}

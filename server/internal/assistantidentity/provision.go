@@ -74,7 +74,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		// only when both the provisioning actor and its owner already have it.
 		// Existing agents keep their explicitly managed policy unchanged.
 		for _, user := range []string{p.ActorUserID, agent.OwnerUserID} {
-			allowed, err := canDelegateInference(ctx, tx, p.OrganizationID, p.ProjectID, user)
+			allowed, err := canDelegateInference(ctx, tx, s.authz, p.OrganizationID, p.ProjectID, user)
 			if err != nil {
 				return err
 			}

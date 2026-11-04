@@ -78,6 +78,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, authzEngine)
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
@@ -86,7 +87,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	f := &feature.InMemory{}
 	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)), f)
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, catalog, authzEngine, serverURL)
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, catalog, authzEngine, authzClient, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -69,7 +69,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 		tracer: tracerProvider.Tracer("test"),
 		logger: logger,
 		auth:   nil,
-		authz:  authzEngine,
+		authz:  authztest.NewParityClient(t, authzEngine),
 		memory: mem,
 	}
 
@@ -134,7 +134,7 @@ func TestListAssistantMemories_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authztest.NewParityClient(t, authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
@@ -303,7 +303,7 @@ func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authztest.NewParityClient(t, authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
@@ -374,7 +374,7 @@ func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authztest.NewParityClient(t, authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, h.projectID.String()))
 

@@ -128,10 +128,11 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
+	authzClient := authztest.NewParityClient(t, authzEngine)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger, temporalEnv, false)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, authzClient, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger)
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -228,7 +229,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,

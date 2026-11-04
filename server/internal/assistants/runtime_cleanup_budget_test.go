@@ -32,7 +32,7 @@ func TestReapStoppedAssistantRuntimesSharesRetirementBudget(t *testing.T) {
 				if failed {
 					backend.stopErr = errors.New("retirement stop failed")
 				}
-				core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, db))
+				core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzClient(t, db))
 				result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{StoppedTTL: 24 * time.Hour, BatchSize: batchSize})
 				require.NoError(t, err)
 				require.EqualValues(t, 1, stops.Load())

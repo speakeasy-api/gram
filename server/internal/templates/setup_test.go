@@ -79,8 +79,9 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 	}
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, authzEngine)
 	auditLogger := audit.NewLogger()
-	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
+	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, authzClient, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -157,7 +157,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 	// Unconditional so later per-tool checks (member dispatch on a private
 	// toolset) never hit an unprepared context; no-op for callers RBAC never
 	// enforces (AGE-2672).
-	ctx, err := s.authz.PrepareContext(ctx)
+	ctx, err := s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
 	}
@@ -296,7 +296,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
-	ctx, err := s.authz.PrepareContext(ctx)
+	ctx, err := s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
 	}
@@ -465,7 +465,7 @@ func (s *Service) admitMetaMembers(
 		case mcpservers.VisibilityPublic:
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
-			if err := s.authz.Require(ctx, connect); err != nil {
+			if err := s.authzClient.Require(ctx, authz.MCPServer(candidate.projectID.String(), connectResourceID.String()).Connect()); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
 				// endpoint carry no AuthContext) are denials: filter the
 				// member. Anything else is an evaluation failure.

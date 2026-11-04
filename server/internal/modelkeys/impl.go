@@ -41,7 +41,7 @@ type Service struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	auth        *auth.Auth
-	authz       *authz.Engine
+	authz       *authz.Client
 	enc         *encryption.Client
 	provisioner openrouter.Provisioner
 	features    *productfeatures.Client
@@ -57,6 +57,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	enc *encryption.Client,
 	provisioner openrouter.Provisioner,
 	features *productfeatures.Client,
@@ -69,7 +70,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
+		authz:       authzClient,
 		enc:         enc,
 		provisioner: provisioner,
 		features:    features,
@@ -106,7 +107,7 @@ func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.Li
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +125,7 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -226,7 +227,7 @@ func (s *Service) SetKeyEnabled(ctx context.Context, payload *gen.SetKeyEnabledP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -305,7 +306,7 @@ func (s *Service) DeleteKey(ctx context.Context, payload *gen.DeleteKeyPayload) 
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return err
 	}
 

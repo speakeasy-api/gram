@@ -106,12 +106,13 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, authzEngine)
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
 	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)), f)
-	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger, catalog)
+	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, authzClient, auditLogger, catalog)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, authztest.NewParityClient(t, authzEngine), auditLogger)
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient)
 
 	return ctx, &testInstance{
 		service:        svc,

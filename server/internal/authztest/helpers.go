@@ -2,6 +2,8 @@ package authztest
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -56,6 +58,18 @@ func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
 	client, err := authz.NewDefaultClient(engine)
 	if err != nil {
 		t.Fatalf("create authorization client: %v", err)
+	}
+	return client
+}
+
+// NewLoadedGrantsClient builds the default client over an engine with no
+// database, for tests that only ask EvaluateGrants about grants they load
+// themselves. It panics if the registry does not compile, so it can
+// initialize a package-level fixture.
+func NewLoadedGrantsClient() *authz.Client {
+	client, err := authz.NewDefaultClient(authz.NewEngine(slog.New(slog.DiscardHandler), nil, nil, nil))
+	if err != nil {
+		panic(fmt.Sprintf("create authorization client: %v", err))
 	}
 	return client
 }

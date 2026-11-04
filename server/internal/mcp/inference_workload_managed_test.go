@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -44,7 +45,7 @@ func TestWorkloadInference_ManagedCompletion(t *testing.T) {
 	require.NoError(t, err)
 	_, err = triggerrepo.New(f.ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{OrganizationID: f.fx.orgID, ProjectID: project, DefinitionSlug: "manual", Name: "Managed root", TargetKind: "assistant", TargetRef: a.ID.String(), TargetDisplay: a.Name, ConfigJson: []byte(`{}`), Status: "active"})
 	require.NoError(t, err)
-	identities := assistantidentity.New(f.ti.serverURL.String(), f.ti.audit)
+	identities := assistantidentity.New(f.ti.serverURL.String(), f.ti.audit, authztest.NewLoadedGrantsClient())
 	tx := testenv.BeginTx(t, ctx, f.ti.conn)
 	require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: f.fx.orgID, ProjectID: project, AssistantID: a.ID, ActorUserID: f.fx.userID}))
 	require.NoError(t, tx.Commit(ctx))

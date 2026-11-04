@@ -124,7 +124,7 @@ func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEn
 	if err != nil {
 		return ctx, err
 	}
-	ctx, err = s.authz.PrepareContext(ctx)
+	ctx, err = s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return ctx, fmt.Errorf("prepare agent session authorization: %w", err)
 	}
@@ -136,7 +136,7 @@ func (s *Service) requireAgentSessionAuthorization(ctx context.Context, endpoint
 	if !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, target.connectCheck()); err != nil {
+	if err := s.authzClient.Require(ctx, target.connectOperation()); err != nil {
 		return ctx, err
 	}
 	return ctx, nil

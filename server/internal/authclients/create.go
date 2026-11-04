@@ -55,7 +55,7 @@ const (
 )
 
 func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthClientPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthC
 }
 
 func (s *Service) AttachAuthClientToMcpServer(ctx context.Context, payload *gen.AttachAuthClientToMcpServerPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (s *Service) AttachAuthClientToMcpServer(ctx context.Context, payload *gen.
 }
 
 func (s *Service) SetAuthClientHeaders(ctx context.Context, payload *gen.SetAuthClientHeadersPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

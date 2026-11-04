@@ -148,12 +148,14 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := modelkeys.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		enc,
 		provisioner,
 		features,

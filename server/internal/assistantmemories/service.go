@@ -36,7 +36,7 @@ type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	auth   *auth.Auth
-	authz  *authz.Engine
+	authz  *authz.Client
 	memory memoryStore
 }
 
@@ -51,6 +51,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	memorySvc *memory.MemoryService,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistantmemories"))
@@ -58,7 +59,7 @@ func NewService(
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistantmemories"),
 		logger: logger,
 		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		authz:  authzClient,
 		memory: memorySvc,
 	}
 }

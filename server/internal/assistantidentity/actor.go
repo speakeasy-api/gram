@@ -13,7 +13,7 @@ import (
 // CheckActor reports ErrActorIneligible unless user is an active member of org
 // whose own grants can read project. The grants of whatever transport carried
 // the request never count.
-func CheckActor(ctx context.Context, db orgrepo.DBTX, engine *authz.Engine, org string, project uuid.UUID, user string) error {
+func CheckActor(ctx context.Context, db orgrepo.DBTX, client *authz.Client, org string, project uuid.UUID, user string) error {
 	active, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: org, UserID: user})
 	if err != nil {
 		return fmt.Errorf("check actor membership: %w", err)
@@ -29,8 +29,8 @@ func CheckActor(ctx context.Context, db orgrepo.DBTX, engine *authz.Engine, org 
 	if err != nil {
 		return fmt.Errorf("load actor grants: %w", err)
 	}
-	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.String(), Dimensions: nil}
-	if err := engine.EvaluateLoadedGrants(ctx, grants, check); err != nil {
+	policies := authz.LoadedPolicies{OrganizationID: org, User: user, Policies: [][]authz.Grant{grants}}
+	if err := client.RequireLoaded(ctx, policies, authz.Project(org, project.String()).Read()); err != nil {
 		return fmt.Errorf("%w: cannot read the project: %w", ErrActorIneligible, err)
 	}
 	return nil
@@ -38,7 +38,7 @@ func CheckActor(ctx context.Context, db orgrepo.DBTX, engine *authz.Engine, org 
 
 // canDelegateInference reads a user's own current authority, not a request's
 // transport grants. Missing authority leaves a new agent without inference.
-func canDelegateInference(ctx context.Context, db orgrepo.DBTX, org string, project uuid.UUID, user string) (bool, error) {
+func canDelegateInference(ctx context.Context, db orgrepo.DBTX, client *authz.Client, org string, project uuid.UUID, user string) (bool, error) {
 	active, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: org, UserID: user})
 	if err != nil {
 		return false, fmt.Errorf("check inference owner membership: %w", err)
@@ -54,7 +54,7 @@ func canDelegateInference(ctx context.Context, db orgrepo.DBTX, org string, proj
 	if err != nil {
 		return false, fmt.Errorf("load inference owner grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.InferenceExecuteCheck(project.String()))
+	allowed, err := client.EvaluateGrants(ctx, grants, authz.Inference(project.String()).Execute())
 	if err != nil {
 		return false, fmt.Errorf("check inference delegation: %w", err)
 	}

@@ -68,7 +68,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := widgets.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
+	authzClient := authztest.NewParityClient(t, authzEngine)
+	service := widgets.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient, audit.NewLogger())
 
 	return ctx, &testInstance{
 		service:   service,

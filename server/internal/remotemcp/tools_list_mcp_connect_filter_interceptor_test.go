@@ -85,7 +85,7 @@ func newToolsListResponseFromWire(t *testing.T, payload string) *proxy.ToolsList
 func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, newAuthzEngineForTest(t)), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-list-mcp-connect-filter", interceptor.Name())
 }
 
@@ -108,7 +108,7 @@ func TestToolsListMCPConnectFilterInterceptor_ErrorResponseUntouched(t *testing.
 
 	// A JSON-RPC error carries no inventory, so there is nothing to filter
 	// and no result to splice into.
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, newAuthzEngineForTest(t)), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, nil)
 	resp.Result = nil
@@ -135,7 +135,7 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "search_tickets", InputSchema: map[string]any{}},
@@ -171,7 +171,7 @@ func TestToolsListMCPConnectFilterInterceptor_AllGrantedPreservesToolBytes(t *te
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	// An upstream declaring its own cache stance, plus a per-tool member
 	// mcp.Tool does not model.
@@ -207,7 +207,7 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -238,7 +238,7 @@ func TestToolsListMCPConnectFilterInterceptor_PreservesInputOrderInFilteredResul
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -259,7 +259,7 @@ func TestToolsListMCPConnectFilterInterceptor_NilResultPassesThrough(t *testing.
 	// An error-shaped response (no Result) must short-circuit without
 	// touching the typed view. The downstream relay surfaces the
 	// upstream's JSON-RPC error envelope to the user unchanged.
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, newAuthzEngineForTest(t)), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := &proxy.ToolsListResponse{
 		Error:         &jsonrpc.Error{Code: -32601, Message: "method not found", Data: nil},
@@ -279,7 +279,7 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListPassesThrough(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, nil)
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
@@ -304,7 +304,7 @@ func TestToolsListMCPConnectFilterInterceptor_FiltersByDisposition(t *testing.T)
 		"list_items":  "read_only",
 		"delete_item": "destructive",
 	}}
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "list_items", InputSchema: map[string]any{}},
@@ -333,7 +333,7 @@ func TestToolsListMCPConnectFilterInterceptor_ResolverErrorFailsClosed(t *testin
 	)
 
 	resolver := fakeToolDispositionResolver{err: errors.New("metadata store unavailable")}
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "list_items", InputSchema: map[string]any{}},
@@ -364,7 +364,7 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsUnclassifiedGrantedTool(t *te
 	)
 
 	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"tool_b": "destructive"}}
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},

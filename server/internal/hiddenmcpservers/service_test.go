@@ -70,7 +70,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	require.True(t, ok)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := hiddenmcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	svc := hiddenmcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine))
 	return ctx, &instance{svc: svc, conn: conn, authCtx: authCtx}
 }
 

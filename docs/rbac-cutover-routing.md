@@ -9,6 +9,10 @@ A migration unit is a set of declared types whose operations switch evaluators t
 ```mermaid
 flowchart BT
     mcp["mcp<br/>mcp_server, mcp_auth_client"] --> project["project<br/>project"]
+    skill["skill<br/>skill"] --> project
+    assistant["assistant<br/>assistant"] --> project
+    environment["environment<br/>environment"] --> project
+    inference["inference<br/>inference"] --> project
     project --> organization["organization<br/>organization"]
 ```
 

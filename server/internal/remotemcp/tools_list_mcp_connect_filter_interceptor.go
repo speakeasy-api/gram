@@ -45,7 +45,7 @@ import (
 // member ever carry tool identities the way tools does, this filter will not
 // scrub it.
 type ToolsListMCPConnectFilterInterceptor struct {
-	authz       *authz.Engine
+	authz       *authz.Client
 	resolver    ToolDispositionResolver
 	mcpServerID string
 	projectID   string
@@ -60,9 +60,9 @@ var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterIntercepto
 // grants against the same row as the handler's upfront server-level
 // `mcp:connect` check and as [authz.MCPToolCallCheck] does for the paired
 // tools/call enforcement.
-func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
+func NewToolsListMCPConnectFilterInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
-		authz:       authzEngine,
+		authz:       authzClient,
 		resolver:    resolver,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
@@ -106,16 +106,12 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return fmt.Errorf("resolve remote MCP tool dispositions: %w", err)
 	}
 
-	checks := make([]authz.Check, len(tools))
+	ops := make([]authz.Operation, len(tools))
 	for idx, t := range tools {
-		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: dispositions[t.Name],
-			ProjectID:   i.projectID,
-		})
+		ops[idx] = authz.MCPServer(i.projectID, i.mcpServerID).CallTool(t.Name, dispositions[t.Name])
 	}
 
-	matched, err := i.authz.FindMatched(ctx, checks)
+	matched, err := i.authz.MatchMany(ctx, ops)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}

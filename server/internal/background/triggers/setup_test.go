@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -98,4 +99,4 @@ func (f identityFixture) createParams() triggers.CreateParams {
 	return triggers.CreateParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, DefinitionSlug: triggers.DefinitionSlugGithub, Name: "Root trigger", EnvironmentID: uuid.NullUUID{UUID: f.environmentID, Valid: true}, TargetKind: triggers.TargetKindAssistant, TargetRef: f.assistantID.String(), TargetDisplay: "Identity assistant", Config: map[string]any{}, Status: triggers.StatusActive}
 }
 
-var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authztest.NewLoadedGrantsClient())

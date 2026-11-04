@@ -67,7 +67,7 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 	// is the public member snapshot and the unchanged gate, not user grants.
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
 		var err error
-		boundary, err = service.authz.CaptureAdmissionBoundary(ctx)
+		boundary, err = service.authzClient.CaptureAdmissionBoundary(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("capture code admission: %w", err)
 		}
@@ -192,7 +192,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	}
 	gate.execute = execute
 	ctx = b.boundary.Apply(ctx)
-	freshCtx, err = b.service.authz.RefreshContext(ctx)
+	freshCtx, err = b.service.authzClient.RefreshContext(ctx)
 	if err != nil {
 		return ctx, nil, nil, b.refreshFailure(ctx, err)
 	}

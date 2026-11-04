@@ -27,11 +27,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
-var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authztest.NewLoadedGrantsClient())
 
 func newTestAuthzEngine(t *testing.T, db *pgxpool.Pool) *authz.Engine {
 	t.Helper()
 	return authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+}
+
+// newTestAuthzClient decides every check the same way the engine does and
+// fails the test when the registry evaluator would disagree.
+func newTestAuthzClient(t *testing.T, db *pgxpool.Pool) *authz.Client {
+	t.Helper()
+	return authztest.NewParityClient(t, newTestAuthzEngine(t, db))
 }
 
 // seedIdentityMembers creates the organization members that own dedicated

@@ -114,7 +114,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
-	svc := oktaserversuggestions.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags, validator)
+	svc := oktaserversuggestions.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), flags, validator)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
 
 	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, flags: flags, authCtx: authCtx}

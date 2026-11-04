@@ -186,6 +186,185 @@ func (p ProjectRef) ReadOrOrganizationRead() Operation {
 	)
 }
 
+// ReadSkills asks to read the project's skills. Skill grants are stored
+// against the project ID, so the operation targets the project rather than
+// one skill.
+func (p ProjectRef) ReadSkills() Operation {
+	return newOperation("skill", "read", p.id, nil)
+}
+
+// WriteSkills asks to change the project's skills as a collection, such as
+// creating or importing one. Like ReadSkills it targets the project ID, the
+// resource collection-wide skill grants are stored against.
+func (p ProjectRef) WriteSkills() Operation {
+	return newOperation("skill", "write", p.id, nil)
+}
+
+// SkillRef names one skill in its project for typed operations.
+type SkillRef struct {
+	projectID string
+	id        string
+}
+
+// Skill names a skill. The caller must have verified that the skill belongs
+// to the project.
+func Skill(projectID, skillID string) SkillRef {
+	return SkillRef{projectID: projectID, id: skillID}
+}
+
+// Read asks to read the skill. Skill grants are stored either against the
+// project, covering every skill in it, or against one skill, so the
+// operation passes with either; a block on either refuses it.
+func (k SkillRef) Read() Operation {
+	return newAlternatives("skill", "project_or_skill_read",
+		newOperation("skill", "read", k.projectID, nil),
+		newOperation("skill", "read", k.id, nil),
+	)
+}
+
+// AssistantRef names one assistant in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant bounded to
+// one project never matches an assistant in another.
+type AssistantRef struct {
+	projectID string
+	id        string
+}
+
+// Assistant names an assistant. The caller must have verified that the
+// assistant belongs to the project.
+func Assistant(projectID, assistantID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: assistantID}
+}
+
+// AssistantsInProject names the assistants of a project as a whole, for
+// operations that are not about one existing assistant, such as creating
+// one. Grants for these operations are stored with the project's ID as the
+// resource, so the reference uses the project ID as the assistant ID and
+// also carries it as the project dimension.
+func AssistantsInProject(projectID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: projectID}
+}
+
+func (a AssistantRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: a.projectID}
+}
+
+// Read asks to read the assistant.
+func (a AssistantRef) Read() Operation {
+	return newOperation("assistant", "read", a.id, a.dimensions())
+}
+
+// Write asks to change the assistant.
+func (a AssistantRef) Write() Operation {
+	return newOperation("assistant", "write", a.id, a.dimensions())
+}
+
+// MCPServerRef names one MCP server in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant or block
+// bounded to one project never matches a server in another.
+type MCPServerRef struct {
+	projectID string
+	id        string
+}
+
+// MCPServer names an MCP server (a toolset). The caller must have verified
+// that the server belongs to the project.
+func MCPServer(projectID, serverID string) MCPServerRef {
+	return MCPServerRef{projectID: projectID, id: serverID}
+}
+
+// MCPServersInProject names the MCP servers of a project as a whole, for
+// operations that are not about one existing server, such as listing or
+// creating servers. Grants for these operations are stored with the
+// project's ID as the resource, so the reference uses the project ID as the
+// server ID and also carries it as the project dimension.
+func MCPServersInProject(projectID string) MCPServerRef {
+	return MCPServerRef{projectID: projectID, id: projectID}
+}
+
+func (m MCPServerRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: m.projectID}
+}
+
+// Read asks to inspect the server's configuration.
+func (m MCPServerRef) Read() Operation {
+	return newOperation("mcp_server", "read", m.id, m.dimensions())
+}
+
+// Edit asks to change the server's configuration.
+func (m MCPServerRef) Edit() Operation {
+	return newOperation("mcp_server", "edit", m.id, m.dimensions())
+}
+
+// Connect asks to connect to the server.
+func (m MCPServerRef) Connect() Operation {
+	return newOperation("mcp_server", "connect", m.id, m.dimensions())
+}
+
+// EnvironmentRef names one environment in its project for typed
+// operations. Every operation carries the project as a dimension, so a grant
+// or block bounded to one project never matches an environment in another.
+type EnvironmentRef struct {
+	projectID string
+	id        string
+}
+
+// Environment names an environment. The caller must have verified that the
+// environment belongs to the project.
+func Environment(projectID, environmentID string) EnvironmentRef {
+	return EnvironmentRef{projectID: projectID, id: environmentID}
+}
+
+// EnvironmentsInProject names the environments of a project as a whole, for
+// operations that are not about one existing environment, such as creating
+// one, or answering for a slug that matches none without revealing whether
+// it exists. The project's ID stands in as the environment ID, so only a
+// grant that covers every environment of the project matches.
+func EnvironmentsInProject(projectID string) EnvironmentRef {
+	return EnvironmentRef{projectID: projectID, id: projectID}
+}
+
+// Read asks to view the environment and its entries.
+func (e EnvironmentRef) Read() Operation {
+	return newOperation("environment", "read", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
+}
+
+// Write asks to change, clone or delete the environment.
+func (e EnvironmentRef) Write() Operation {
+	return newOperation("environment", "write", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
+}
+
+// CallTool asks to connect to the server for one tool, and for one of the
+// tool's dispositions when disposition is not empty. A grant or block limited
+// to other tools or dispositions does not decide it.
+func (m MCPServerRef) CallTool(tool, disposition string) Operation {
+	dimensions := m.dimensions()
+	if tool != "" {
+		dimensions[SelectorKeyTool] = tool
+	}
+	if disposition != "" {
+		dimensions[SelectorKeyDisposition] = disposition
+	}
+	return newOperation("mcp_server", "connect", m.id, dimensions)
+}
+
+// InferenceRef names inference in one project for typed operations.
+type InferenceRef struct {
+	projectID string
+}
+
+// Inference names inference in a project. Inference grants are stored against
+// every resource of the project, so the operation targets the project ID and
+// carries it as a dimension.
+func Inference(projectID string) InferenceRef {
+	return InferenceRef{projectID: projectID}
+}
+
+// Execute asks to run inference in the project.
+func (i InferenceRef) Execute() Operation {
+	return newOperation("inference", "execute", i.projectID, map[string]string{SelectorKeyProjectID: i.projectID})
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -193,8 +372,17 @@ func (p ProjectRef) ReadOrOrganizationRead() Operation {
 func typedOperations() []Operation {
 	org := Organization("organization")
 	project := Project("organization", "project")
+	mcpServer := MCPServer("project", "server")
+	environment := Environment("project", "environment")
 	return []Operation{
 		org.Read(), org.Administer(), org.SyncDeviceAgent(), org.IngestHooks("project"),
 		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
+		org.Read(), org.Administer(),
+		project.Read(), project.Write(), project.PublishPlugin(),
+		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
+		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
+		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
+		environment.Read(), environment.Write(),
+		Inference("project").Execute(),
 	}
 }

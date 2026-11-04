@@ -141,7 +141,7 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 	iconSetter := &recordingIconSetter{}
 	features := &feature.InMemory{}
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger, iconSetter, features)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), servicePolicy, auditLogger, iconSetter, features)
 
 	return ctx, &testInstance{
 		service:        svc,

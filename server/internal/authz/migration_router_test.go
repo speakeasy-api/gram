@@ -272,7 +272,7 @@ func TestClientWithoutRouterKeepsEngineDecisions(t *testing.T) {
 	require.NoError(t, ignoreForbidden(err), "the engine denies the blocked read")
 }
 
-// brokenProjectRegistry compiles, but its project read ignores the read
+// brokenProjectRegistry compiles every default type, but its project read ignores the read
 // block the scope table applies, so it allows reads the engine denies.
 func brokenProjectRegistry(t *testing.T) *s.Registry {
 	t.Helper()
