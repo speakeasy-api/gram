@@ -159,12 +159,7 @@ func (s *Service) authorizeBlockView(ctx context.Context, authCtx *contextvalues
 	if blockUserID == authCtx.UserID {
 		return nil
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectWrite,
-		ResourceKind: "",
-		ResourceID:   projectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, projectID.String()).Write()); err != nil {
 		return err
 	}
 	return nil

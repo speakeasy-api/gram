@@ -141,7 +141,7 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 
 	countingDB := &countingBypassDB{DBTX: ti.conn, readCalls: 0}
 	checker := &offlineBypassChecker{
-		evaluator: risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), countingDB),
+		evaluator: risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), countingDB).WithAuthorization(newRiskAuthorization(t, ti.conn)),
 		calls:     0,
 	}
 	scanner := shadowmcpscan.NewScanner(

@@ -36,6 +36,7 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 		ScopeOrgAdmin, ScopeOrgBlockedAdmin, ScopeOrgBlockedRead, ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest, ScopeOrgRead,
 		ScopePluginBlockedWrite, ScopePluginWrite,
 		ScopeProjectBlockedRead, ScopeProjectBlockedWrite, ScopeProjectRead, ScopeProjectWrite,
+		ScopeRiskPolicyBlock, ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate,
 	}
 	var compiledNames []Scope
 	for _, scope := range reg.Scopes() {

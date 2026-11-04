@@ -66,15 +66,24 @@ func ShadowMCPServerPolicyBypassTarget(serverURL string, serverIdentity string, 
 }
 
 type PolicyBypassEvaluator struct {
-	logger *slog.Logger
-	db     repo.DBTX
+	logger        *slog.Logger
+	db            repo.DBTX
+	authorization *authz.Client
 }
 
 func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEvaluator {
 	return &PolicyBypassEvaluator{
-		logger: logger.With(attr.SlogComponent("risk")),
-		db:     db,
+		logger:        logger.With(attr.SlogComponent("risk")),
+		db:            db,
+		authorization: nil,
 	}
+}
+
+// WithAuthorization sets the client that decides bypasses and returns the
+// evaluator. Without it every bypass is denied.
+func (e *PolicyBypassEvaluator) WithAuthorization(client *authz.Client) *PolicyBypassEvaluator {
+	e.authorization = client
+	return e
 }
 
 func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypassEvaluation) bool {
@@ -84,23 +93,24 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 // CanBypassWithGrants evaluates a bypass against an already-loaded caller grant
 // snapshot. Callers that also need policy-audience checks use this to keep both
 // decisions consistent under the same transaction snapshot.
-func CanBypassWithGrants(grants []authz.Grant, input PolicyBypassEvaluation) bool {
-	return CanBypassBatchWithGrants(grants, []PolicyBypassEvaluation{input})[input]
+func CanBypassWithGrants(ctx context.Context, client *authz.Client, grants []authz.Grant, input PolicyBypassEvaluation) bool {
+	return CanBypassBatchWithGrants(ctx, client, grants, []PolicyBypassEvaluation{input})[input]
 }
 
 // CanBypassBatchWithGrants evaluates several bypasses against one already-loaded
-// caller grant snapshot, canonicalizing legacy selectors only once.
-func CanBypassBatchWithGrants(grants []authz.Grant, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
+// caller grant snapshot, canonicalizing legacy selectors only once. A nil
+// client or an evaluation error denies.
+func CanBypassBatchWithGrants(ctx context.Context, client *authz.Client, grants []authz.Grant, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
 	decisions := make(map[PolicyBypassEvaluation]bool, len(inputs))
 	grants = canonicalizeRiskPolicyBypassGrants(grants)
 	for _, input := range inputs {
 		userID := strings.TrimSpace(input.UserID)
-		if userID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
+		if client == nil || userID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
 			decisions[input] = false
 			continue
 		}
-		check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
-		decisions[input] = authz.GrantsSatisfy(grants, check)
+		allowed, err := client.EvaluateGrants(ctx, grants, authz.RiskPolicy(input.PolicyID, policyBypassCheckDimensions(input.Target)).Bypass())
+		decisions[input] = err == nil && allowed
 	}
 	return decisions
 }
@@ -129,7 +139,7 @@ func (e *PolicyBypassEvaluator) CanBypassBatch(ctx context.Context, inputs []Pol
 		if !ok {
 			continue
 		}
-		maps.Copy(results, CanBypassBatchWithGrants(grants, evaluations))
+		maps.Copy(results, CanBypassBatchWithGrants(ctx, e.authorization, grants, evaluations))
 	}
 
 	return results

@@ -165,6 +165,7 @@ func newMeteredScanner(t *testing.T, ti *testInstance, pii *instrumentedPIIScann
 		testCELEngine(t),
 		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 	return scanner, reader
 }
 

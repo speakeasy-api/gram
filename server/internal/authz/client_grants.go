@@ -39,6 +39,9 @@ func (c *Client) EvaluateGrants(ctx context.Context, grants []Grant, op Operatio
 }
 
 func (c *Client) evaluateGrantsOld(grants []Grant, op Operation) (bool, error) {
+	if allowed, ok, err := legacyGrantDecision(grants, op); ok {
+		return allowed, err
+	}
 	check, ok := c.legacyCheck(op)
 	if !ok {
 		return false, fmt.Errorf("%w: operation %s has no engine form", ErrInvalidCheck, op)

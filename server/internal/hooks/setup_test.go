@@ -215,7 +215,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
 	identitySignals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
-	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
+	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn).WithAuthorization(authztest.NewParityClient(t, authzEngine))
 	spendCelEngine, err := spendcelenv.New()
 	require.NoError(t, err)
 	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)

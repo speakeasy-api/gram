@@ -71,6 +71,7 @@ func newShadowMCPTestScanner(t *testing.T, ti *testInstance) *risk.Scanner {
 		nil,
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 	return scanner
 }
 
@@ -155,6 +156,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceBlocksAgent(t *te
 		nil,
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	agentCtx := agentRequestContext(t, ctx, ti, "Roleless agent", "")
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(agentCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")

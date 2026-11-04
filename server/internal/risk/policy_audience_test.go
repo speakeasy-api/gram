@@ -212,6 +212,7 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	otherUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, ""))
 	require.NoError(t, err)
@@ -257,6 +258,7 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	emptyUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User, ""))
 	require.NoError(t, err)
@@ -306,6 +308,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	emptyUserPolicy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
 	require.NoError(t, err)

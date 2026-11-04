@@ -131,6 +131,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
@@ -187,6 +188,7 @@ func TestScanner_PubsubRoutesPolicyKeyedPromptJudge(t *testing.T) {
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "delete production", message.User, ""))
 	require.NoError(t, err)
@@ -242,6 +244,7 @@ func TestScanner_PubsubPromptJudgeFailureHonorsPolicyFailMode(t *testing.T) {
 				metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 			)
 			require.NoError(t, err)
+			scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 			result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "delete production", message.User, ""))
 			require.NoError(t, err)
@@ -286,6 +289,7 @@ func TestScanner_PubsubSkipsOutOfScopePromptJudgeLane(t *testing.T) {
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ordinary user prompt", message.User, ""))
 	require.NoError(t, err)
@@ -305,6 +309,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	_, err = scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue"))
@@ -330,6 +335,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, ""))
@@ -349,6 +355,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ls -la", message.ToolRequest, ""))
@@ -366,6 +373,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
@@ -385,6 +393,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))

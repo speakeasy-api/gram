@@ -59,7 +59,7 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		if err != nil {
 			chatID = uuid.Nil
 		}
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
+		if err := s.engine.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
 			return nil, err
 		}
 		if row.MatchLen == 0 {
@@ -97,7 +97,7 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
 	}
 
-	if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
+	if err := s.engine.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
 		return nil, err
 	}
 

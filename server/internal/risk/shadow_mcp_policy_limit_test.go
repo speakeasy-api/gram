@@ -164,6 +164,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_CarriesDispositionAndBlocklist(t 
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	require.NoError(t, err)
@@ -199,6 +200,7 @@ func TestScanner_LookupShadowMCPBlockingPolicy_BlockAllDisposition(t *testing.T)
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	require.NoError(t, err)

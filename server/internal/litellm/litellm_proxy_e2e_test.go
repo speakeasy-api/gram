@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -301,7 +302,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 			metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		)
 		require.NoError(t, err)
-		return scanner
+		return scanner.WithAuthorization(authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())))
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

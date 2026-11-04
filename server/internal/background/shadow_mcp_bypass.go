@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
@@ -21,9 +22,10 @@ type policyBypassBatchEvaluator interface {
 	CanBypassBatch(ctx context.Context, inputs []risk.PolicyBypassEvaluation) map[risk.PolicyBypassEvaluation]bool
 }
 
-// NewShadowMCPPolicyBypassChecker applies stored policy bypass grants.
-func NewShadowMCPPolicyBypassChecker(logger *slog.Logger, db riskrepo.DBTX) shadowmcpscan.BypassChecker {
-	return &shadowMCPPolicyBypassChecker{evaluator: risk.NewPolicyBypassEvaluator(logger, db)}
+// NewShadowMCPPolicyBypassChecker applies stored policy bypass grants, decided
+// by authorization.
+func NewShadowMCPPolicyBypassChecker(logger *slog.Logger, db riskrepo.DBTX, authorization *authz.Client) shadowmcpscan.BypassChecker {
+	return &shadowMCPPolicyBypassChecker{evaluator: risk.NewPolicyBypassEvaluator(logger, db).WithAuthorization(authorization)}
 }
 
 func (c *shadowMCPPolicyBypassChecker) CanBypassShadowMCP(

@@ -286,7 +286,7 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 	}))
 
 	allUsersTarget := risk.ShadowMCPServerPolicyBypassTarget(allUsersURL, "", allUsersURL)
-	evaluator := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn)
+	evaluator := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -381,7 +381,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	}, "list_events")
 	require.NotNil(t, target)
 	require.NotContains(t, target.Dimensions, authz.SelectorKeyServerIdentity)
-	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(ctx, risk.PolicyBypassEvaluation{
+	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn)).CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         authCtx.UserID,
 		PolicyID:       policyID,
@@ -433,7 +433,7 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 		PolicyID:       wholePolicyID,
 		Target:         nil,
 	}
-	decisions := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypassBatch(ctx, []risk.PolicyBypassEvaluation{
+	decisions := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn)).CanBypassBatch(ctx, []risk.PolicyBypassEvaluation{
 		scopedEvaluation,
 		wholeEvaluation,
 	})
