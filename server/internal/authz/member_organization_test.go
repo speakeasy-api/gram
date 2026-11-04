@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -36,7 +37,9 @@ func TestRequireMemberOrganizationMatchesInEveryMode(t *testing.T) {
 			require.Error(t, client.RequireMemberOrganization(request, "ordinary-member", org.Administer()))
 			require.Error(t, client.RequireMemberOrganization(request, "blocked-admin", org.Administer()), "the admin block holds")
 			require.Error(t, client.RequireMemberOrganization(request, "not-a-member", org.Read()))
-			require.Error(t, ignoreForbidden(client.RequireMemberOrganization(request, "admin-alpha", Project(organizationID, "proj_1").Read())), "only organization operations")
+			var refused *oops.ShareableError
+			require.ErrorAs(t, client.RequireMemberOrganization(request, "admin-alpha", Project(organizationID, "proj_1").Read()), &refused, "only organization operations")
+			require.Equal(t, oops.CodeUnexpected, refused.Code, "a project operation is an invalid check, not a denial")
 
 			for _, comparison := range recorder.all() {
 				require.Equal(t, ShadowMatch, comparison.Outcome, comparison.Detail)

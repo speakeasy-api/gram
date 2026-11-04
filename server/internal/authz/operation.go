@@ -176,13 +176,13 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
-// ReadOrOrganizationRead asks to read the project or, failing that, its
-// organization: either alternative allows, and a block on one does not stop
-// the other.
+// ReadOrOrganizationRead asks to read the project's organization or the
+// project itself: either alternative allows, and a block on one does not
+// stop the other. Organization read comes first, so a denial names it.
 func (p ProjectRef) ReadOrOrganizationRead() Operation {
 	return newAlternatives("project", "read_or_organization_read",
-		p.Read(),
 		Organization(p.organizationID).Read(),
+		p.Read(),
 	)
 }
 

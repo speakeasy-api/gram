@@ -40,7 +40,7 @@ func (c *Client) RequireMemberOrganizationWithDBTX(ctx context.Context, db repo.
 	organizationID := op.instance.resourceID
 	ops := []Operation{op}
 	rt := c.router.routeForOrganization(ctx, organizationID, ops)
-	if rt.mode == MigrationModeOld {
+	if rt.mode != MigrationModeShadow && rt.mode != MigrationModeNew {
 		return c.engine.RequireUserOrganizationScopeWithDBTX(ctx, db, organizationID, userID, check.Scope)
 	}
 

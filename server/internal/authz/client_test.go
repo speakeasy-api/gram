@@ -425,6 +425,9 @@ func TestClientReadOrOrganizationRead(t *testing.T) {
 			for _, outcome := range recorder.outcomes() {
 				require.Equal(t, ShadowMatch, outcome)
 			}
+			if mode == MigrationModeShadow {
+				require.Len(t, recorder.outcomes(), 4)
+			}
 		})
 	}
 }

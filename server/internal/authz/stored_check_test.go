@@ -43,6 +43,11 @@ func TestEvaluateGrantsForStoredCheckMatchesGrantsAuthorize(t *testing.T) {
 			for _, outcome := range recorder.outcomes() {
 				require.Equal(t, ShadowMatch, outcome)
 			}
+			if mode == MigrationModeShadow {
+				// Only the four declared checks have a registry answer to
+				// compare; undeclared ones stay with the engine.
+				require.Len(t, recorder.outcomes(), 4)
+			}
 		})
 	}
 }

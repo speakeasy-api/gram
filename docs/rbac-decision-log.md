@@ -169,12 +169,13 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 1. **Live-membership checks get one client method.** `Client.RequireMemberOrganization(ctx, userID, op)`, and its `WithDBTX` form, enforce an organization operation on a named user's live role membership. They route by that organization on each call. In old mode they call the engine's `RequireUserOrganizationScopeWithDBTX` unchanged. In shadow and new modes they repeat its refusals for principal API keys and principal credentials and its unenforced pass, then decide one live policy. Product features (requested organizations), killswitches (customer administrator) and access (non-support live admin check) use it. _If reversed:_ each caller keeps the engine until X1.
 2. **The killswitch authorizer interface takes an operation.** `organizationAuthorizer` now has `RequireMemberOrganization(ctx, userID, op)`, so the killswitch API passes the client and its stubs record the operation. _If reversed:_ keep the scope-based interface and adapt the client to it.
-3. **Organization-or-project read is a declared alternative.** `project.read_or_organization_read` (project read, or organization read, with no veto) reproduces `ListRoles` and `ListMembers`'s `RequireAny`. Without a project in the request, both ask organization read alone. _If reversed:_ keep `RequireAny` on the engine.
+3. **Organization-or-project read is a declared alternative.** `project.read_or_organization_read` (organization read, or project read, with no veto) reproduces `ListRoles` and `ListMembers`'s `RequireAny`, in its order, so a denial still names organization read. Without a project in the request, both ask organization read alone. _If reversed:_ keep `RequireAny` on the engine.
 4. **Challenge replay evaluates stored checks through the client.** `Client.EvaluateGrantsForStoredCheck` maps a recorded challenge's scope and selector to an operation when a registered permission answers it, and otherwise uses the engine's grant matching. Resolving a challenge therefore follows each type into the registry as its slice declares it. _If reversed:_ challenge resolution keeps `GrantsAuthorize` until every type is declared.
 5. **Stored-grant reads and writes move to X1.** The inventory now assigns these to X1, because the old tables stay authoritative until X1 replaces them:
    - access's loaders and writers, including role-grant patches, resource audience replacement, grant listing for resources and principal resolution;
    - the role-grant deletion in directory events;
-   - the stored-check composite in challenge replay.
+   - the stored-check composite in challenge replay;
+   - challenge-role assignment in `assignChallengeRole`.
 
    `ListGrants`, which feeds the dashboard's scope gates, moves to X4 with the other dashboard gates. _If reversed:_ O2 keeps those rows, and they wait for X1's storage switch anyway.
 
