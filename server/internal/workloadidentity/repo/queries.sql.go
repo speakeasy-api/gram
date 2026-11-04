@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getWorkloadDeviceKey = `-- name: GetWorkloadDeviceKey :one
@@ -183,6 +184,174 @@ func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg Resolv
 	var agent_id uuid.UUID
 	err := row.Scan(&agent_id)
 	return agent_id, err
+}
+
+const seedWorkloadAdmissionFixture = `-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type SeedWorkloadAdmissionFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) SeedWorkloadAdmissionFixture(ctx context.Context, arg SeedWorkloadAdmissionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAdmissionFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadAdmissionRuleFixture = `-- name: SeedWorkloadAdmissionRuleFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type SeedWorkloadAdmissionRuleFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	MatchKind        string
+}
+
+func (q *Queries) SeedWorkloadAdmissionRuleFixture(ctx context.Context, arg SeedWorkloadAdmissionRuleFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAdmissionRuleFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.MatchKind,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadAgentAssignmentFixture = `-- name: SeedWorkloadAgentAssignmentFixture :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type SeedWorkloadAgentAssignmentFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+}
+
+func (q *Queries) SeedWorkloadAgentAssignmentFixture(ctx context.Context, arg SeedWorkloadAgentAssignmentFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAgentAssignmentFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.AgentID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadAgentAssignmentRuleFixture = `-- name: SeedWorkloadAgentAssignmentRuleFixture :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type SeedWorkloadAgentAssignmentRuleFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	MatchKind        string
+	AgentID          uuid.UUID
+}
+
+func (q *Queries) SeedWorkloadAgentAssignmentRuleFixture(ctx context.Context, arg SeedWorkloadAgentAssignmentRuleFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAgentAssignmentRuleFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.MatchKind,
+		arg.AgentID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadIssuerFixture = `-- name: SeedWorkloadIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, created_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type SeedWorkloadIssuerFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Issuer         string
+	JwksUri        string
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Test fixture: this package is read-only; issuer writes belong to the
+// management API. created_at is explicit so oldest-first tie-breaks can be
+// asserted.
+func (q *Queries) SeedWorkloadIssuerFixture(ctx context.Context, arg SeedWorkloadIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadIssuerFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setWorkloadIssuerAllowWildcardAdmissionFixture = `-- name: SetWorkloadIssuerAllowWildcardAdmissionFixture :exec
+UPDATE workload_issuers SET allow_wildcard_admission = $1 WHERE id = $2
+`
+
+type SetWorkloadIssuerAllowWildcardAdmissionFixtureParams struct {
+	AllowWildcardAdmission bool
+	ID                     uuid.UUID
+}
+
+func (q *Queries) SetWorkloadIssuerAllowWildcardAdmissionFixture(ctx context.Context, arg SetWorkloadIssuerAllowWildcardAdmissionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setWorkloadIssuerAllowWildcardAdmissionFixture, arg.AllowWildcardAdmission, arg.ID)
+	return err
+}
+
+const unassignWorkloadAgentFixture = `-- name: UnassignWorkloadAgentFixture :exec
+UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) UnassignWorkloadAgentFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, unassignWorkloadAgentFixture, id)
+	return err
+}
+
+const withdrawWorkloadAdmissionFixture = `-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) WithdrawWorkloadAdmissionFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, withdrawWorkloadAdmissionFixture, id)
+	return err
 }
 
 const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one

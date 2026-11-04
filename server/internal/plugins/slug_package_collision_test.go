@@ -148,7 +148,7 @@ func TestPluginsService_ExistingSharedDirectoryCannotPublishPausedChanges(t *tes
 	require.NoError(t, err)
 	require.Nil(t, status.UpToDate, "freshness is unknown for an invalid holding plan")
 
-	_, err = ti.conn.Exec(ctx, "UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = $1", f.projectID) //nolint:glint // notestingrawsql: arrange pre-fingerprint publication without changing the last-published timestamp
+	err = pluginsrepo.New(ti.conn).ClearPublishedMCPFingerprintsFixture(ctx, f.projectID)
 	require.NoError(t, err)
 	_, err = ti.service.ResolvePublicationEvidence(ctx, authCtx.ActiveOrganizationID, f.projectID, []string{"foo"})
 	require.Error(t, err, "connections without fingerprints must also report unavailable collision evidence")

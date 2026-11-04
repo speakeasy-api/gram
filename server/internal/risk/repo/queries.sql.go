@@ -4474,6 +4474,29 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 	return items, nil
 }
 
+const lockExactRiskPolicyAudienceGrants = `-- name: LockExactRiskPolicyAudienceGrants :exec
+SELECT id
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors = $3
+ORDER BY id
+FOR UPDATE
+`
+
+type LockExactRiskPolicyAudienceGrantsParams struct {
+	OrganizationID string
+	Scope          string
+	Selectors      []byte
+}
+
+// Locks existing exact audience grants against generic deletes and updates
+// without blocking concurrent inserts.
+func (q *Queries) LockExactRiskPolicyAudienceGrants(ctx context.Context, arg LockExactRiskPolicyAudienceGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockExactRiskPolicyAudienceGrants, arg.OrganizationID, arg.Scope, arg.Selectors)
+	return err
+}
+
 const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
 SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
 `
@@ -5173,6 +5196,24 @@ type SetChatMessageExternalUserIDForTestParams struct {
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRiskPolicyApprovalConfigFixture = `-- name: SetRiskPolicyApprovalConfigFixture :exec
+UPDATE risk_policies
+SET approval_config = $1
+WHERE id = $2
+`
+
+type SetRiskPolicyApprovalConfigFixtureParams struct {
+	ApprovalConfig []byte
+	ID             uuid.UUID
+}
+
+// Test fixture: replaces only a policy's approval config, which no production
+// query edits on its own.
+func (q *Queries) SetRiskPolicyApprovalConfigFixture(ctx context.Context, arg SetRiskPolicyApprovalConfigFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRiskPolicyApprovalConfigFixture, arg.ApprovalConfig, arg.ID)
 	return err
 }
 

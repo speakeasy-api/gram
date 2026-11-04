@@ -10,13 +10,8 @@ const queries = vi.hoisted(() => ({
   devices: [] as FleetDevice[],
 }));
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    deviceAgent: {
-      href: () => "/org/device-agent",
-      mdmIntegrations: { href: () => "/org/device-agent/mdm-integrations" },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/fleetCoverage.js", () => ({
   useFleetCoverage: () => ({

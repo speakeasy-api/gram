@@ -90,7 +90,11 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   invalidateAllRemoteMcpServerHeaders: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: vi.fn(() => ({ data: undefined })),
   invalidateAllMcpServers: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/latestDeployment.js", () => ({
+  useLatestDeployment: vi.fn(() => ({ data: undefined })),
 }));
 vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   invalidateAllMcpEndpoints: vi.fn(() => Promise.resolve()),
@@ -116,6 +120,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
@@ -124,6 +129,7 @@ import {
 } from "./useRemoteMcpInstallWorkflow";
 
 const mockUseRemoteMcpServers = vi.mocked(useRemoteMcpServers);
+const mockUseMcpServers = vi.mocked(useMcpServers);
 
 function remote(url: string, headerNames: string[] = []): ExternalMCPRemote {
   return {
@@ -1182,5 +1188,26 @@ describe("useRemoteMcpInstallWorkflow", () => {
 
     expect(result.current.isServerAlreadyInstalled(installed)).toBe(true);
     expect(result.current.isServerAlreadyInstalled(notInstalled)).toBe(false);
+  });
+
+  it("reports a toolset-backed server as already installed", () => {
+    mockUseRemoteMcpServers.mockReturnValue({
+      data: { remoteMcpServers: [] },
+    } as unknown as ReturnType<typeof useRemoteMcpServers>);
+    mockUseMcpServers.mockReturnValue({
+      data: {
+        mcpServers: [
+          {
+            toolset: { registrySpecifier: "test/server", externalMcpSlugs: [] },
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useMcpServers>);
+
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers: EMPTY_SERVERS }),
+    );
+
+    expect(result.current.isServerAlreadyInstalled(makeServer())).toBe(true);
   });
 });

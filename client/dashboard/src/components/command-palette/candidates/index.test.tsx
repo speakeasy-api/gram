@@ -36,13 +36,6 @@ const mocks = vi.hoisted(() => ({
   recentsArgs: [] as unknown[][],
   navigate: vi.fn(),
   clearQueryCache: vi.fn(),
-  goToPlugins: vi.fn(),
-  goToToolsetDetails: vi.fn(),
-  goToMcpServerOverview: vi.fn(),
-  goToGatewayOverview: vi.fn(),
-  goToCatalogDetail: vi.fn(),
-  goToSourceDetail: vi.fn(),
-  goToSources: vi.fn(),
   updateMcpServer: vi.fn(),
   /** Latest server rows by id, as the pre-update refetch returns them. */
   latestServers: {} as Record<string, unknown>,
@@ -219,9 +212,10 @@ vi.mock("@/contexts/Telemetry", () => ({
 vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ search: "" }),
+  useLocation: () => ({ pathname: "/", search: "" }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({
@@ -332,44 +326,6 @@ vi.mock("../recentlyVisited", () => ({
   },
   getRecentLabelOverride: () => undefined,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/acme/access/roles" } },
-  }),
-  useRoutes: () => ({
-    toolset: { goTo: mocks.goToToolsetDetails },
-    plugins: {
-      goTo: mocks.goToPlugins,
-      href: () => "/acme/projects/default/plugins",
-    },
-    mcp: {
-      goTo: vi.fn(),
-      details: { overview: { goTo: mocks.goToMcpServerOverview } },
-      gateway: { overview: { goTo: mocks.goToGatewayOverview } },
-      catalog: { detail: { goTo: mocks.goToCatalogDetail } },
-      sources: {
-        goTo: mocks.goToSources,
-        detail: { goTo: mocks.goToSourceDetail },
-      },
-    },
-    assistants: { detail: { goTo: vi.fn() } },
-    environments: { environment: { goTo: vi.fn() } },
-    deployments: { deployment: { goTo: vi.fn() } },
-    policyCenter: { href: () => "/acme/projects/default/policy-center" },
-    shadowAI: {
-      mcps: {
-        detail: {
-          href: (slug: string) =>
-            `/acme/projects/default/shadow-ai/mcps/${slug}`,
-        },
-      },
-    },
-    identities: {
-      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
-    },
-  }),
-}));
-
 import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
@@ -513,7 +469,9 @@ describe("useGatewayCandidates", () => {
     expect(gateways[0]?.keywords).toContain("gateway-1");
     expect(gateways[0]?.verbs).toEqual(["open"]);
     void gateways[0]?.run("open");
-    expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-1");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/default/mcp/gateway/gateway-1/overview",
+    );
   });
 
   it("stays hidden, and does not fetch, without mcp:read or mcp:write", () => {
@@ -620,8 +578,9 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/hosted-x1/overview",
+    );
   });
 
   it("opens the hosting server of a toolset with no canonical wrapper under its own name", async () => {
@@ -644,8 +603,9 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/hosted-x1/overview",
+    );
   });
 
   // Without the summary there is no toolset slug; the server page redirects.
@@ -665,8 +625,9 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/hosted-x1/overview",
+    );
   });
 
   it("reads and flips a hosted server's visibility on its mcp_servers row", async () => {
@@ -685,8 +646,9 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/hosted-x1/overview",
+    );
 
     await act(async () => {
       await hosted?.run("enable");
@@ -730,8 +692,9 @@ describe("useMcpServerCandidates", () => {
       await hosted?.run("enable");
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/hosted-x1/overview",
+    );
   });
 
   // A hosted server is granted under its toolset id (the server resolves the
@@ -797,7 +760,9 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await slack?.run("open");
     });
-    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("slack-a1");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/default/mcp/slack-a1/overview",
+    );
 
     await act(async () => {
       await slack?.run("disable");
@@ -1042,10 +1007,9 @@ describe("useCatalogCandidates", () => {
     const [datadog] = byKind(result.current, "catalog");
 
     void datadog?.run("open");
-    expect(mocks.goToCatalogDetail).toHaveBeenCalledWith(
-      encodeURIComponent("com.datadoghq/datadog"),
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      `/acme/projects/default/mcp/catalog/${encodeURIComponent("com.datadoghq/datadog")}`,
     );
-    expect(mocks.goToMcpServerOverview).not.toHaveBeenCalled();
   });
 
   // Standing in as the title, the specifier is not repeated in the detail.
@@ -1178,7 +1142,9 @@ describe("useMarketplaceCandidate", () => {
     await act(async () => {
       await marketplace?.run("open");
     });
-    expect(mocks.goToPlugins).toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/default/plugins",
+    );
 
     await act(async () => {
       await marketplace?.run("publish");
@@ -1503,11 +1469,15 @@ describe("useSourceCandidates", () => {
       expect.arrayContaining(["petstore", "openapi", "doc-1"]),
     );
     void petstore?.run("open");
-    expect(mocks.goToSourceDetail).toHaveBeenLastCalledWith("doc-1");
+    expect(mocks.navigate).toHaveBeenLastCalledWith(
+      "/acme/projects/default/mcp/sources/doc-1",
+    );
 
     expect(billing?.detail).toBe("Source · function");
     void billing?.run("open");
-    expect(mocks.goToSourceDetail).toHaveBeenLastCalledWith("fn-1");
+    expect(mocks.navigate).toHaveBeenLastCalledWith(
+      "/acme/projects/default/mcp/sources/fn-1",
+    );
   });
 
   // An external MCP has no page of its own: it opens the hosted server built
@@ -1531,8 +1501,9 @@ describe("useSourceCandidates", () => {
       expect.arrayContaining(["linear", "externalmcp", "ext-1"]),
     );
     void linear?.run("open");
-    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("linear-srv");
-    expect(mocks.goToSources).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/toolsets/linear-srv",
+    );
   });
 
   it("falls back to the sources list for an external MCP no server uses", () => {
@@ -1546,8 +1517,9 @@ describe("useSourceCandidates", () => {
     );
 
     void linear?.run("open");
-    expect(mocks.goToSources).toHaveBeenCalled();
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/sources",
+    );
   });
 
   // Several servers can carry the same external MCP; opening the first would
@@ -1575,8 +1547,9 @@ describe("useSourceCandidates", () => {
     );
 
     void linear?.run("open");
-    expect(mocks.goToSources).toHaveBeenCalled();
-    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(
+      "/acme/projects/default/mcp/sources",
+    );
   });
 });
 
@@ -1646,7 +1619,7 @@ describe("useRuleCandidates", () => {
     );
     void custom?.run("open");
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/acme/projects/default/policy-center?tab=detection-rules&rule=custom.pii-ssn",
+      "/acme/projects/default/risk-policies?tab=detection-rules&rule=custom.pii-ssn",
     );
   });
 });

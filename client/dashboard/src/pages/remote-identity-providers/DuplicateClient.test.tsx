@@ -32,6 +32,7 @@ vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     organizationRemoteSessionClients: { duplicate: duplicateClient },
   }),
@@ -39,16 +40,6 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
   proxyRegisterUpstreamClient: (...args: unknown[]) => proxyRegister(...args),
   registrationProvenance: () => ({}),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      clientDetail: {
-        href: (issuerId: string, clientId: string) =>
-          `/issuers/${issuerId}/clients/${clientId}`,
-      },
-    },
-  }),
 }));
 vi.mock("@gram/client/react-query/organizationRemoteSessionClient.js", () => ({
   useOrganizationRemoteSessionClient: ({ id }: { id: string }) => loadCopy(id),
@@ -190,7 +181,9 @@ describe("DuplicateClientFlow", () => {
     expect(screen.getByText("Edit the copy")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "View client" }).getAttribute("href"),
-    ).toBe("/issuers/issuer-1/clients/copy-id");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/issuer-1/clients/copy-id",
+    );
   });
 
   it("registers a new client when chosen", async () => {

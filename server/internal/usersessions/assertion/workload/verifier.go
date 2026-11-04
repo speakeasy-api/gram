@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -78,7 +79,8 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 	}
 	var claims jwt.Claims
 	var extra replayIDClaims
-	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims, &extra); err != nil {
+	var confirmation confirmationClaims
+	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims, &extra, &confirmation); err != nil {
 		if verifiedErr, ok := errors.AsType[*assertioncore.VerificationError](err); ok && verifiedErr.Stage == assertioncore.VerificationKeyResolution {
 			if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrRefreshRateLimited) || errors.Is(err, jwks.ErrFetchRateLimited) {
 				return nil, rejectWith(ReasonKeyUnknown, err)
@@ -86,6 +88,9 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 			return nil, rejectWith(ReasonKeyUnresolvable, err)
 		}
 		return nil, rejectWith(ReasonSignatureInvalid, err)
+	}
+	if confirmation.Cnf != nil {
+		return nil, reject(ReasonTypeNotBearer, "cnf-bound assertions are not bearer assertions")
 	}
 	if claims.Expiry == nil {
 		return nil, reject(ReasonExpiryMissing, "exp is required")
@@ -112,6 +117,12 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
 	}
 	return &Result{ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil
+}
+
+// confirmationClaims detects a key-bound token (RFC 7800). Any cnf value,
+// including null, marks a credential that must not be exchanged as a bearer.
+type confirmationClaims struct {
+	Cnf json.RawMessage `json:"cnf"`
 }
 
 // checkBearerType refuses a denylisted typ. A missing typ and every other

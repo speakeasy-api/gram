@@ -5068,6 +5068,9 @@ type PrincipalGrant struct {
 	// JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 	// @access: opaque-restricted
 	Selectors []byte
+	// When a temporary grant stops authorizing new requests. NULL = permanent. A row whose expires_at has passed grants nothing and is ignored by every reader.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

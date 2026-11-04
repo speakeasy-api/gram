@@ -7,8 +7,21 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
+// Registering a palette entry must not fetch billing state. The page owns that.
+vi.mock("@/components/billing/use-billing-state", () => ({
+  useBillingState: () => {
+    throw new Error("palette registration fetched billing state");
+  },
+}));
+
+import { withOrgPages } from "@/route-pages";
 import { useOrgRoutes } from "@/routes";
 import { orgRoutesToNavActions } from "./navigation-actions";
+
+const grant =
+  (granted: string[]) =>
+  (scopes: string[]): boolean =>
+    scopes.some((scope) => granted.includes(scope));
 
 function wrapper({ children }: { children: ReactNode }) {
   return <MemoryRouter initialEntries={["/org"]}>{children}</MemoryRouter>;
@@ -18,10 +31,10 @@ describe("organization navigation registration", () => {
   it("registers both billing destinations without navigating until selected", () => {
     const { result } = renderHook(
       () => {
-        const routes = useOrgRoutes();
+        const routes = withOrgPages(useOrgRoutes());
         const location = useLocation();
         return {
-          actions: orgRoutesToNavActions(routes, false, true),
+          actions: orgRoutesToNavActions(routes, false, grant(["org:read"])),
           pathname: location.pathname,
         };
       },
@@ -58,9 +71,19 @@ describe("organization navigation registration", () => {
   });
 
   it("requires ordinary billing route access and does not expand unrelated nested routes", () => {
-    const { result } = renderHook(() => useOrgRoutes(), { wrapper });
-    const denied = orgRoutesToNavActions(result.current, false, false);
-    const allowed = orgRoutesToNavActions(result.current, false, true);
+    const { result } = renderHook(() => withOrgPages(useOrgRoutes()), {
+      wrapper,
+    });
+    const denied = orgRoutesToNavActions(
+      result.current,
+      false,
+      grant(["project:read"]),
+    );
+    const allowed = orgRoutesToNavActions(
+      result.current,
+      false,
+      grant(["org:admin"]),
+    );
     expect(denied.some(({ id }) => id === "nav-org-billing-setup")).toBe(false);
     expect(
       denied.some(({ id }) => id === "nav-org-billing-payment-method"),
@@ -70,5 +93,17 @@ describe("organization navigation registration", () => {
         .filter(({ id }) => !denied.some((action) => action.id === id))
         .map(({ id }) => id),
     ).toEqual(["nav-org-billing-setup", "nav-org-billing-payment-method"]);
+    // Tabs of a parent page stay out unless the route opts in.
+    for (const id of [
+      "nav-org-access-members",
+      "nav-org-access-roles",
+      "nav-org-access-challenges",
+      "nav-org-access-assignments",
+      "nav-org-deviceAgent-configuration",
+      "nav-org-deviceAgent-mdm-integrations",
+      "nav-org-deviceAgent-scan-targets",
+    ]) {
+      expect(allowed.some((action) => action.id === id)).toBe(false);
+    }
   });
 });

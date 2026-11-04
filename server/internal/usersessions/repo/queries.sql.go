@@ -1814,6 +1814,50 @@ func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getReconnectSessionPolicy = `-- name: GetReconnectSessionPolicy :one
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = $1::uuid
+  AND us.user_session_issuer_id = $2::uuid
+  AND us.organization_id = $3::text
+  AND us.project_id IS NOT DISTINCT FROM $4::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = $5
+  AND c.client_id = $6::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us
+`
+
+type GetReconnectSessionPolicyParams struct {
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	ClientID            string
+}
+
+// Resolve the original credential across refresh rotation, without reviving
+// revoked/expired connections or borrowing another client's catalogue.
+func (q *Queries) GetReconnectSessionPolicy(ctx context.Context, arg GetReconnectSessionPolicyParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getReconnectSessionPolicy,
+		arg.CredentialID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.ClientID,
+	)
+	var tool_selection []byte
+	err := row.Scan(&tool_selection)
+	return tool_selection, err
+}
+
 const getSharedUserSessionIssuerByID = `-- name: GetSharedUserSessionIssuerByID :one
 SELECT
     issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
@@ -4927,6 +4971,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND ($5::uuid[] IS NULL
+           OR s.id = ANY($5::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -4945,9 +4991,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($5::uuid[]) AS mcp_server_id,
-           unnest($6::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($7::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($6::uuid[]) AS mcp_server_id,
+           unnest($7::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -5176,13 +5222,16 @@ type RecordUpstreamClientSelectionsParams struct {
 	CredentialID        uuid.UUID
 	Source              string
 	UserSessionIssuerID uuid.UUID
+	ScopeMcpServerIds   []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
-// every MCP server it can reach, or an explicit no-auth choice. An existing
+// every MCP server it can reach, or an explicit no-auth choice. A NULL
+// scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+// recording to those servers, and an empty array records nothing. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
 // only once the server has an associated client and one is decided for the
 // credential: the no-auth choice is unusable by then, and recording the
@@ -5242,6 +5291,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.CredentialID,
 		arg.Source,
 		arg.UserSessionIssuerID,
+		arg.ScopeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
@@ -5710,6 +5760,57 @@ func (q *Queries) RevokeUserSessionConsentGroup(ctx context.Context, arg RevokeU
 	return items, nil
 }
 
+const seedWorkloadAdmissionFixture = `-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type SeedWorkloadAdmissionFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+}
+
+func (q *Queries) SeedWorkloadAdmissionFixture(ctx context.Context, arg SeedWorkloadAdmissionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAdmissionFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadAgentAssignmentFixture = `-- name: SeedWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedWorkloadAgentAssignmentFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+}
+
+// Test fixture: workload identity writes belong to the workload identity
+// management API.
+func (q *Queries) SeedWorkloadAgentAssignmentFixture(ctx context.Context, arg SeedWorkloadAgentAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedWorkloadAgentAssignmentFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.AgentID,
+	)
+	return err
+}
+
 const setOrganizationManagedUserSessionIssuerAuthenticationHost = `-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one
 UPDATE user_session_issuers AS issuer
 SET use_authentication_host = $1,
@@ -5923,6 +6024,28 @@ func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg S
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const softDeleteReconnectUpstreamChoices = `-- name: SoftDeleteReconnectUpstreamChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = $1::uuid
+  AND organization_id = $2::text
+  AND mcp_server_id = ANY($3::uuid[])
+  AND deleted IS FALSE
+`
+
+type SoftDeleteReconnectUpstreamChoicesParams struct {
+	CredentialID   uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Retire only active choices in the reviewed scope; preserve prior history.
+func (q *Queries) SoftDeleteReconnectUpstreamChoices(ctx context.Context, arg SoftDeleteReconnectUpstreamChoicesParams) error {
+	_, err := q.db.Exec(ctx, softDeleteReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID, arg.McpServerIds)
+	return err
 }
 
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
@@ -6365,6 +6488,62 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateReconnectSessionPolicy = `-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = $2::uuid
+  AND us.user_session_issuer_id = $3::uuid
+  AND us.organization_id = $4::text
+  AND us.project_id IS NOT DISTINCT FROM $5::uuid
+  AND us.subject_urn = $6
+  AND us.tool_selection -> 'catalog' ->> 'id' = $7::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = $8::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti
+`
+
+type UpdateReconnectSessionPolicyParams struct {
+	ToolSelection       []byte
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	CatalogID           string
+	ClientID            string
+}
+
+func (q *Queries) UpdateReconnectSessionPolicy(ctx context.Context, arg UpdateReconnectSessionPolicyParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, updateReconnectSessionPolicy,
+		arg.ToolSelection,
+		arg.CredentialID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.CatalogID,
+		arg.ClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var jti string
+		if err := rows.Scan(&jti); err != nil {
+			return nil, err
+		}
+		items = append(items, jti)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateRemoteSessionEMABindingsToUserSessionIssuer = `-- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
@@ -7017,4 +7196,13 @@ func (q *Queries) UserSessionIssuerIsPlatformOwned(ctx context.Context, arg User
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const withdrawWorkloadAdmissionFixture = `-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) WithdrawWorkloadAdmissionFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, withdrawWorkloadAdmissionFixture, id)
+	return err
 }

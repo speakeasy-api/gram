@@ -1,13 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { StepAuthentication } from "./StepAuthentication";
 import type { InventoryServer } from "./useServerInventory";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -58,6 +57,7 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
@@ -76,6 +76,7 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
@@ -96,6 +97,7 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -143,6 +145,7 @@ describe("create connection reauthentication", () => {
             refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
           }}
         />,
+        { wrapper: MemoryRouter },
       );
       // Rows start closed; the badge alone says how it signs in.
       expect(

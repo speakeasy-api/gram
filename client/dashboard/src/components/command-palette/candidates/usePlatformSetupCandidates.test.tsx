@@ -62,15 +62,13 @@ vi.mock("@/pages/agents/credentials/platformSetups", () => ({
   platformSetup: (entry: { key: string }) =>
     entry.key === "github-actions" ? { keywords: ["CI", "workflow"] } : {},
 }));
-vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      agents: {
-        new: { href: () => "/example/projects/main/identities/agents/new" },
-      },
-    },
-  }),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: "/" }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: mocks.orgSlug, projectSlug: "main" }),
 }));
 
 afterEach(cleanup);

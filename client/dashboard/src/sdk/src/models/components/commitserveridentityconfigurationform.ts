@@ -73,6 +73,10 @@ export type CommitServerIdentityConfigurationForm = {
    * Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
    */
   registrationMethod?: RegistrationMethod | undefined;
+  /**
+   * Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
+   */
+  targetServerOnly?: boolean | undefined;
 };
 
 /** @internal */
@@ -93,6 +97,7 @@ export type CommitServerIdentityConfigurationForm$Outbound = {
   mcp_server_id: string;
   provider_id?: string | undefined;
   registration_method?: string | undefined;
+  target_server_only?: boolean | undefined;
 };
 
 /** @internal */
@@ -111,6 +116,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
       mcpServerId: z.string(),
       providerId: z.optional(z.string()),
       registrationMethod: z.optional(RegistrationMethod$outboundSchema),
+      targetServerOnly: z.optional(z.boolean()),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -121,6 +127,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
         mcpServerId: "mcp_server_id",
         providerId: "provider_id",
         registrationMethod: "registration_method",
+        targetServerOnly: "target_server_only",
       });
     }),
   );

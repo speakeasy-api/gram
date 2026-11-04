@@ -431,7 +431,7 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	}
 	tokens, err := g.projectTokens.get(ctx, member.projectID)
 	if err != nil {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 	}
 	return tokens, nil
 }
@@ -446,8 +446,8 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // servers their access does not include.
 //
 // Where typed auth client resolution is enforced, the registrations its
-// servers offer through typed auth clients are listed too, whether or not the
-// sign-in links them.
+// servers offer through typed auth clients are listed whether or not the
+// sign-in links them. Direct proxied servers offer only these registrations.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	return clients, err
@@ -467,11 +467,44 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 		}
 		return members, membersErr
 	}
+	loadTypedRegistrations := func() (map[uuid.UUID]uuid.UUID, error) {
+		typed, err := s.typedConsentRegistrations(ctx, endpoint, loadMembers)
+		if err != nil {
+			return nil, err
+		}
+		// A workload reconnect authorizes connecting only its bound client.
+		// Filter before loading typed cards, even those not linked to the issuer.
+		if reconnect := challengeState.WorkloadReconnect; reconnect != nil {
+			for id := range typed {
+				if id != reconnect.ClientID {
+					delete(typed, id)
+				}
+			}
+		}
+		return typed, nil
+	}
+	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if enforced {
+			// Legacy issuer links are not offers under typed enforcement. Load
+			// only personal and identity-provider registrations linked directly
+			// to this server, even when that leaves no connection cards.
+			typed, err := loadTypedRegistrations()
+			if err != nil {
+				return nil, nil, err
+			}
+			clients, err := s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, nil, typed)
+			return clients, typed, err
+		}
+	}
 	clients, err := s.listSignInClients(ctx, endpoint, challengeState, loadMembers)
 	if err != nil {
 		return nil, nil, err
 	}
-	typed, err := s.typedConsentRegistrations(ctx, endpoint, loadMembers)
+	typed, err := loadTypedRegistrations()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -553,7 +586,7 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 		return nil, err
 	}
-	if binding := challengeState.CodeReconnect; binding != nil {
+	if binding := challengeState.CodeReconnect; binding != nil && !binding.reviewReady() {
 		hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, binding.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("check connection visibility: %w", err)

@@ -4,12 +4,16 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RemoteSessionClientDetail from "./RemoteSessionClientDetail";
 
-const BASE = "/rip/issuer-1/clients/client-1";
+const BASE =
+  "/org/projects/project/remote-identity-providers/issuer-1/clients/client-1";
 
 function Passthrough({ children }: { children?: ReactNode }) {
   return <>{children}</>;
 }
 
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("@/components/page-layout", () => ({
   Page: Object.assign(Passthrough, {
     Header: Object.assign(Passthrough, { Breadcrumbs: () => null }),
@@ -23,24 +27,6 @@ vi.mock("@/lib/remote-identity", () => ({ ScopeBadge: () => null }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true }),
 }));
-vi.mock("@/routes", () => {
-  const tab = (segment: string) => ({
-    href: (issuerId: string, clientId: string) =>
-      `/rip/${issuerId}/clients/${clientId}/${segment}`,
-  });
-  return {
-    useRoutes: () => ({
-      remoteIdentityProviders: {
-        issuerDetail: { clients: { href: () => "/rip/issuer-1/clients" } },
-        clientDetail: {
-          overview: tab("overview"),
-          mcpServers: tab("mcp-servers"),
-          sessions: tab("sessions"),
-        },
-      },
-    }),
-  };
-});
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
@@ -86,7 +72,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
-          path="/rip/:issuerId/clients/:clientId/*"
+          path="/:orgSlug/projects/:projectSlug/remote-identity-providers/:issuerId/clients/:clientId/*"
           element={
             <>
               <RemoteSessionClientDetail />

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/repo"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 )
 
@@ -23,21 +24,17 @@ func ProcessGlobalFanout(ctx context.Context, db *pgxpool.Pool, roleID uuid.UUID
 		return fmt.Errorf("begin global role distribution: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	var active bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM global_roles WHERE id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE)`, roleID).Scan(&active)
+	queries := repo.New(tx)
+	active, err := queries.GlobalRoleIsActive(ctx, roleID)
 	if err != nil {
 		return fmt.Errorf("validate global role distribution: %w", err)
 	}
 	if !active {
 		return nil
 	}
-	rows, err := tx.Query(ctx, `SELECT id FROM organization_metadata WHERE disabled_at IS NULL AND id > $1 ORDER BY id LIMIT $2`, cursor, expansionPageSize)
+	organizations, err := queries.ListActiveOrganizationsPage(ctx, repo.ListActiveOrganizationsPageParams{Cursor: cursor, PageLimit: expansionPageSize})
 	if err != nil {
 		return fmt.Errorf("list global role distribution organizations: %w", err)
-	}
-	organizations, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return fmt.Errorf("read global role distribution organizations: %w", err)
 	}
 	for _, organizationID := range organizations {
 		if err := requests.Publish(ctx, tx, requests.Request{OrganizationID: organizationID, RoleURN: "role:global:" + roleID.String(), GlobalRoleID: "", BootstrapOrganizationID: "", Cursor: ""}); err != nil {
@@ -66,25 +63,17 @@ func ProcessOrganizationBootstrap(ctx context.Context, db *pgxpool.Pool, organiz
 	if err := requests.LockOrganization(ctx, tx, organizationID); err != nil {
 		return fmt.Errorf("lock organization role distribution: %w", err)
 	}
-	var locked string
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&locked)
+	queries := repo.New(tx)
+	_, err = queries.LockActiveOrganization(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("validate organization role distribution: %w", err)
 	}
-	rows, err := tx.Query(ctx, `WITH active_roles AS (
- SELECT 'role:global:' || id::text AS role_urn FROM global_roles WHERE deleted IS FALSE AND workos_deleted IS FALSE
- UNION ALL
- SELECT 'role:organization:' || id::text FROM organization_roles WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
- ) SELECT role_urn FROM active_roles WHERE role_urn > $2 ORDER BY role_urn LIMIT $3`, organizationID, cursor, expansionPageSize)
+	roles, err := queries.ListActiveOrganizationRoleURNsPage(ctx, repo.ListActiveOrganizationRoleURNsPageParams{OrganizationID: organizationID, Cursor: cursor, PageLimit: expansionPageSize})
 	if err != nil {
 		return fmt.Errorf("list organization role distribution roles: %w", err)
-	}
-	roles, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return fmt.Errorf("read organization role distribution roles: %w", err)
 	}
 	for _, roleURN := range roles {
 		if err := requests.Publish(ctx, tx, requests.Request{OrganizationID: organizationID, RoleURN: roleURN, GlobalRoleID: "", BootstrapOrganizationID: "", Cursor: ""}); err != nil {

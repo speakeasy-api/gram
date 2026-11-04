@@ -30,7 +30,11 @@
 # protection rules (required reviewers, allowed branches) pass, so it is the
 # way to put a review in front of the agent's access. An environment a
 # workflow names before anyone configures it is created with no rules, so the
-# environment has to be set up first.
+# environment has to be set up first. Pull requests admits jobs whose context
+# is pull_request, which GitHub gives a job started by a pull request event
+# that references no environment. pull_request_target is such an event, so the
+# caveat above holds for this choice too. A pull_request job runs the workflow
+# as the pull request's branch has it, so nobody reviews it first.
 #
 # Repositories created, renamed or transferred on github.com since 2026-07-15
 # put immutable IDs in the subject (repo:<owner>@<owner_id>/<repo>@<repo_id>:),
@@ -56,6 +60,9 @@ icon: /access-hub/github-actions.svg
 # Off until a stable speakeasyd release supports GitHub Actions (device-agent
 # #296): the workflow installs the latest stable release, and every release
 # before that one stops the job at "did not pick up the GitHub identity".
+# Before then, the workload-platform-github-actions feature flag offers it to
+# the organizations it is on for, so it can be tried in production with a
+# speakeasyd built from source.
 enabled: false
 
 issuer:
@@ -107,4 +114,8 @@ subject:
     - key: environment
       label: One environment
       template: "repo:{owner}/{repo}:environment:{environment}"
+      wildcard: false
+    - key: pull_request
+      label: Pull requests
+      template: "repo:{owner}/{repo}:pull_request"
       wildcard: false

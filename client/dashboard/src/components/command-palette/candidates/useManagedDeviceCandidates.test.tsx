@@ -24,15 +24,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    deviceAgent: {
-      devices: { href: () => "/org/device-agent/devices" },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: "/" }),
+}));
 vi.mock("@gram/client/react-query/fleetDevices.js", () => ({
   buildFleetDevicesInfiniteQuery: (_sdk: unknown, request: unknown) => {
     mocks.requests.push(request);

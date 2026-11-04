@@ -412,7 +412,11 @@ function MoveToProvider({
             <ChangeIssuerConfirmDialog
               open={open}
               onOpenChange={setOpen}
-              target={{ attachImpactTarget: { mcpServerId: server.id } }}
+              target={{
+                attachImpactTarget: { mcpServerId: server.id },
+                mcpServerId: server.id,
+                slug: server.slug || server.name,
+              }}
               replacing
               candidate={target}
               onConfirm={() => move.mutate()}

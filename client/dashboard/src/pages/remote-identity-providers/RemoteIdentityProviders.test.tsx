@@ -11,15 +11,8 @@ import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { RemoteIdentityProvidersPage } from "./RemoteIdentityProviders";
 
-vi.mock("@/routes", () => ({
-  useRoutes: (overrides?: { projectSlug?: string }) => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/example/projects/${overrides?.projectSlug ?? "active"}/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "active" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
