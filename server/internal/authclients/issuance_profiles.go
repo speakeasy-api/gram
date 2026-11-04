@@ -26,7 +26,7 @@ import (
 )
 
 func (s *Service) ListIssuanceProfiles(ctx context.Context, payload *gen.ListIssuanceProfilesPayload) (*gen.ListIssuanceProfilesResult, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *Service) ListIssuanceProfiles(ctx context.Context, payload *gen.ListIss
 }
 
 func (s *Service) SetIssuanceProfile(ctx context.Context, payload *gen.SetIssuanceProfilePayload) (*types.IssuanceProfile, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func WriteIssuanceProfile(ctx context.Context, db *pgxpool.Pool, auditLogger *au
 }
 
 func (s *Service) DeleteIssuanceProfile(ctx context.Context, payload *gen.DeleteIssuanceProfilePayload) error {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return err
 	}

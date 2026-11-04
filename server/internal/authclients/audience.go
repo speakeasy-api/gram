@@ -50,7 +50,7 @@ var levelScopes = map[string]authz.Scope{
 var levelOrder = []string{LevelBlocked, LevelUse}
 
 func (s *Service) GetAuthClientAudience(ctx context.Context, payload *gen.GetAuthClientAudiencePayload) (*types.AuthClientAudience, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *Service) GetAuthClientAudience(ctx context.Context, payload *gen.GetAut
 }
 
 func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAuthClientAudiencePayload) (*types.AuthClientAudience, error) {
-	authCtx, logger, err := s.require(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.require(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
