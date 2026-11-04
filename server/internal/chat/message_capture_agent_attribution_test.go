@@ -233,6 +233,39 @@ func TestStartOrResumeChat_PreExistingEmptyIdentityIsNamedNotOpened(t *testing.T
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+// A human turn landing on an agent-only session makes its attribution mixed.
+// The session is demoted to the no-author shape: the agent's owner no longer
+// opens it by ownership, and the human who wrote into it does not inherit it.
+func TestStartOrResumeChat_HumanTurnOnAgentSessionClosesItToBoth(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentOwner := "agent-owner-" + uuid.NewString()
+	agentID := seedAgent(t, ctx, ti, agentOwner, "Agent whose session a human joins")
+	chatID := uuid.New()
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, agentOwner), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, agentOwner), loadPayload(chatID.String()))
+	require.NoError(t, err, "before the human turn the owner opens the agent-only session")
+
+	_, err = strategy.StartOrResumeChat(ctx, completionRequest(ti, chatID, authCtx.UserID))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.Equal(t, agentID, row.AgentID.UUID, "the agent stays recorded")
+	require.True(t, row.UserID.Valid)
+	require.Empty(t, row.UserID.String, "mixed attribution leaves no author")
+
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, agentOwner), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.LoadChat(authztest.WithExactGrants(t, ctx), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 // An agent from another organization never lands on the chat: the stamp
 // resolves the agent against the caller's tenant at write time.
 func TestStartOrResumeChat_ForeignTenantAgentIsNotRecorded(t *testing.T) {
