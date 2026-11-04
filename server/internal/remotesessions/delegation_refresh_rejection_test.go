@@ -37,9 +37,7 @@ type fakeTokenEndpoint struct {
 }
 
 func (e *fakeTokenEndpoint) answer(status int, body string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.status, e.body = status, body
+	e.answerRetryAfter(status, body, "")
 }
 
 func (e *fakeTokenEndpoint) answerRetryAfter(status int, body, retryAfter string) {
