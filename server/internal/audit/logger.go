@@ -19,8 +19,7 @@ type Logger struct {
 type LoggerOption func(*Logger)
 
 // WithoutOutbox records audit rows without publishing outbox events. Use it for
-// operator backfills, and for internal staff activity attributed to a customer
-// tenant (such as catalog curation) that must not reach that tenant's webhooks.
+// operator backfills independently of internal-event classification.
 // Skipping the outbox also drops the event from internal outbox consumers such
 // as growth signals.
 func WithoutOutbox() LoggerOption {
@@ -54,7 +53,7 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)
 	}
 
-	if l.skipOutbox {
+	if l.skipOutbox || entry.Params.IsInternal {
 		return nil
 	}
 	return PublishWebhook(ctx, dbtx, entry.Params, row, CategoryConfiguration, entry.OutboxEvent)

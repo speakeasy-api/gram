@@ -195,8 +195,8 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		require.True(t, ok)
 		fields, ok := item["properties"].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, fields, 19)
-		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
+		require.Len(t, fields, 20)
+		for _, name := range []string{"id", "is_internal", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
 			require.Contains(t, fields, name)
 		}
 		for _, name := range []string{"before_snapshot", "after_snapshot"} {
@@ -210,4 +210,32 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		return
 	}
 	t.Fatal("list_audit_log_entries missing from tools/list")
+}
+
+func TestActivityAuditLogInternalSchema(t *testing.T) {
+	t.Parallel()
+	tools := listAllAdminTools(t)
+	found := 0
+	for _, raw := range tools {
+		var tool struct {
+			Name         string         `json:"name"`
+			OutputSchema map[string]any `json:"outputSchema"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &tool))
+		field := "activity"
+		switch tool.Name {
+		case "list_organization_activity":
+		case "list_audit_log_entries":
+			field = "entries"
+		default:
+			continue
+		}
+		found++
+		properties := tool.OutputSchema["properties"].(map[string]any)
+		items := properties[field].(map[string]any)["items"].(map[string]any)
+		require.Contains(t, items["required"], "is_internal", tool.Name)
+		internal := items["properties"].(map[string]any)["is_internal"].(map[string]any)
+		require.Equal(t, "boolean", internal["type"], tool.Name)
+	}
+	require.Equal(t, 2, found)
 }

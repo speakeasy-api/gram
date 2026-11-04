@@ -137,6 +137,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 		t.Helper()
 		row, err := configuration.InsertAuditLog(ctx, auditrepo.InsertAuditLogParams{
 			OrganizationID: organizationID,
+			IsInternal:     action == audit.ActionWorkloadAdmissionAdmit,
 			ActorID:        actorID,
 			ActorType:      actorType,
 			Action:         string(action),
@@ -150,6 +151,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	// An entry the security log already holds, written after deploy.
 	nativeSubject := uuid.New()
 	native, err := q.InsertSecurityAuditLog(ctx, repo.InsertSecurityAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: orgID,
 		ActorID:        uuid.NewString(),
 		ActorType:      "agent",
@@ -183,7 +185,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	otherOrgID := uuid.NewString()
 	otherRuntime := insertConfiguration(otherOrgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, uuid.NewString())
 
-	before, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: orgID})
+	before, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{IncludeInternalEvents: true, OrganizationID: orgID})
 	require.NoError(t, err)
 	seqByID := make(map[uuid.UUID]int64, len(before))
 	for _, row := range before {
@@ -214,7 +216,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	require.EqualValues(t, 2, move(orgID))
 	require.EqualValues(t, 0, move(orgID), "a finished organization moves nothing on rerun")
 
-	otherLeft, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: otherOrgID})
+	otherLeft, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{IncludeInternalEvents: true, OrganizationID: otherOrgID})
 	require.NoError(t, err)
 	require.Len(t, otherLeft, 1, "a batch moves only its own organization's entries")
 	require.Equal(t, otherRuntime, otherLeft[0].ID)
@@ -226,7 +228,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 
 	// Moved entries keep their seq, below every entry written to the security
 	// log directly, so the feed lists them after it, newest first.
-	security, err := securityevent.List(ctx, conn, auditrepo.ListAuditLogsParams{OrganizationID: orgID})
+	security, err := securityevent.List(ctx, conn, auditrepo.ListAuditLogsParams{IncludeInternalEvents: true, OrganizationID: orgID})
 	require.NoError(t, err)
 	require.Len(t, security, len(moving)+1)
 	require.Equal(t, native.ID, security[0].ID)
@@ -234,10 +236,11 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 		row := security[len(security)-1-i]
 		require.Equal(t, id, row.ID)
 		require.Equal(t, seqByID[id], row.Seq)
+		require.Equal(t, row.Action == string(audit.ActionWorkloadAdmissionAdmit), row.IsInternal)
 		require.Less(t, row.Seq, security[0].Seq)
 	}
 
-	left, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: orgID})
+	left, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{IncludeInternalEvents: true, OrganizationID: orgID})
 	require.NoError(t, err)
 	require.Len(t, left, 3, "the person-made entries stay in the configuration log")
 	for _, row := range left {
@@ -279,4 +282,90 @@ func TestListReadsSecurityLog(t *testing.T) {
 	require.Len(t, actions, 1)
 	require.Equal(t, string(audit.ActionWorkloadAdmissionWithdraw), actions[0].Value)
 	require.EqualValues(t, 2, actions[0].Count)
+}
+
+func TestPublishWebhook_InternalSecurityEvent(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	input := repo.InsertSecurityAuditLogParams{OrganizationID: uuid.NewString(), ActorID: "audit-test", ActorType: "system", Action: string(audit.ActionWorkloadAdmissionAdmit), SubjectID: uuid.NewString(), SubjectType: "workload_admission", IsInternal: true}
+	row, err := repo.New(conn).InsertSecurityAuditLog(ctx, input)
+	require.NoError(t, err)
+	var internal bool
+	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM security_audit_logs WHERE id = $1", row.ID).Scan(&internal))
+	require.True(t, internal)
+	require.NoError(t, audit.PublishWebhook(ctx, conn, auditrepo.InsertAuditLogParams(input), auditrepo.InsertAuditLogRow(row), audit.CategorySecurity, events.WorkloadAdmissionV1))
+	var count int
+	require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM publish_outbox WHERE organization_id = $1", input.OrganizationID).Scan(&count))
+	require.Zero(t, count)
+}
+
+func TestListSecurityAuditLogs_InternalClassification(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	orgID := uuid.NewString()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Test Organization", Slug: "test-" + orgID[:8]})
+	require.NoError(t, err)
+	q := repo.New(conn)
+	for _, subject := range []string{"catalog_promotion", "mcp_server"} {
+		for _, internal := range []bool{false, true} {
+			actor, action, surface := "visible", "visible:create", "dashboard"
+			if internal {
+				actor, action, surface = "hidden", "hidden:create", "platform_mcp"
+			}
+			_, err = q.InsertSecurityAuditLog(ctx, repo.InsertSecurityAuditLogParams{OrganizationID: orgID, ActorID: actor, ActorType: "system", Action: action, SubjectID: subject, SubjectType: subject, IsInternal: internal, ActingSurface: pgtype.Text{String: surface, Valid: true}})
+			require.NoError(t, err)
+		}
+	}
+	base := repo.ListSecurityAuditLogsParams{OrganizationID: orgID}
+	for _, filter := range []string{"none", "action", "subject_type", "subject_id", "subject_ids"} {
+		p := base
+		switch filter {
+		case "action":
+			p.Action = pgtype.Text{String: "hidden:create", Valid: true}
+		case "subject_type":
+			p.SubjectType = pgtype.Text{String: "mcp_server", Valid: true}
+		case "subject_id":
+			p.SubjectID = pgtype.Text{String: "mcp_server", Valid: true}
+		case "subject_ids":
+			p.SubjectIds = []string{"mcp_server"}
+		}
+		rows, err := q.ListSecurityAuditLogs(ctx, p)
+		require.NoError(t, err)
+		for _, row := range rows {
+			require.False(t, row.IsInternal, filter)
+		}
+		if filter == "none" {
+			require.Len(t, rows, 2)
+		}
+		if filter == "action" {
+			require.Empty(t, rows)
+		}
+	}
+	actors, err := q.ListSecurityActorFacets(ctx, repo.ListSecurityActorFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, actors, 1)
+	actions, err := q.ListSecurityActionFacets(ctx, repo.ListSecurityActionFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	surfaces, err := q.ListSecuritySurfaceFacets(ctx, repo.ListSecuritySurfaceFacetsParams{OrganizationID: orgID})
+	require.NoError(t, err)
+	require.Len(t, surfaces, 1)
+	base.IncludeInternalEvents = true
+	rows, err := q.ListSecurityAuditLogs(ctx, base)
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+	for i, row := range rows {
+		p := base
+		p.CursorSeq = pgtype.Int8{Int64: row.Seq, Valid: true}
+		next, err := q.ListSecurityAuditLogs(ctx, p)
+		require.NoError(t, err)
+		require.Len(t, next, len(rows)-i-1)
+		for j := range next {
+			require.Equal(t, rows[i+1+j], next[j])
+		}
+	}
 }

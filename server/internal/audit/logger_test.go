@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	writerrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -52,6 +53,10 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 		AssetName:      "Test Asset",
 	})
 	require.NoError(t, err)
+
+	var internal bool
+	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM audit_logs WHERE subject_id = $1", assetID.String()).Scan(&internal))
+	require.False(t, internal)
 
 	envelope, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
@@ -246,10 +251,56 @@ func TestLogger_WithoutOutboxRecordsAuditRowOnly(t *testing.T) {
 	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAssetCreate)
 	require.NoError(t, err)
 	require.Equal(t, assetID.String(), record.SubjectID)
+	var internal bool
+	require.NoError(t, conn.QueryRow(ctx, "SELECT is_internal FROM audit_logs WHERE subject_id = $1", assetID.String()).Scan(&internal))
+	require.False(t, internal)
 
 	_, err = auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
 		EventType:      string(events.AssetV1.EventType()),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestLogger_InternalEvents(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	orgID := uuid.NewString()
+	actor := urn.NewSystemPrincipal("audit-test")
+	promotion := urn.NewCatalogPromotion(uuid.New())
+	logger := audit.NewLogger()
+	actions := []struct {
+		name string
+		log  func() error
+	}{
+		{"Archive", func() error {
+			return logger.LogCatalogPromotionArchive(ctx, conn, audit.LogCatalogPromotionArchiveEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"Reject", func() error {
+			return logger.LogCatalogPromotionReject(ctx, conn, audit.LogCatalogPromotionRejectEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"Restore", func() error {
+			return logger.LogCatalogPromotionRestore(ctx, conn, audit.LogCatalogPromotionRestoreEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"RetryDocs", func() error {
+			return logger.LogCatalogPromotionRetryDocs(ctx, conn, audit.LogCatalogPromotionRetryDocsEvent{OrganizationID: orgID, Actor: actor, CatalogPromotionURN: promotion})
+		}},
+		{"PromoteCatalogue", func() error {
+			return logger.LogMcpServerPromoteCatalogue(ctx, conn, audit.LogMcpServerPromoteCatalogueEvent{OrganizationID: orgID, Actor: actor, McpServerURN: urn.NewMcpServer(uuid.New())})
+		}},
+	}
+	for _, action := range actions {
+		t.Run(action.name, func(t *testing.T) {
+			require.NoError(t, action.log())
+			rows, err := writerrepo.New(conn).ListAuditLogs(ctx, writerrepo.ListAuditLogsParams{OrganizationID: orgID, IncludeInternalEvents: true})
+			require.NoError(t, err)
+			require.NotEmpty(t, rows)
+			require.True(t, rows[0].IsInternal)
+			var count int
+			require.NoError(t, conn.QueryRow(ctx, "SELECT count(*) FROM publish_outbox WHERE organization_id = $1", orgID).Scan(&count))
+			require.Zero(t, count)
+		})
+	}
 }

@@ -393,3 +393,14 @@ func TestAuditLogEntriesAvailableWithoutSummaryReader(t *testing.T) {
 func testActivityCursor(seq int) string {
 	return base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "activity:%d:done", seq))
 }
+
+func TestAuditLogEntriesInternalClassification(t *testing.T) {
+	t.Parallel()
+	reads := testAuditReads()
+	reads.result.Logs = []*gen.AuditLog{{ID: "ordinary", IsInternal: false}, {ID: "internal", IsInternal: true}}
+	status, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, `"isError":true`)
+	require.Contains(t, string(data), `"is_internal":false`)
+	require.Contains(t, string(data), `"is_internal":true`)
+}

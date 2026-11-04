@@ -119,7 +119,7 @@ func (s *Service) CurateTx(ctx context.Context, tx pgx.Tx, request CurationReque
 	}
 	// Curation is internal staff activity attributed to the source tenant;
 	// customer webhooks must not receive it.
-	logger := audit.NewLogger(audit.WithoutOutbox())
+	logger := audit.NewLogger()
 	switch request.Action {
 	case "reject":
 		err = logger.LogCatalogPromotionReject(ctx, tx, audit.LogCatalogPromotionRejectEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})

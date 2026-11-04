@@ -15,7 +15,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   @organization_id,
   @project_id,
@@ -32,7 +33,8 @@ INSERT INTO audit_logs (
   @after_snapshot,
   @metadata,
   @acting_surface,
-  @acting_client_id
+  @acting_client_id,
+  @is_internal
 )
 RETURNING id, organization_id;
 
@@ -115,11 +117,8 @@ WHERE a.organization_id = @organization_id
     )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
-  -- Staff catalogue curation is attributed to the candidate's source tenant
-  -- but is internal Speakeasy activity, so customer feeds never return it,
-  -- not even for an explicit subject_type or action filter. Only the private
-  -- admin caller opts in.
-  AND (@include_internal_events::boolean OR a.subject_type <> 'catalog_promotion')
+  -- Internal activity is visible only to the private staff caller.
+  AND (@include_internal_events::boolean OR NOT a.is_internal)
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
@@ -158,7 +157,7 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = @organization_id
     AND subject_type <> 'assistant'
-    AND subject_type <> 'catalog_promotion'
+    AND NOT is_internal
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
@@ -220,7 +219,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
-  AND subject_type <> 'catalog_promotion'
+  AND NOT is_internal
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
@@ -241,7 +240,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
-  AND subject_type <> 'catalog_promotion'
+  AND NOT is_internal
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid

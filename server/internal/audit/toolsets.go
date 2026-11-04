@@ -42,6 +42,7 @@ type LogToolsetCreateEvent struct {
 func (l *Logger) LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event LogToolsetCreateEvent) error {
 	action := ActionToolsetCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -115,6 +116,7 @@ func (l *Logger) LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -154,6 +156,7 @@ type LogToolsetDeleteEvent struct {
 func (l *Logger) LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event LogToolsetDeleteEvent) error {
 	action := ActionToolsetDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -209,6 +212,7 @@ func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -263,6 +267,7 @@ func (l *Logger) LogToolsetUpdateExternalOAuthIssuer(ctx context.Context, dbtx r
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,
@@ -312,6 +317,7 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -382,6 +388,7 @@ func (l *Logger) LogToolsetMigrateToRemoteMcp(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

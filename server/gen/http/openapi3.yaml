@@ -101216,6 +101216,9 @@ components:
                     format: date-time
                 id:
                     type: string
+                is_internal:
+                    type: boolean
+                    description: Internal staff-only audit activity; persisted but never published to the outbox.
                 metadata:
                     type: object
                     additionalProperties: true
@@ -101232,6 +101235,7 @@ components:
                 subject_type:
                     type: string
             required:
+                - is_internal
                 - id
                 - actor_id
                 - actor_type

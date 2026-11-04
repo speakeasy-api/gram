@@ -19,14 +19,14 @@ var catalogPromotionActions = []audit.Action{
 	audit.ActionCatalogPromotionRetryDocs,
 }
 
-// seedCatalogPromotionLogs inserts rows directly, the way rows written before
-// the customer feed filtered them already sit in the table.
+// seedCatalogPromotionLogs explicitly classifies staff-only activity.
 func seedCatalogPromotionLogs(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, subjectID string) {
 	t.Helper()
 
 	adminSurface := string(audit.SurfaceAdmin)
 	for _, action := range catalogPromotionActions {
 		insertAuditLog(t, ctx, ti, auditLogSeed{
+			isInternal:       true,
 			organizationID:   authCtx.ActiveOrganizationID,
 			projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 			actorID:          "oidc|staff-curator",
@@ -82,6 +82,7 @@ func TestAuditService_List_ExcludesCatalogPromotionEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1, "catalogue curation must not appear in the customer feed")
 	require.Equal(t, customerLog.String(), result.Logs[0].ID)
+	require.False(t, result.Logs[0].IsInternal)
 
 	for _, action := range catalogPromotionActions {
 		payload := listPayload()

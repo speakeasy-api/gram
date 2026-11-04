@@ -398,6 +398,9 @@ type ListFacetsGatewayErrorResponseBody struct {
 
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox.
+	IsInternal       bool    `form:"is_internal" json:"is_internal" xml:"is_internal"`
 	ID               string  `form:"id" json:"id" xml:"id"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`

@@ -9,6 +9,7 @@ import {
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { organizationQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
@@ -524,6 +525,7 @@ function ActivityItem({ log }: { log: AuditLog }): JSX.Element {
           {formatDate(log.createdAt)}
         </time>
         <strong className="font-medium">{activityAction(log)}</strong>
+        {log.isInternal ? <Badge variant="secondary">Internal</Badge> : null}
         <span>{actorName(log)}</span>
         <span className="text-muted-foreground">→</span>
         <span>{subjectName(log)}</span>

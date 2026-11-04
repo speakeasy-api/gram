@@ -90,7 +90,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   $1,
   $2,
@@ -107,7 +108,8 @@ INSERT INTO audit_logs (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 RETURNING id, organization_id
 `
@@ -129,6 +131,7 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
+	IsInternal         bool
 }
 
 type InsertAuditLogRow struct {
@@ -154,6 +157,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
+		arg.IsInternal,
 	)
 	var i InsertAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -168,7 +172,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND subject_type <> 'catalog_promotion'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -216,7 +220,7 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
-    AND subject_type <> 'catalog_promotion'
+    AND NOT is_internal
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
@@ -308,7 +312,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
+SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
 LEFT JOIN organization_user_relationships actor_membership
@@ -340,11 +344,8 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
-  -- Staff catalogue curation is attributed to the candidate's source tenant
-  -- but is internal Speakeasy activity, so customer feeds never return it,
-  -- not even for an explicit subject_type or action filter. Only the private
-  -- admin caller opts in.
-  AND ($8::boolean OR a.subject_type <> 'catalog_promotion')
+  -- Internal activity is visible only to the private staff caller.
+  AND ($8::boolean OR NOT a.is_internal)
   AND (
     $9::text IS NULL
     OR a.subject_id = $9::text
@@ -394,6 +395,7 @@ type ListAuditLogsParams struct {
 
 type ListAuditLogsRow struct {
 	ID                   uuid.UUID
+	IsInternal           bool
 	Seq                  int64
 	OrganizationID       string
 	ProjectID            uuid.NullUUID
@@ -458,6 +460,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		var i ListAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.IsInternal,
 			&i.Seq,
 			&i.OrganizationID,
 			&i.ProjectID,
@@ -497,7 +500,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND subject_type <> 'catalog_promotion'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
