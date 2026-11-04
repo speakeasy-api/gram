@@ -70,6 +70,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// TypedAuthorization pins the server, typed client, registration, tenant and
+// subject whose permission started a remote login. It is stored only in trusted
+// login state; callbacks revalidate it before accepting a grant.
+type TypedAuthorization struct {
+	OrganizationID        string             `json:"organization_id"`
+	ProjectID             uuid.UUID          `json:"project_id"`
+	ServerID              uuid.UUID          `json:"server_id"`
+	AuthClientID          uuid.UUID          `json:"auth_client_id"`
+	RemoteSessionClientID uuid.UUID          `json:"remote_session_client_id"`
+	Subject               urn.SessionSubject `json:"subject"`
+}
+
 // ParentChallenge projects the in-flight user-session AuthnChallengeState
 // into the fields the remote leg needs. mcp/ builds this from its
 // AuthnChallengeState; remotesessions/ never imports mcp/.
@@ -83,6 +95,7 @@ import (
 // RouteBase is the surface the parent challenge was minted under. Drives
 // the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
+	TypedAuthorization *TypedAuthorization
 	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
 	ConnectionPopup     bool
 	ID                  string
@@ -129,6 +142,9 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
+	// TypedAuthorization records the exact typed binding that authorized this login.
+	// Absent state always uses the legacy issuer binding check.
+	TypedAuthorization *TypedAuthorization `json:"typed_authorization,omitempty"`
 	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
 	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
@@ -198,6 +214,7 @@ type RemoteLoginState struct {
 // callback can mint a sibling leg for the same login.
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
+		TypedAuthorization:  s.TypedAuthorization,
 		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
@@ -267,7 +284,8 @@ type ChallengeManager struct {
 
 	// privateAuthorityValidator is injected at construction. The callback package
 	// owns state mechanics; the caller owns endpoint resolution.
-	privateAuthorityValidator PrivateAuthorityValidator
+	privateAuthorityValidator   PrivateAuthorityValidator
+	typedAuthorizationValidator TypedAuthorizationValidator
 
 	// idTokens verifies the ID token a code exchange or refresh returns.
 	idTokens IDTokenVerifier
@@ -334,6 +352,30 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 	return func(m *ChallengeManager) {
 		m.privateAuthorityValidator = validator
 	}
+}
+
+// TypedAuthorizationValidator revalidates the recorded typed binding and
+// subject permission without a remotesessions -> mcp dependency.
+type TypedAuthorizationValidator func(context.Context, RemoteLoginState) error
+
+// WithTypedAuthorizationValidator installs the live typed binding authorizer.
+func WithTypedAuthorizationValidator(validator TypedAuthorizationValidator) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.typedAuthorizationValidator = validator }
+}
+
+// SetTypedAuthorizationValidator wires the owning MCP service before serving requests.
+func (m *ChallengeManager) SetTypedAuthorizationValidator(validator TypedAuthorizationValidator) {
+	m.typedAuthorizationValidator = validator
+}
+
+func (m *ChallengeManager) validateTypedAuthorization(ctx context.Context, state RemoteLoginState) error {
+	if state.TypedAuthorization == nil {
+		return nil
+	}
+	if m.typedAuthorizationValidator == nil {
+		return errors.New("typed authorization validator is unavailable")
+	}
+	return m.typedAuthorizationValidator(ctx, state)
 }
 
 // WithRegistrationAuditLogger records automatic client registration rotations
@@ -409,18 +451,19 @@ func NewChallengeManager(
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
-		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
-		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
-		protectedResources:        nil,
-		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
-		privateAuthorityValidator: nil,
-		idTokens:                  NoIDTokenVerifier(),
-		enricher:                  nil,
-		auditLogger:               audit.NewLogger(),
-		rotator:                   nil,
-		assertions:                unavailableTokenEndpointAssertionSigner{},
-		clientCredentials:         unconfiguredClientCredentialSource{},
-		clientCredentialBuilder:   nil,
+		metrics:                     remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		scopeMetrics:                remotesessionmetrics.NewScopeResolution(logger, meterProvider),
+		protectedResources:          nil,
+		registrationTelemetry:       registration.NewMetrics(logger, meterProvider),
+		privateAuthorityValidator:   nil,
+		typedAuthorizationValidator: nil,
+		idTokens:                    NoIDTokenVerifier(),
+		enricher:                    nil,
+		auditLogger:                 audit.NewLogger(),
+		rotator:                     nil,
+		assertions:                  unavailableTokenEndpointAssertionSigner{},
+		clientCredentials:           unconfiguredClientCredentialSource{},
+		clientCredentialBuilder:     nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -1392,6 +1435,7 @@ func (m *ChallengeManager) mintAuthorization(
 	state := RemoteLoginState{
 		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
+		TypedAuthorization:    parent.TypedAuthorization,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
 		OrganizationID:        parent.OrganizationID,
@@ -1622,6 +1666,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
+	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+	}
+
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
@@ -1785,12 +1833,25 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// committed re-reads the binding as dead and is rejected here, instead
 	// of resurrecting a grant no live issuer can reach or revoke. A rejected
 	// callback leaves the revocation armed above still standing.
+	// Recheck subject permission after the exchange, before taking database
+	// locks. The exact typed binding is then locked through grant commit below.
+	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+	}
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
+
+	// Typed writers lock the server before the issuer and registration. Keep
+	// legacy callbacks unchanged, but follow that order for typed logins too.
+	if a := state.TypedAuthorization; a != nil {
+		if _, err := txQueries.LockTypedRemoteLoginServer(ctx, remotesessions_repo.LockTypedRemoteLoginServerParams{McpServerID: a.ServerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID}); err != nil {
+			return none, oops.E(oops.CodeUnauthorized, err, "typed connection server is no longer valid").LogWarn(ctx, logger)
+		}
+	}
 
 	// Issuer first, before the client row, so this transaction and an issuer
 	// migration acquire locks in the same order. A login whose issuer was
@@ -1816,17 +1877,28 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// issuer's surface, so its deletion ends the login rather than quietly
 	// re-homing the grant onto a sibling the user was never shown. The user
 	// re-authorizes through the surviving surface instead.
-	bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
-		RemoteSessionClientID: state.RemoteSessionClientID,
-		UserSessionIssuerID:   state.UserSessionIssuerID,
-		ProjectID:             state.ProjectID,
-		OrganizationID:        state.OrganizationID,
-	})
-	if err != nil {
-		return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
-	}
-	if !bound {
-		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+	if state.TypedAuthorization != nil {
+		a := state.TypedAuthorization
+
+		if _, err := txQueries.LockTypedRemoteLoginAuthorization(ctx, remotesessions_repo.LockTypedRemoteLoginAuthorizationParams{
+			AuthClientID: a.AuthClientID, OrganizationID: state.OrganizationID, ProjectID: state.ProjectID,
+			RemoteSessionClientID: state.RemoteSessionClientID, McpServerID: a.ServerID,
+		}); err != nil {
+			return none, oops.E(oops.CodeUnauthorized, err, "typed connection binding is no longer valid").LogWarn(ctx, logger)
+		}
+	} else {
+		bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+			RemoteSessionClientID: state.RemoteSessionClientID,
+			UserSessionIssuerID:   state.UserSessionIssuerID,
+			ProjectID:             state.ProjectID,
+			OrganizationID:        state.OrganizationID,
+		})
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
+		}
+		if !bound {
+			return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+		}
 	}
 
 	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
@@ -1974,7 +2046,16 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
-	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
+	var clients []Client
+	var err error
+	if state.TypedAuthorization != nil {
+		if err = m.validateTypedAuthorization(ctx, state); err != nil {
+			return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid")
+		}
+		clients, err = m.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})
+	} else {
+		clients, err = m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
+	}
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
 	}
