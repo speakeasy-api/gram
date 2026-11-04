@@ -139,8 +139,10 @@ func newTestServiceWithAuthorization(t *testing.T, hosts authserver.Hosts, revok
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	// Shadow mode keeps the parity client, so a disagreement fails the test
+	// instead of only being logged.
 	authorization := authztest.NewParityClient(t, authzEngine)
-	if mode != nil {
+	if mode != nil && *mode != authz.MigrationModeShadow {
 		authorization = authztest.NewClientInMode(t, authzEngine, *mode)
 	}
 
