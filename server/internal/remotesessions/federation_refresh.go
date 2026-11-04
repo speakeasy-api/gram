@@ -9,6 +9,12 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	redisCache "github.com/go-redis/cache/v9"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
 // FederatedRefreshFailure contains only local classifications, never upstream
@@ -18,8 +24,12 @@ type FederatedRefreshFailure string
 const (
 	FederatedRefreshInvalidGrant    FederatedRefreshFailure = "invalid_grant"
 	FederatedRefreshConfiguration   FederatedRefreshFailure = "configuration"
+	FederatedRefreshSetup           FederatedRefreshFailure = "setup"
+	FederatedRefreshClientRejected  FederatedRefreshFailure = "client_rejected"
 	FederatedRefreshAmbiguous       FederatedRefreshFailure = "ambiguous"
+	FederatedRefreshRateLimited     FederatedRefreshFailure = "rate_limited"
 	FederatedRefreshRetryable       FederatedRefreshFailure = "retryable"
+	FederatedRefreshSetupRetryable  FederatedRefreshFailure = "setup_retryable"
 	FederatedRefreshInvalidIdentity FederatedRefreshFailure = "invalid_identity"
 )
 
@@ -60,7 +70,7 @@ func (r FederatedRefreshResult) LogValue() slog.Value              { return slog
 // Ambiguous failures must not blindly replay a potentially spent refresh token.
 func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *FederatedProvider, refreshToken, expectedSubject, expectedNonce string) (*FederatedRefreshResult, error) {
 	if p == nil || refreshToken == "" || expectedSubject == "" {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, &FederatedRefreshError{Kind: FederatedRefreshSetup}
 	}
 	if err := m.preflightFederatedSigner(p); err != nil {
 		return nil, federatedRefreshSetupError(err)
@@ -68,19 +78,24 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, federatedRefreshSetupError(err)
 	}
 	doer, auth, err := m.federatedTokenClient(p)
 	if err != nil {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, federatedRefreshSetupError(err)
 	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
 	req, err := NewTokenEndpointRequest(ctx, p.metadata.TokenEndpoint, form, auth)
 	if err != nil {
 		return nil, federatedRefreshSetupError(classifyFederatedExchangeError(err))
 	}
-	tok, receivedAt, err := postFederatedRefresh(doer, req)
+	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
+	tok, receivedAt, err := postFederatedRefresh(logger, doer, req)
 	if err != nil {
+		var failure *FederatedRefreshError
+		if errors.As(err, &failure) && failure.Kind == FederatedRefreshClientRejected {
+			m.pauseFederatedClient(ctx, logger, p)
+		}
 		return nil, err
 	}
 	return m.verifyFederatedRefresh(ctx, p, tok, receivedAt, expectedSubject, expectedNonce, doer)
@@ -116,7 +131,7 @@ func classifyFederatedRefreshVerificationError(err error) error {
 // response to cause unbounded allocation; one extra byte detects truncation.
 const maxFederatedRefreshResponseBytes = 64 << 10
 
-func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time.Time, error) {
+func postFederatedRefresh(logger *slog.Logger, doer httpDoer, req *http.Request) (tokenResponse, time.Time, error) {
 	var zero tokenResponse
 	resp, err := doer.Do(req)
 	if err != nil {
@@ -129,7 +144,13 @@ func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time
 		return zero, time.Time{}, &FederatedRefreshError{Kind: FederatedRefreshAmbiguous}
 	}
 	if resp.StatusCode/100 != 2 {
-		return zero, time.Time{}, classifyFederatedRefreshResponse(resp.StatusCode, body)
+		kind, code := classifyFederatedRefreshResponse(resp.StatusCode, body)
+		logger.WarnContext(req.Context(), "federated refresh rejected",
+			attr.SlogOutcome(string(kind)),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogOAuthError(loggableOAuthErrorCode(code)),
+		)
+		return zero, time.Time{}, &FederatedRefreshError{Kind: kind}
 	}
 	var tok tokenResponse
 	if json.Unmarshal(body, &tok) != nil || tok.AccessToken == "" {
@@ -138,46 +159,92 @@ func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time
 	return tok, receivedAt, nil
 }
 
-func classifyFederatedRefreshResponse(status int, body []byte) error {
-	var response struct {
-		Error string `json:"error"`
+// federatedClientPause is how long a client rejection stops every person's
+// refresh for that client, so one request per interval tests the fix.
+const federatedClientPause = 5 * time.Minute
+
+func federatedClientPauseKey(p *FederatedProvider) string {
+	return "federatedRefreshClientPause:" + p.client.ID.String() + ":" + p.DelegationConfigurationHash()
+}
+
+// A cache failure must not stop refreshes, so it reads as not paused.
+func (m *ChallengeManager) federatedClientPaused(ctx context.Context, p *FederatedProvider) bool {
+	if m.locks == nil {
+		return false
 	}
-	_ = json.Unmarshal(body, &response)
-	kind := FederatedRefreshConfiguration
+	var paused bool
+	err := m.locks.Get(ctx, federatedClientPauseKey(p), &paused)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		m.logger.WarnContext(ctx, "read federated client pause", attr.SlogRemoteSessionClientID(p.client.ID.String()), attr.SlogError(err))
+	}
+	return err == nil && paused
+}
+
+func (m *ChallengeManager) pauseFederatedClient(ctx context.Context, logger *slog.Logger, p *FederatedProvider) {
+	if m.locks == nil {
+		return
+	}
+	// The first rejection sets the window, so late rejections cannot extend it.
+	var err error
+	if conditional, ok := m.locks.(cache.ConditionalCache); ok {
+		_, err = conditional.SetIfAbsent(ctx, federatedClientPauseKey(p), true, federatedClientPause)
+	} else {
+		err = m.locks.Set(ctx, federatedClientPauseKey(p), true, federatedClientPause)
+	}
+	if err != nil {
+		logger.WarnContext(ctx, "record federated client pause", attr.SlogError(err))
+	}
+}
+
+// Only invalid_grant (RFC 6749 section 5.2) or a sign-in code (OIDC Core section 3.1.2.6) deletes the token.
+func classifyFederatedRefreshResponse(status int, body []byte) (FederatedRefreshFailure, string) {
+	parsed, _ := oautherr.ParseTokenError(body)
+	code := oautherr.CanonicalTokenErrorCode(parsed.Code)
 	switch {
 	// An intermediary can return a timeout, rate limit or 5xx after the issuer rotated.
 	// The HTTP error is not evidence that the submitted refresh token is unspent.
-	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500:
-		kind = FederatedRefreshAmbiguous
-	case response.Error == "invalid_grant":
-		kind = FederatedRefreshInvalidGrant
-	case response.Error == "invalid_client" || response.Error == "unauthorized_client":
-		kind = FederatedRefreshConfiguration
-	case response.Error == "temporarily_unavailable" || response.Error == "server_error":
-		kind = FederatedRefreshRetryable
+	case status == http.StatusTooManyRequests:
+		return FederatedRefreshRateLimited, code
+	case status == http.StatusRequestTimeout || status >= http.StatusInternalServerError:
+		return FederatedRefreshAmbiguous, code
+	case code == oautherr.CodeInvalidGrant || federatedRefreshNeedsSignIn(code):
+		return FederatedRefreshInvalidGrant, code
+	case code == oautherr.CodeInvalidClient || code == oautherr.CodeUnauthorizedClient:
+		return FederatedRefreshClientRejected, code
+	case code == oautherr.CodeTemporarilyUnavailable || code == oautherr.CodeServerError:
+		return FederatedRefreshRetryable, code
 	}
-	return &FederatedRefreshError{Kind: kind}
+	return FederatedRefreshConfiguration, code
+}
+
+func federatedRefreshNeedsSignIn(code string) bool {
+	return code == oautherr.OIDCCodeLoginRequired || code == oautherr.OIDCCodeInteractionRequired || code == oautherr.OIDCCodeConsentRequired || code == oautherr.OIDCCodeAccountSelectionRequired
+}
+
+// oauthErrorCodeUnrecognized replaces a code outside the IETF registry in logs.
+const oauthErrorCodeUnrecognized = "unrecognized"
+
+// The "error" member is provider-controlled text, so only registered codes reach logs.
+func loggableOAuthErrorCode(code string) string {
+	if code == "" || oautherr.IsIETFRegisteredCode(code) || federatedRefreshNeedsSignIn(code) {
+		return code
+	}
+	return oauthErrorCodeUnrecognized
 }
 
 func federatedRefreshCredentials(tok tokenResponse, receivedAt time.Time) FederatedRefreshCredentials {
 	c := FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{refreshExpiresAt: nil, idToken: tok.IDToken, refreshToken: tok.RefreshToken, expiresIn: tok.ExpiresIn, refreshExpiresIn: tok.RefreshExpiresIn, receivedAt: receivedAt}}
 	// Use the shortest reported bound, never the access-token expires_in.
-	// Standard explicit zero is distinct from absent; provider aliases follow
-	// the shared parser and count only when positive.
 	idle, hasIdle := tok.RefreshTokenTimeoutSeconds()
 	absolute, hasAbsolute := tok.AuthorizationLifetimeSeconds()
 	for _, bound := range []struct {
 		seconds  int64
 		reported bool
 	}{{idle, hasIdle}, {absolute, hasAbsolute}} {
-		seconds := bound.seconds
-		if !bound.reported || seconds > int64((1<<63-1)/time.Second) {
+		if !bound.reported {
 			continue
 		}
-		if seconds < 0 {
-			seconds = 0
-		}
-		expiry := receivedAt.Add(time.Duration(seconds) * time.Second)
+		expiry := receivedAt.Add(time.Duration(bound.seconds) * time.Second)
 		if c.refreshExpiresAt == nil || expiry.Before(*c.refreshExpiresAt) {
 			c.refreshExpiresAt = &expiry
 		}
@@ -192,10 +259,11 @@ func (e *FederatedRefreshError) Is(target error) bool {
 	return ok && other != nil && e.Kind == other.Kind
 }
 
+// Nothing was sent, so the provider has said nothing about the token.
 func federatedRefreshSetupError(err error) error {
-	kind := FederatedRefreshConfiguration
+	kind := FederatedRefreshSetup
 	if errors.Is(err, ErrFederatedUnavailable) {
-		kind = FederatedRefreshRetryable
+		kind = FederatedRefreshSetupRetryable
 	}
 	return &FederatedRefreshError{Kind: kind}
 }

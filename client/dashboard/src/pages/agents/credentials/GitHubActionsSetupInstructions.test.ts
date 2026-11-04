@@ -92,6 +92,12 @@ const github: CatalogEntry = {
         template: "repo:{owner}/{repo}:environment:{environment}",
         wildcard: false,
       },
+      {
+        key: "pull_request",
+        label: "Pull requests",
+        template: "repo:{owner}/{repo}:pull_request",
+        wildcard: false,
+      },
     ],
   },
 };
@@ -180,6 +186,22 @@ describe("GitHub Actions setup", () => {
     ).toEqual({ subject: "repo:acme/payments-api:*", matchKind: "wildcard" });
   });
 
+  it("admits pull request jobs alone with an exact rule", () => {
+    const setup = githubActionsSetupInstructions(github);
+    expect(
+      setup.connection({
+        owner: "acme",
+        repo: "payments-api",
+        [SUBJECT_CHOICE]: "pull_request",
+        // Another choice's value is not part of the rule.
+        branch: "main",
+      }),
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:pull_request",
+      matchKind: "exact",
+    });
+  });
+
   it("refuses a choice the catalog does not offer rather than widen the rule", () => {
     expect(
       subjectRule(github, {
@@ -236,13 +258,48 @@ describe("GitHub Actions setup", () => {
       owner: "acme",
       repo: "payments-api",
     });
-    // A context the setup never writes is not read as one of its choices.
+    const pullRequests = valuesFromSubject(github, {
+      subject: "repo:acme/payments-api:pull_request",
+      matchKind: "exact",
+    });
+    expect(pullRequests).toEqual({
+      owner: "acme",
+      repo: "payments-api",
+      [SUBJECT_CHOICE]: "pull_request",
+    });
+    expect(jobScope(pullRequests)).toEqual({ kind: "pull_request" });
     expect(
       valuesFromSubject(github, {
-        subject: "repo:acme/payments-api:pull_request",
+        subject: "repo:acme@1/payments-api@2:pull_request",
         matchKind: "exact",
       }),
-    ).toEqual({});
+    ).toEqual({
+      owner: "acme@1",
+      repo: "payments-api@2",
+      [SUBJECT_CHOICE]: "pull_request",
+    });
+    expect(subjectRule(github, pullRequests)).toEqual({
+      subject: "repo:acme/payments-api:pull_request",
+      matchKind: "exact",
+    });
+    // A context the setup never writes is not read as one of its choices,
+    // nor is a wildcard over pull request contexts.
+    for (const rule of [
+      {
+        subject: "repo:acme/payments-api:ref:refs/tags/v1",
+        matchKind: "exact",
+      },
+      {
+        subject: "repo:acme/payments-api:pull_request_target",
+        matchKind: "exact",
+      },
+      {
+        subject: "repo:acme/payments-api:pull_request*",
+        matchKind: "wildcard",
+      },
+    ]) {
+      expect(valuesFromSubject(github, rule)).toEqual({});
+    }
   });
 
   it("refuses an ID on only one of the two names", () => {
@@ -310,6 +367,7 @@ describe("workflowYaml", () => {
     { kind: "repository" },
     { kind: "branch", name: "release/v2" },
     { kind: "environment", name: "production" },
+    { kind: "pull_request" },
   ];
 
   /** Every variant the setup can print. */
@@ -427,6 +485,22 @@ describe("workflowYaml", () => {
     );
   });
 
+  it("runs the pull request rule's workflow on pull requests alone", () => {
+    const yaml = workflow({ scope: { kind: "pull_request" } });
+    expect(yaml).toContain(
+      [
+        "on:",
+        "  pull_request:",
+        "    types: [opened, synchronize, reopened, ready_for_review]",
+        "",
+        "jobs:",
+      ].join("\n"),
+    );
+    expect(yaml).not.toContain("push:");
+    expect(yaml).not.toContain("pull_request_target");
+    expect(yaml).not.toMatch(/^ {4}environment:/m);
+  });
+
   it("reads the scope from the setup's values", () => {
     expect(jobScope({})).toEqual({ kind: "repository" });
     expect(jobScope({ [SUBJECT_CHOICE]: "", branch: "main" })).toEqual({
@@ -438,18 +512,27 @@ describe("workflowYaml", () => {
     expect(
       jobScope({ [SUBJECT_CHOICE]: "environment", environment: "prod" }),
     ).toEqual({ kind: "environment", name: "prod" });
+    expect(
+      jobScope({ [SUBJECT_CHOICE]: "pull_request", branch: "main" }),
+    ).toEqual({ kind: "pull_request" });
   });
 
   it("skips fork pull requests before the job starts", () => {
-    for (const yaml of variants.filter((v) => v.includes("pull_request:"))) {
+    for (const yaml of variants) {
       const lines = yaml.split("\n");
       const job = lines.indexOf("  agent:");
       expect(job).toBeGreaterThan(0);
-      // The job's first key, so no step of it runs for a fork.
-      expect(lines[job + 1]).toBe(
-        "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
-      );
-      expect(lines.indexOf("    runs-on: ubuntu-latest")).toBe(job + 2);
+      // The job's first key, so no step of it runs for a fork. A workflow
+      // that never runs on a pull request has no fork to skip.
+      const guard = yaml.includes("  pull_request:")
+        ? [
+            "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+          ]
+        : [];
+      expect(lines.slice(job + 1, job + 2 + guard.length)).toEqual([
+        ...guard,
+        "    runs-on: ubuntu-latest",
+      ]);
     }
   });
 

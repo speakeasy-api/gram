@@ -340,6 +340,25 @@ INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, 
 VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint, @hostname, @serial)
 RETURNING *;
 
+-- name: CreateOrganizationFixture :exec
+-- Test fixture: another organization's rows are not reachable through the
+-- caller's API.
+INSERT INTO organization_metadata (id, name, slug) VALUES (@id, @name, @slug);
+
+-- name: CreateNamedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, workload_issuer_id, subject, name)
+VALUES (@organization_id, @workload_issuer_id, @subject, @name)
+RETURNING id;
+
+-- name: GetWorkloadAdmissionNameFixture :one
+SELECT name FROM workload_identity_admissions WHERE id = @id;
+
+-- name: GetWorkloadIssuerNameFixture :one
+SELECT name FROM workload_issuers WHERE id = @id;
+
+-- name: GetWorkloadIssuerDeletedFixture :one
+SELECT deleted FROM workload_issuers WHERE id = @id;
+
 -- name: SoftDeleteWorkloadDeviceKeysForSubject :many
 -- Withdrawing a device's admission also retires its key, so a re-admission of
 -- the same subject cannot quietly bring an old key back.
@@ -350,3 +369,17 @@ WHERE organization_id = @organization_id
   AND subject = @subject
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: WorkloadSubjectWasExactlyAdmitted :one
+-- Whether any historical issuer row for these issuer URLs ever admitted the
+-- exact subject, including withdrawn admissions and recreated issuers.
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.id = a.workload_issuer_id
+  WHERE a.organization_id = @organization_id
+    AND i.organization_id = @organization_id
+    AND i.issuer = ANY(@issuers::text[])
+    AND a.subject = @subject
+    AND a.match_kind = 'exact'
+);

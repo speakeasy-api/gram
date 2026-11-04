@@ -379,18 +379,25 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return none, nil
 	}
 
-	var match remotesessions.UpstreamToken
+	var match, outage remotesessions.UpstreamToken
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
 			nullResources++
 		}
-		if upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
-			found++
-			match = entry
+		if !upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+			continue
 		}
+		if entry.SessionUnavailable() {
+			outage = entry
+			continue
+		}
+		found++
+		match = entry
 	}
 	switch {
+	case found == 0 && outage.SessionUnavailable():
+		return none, outage.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {
 			return none, err
@@ -992,6 +999,7 @@ func (s *Service) serveTunneledBackend(
 		Request:            r,
 	}, buildOptions...)
 	if err != nil {
+		tagTunnelOutage(w, err)
 		return err
 	}
 	// Only observed traffic needs attribution; otherwise skip the Redis work.

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
@@ -70,8 +71,8 @@ func (s *Service) handleMetaDescribeServerCall(
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaToolError(ctx, logger, req.ID, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		return nil, err
 	}
@@ -167,8 +168,8 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
-			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
+			if _, ok := errors.AsType[*metaMemberError](err); ok {
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: s.memberFailureMessage(ctx, logger, gate, mr.member, err)})
 				continue
 			}
 			return nil, err
@@ -247,8 +248,8 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 			return nil, err
@@ -278,6 +279,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return marshalMetaToolError(ctx, logger, req.ID,
 			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
 	}
+	ctx = withMemberProjectAuthContext(ctx, toolset.ProjectID)
 
 	// The outer request's _meta rides along: the member dispatch serves the
 	// same client, so its telemetry (client identity, protocol declaration)
@@ -424,6 +426,26 @@ func (s *Service) describeMemberToolset(
 	return catalog, nil
 }
 
+// withMemberProjectAuthContext scopes the caller's auth context to a hosted
+// member's project for that member's dispatch. Agent and organization
+// gateways carry no project, and a project gateway's project need not be the
+// member's, yet project-bound runtimes such as Platform tools run in the
+// member's project. Call it only after the member is admitted.
+func withMemberProjectAuthContext(ctx context.Context, projectID uuid.UUID) context.Context {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return ctx
+	}
+	if authCtx.ProjectID != nil && *authCtx.ProjectID == projectID {
+		return ctx
+	}
+	// Copy: the caller's auth context is shared across members.
+	scoped := *authCtx
+	scoped.ProjectID = &projectID
+	scoped.ProjectSlug = nil
+	return contextvalues.SetAuthContext(ctx, &scoped)
+}
+
 // buildMemberDispatch assembles mcpInputs for one member as
 // ServeToolsetResolved would, with meta-surface decisions: static mode, no
 // header env vars or ?tags=, environment = member environment_id then
@@ -450,7 +472,7 @@ func (s *Service) buildMemberDispatch(
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, err
+		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberReconnectURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
@@ -648,7 +670,10 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // records, for Code Mode, whether connecting the member is its remedy.
 func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, err error, message string) (json.RawMessage, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
-		_, invocation.credential = errors.AsType[memberCredentialError](err)
+		_, credential := errors.AsType[memberCredentialError](err)
+		_, stale := errors.AsType[memberStaleChoiceError](err)
+		invocation.credential = credential && !stale
+		invocation.rejected = invocation.rejected || stale
 	}
 	return marshalMetaToolError(ctx, logger, id, message)
 }

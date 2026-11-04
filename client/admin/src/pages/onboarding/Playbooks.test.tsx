@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingPlaybooks } from "./Playbooks";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -313,6 +319,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 const posts = () =>
@@ -571,17 +578,26 @@ describe("OnboardingPlaybooks", () => {
     useCases = [structuredClone(distribution)];
     playbooks = [structuredClone(gatewayFirst), structuredClone(acmeOwn)];
     assignedId = "pb-acme";
-    await renderPage("org_acme");
-    await screen.findByRole("table", { name: "Playbooks" });
+    // Exercise the real highlight timer without spending 1.5 seconds idle.
+    vi.useFakeTimers();
+    await act(async () => {
+      await renderPage("org_acme");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByRole("table", { name: "Playbooks" })).toBeTruthy();
     expect(screen.getByText(/Scoped to Acme/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Show all" })).toBeTruthy();
     expect(rowsOf(playbooksTable())).toEqual(["pb-1", "pb-acme"]);
     // The assigned playbook's row is highlighted for a moment, no marker.
     expect(highlightedRows()).toEqual(["pb-acme"]);
     expect(screen.queryByRole("img", { name: "Assigned playbook" })).toBeNull();
-    await vi.waitFor(() => expect(highlightedRows()).toEqual([]), {
-      timeout: 4000,
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
     });
+    expect(highlightedRows()).toEqual([]);
+    vi.useRealTimers();
 
     // A use case's playbook can be assigned from its menu: Acme gets a copy
     // of its own, and the highlight lands on that copy.

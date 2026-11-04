@@ -49,9 +49,20 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
-	statuses, err := s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
-	if err != nil {
-		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	var err error
+	enforcedDirect := false
+	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		enforcedDirect, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, routing, err
+		}
+	}
+	if !enforcedDirect {
+		statuses, err = s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
+		if err != nil {
+			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+		}
 	}
 	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
 	if err != nil {
@@ -196,8 +207,11 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 			return rejected("%s didn't accept your identity provider sign-in. Ask your administrator, or use a separate sign-in.")
 		}
 	case identitychaining.ReasonReauthenticationRequired:
-		return rejected("A current identity provider sign-in for %s is required. Sign in again, or use a separate sign-in.")
+		return rejected("A current identity provider sign-in for %s is required. Close this page and start connecting again, or use a separate sign-in.")
 	case identitychaining.ReasonConfigurationRequired:
+		if outcome.Retained {
+			return rejected("Your saved company sign-in for %s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use a separate sign-in.")
+		}
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonIneligibleIdentity:
 		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")

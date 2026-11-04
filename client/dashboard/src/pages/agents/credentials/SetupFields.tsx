@@ -1,4 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -12,12 +13,22 @@ import {
 } from "@/components/ui/Select";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
 import { ExternalLink } from "lucide-react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { Fragment, type JSX, type ReactNode } from "react";
+import { Fragment, useState, type JSX, type ReactNode } from "react";
+import { Link } from "react-router";
+import { RequireScope } from "@/components/require-scope";
+import { useSdkClient } from "@/contexts/Sdk";
+import { linkMcpServerUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
+import { ChangeIssuerConfirmDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/ChangeIssuerConfirmDialog";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
+import type { SetupServer } from "./setupInstructions";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
-import type { SetupValues } from "./workloadTokenEndpoints";
+import type { ProviderMismatch, SetupValues } from "./workloadTokenEndpoints";
 
 /** One value a platform's policy asks the operator for. */
 export function VariableField({
@@ -107,14 +118,51 @@ export function TextField({
 }
 
 /**
- * Which user session issuer the derived values come from, and why there are
- * none when there are none.
+ * The shared authorization server picker, with the recommended one marked.
+ * Tokens are issued for the organization or project that owns the one chosen.
  */
+function SharedServerSelect({
+  setupValues,
+  id,
+}: {
+  setupValues: SetupValues;
+  id: string;
+}): JSX.Element {
+  return (
+    <Select
+      value={setupValues.selectedEndpointId}
+      onValueChange={setupValues.onEndpointChange}
+    >
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue placeholder="Select a shared authorization server" />
+      </SelectTrigger>
+      <SelectContent>
+        {setupValues.endpointGroups.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.id === setupValues.recommendedEndpointId
+                  ? `${option.label} (recommended)`
+                  : option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** The shared authorization server behind the values a step shows. */
 export function ComputedStatus({
   setupValues,
 }: {
   setupValues: SetupValues;
 }): JSX.Element {
+  if (setupValues.mismatch !== null) {
+    return <ProviderMismatchNotice mismatch={setupValues.mismatch} />;
+  }
   if (setupValues.unavailableReason !== null) {
     return (
       <Alert variant="info">
@@ -124,30 +172,67 @@ export function ComputedStatus({
   }
   return (
     <Stack gap={2}>
-      <Label htmlFor="setup-token-endpoint">User session issuer</Label>
-      <Select
-        value={setupValues.selectedEndpointId}
-        onValueChange={setupValues.onEndpointChange}
-      >
-        <SelectTrigger id="setup-token-endpoint" className="w-full">
-          <SelectValue placeholder="Select an issuer" />
-        </SelectTrigger>
-        <SelectContent>
-          {setupValues.endpointGroups.map((group) => (
-            <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
-              {group.options.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      <Label htmlFor="setup-token-endpoint">Shared authorization server</Label>
+      <SharedServerSelect setupValues={setupValues} id="setup-token-endpoint" />
       <Text muted small>
-        Tokens are issued for the organization or project that owns this issuer.
+        Tokens are issued for the organization or project that owns it.
       </Text>
+    </Stack>
+  );
+}
+
+/**
+ * Says that an agent on an OIDC platform signs in through one shared
+ * authorization server, lets the reader choose it, and names the servers that
+ * aren't on it with a way to move them.
+ */
+export function SharedServerChoice({
+  setupValues,
+  onMoved,
+}: {
+  setupValues: SetupValues;
+  onMoved: () => void;
+}): JSX.Element {
+  const count = setupValues.endpointGroups.reduce(
+    (total, group) => total + group.options.length,
+    0,
+  );
+  return (
+    <Stack gap={3}>
+      <Stack gap={1}>
+        <Label htmlFor="agent-shared-server">Shared authorization server</Label>
+        <Text muted small>
+          An agent on GKE, Claude Tag or another platform signs in through a
+          shared authorization server, and every MCP server it uses must be on
+          the one you choose.{" "}
+          {count === 1
+            ? "This is the only one available."
+            : "The recommended one is the server most of this agent's servers already use."}
+        </Text>
+      </Stack>
+      {setupValues.checking ? (
+        <Text muted small>
+          Loading shared authorization servers…
+        </Text>
+      ) : count === 0 ? (
+        <Alert variant="info">
+          <div className="text-sm">
+            {setupValues.unavailableReason ??
+              "No shared authorization server is available yet."}
+          </div>
+        </Alert>
+      ) : (
+        <SharedServerSelect
+          setupValues={setupValues}
+          id="agent-shared-server"
+        />
+      )}
+      {setupValues.mismatch !== null && count > 0 && (
+        <ProviderMismatchNotice
+          mismatch={setupValues.mismatch}
+          onMoved={onMoved}
+        />
+      )}
     </Stack>
   );
 }
@@ -171,6 +256,177 @@ export function SetupWarning({
     <Alert variant="warning">
       <div className="space-y-2 text-sm">{children}</div>
     </Alert>
+  );
+}
+
+/**
+ * The agent's servers that won't accept tokens from the chosen shared
+ * authorization server, each with a way to move it there.
+ */
+function ProviderMismatchNotice({
+  mismatch,
+  onMoved,
+}: {
+  mismatch: ProviderMismatch;
+  /**
+   * Rereads the agent's servers after one is moved. Without it the notice
+   * only links to each server's settings.
+   */
+  onMoved?: () => void;
+}): JSX.Element {
+  const target = mismatch.target;
+  return (
+    <Alert
+      variant="warning"
+      title={
+        target
+          ? `These servers aren't on ${target.slug}`
+          : "These servers need a shared authorization server"
+      }
+    >
+      <Stack gap={3}>
+        <Text small>
+          {target
+            ? `They won't accept the token this agent gets from ${target.slug}. Move them there, choose another shared authorization server, or remove them from this agent.`
+            : "Set up a shared authorization server for them, or remove them from this agent."}
+        </Text>
+        <ul className="divide-border w-full divide-y">
+          {mismatch.servers.map(({ server, current }) => (
+            <MismatchRow
+              key={server.id}
+              server={server}
+              reason={
+                current
+                  ? `Uses ${current}.`
+                  : "Uses its own sign-in, not a shared authorization server."
+              }
+              action={
+                target && onMoved ? (
+                  <MoveToProvider
+                    server={server}
+                    target={target}
+                    onMoved={onMoved}
+                  />
+                ) : undefined
+              }
+            />
+          ))}
+        </ul>
+      </Stack>
+    </Alert>
+  );
+}
+
+function MismatchRow({
+  server,
+  reason,
+  action,
+}: {
+  server: SetupServer;
+  reason: string;
+  /** Fixes the server in place; replaces the settings link when given. */
+  action?: ReactNode;
+}): JSX.Element {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 first:pt-0 last:pb-0">
+      <div className="min-w-0 flex-1">
+        <Text small className="block truncate">
+          {server.name}
+        </Text>
+        <Text muted small className="block">
+          {reason}
+        </Text>
+      </div>
+      {action ?? <SettingsLink server={server} />}
+    </li>
+  );
+}
+
+/** Opens the server's authentication settings in a new tab. */
+function SettingsLink({ server }: { server: SetupServer }): JSX.Element | null {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  if (!server.projectSlug) return null;
+  return (
+    <Button variant="secondary" size="sm" asChild>
+      <Link
+        to={`${routes.mcp.details.settings.href(
+          mcpServerRouteParam({ id: server.id, slug: server.slug }),
+        )}#authentication`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open authentication settings
+        <ExternalLink className="size-3.5" aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+}
+
+/**
+ * Moves one server onto the shared provider the agent's token comes from,
+ * after the same confirmation its settings page asks for: everyone connected
+ * to it signs in again.
+ */
+function MoveToProvider({
+  server,
+  target,
+  onMoved,
+}: {
+  server: SetupServer;
+  target: { id: string; slug: string };
+  onMoved: () => void;
+}): JSX.Element {
+  const client = useSdkClient();
+  const [open, setOpen] = useState(false);
+  const move = useMutation({
+    mutationFn: () =>
+      linkMcpServerUserSessionIssuer(client, server.id, target.id),
+    onSuccess: () => {
+      setOpen(false);
+      toast.success(`${server.name} now uses ${target.slug}`);
+      onMoved();
+    },
+  });
+  return (
+    <RequireScope
+      scope="mcp:write"
+      resourceId={server.resourceId}
+      projectId={server.projectId}
+      level="component"
+    >
+      {({ disabled }) =>
+        disabled ? (
+          <SettingsLink server={server} />
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                move.reset();
+                setOpen(true);
+              }}
+            >
+              Move to {target.slug}
+            </Button>
+            <ChangeIssuerConfirmDialog
+              open={open}
+              onOpenChange={setOpen}
+              target={{
+                attachImpactTarget: { mcpServerId: server.id },
+                mcpServerId: server.id,
+                slug: server.slug || server.name,
+              }}
+              replacing
+              candidate={target}
+              onConfirm={() => move.mutate()}
+              isPending={move.isPending}
+              error={move.error}
+            />
+          </>
+        )
+      }
+    </RequireScope>
   );
 }
 

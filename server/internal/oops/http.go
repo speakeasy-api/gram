@@ -20,16 +20,22 @@ import (
 // errors and a generic message is returned to the client. All errors are logged
 // with the provided logger.
 func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
-	return errHandle(logger, handler, false)
+	return errHandle(logger, handler, false, false)
+}
+
+// AuthErrHandle is ErrHandle for machine routes an MCP client signs in through,
+// such as discovery, where a 500 restarts sign-in and an outage must say retry.
+func AuthErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
+	return errHandle(logger, handler, false, true)
 }
 
 // BrowserErrHandle opts a navigation route into HTML failures. Machine endpoints
 // keep ErrHandle or OAuthErrHandle; request headers never choose the format.
 func BrowserErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
-	return errHandle(logger, handler, true)
+	return errHandle(logger, handler, true, true)
 }
 
-func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser bool) http.Handler {
+func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser, outages bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorded := &oauthResponseWriter{ResponseWriter: w, committed: false}
 		writer := w
@@ -39,6 +45,9 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		err := handler(writer, r)
 		if err == nil {
 			return
+		}
+		if outages {
+			err = answerOutage(r.Context(), logger, w, err)
 		}
 
 		code := http.StatusInternalServerError
@@ -66,10 +75,12 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		if browser {
 			reason := oauthui.ReasonDefault
 			clientName := ""
+			providerName := ""
 			var recovery *oauthui.RecoveryLink
 			if presentation, ok := errors.AsType[*browserError](err); ok {
 				reason = presentation.reason
 				clientName = presentation.clientName
+				providerName = presentation.providerName
 				recovery = presentation.recovery
 			}
 			page := oauthui.AuthorizationError{
@@ -86,6 +97,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				ClientID:       "",
 				ClientIDOrigin: "",
 				ServerName:     "",
+				ProviderName:   providerName,
 			}
 			if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
 				logger.ErrorContext(r.Context(), "write browser error response", attr.SlogError(err))
@@ -115,6 +127,9 @@ type browserError struct {
 
 	// recovery is a caller-controlled destination for restarting the flow.
 	recovery *oauthui.RecoveryLink
+
+	// providerName names the sign-in provider that is down, from validated flow state.
+	providerName string
 }
 
 func (e *browserError) Error() string { return e.cause.Error() }
@@ -142,6 +157,16 @@ func WithBrowserClient(err error, name string) error {
 	return presentation
 }
 
+// WithBrowserProvider names the provider on an outage page, from validated flow state.
+func WithBrowserProvider(err error, name string) error {
+	if err == nil {
+		return nil
+	}
+	presentation := browserPresentation(err)
+	presentation.providerName = name
+	return presentation
+}
+
 // WithBrowserRecovery adds an explicit recovery action to browser failures.
 // Callers must use a trusted destination, never a callback or request URL.
 func WithBrowserRecovery(err error, recovery *oauthui.RecoveryLink) error {
@@ -154,7 +179,7 @@ func WithBrowserRecovery(err error, recovery *oauthui.RecoveryLink) error {
 }
 
 func browserPresentation(err error) *browserError {
-	presentation := &browserError{cause: err, reason: oauthui.ReasonDefault, clientName: "", recovery: nil}
+	presentation := &browserError{cause: err, reason: oauthui.ReasonDefault, clientName: "", recovery: nil, providerName: ""}
 	if existing, ok := errors.AsType[*browserError](err); ok {
 		*presentation = *existing
 		presentation.cause = err

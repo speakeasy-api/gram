@@ -528,8 +528,8 @@ WHERE d.organization_id = @org_id::text
       AND LOWER(m.serial_number) = LOWER(d.serial_number)
   );
 
--- State reports: two attested machines (one only its agent lists) and one
--- enforcing an older policy. Without them every active device reads
+-- State reports: three attested machines (one only its agent lists, one a
+-- Windows desktop that reports no serial) and one enforcing an older policy. Without them every active device reads
 -- unreported.
 
 -- name: PostflightCountDeviceAgentStateReports :one

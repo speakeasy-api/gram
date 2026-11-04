@@ -66,6 +66,13 @@ func AudienceAttribute() {
 	MaxLength(512)
 }
 
+// UpdateAudienceAttribute allows an explicit empty string to clear the audience.
+// Omitted values leave it unchanged; creation still uses AudienceAttribute.
+func UpdateAudienceAttribute() {
+	Pattern("^[!-~]*$")
+	MaxLength(512)
+}
+
 // Companion endpoint: POST /oauth/proxy-register. The dashboard mints the
 // client_id/client_secret it hands to createRemoteSessionClient by running
 // Dynamic Client Registration against the upstream provider through that
@@ -877,7 +884,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.", UpdateAudienceAttribute)
 	Attribute("legacy_callback_url", Boolean, "Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.")
 
 	Required("id")
