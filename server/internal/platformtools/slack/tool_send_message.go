@@ -56,10 +56,11 @@ func NewSendMessageTool(httpClient *guardian.HTTPClient, router ThreadRouter) co
 
 	return &slackTool{
 		descriptor: core.ToolDescriptor{
-			SourceSlug:  sourceSlack,
-			HandlerName: "send_message",
-			Name:        toolNameSendMessage,
-			Description: "Send a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. Supports plain text and Block Kit (sections, actions, context, divider, buttons) via the optional 'blocks' parameter.",
+			SourceSlug:    sourceSlack,
+			ThreadContext: core.ThreadContextSlackSelf,
+			HandlerName:   "send_message",
+			Name:          toolNameSendMessage,
+			Description:   "Send a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. Supports plain text and Block Kit (sections, actions, context, divider, buttons) via the optional 'blocks' parameter.",
 			InputSchema: core.BuildInputSchema[sendMessageInput](
 				core.WithPropertyEnum("route_replies", routeRepliesSelf, routeRepliesNew),
 			),
@@ -177,7 +178,7 @@ func callerAssistantThread(ctx context.Context, router ThreadRouter, env toolcon
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q requires a project", routeRepliesSelf)
 	}
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q is only available to assistants", routeRepliesSelf)
 	}

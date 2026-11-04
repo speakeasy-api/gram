@@ -15,6 +15,7 @@ import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
+  providerSetup: "enabled" as "enabled" | "disabled" | "loading",
   hasScope: vi.fn(),
   onOpenChange: vi.fn(),
   reset: vi.fn(),
@@ -28,6 +29,9 @@ const mocks = vi.hoisted(() => ({
   workflow: vi.fn(),
 }));
 
+vi.mock("@/hooks/useProviderSetupRollout", () => ({
+  useProviderSetupRollout: () => mocks.providerSetup,
+}));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
   useOrganization: () => ({ id: "org-1", slug: "acme" }),
@@ -86,12 +90,15 @@ function render(ui: React.ReactElement) {
     defaultOptions: { queries: { retry: false } },
   });
   const invalidate = vi.spyOn(client, "invalidateQueries");
+  const wrap = (content: React.ReactElement) => (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{content}</QueryClientProvider>
+    </MemoryRouter>
+  );
+  const view = testingRender(wrap(ui));
   return {
-    ...testingRender(
-      <MemoryRouter>
-        <QueryClientProvider client={client}>{ui}</QueryClientProvider>
-      </MemoryRouter>,
-    ),
+    ...view,
+    rerender: (content: React.ReactElement) => view.rerender(wrap(content)),
     invalidate,
   };
 }
@@ -134,6 +141,7 @@ function mockConfigureWorkflow(selectedServer = server): void {
 }
 
 beforeEach(() => {
+  mocks.providerSetup = "enabled";
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
 });
@@ -427,3 +435,181 @@ describe("catalog admission", () => {
     expect(mocks.getServerDetails).not.toHaveBeenCalled();
   });
 });
+
+describe.each([
+  ["Slack", "https://mcp.slack.com/mcp"],
+  ["GitHub", "https://api.githubcopilot.com/mcp"],
+])("%s catalog setup handoff", (provider, url) => {
+  const catalogServer = {
+    ...server,
+    registrySpecifier: "example/official-mcp",
+    title: provider,
+    remotes: [
+      {
+        url,
+        transportType: "streamable-http" as const,
+      },
+    ],
+  };
+  it("opens the installed server's setup page once from an opted-in catalog install", async () => {
+    mocks.workflow.mockReturnValue({
+      phase: "complete",
+      statuses: [
+        {
+          key: provider.toLowerCase(),
+          name: provider,
+          identityMode: "user",
+          remoteUrl: url,
+          status: "completed",
+          mcpServerId: "example-id",
+          mcpServerParam: `${provider.toLowerCase()}-installed`,
+        },
+      ],
+      reset: mocks.reset,
+    });
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[catalogServer]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        `/acme/projects/default/mcp/${provider.toLowerCase()}-installed/setup`,
+      );
+    });
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+  });
+  it.each(["disabled", "loading"] as const)(
+    "keeps the install completion open while rollout is %s",
+    async (status) => {
+      mocks.providerSetup = status;
+      mocks.workflow.mockReturnValue({
+        phase: "complete",
+        statuses: [
+          {
+            key: provider.toLowerCase(),
+            name: provider,
+            identityMode: "user",
+            remoteUrl: url,
+            status: "completed",
+            mcpServerId: "example-id",
+            mcpServerParam: "installed",
+          },
+        ],
+        reset: mocks.reset,
+      });
+      const content = () => (
+        <TooltipProvider>
+          <AddServerDialog
+            servers={[catalogServer]}
+            open
+            openProviderSetup
+            onOpenChange={(open) => {
+              mocks.onOpenChange(open);
+            }}
+          />
+        </TooltipProvider>
+      );
+      const view = render(content());
+      await waitFor(() =>
+        expect(screen.getByText("Added to your project")).toBeDefined(),
+      );
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(mocks.onOpenChange).not.toHaveBeenCalled();
+      if (status === "loading") {
+        mocks.providerSetup = "enabled";
+        view.rerender(content());
+        await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+        expect(mocks.navigate).toHaveBeenCalledWith(
+          "/acme/projects/default/mcp/installed/setup",
+        );
+      }
+    },
+  );
+  it("does not redirect when catalog setup opt-in is absent", async () => {
+    mocks.workflow.mockReturnValue({
+      phase: "complete",
+      statuses: [
+        {
+          key: provider.toLowerCase(),
+          name: provider,
+          identityMode: "user",
+          remoteUrl: url,
+          status: "completed",
+          mcpServerId: "example-id",
+          mcpServerParam: `${provider.toLowerCase()}-installed`,
+        },
+      ],
+      reset: mocks.reset,
+    });
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[catalogServer]}
+          open
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Added to your project")).toBeDefined();
+    });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+it.each([{ headless: true }, { autoStartInstall: true }])(
+  "does not redirect automatic/headless callers even with catalog opt-in: %j",
+  async (props) => {
+    mocks.workflow.mockReturnValue({
+      phase: "complete",
+      statuses: [
+        {
+          key: "slack",
+          name: "Slack",
+          identityMode: "user",
+          remoteUrl: "https://mcp.slack.com/mcp",
+          status: "completed",
+          mcpServerId: "id",
+          mcpServerParam: "slack-installed",
+        },
+      ],
+      reset: mocks.reset,
+    });
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[
+            {
+              ...server,
+              remotes: [
+                {
+                  url: "https://mcp.slack.com/mcp",
+                  transportType: "streamable-http",
+                },
+              ],
+            },
+          ]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          {...props}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  },
+);

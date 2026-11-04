@@ -1367,6 +1367,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnavailable, err, "read upstream credential choice").LogError(ctx, logger)
 	}
 
+	if err := s.validateDirectConsentInventory(ctx, endpoint, boundInventory, authClientPicks); err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview before approving.").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnavailable, err, "validate consent inventory credential").LogError(ctx, logger)
+	}
+
 	if materializeGateway {
 		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
 		if err != nil {

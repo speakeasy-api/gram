@@ -83,24 +83,27 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	runner.OnPromptSubmitted(r.onPrompt)
-	runner.OnToolPre(r.onToolPre)
-	runner.OnPermission(r.onPermission)
-	runner.OnToolPost(r.onToolPost)
-	runner.OnToolError(r.onToolPost)
+	// Inside Claude's Cowork VM the relay only ships the session transcript
+	// from Stop (onStop); every other handler answers with its neutral
+	// decision and sends nothing. See coworkTranscriptMode.
+	runner.OnPromptSubmitted(outsideCowork(r.onPrompt, agenthooks.AcceptPrompt))
+	runner.OnToolPre(outsideCowork(r.onToolPre, agenthooks.NoDecision))
+	runner.OnPermission(outsideCowork(r.onPermission, agenthooks.NoDecision))
+	runner.OnToolPost(outsideCowork(r.onToolPost, agenthooks.Observed))
+	runner.OnToolError(outsideCowork(r.onToolPost, agenthooks.Observed))
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
-	runner.OnSessionStart(r.onSessionStart)
-	runner.OnMCPInventory(r.onMCPInventory)
-	runner.OnSessionEnd(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
+	runner.OnSessionStart(outsideCowork(r.onSessionStart, agenthooks.ContinueSession))
+	runner.OnMCPInventory(observeOutsideCowork(r.onMCPInventory))
+	runner.OnSessionEnd(observeOutsideCowork(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {
 		return r.onObserve(ctx, e)
-	})
-	runner.OnNotification(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
+	}))
+	runner.OnNotification(observeOutsideCowork(func(ctx context.Context, e *agenthooks.NotificationEvent) error {
 		return r.onObserve(ctx, e)
-	})
-	runner.OnOther("ConfigChange", func(ctx context.Context, e *agenthooks.Event) error {
+	}))
+	runner.OnOther("ConfigChange", observeOutsideCowork(func(ctx context.Context, e *agenthooks.Event) error {
 		return r.onObserve(ctx, e)
-	})
+	}))
 	// Cursor is the only provider whose rendered config subscribes
 	// model-response natives (afterAgentResponse/afterAgentThought); they carry
 	// the assistant message text and token usage.
@@ -495,8 +498,34 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
+	if coworkTranscriptMode(&e.Event) {
+		r.shipTranscript(ctx, e)
+		return agenthooks.Finish(), nil
+	}
 	r.deliver(ctx, e)
 	return agenthooks.Finish(), nil
+}
+
+// outsideCowork runs a decision handler everywhere but Claude's Cowork VM,
+// where it answers with the neutral decision instead.
+func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral func() D) func(context.Context, E) (D, error) {
+	return func(ctx context.Context, e E) (D, error) {
+		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+			return neutral(), nil
+		}
+		return h(ctx, e)
+	}
+}
+
+// observeOutsideCowork runs an observe-only handler everywhere but Claude's
+// Cowork VM.
+func observeOutsideCowork[E any](h func(context.Context, E) error) func(context.Context, E) error {
+	return func(ctx context.Context, e E) error {
+		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+			return nil
+		}
+		return h(ctx, e)
+	}
 }
 
 // onSessionStart runs the interactive sign-in preflight whenever the machine

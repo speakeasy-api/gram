@@ -151,7 +151,11 @@ const role: Role = {
   createdAt: new Date(),
   updatedAt: new Date(),
 };
-function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
+function renderEditor(
+  editingRole?: Role,
+  confirmAssignmentFor?: string,
+  extra: Partial<React.ComponentProps<typeof CreateRoleDialog>> = {},
+) {
   const client = new QueryClient();
   const tree = (role?: Role) => (
     <MemoryRouter>
@@ -163,6 +167,7 @@ function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
             editingRole={role}
             confirmAssignmentFor={confirmAssignmentFor}
             presentation="page"
+            {...extra}
           />
         </TooltipProvider>
       </QueryClientProvider>
@@ -301,6 +306,51 @@ describe("agent assignment", () => {
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
     ).not.toHaveProperty("agentIds");
+  });
+});
+
+describe("a role pre-filled from an access request", () => {
+  function createdGrants() {
+    fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
+    expect(mocks.create).toHaveBeenCalledOnce();
+    return mocks.create.mock.calls[0]![0].request.createRoleForm.grants;
+  }
+
+  it("limits the permission to the requested server", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "Connect to GitHub",
+      defaultScopes: ["mcp:connect"],
+      defaultResource: { resourceId: "server-a", projectId: "project-a" },
+    });
+    expect(createdGrants()).toEqual([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+      },
+    ]);
+  });
+
+  it("limits a project permission to the requested project", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "Read the project",
+      defaultScopes: ["project:read"],
+      defaultResource: { projectId: "project-a" },
+    });
+    expect(createdGrants()).toEqual([
+      {
+        scope: "project:read",
+        selectors: [{ resourceKind: "project", resourceId: "project-a" }],
+      },
+    ]);
+  });
+
+  it("stays unrestricted when no resource was requested", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "View organization",
+      defaultScopes: ["org:read"],
+      defaultResource: { resourceId: "org-a" },
+    });
+    expect(createdGrants()).toEqual([{ scope: "org:read" }]);
   });
 });
 

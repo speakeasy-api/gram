@@ -308,6 +308,7 @@ const (
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
+	ExternalMCPFailureReasonKey = attribute.Key("gram.external_mcp.failure_reason")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -784,6 +785,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -976,6 +978,7 @@ const (
 	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
 	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
 	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1706,6 +1709,10 @@ func SlogAgentBuildOS(v string) slog.Attr {
 
 func SlogAgentBuildArch(v string) slog.Attr {
 	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
@@ -3055,6 +3062,11 @@ func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
 }
 
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
+}
+
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
 func SlogUserSessionClientID(v string) slog.Attr {
 	return slog.String(string(UserSessionClientIDKey), v)
@@ -3723,6 +3735,10 @@ func SlogMCPApprovalRequestID(v string) slog.Attr {
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
+
+func SlogExternalMCPFailureReason(v string) slog.Attr {
+	return slog.String(string(ExternalMCPFailureReasonKey), v)
+}
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }

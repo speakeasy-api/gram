@@ -32,8 +32,9 @@ import {
  * GitHub token at the organization's device-agent endpoint, fetches the
  * agent's plugins, writes each tool's MCP servers with a per-connection token
  * helper, and sends hook events. One access rule covers the whole repository,
- * one branch or one environment, and the agent it names supplies all three, so
- * the agent needs the device agent's grants as well as its servers.
+ * one branch, one environment or its pull requests, and the agent it names
+ * supplies all three, so the agent needs the device agent's grants as well as
+ * its servers.
  */
 export function githubActionsSetupInstructions(
   entry: CatalogEntry,
@@ -59,6 +60,8 @@ export function githubActionsSetupInstructions(
   const unreachable = controlPlaneProblem(getServerURL());
 
   return {
+    // The device agent exchanges the job's token at each server itself.
+    ownTokenExchange: true,
     // Nothing is written for an unreachable deployment, so no grant is shown
     // in the summary or checked either.
     agentGrants: (organizationId, projectId) =>
@@ -116,8 +119,7 @@ export function githubActionsSetupInstructions(
           const repository = repositoryName(values);
           const agent = agentName || "this agent";
           const scope = jobScope(values);
-          const scopeField =
-            scope.kind === "repository" ? undefined : variable(scope.kind);
+          const scopeField = "name" in scope ? variable(scope.kind) : undefined;
           return (
             <>
               {unreachable !== null && <SetupError>{unreachable}</SetupError>}

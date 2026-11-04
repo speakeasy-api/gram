@@ -446,8 +446,8 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // servers their access does not include.
 //
 // Where typed auth client resolution is enforced, the registrations its
-// servers offer through typed auth clients are listed too, whether or not the
-// sign-in links them.
+// servers offer through typed auth clients are listed whether or not the
+// sign-in links them. Direct proxied servers offer only these registrations.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	return clients, err
@@ -467,11 +467,44 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 		}
 		return members, membersErr
 	}
+	loadTypedRegistrations := func() (map[uuid.UUID]uuid.UUID, error) {
+		typed, err := s.typedConsentRegistrations(ctx, endpoint, loadMembers)
+		if err != nil {
+			return nil, err
+		}
+		// A workload reconnect authorizes connecting only its bound client.
+		// Filter before loading typed cards, even those not linked to the issuer.
+		if reconnect := challengeState.WorkloadReconnect; reconnect != nil {
+			for id := range typed {
+				if id != reconnect.ClientID {
+					delete(typed, id)
+				}
+			}
+		}
+		return typed, nil
+	}
+	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if enforced {
+			// Legacy issuer links are not offers under typed enforcement. Load
+			// only personal and identity-provider registrations linked directly
+			// to this server, even when that leaves no connection cards.
+			typed, err := loadTypedRegistrations()
+			if err != nil {
+				return nil, nil, err
+			}
+			clients, err := s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, nil, typed)
+			return clients, typed, err
+		}
+	}
 	clients, err := s.listSignInClients(ctx, endpoint, challengeState, loadMembers)
 	if err != nil {
 		return nil, nil, err
 	}
-	typed, err := s.typedConsentRegistrations(ctx, endpoint, loadMembers)
+	typed, err := loadTypedRegistrations()
 	if err != nil {
 		return nil, nil, err
 	}

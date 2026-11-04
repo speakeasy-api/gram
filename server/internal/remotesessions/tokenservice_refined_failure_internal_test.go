@@ -104,9 +104,14 @@ func TestRefreshErrorIs(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "caller canceled mid-POST",
-			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.Canceled),
+			name: "caller canceled before the POST",
+			err:  fmt.Errorf("re-read active remote_session: %w", context.Canceled),
 			want: nil,
+		},
+		{
+			name: "detached POST canceled independently of the caller",
+			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.Canceled),
+			want: ErrRemoteSessionUnavailable,
 		},
 		{
 			name: "lost compare-and-swap after the POST",

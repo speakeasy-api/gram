@@ -140,7 +140,22 @@ WITH candidate_chats AS (
     -- also carries a human identity (user_id or external_user_id) is that
     -- human's, whatever agent_id says.
     AND ($5 = '' OR c.user_id = $5 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($6::uuid[])))
-    AND ($7::uuid IS NULL OR c.agent_id = $7::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      $7::uuid IS NULL
+      OR c.agent_id = $7::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = $3 AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = $3 AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = $7::uuid
+          AND bound.project_id = $3
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       $8::text = ''
       OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -3028,7 +3043,22 @@ WITH candidate_chats AS (
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
     -- sessions would otherwise belong to nobody.
     AND ($4 = '' OR c.user_id = $4 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($5::uuid[])))
-    AND ($6::uuid IS NULL OR c.agent_id = $6::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      $6::uuid IS NULL
+      OR c.agent_id = $6::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = $1 AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = $1 AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = $6::uuid
+          AND bound.project_id = $1
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       $7::text = ''
       OR ($7::text = 'true' AND c.pinned_at IS NOT NULL)

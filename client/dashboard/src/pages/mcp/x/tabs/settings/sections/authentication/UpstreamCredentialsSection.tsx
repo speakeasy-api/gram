@@ -136,6 +136,7 @@ export function UpstreamCredentialsSection({
         <AddCredentialSheet
           mcpServerId={mcpServer.id}
           projectId={mcpServer.projectId}
+          remoteMcpServerId={mcpServer.remoteMcpServerId}
           tunneled={!!mcpServer.tunneledMcpServerId}
           onOpenChange={setAdding}
         />

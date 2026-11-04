@@ -400,7 +400,18 @@ func (s *Service) buildRemoteConnectURL(
 	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
 		loginProjectID = resourceMember.projectID
 	}
+	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
+	if err != nil {
+		if errors.Is(err, errTypedLoginDenied) {
+			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		}
+		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
+	}
+	if typedAuthorization != nil {
+		loginProjectID = typedAuthorization.ProjectID
+	}
 	parent := remotesessions.ParentChallenge{
+		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,
