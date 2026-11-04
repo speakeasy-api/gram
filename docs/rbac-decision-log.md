@@ -137,4 +137,4 @@ Review follow-ups adopted on #8442 (each fails closed):
 
    The organization slice cannot declare those types without colliding with the slices that own them. _If reversed:_ O7 waits for AS1 and C1 and moves all three together.
 
-2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. The e2e suite run is its evidence. _If reversed:_ add a service test before moving it.
+2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. Its evidence is the RBAC e2e suite run, which is still pending; until it is attached to the PR, this check has no authorization evidence. _If reversed:_ add a service test before moving it.
