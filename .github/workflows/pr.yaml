@@ -1514,6 +1514,8 @@ jobs:
         run: mise run test:infra
 
       - name: Run code generators
+        env:
+          BUF_TOKEN: ${{ secrets.FORGEBOT_BUF_TOKEN }}
         run: mise run gen:infra
 
       - name: Check for dirty files

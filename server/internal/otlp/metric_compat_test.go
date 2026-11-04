@@ -17,16 +17,16 @@ func TestOTLPMetricsUnmarshalAsGram(t *testing.T) {
 		raw, err := proto.Marshal(src)
 		require.NoError(t, err, "marshal OTLP metric %s", src.GetName())
 
-		for _, copy := range metricCopies() {
-			gramMetric := copy.newMetric()
-			require.NoError(t, proto.Unmarshal(raw, gramMetric), "%s: unmarshal OTLP metric %s as Speakeasy", copy.name, src.GetName())
+		for _, schemaCopy := range metricCopies() {
+			gramMetric := schemaCopy.newMetric()
+			require.NoError(t, proto.Unmarshal(raw, gramMetric), "%s: unmarshal OTLP metric %s as Speakeasy", schemaCopy.name, src.GetName())
 
 			roundTripRaw, err := proto.Marshal(gramMetric)
-			require.NoError(t, err, "%s: marshal Speakeasy metric %s", copy.name, src.GetName())
+			require.NoError(t, err, "%s: marshal Speakeasy metric %s", schemaCopy.name, src.GetName())
 
 			var got otlpmetrics.Metric
-			require.NoError(t, proto.Unmarshal(roundTripRaw, &got), "%s: unmarshal Speakeasy metric %s as OTLP", copy.name, src.GetName())
-			require.True(t, proto.Equal(src, &got), "%s: %s changed across OTLP → Speakeasy → OTLP", copy.name, src.GetName())
+			require.NoError(t, proto.Unmarshal(roundTripRaw, &got), "%s: unmarshal Speakeasy metric %s as OTLP", schemaCopy.name, src.GetName())
+			require.True(t, proto.Equal(src, &got), "%s: %s changed across OTLP → Speakeasy → OTLP", schemaCopy.name, src.GetName())
 		}
 	}
 }

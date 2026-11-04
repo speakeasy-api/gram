@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -124,4 +125,51 @@ func TestRemoteCallbackRejectsTransferredBrowserState(t *testing.T) {
 	require.NoError(t, s.validateRemoteLoginBrowser(callback))
 	_, err := s.remoteLoginCache.Get(t.Context(), "remoteLogin:"+remote.ID)
 	require.NoError(t, err)
+}
+
+func TestCodeReconnectBrowserProofPrecedesMemberLookup(t *testing.T) {
+	t.Parallel()
+	for _, hop := range []bool{false, true} {
+		s := browserTestService(t) // No DB: member resolution before proof would panic.
+		parent := browserTestState()
+		parent.FirstParty = true
+		parent.FocusServer = "tracker"
+		parent.AuthorizerUserID = parent.Subject.ID
+		parent.AuthorizerImpersonated = new(false)
+		parent.CodeReconnect = &CodeReconnectBinding{UserID: parent.Subject.ID, Server: "tracker", ServerID: uuid.New(), ExpiresAt: time.Now().Add(time.Minute)}
+		require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+		remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+		if hop {
+			remote.BrowserHash = sha256Hex("hop-browser")
+			remote.BrowserCookieID = uuid.NewString()
+		}
+		require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
+		req := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/remote_login_callback?state="+remote.ID, nil)
+		require.ErrorContains(t, s.validateRemoteLoginBrowser(req), "invalid remote login browser binding")
+		if !hop {
+			req.AddCookie(federatedBrowserCookie(parent.Browser.CookieID, "callback-browser", 600))
+			parent.CodeReconnect.ExpiresAt = time.Now().Add(-time.Minute)
+			require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+			w := httptest.NewRecorder()
+			oops.BrowserErrHandle(s.logger, func(_ http.ResponseWriter, r *http.Request) error { return s.validateRemoteLoginBrowser(r) }).ServeHTTP(w, req)
+			require.Equal(t, http.StatusUnauthorized, w.Code)
+			require.Contains(t, w.Body.String(), "current browser or sign-in session")
+		}
+	}
+}
+
+func TestWorkloadReconnectBrowserFailureIsSessionChanged(t *testing.T) {
+	t.Parallel()
+	s := browserTestService(t)
+	parent := browserTestState()
+	parent.WorkloadReconnect = &WorkloadReconnectBinding{OwnerUserID: parent.Subject.ID, ExpiresAt: time.Now().Add(-time.Minute)}
+	require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+	remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+	require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
+	req := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/remote_login_callback?state="+remote.ID, nil)
+	req.AddCookie(federatedBrowserCookie(parent.Browser.CookieID, "callback-browser", 600))
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(s.logger, func(_ http.ResponseWriter, r *http.Request) error { return s.validateRemoteLoginBrowser(r) }).ServeHTTP(response, req)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), "current browser or sign-in session")
 }

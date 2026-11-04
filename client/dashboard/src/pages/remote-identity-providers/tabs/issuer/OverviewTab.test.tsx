@@ -14,6 +14,7 @@ vi.mock("@gram/client/react-query/listProjects.js", () => ({
   useListProjects: () => ({ data: undefined }),
 }));
 vi.mock("react-router", () => ({
+  Outlet: () => null,
   Link: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 

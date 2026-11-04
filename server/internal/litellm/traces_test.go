@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,10 +23,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -976,17 +980,53 @@ func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	jsonFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.json")
 	protobufFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.pb")
 
+	// Keep this persistence test inside the telemetry TTL without changing the
+	// fixed fixtures used by contract tests. Shift all spans equally to preserve
+	// their durations and ordering, including the malformed-ID batch below.
+	fixtureStart := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	timeStart := time.Now().UTC().Add(-time.Hour)
+	offset := timeStart.Sub(fixtureStart).Nanoseconds()
+	rebaseJSON := func(body []byte) []byte {
+		for i, resource := range gjson.GetBytes(body, "resourceSpans").Array() {
+			for j, scope := range resource.Get("scopeSpans").Array() {
+				for k := range scope.Get("spans").Array() {
+					for _, field := range []string{"startTimeUnixNano", "endTimeUnixNano"} {
+						path := fmt.Sprintf("resourceSpans.%d.scopeSpans.%d.spans.%d.%s", i, j, k, field)
+						timestamp := gjson.GetBytes(body, path)
+						require.True(t, timestamp.Exists(), path)
+						shifted := strconv.Quote(strconv.FormatInt(timestamp.Int()+offset, 10))
+						body = []byte(string(body[:timestamp.Index]) + shifted + string(body[timestamp.Index+len(timestamp.Raw):]))
+					}
+				}
+			}
+		}
+		return body
+	}
+	jsonFixture = rebaseJSON(jsonFixture)
+	var protobufRequest collectortracev1.ExportTraceServiceRequest
+	require.NoError(t, proto.Unmarshal(protobufFixture, &protobufRequest))
+	for _, resource := range protobufRequest.GetResourceSpans() {
+		for _, scope := range resource.GetScopeSpans() {
+			for _, span := range scope.GetSpans() {
+				span.StartTimeUnixNano = uint64(int64(span.GetStartTimeUnixNano()) + offset)
+				span.EndTimeUnixNano = uint64(int64(span.GetEndTimeUnixNano()) + offset)
+			}
+		}
+	}
+	protobufFixture, err := proto.Marshal(&protobufRequest)
+	require.NoError(t, err)
+
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, jsonFixture, "application/json", "", "fixture-key", "fixture-project").Code)
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, gzipBody(t, protobufFixture), "application/x-protobuf", "gzip", "fixture-key", "fixture-project").Code)
 	invalidBatch := []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"fedcba9876543210","name":"valid sibling","startTimeUnixNano":"1785542401000000000","endTimeUnixNano":"1785542401000000001"},{"traceId":"not-a-trace-id","spanId":"bad-span","parentSpanId":"bad-parent","name":"invalid ids","startTimeUnixNano":"1785542402000000000","endTimeUnixNano":"1785542402000000001"}]}]}]}`)
-	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, invalidBatch, "application/json", "", "fixture-key", "fixture-project").Code)
+	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, rebaseJSON(invalidBatch), "application/json", "", "fixture-key", "fixture-project").Code)
 	require.NoError(t, instance.service.traces.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(instance.chConn)
 	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
-		TimeEnd:       time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
+		TimeStart:     timeStart.UnixNano(),
+		TimeEnd:       timeStart.Add(24 * time.Hour).UnixNano(),
 		GramURNs:      []string{litellmOTLPResourceURN},
 		SortOrder:     "asc",
 		Cursor:        "",

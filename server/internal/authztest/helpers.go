@@ -23,12 +23,10 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 // plus any extra grants required by the fixture.
 func WithAdminGrants(ctx context.Context, additional ...authz.Grant) context.Context {
 	roleGrants := authz.SystemRoleGrants[authz.SystemRoleAdmin]
-	overrides := make([]authz.RoleGrant, 0, len(roleGrants))
+	grants := make([]authz.Grant, 0, len(roleGrants)+len(additional))
 	for _, grant := range roleGrants {
-		overrides = append(overrides, *grant)
+		grants = append(grants, authz.NewGrant(authz.Scope(grant.Scope), authz.WildcardResource))
 	}
-
-	grants := authz.GrantsFromOverrides(overrides)
 	return authz.GrantsToContext(ctx, append(grants, additional...))
 }
 

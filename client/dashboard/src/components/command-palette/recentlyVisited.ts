@@ -182,6 +182,25 @@ export function removeVisitsMatching(
   }
 }
 
+/** Forget a resource and all its subpages after definitive loss of access. */
+export function removeResourceVisits(
+  userId: string,
+  orgSlug: string | undefined,
+  projectSlug: string | undefined,
+  resourceHref: string,
+): void {
+  const matches = (href: string) =>
+    href === resourceHref || href.startsWith(`${resourceHref}/`);
+  // Clear overrides first: the recorder and candidate source both consult
+  // them, even when a later visit has only a generic URL-derived label.
+  for (const href of labelOverrides.keys()) {
+    if (matches(href)) labelOverrides.delete(href);
+  }
+  removeVisitsMatching(userId, orgSlug, projectSlug, (entry) =>
+    matches(entry.href),
+  );
+}
+
 const NO_ENTRIES: RecentEntry[] = [];
 
 /**

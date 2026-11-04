@@ -144,6 +144,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/lib/assistantEntityLinks", () => ({
   useAssistantLinkResolver: () => undefined,
@@ -159,22 +160,17 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
 vi.mock("./command-palette/askAiBridge", () => ({
   useAskAiListener: vi.fn(),
 }));
-vi.mock("react-router", () => ({
+// The real route helpers derive which assistant route is active from this
+// pathname.
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => vi.fn(),
   useLocation: () => ({
-    pathname:
-      mocks.activeRoute === "new"
-        ? "/org/projects/project/assistants/new"
-        : "/org/projects/project/assistants/assistant-id",
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    playground: { active: false },
-    assistants: {
-      newAssistant: { active: mocks.activeRoute === "new" },
-      detail: { active: mocks.activeRoute === "detail" },
-    },
-    chat: { conversation: { goTo: vi.fn() } },
+    pathname: {
+      new: "/org/projects/project/assistants/new",
+      detail: "/org/projects/project/assistants/assistant-id",
+      home: "/org/projects/project",
+    }[mocks.activeRoute],
   }),
 }));
 

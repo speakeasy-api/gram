@@ -16,6 +16,7 @@ const (
 	ReasonClaimsMalformed        Reason = "assertion_claims_malformed"
 	ReasonAudienceMismatch       Reason = "assertion_audience_mismatch"
 	ReasonResourceMismatch       Reason = "assertion_resource_mismatch"
+	ReasonResourceNotIndicated   Reason = "assertion_resource_not_indicated"
 	ReasonClientMismatch         Reason = "assertion_client_mismatch"
 	ReasonSubjectMissing         Reason = "assertion_subject_missing"
 	ReasonEmailMissing           Reason = "assertion_email_missing"

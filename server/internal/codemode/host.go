@@ -19,6 +19,8 @@ const (
 	discoveryConcurrency = 4
 	// memberDeadline limits an individual catalog lookup.
 	memberDeadline = 5 * time.Second
+	// verificationDeadline leaves time for the program to handle partial results.
+	verificationDeadline = 10 * time.Second
 	// pathSeparator joins a member slug and an upstream tool name. Member
 	// slugs never contain it, so the first occurrence is the boundary and the
 	// tool name may contain further occurrences.
@@ -31,6 +33,19 @@ var ErrToolUnavailable = errors.New("tool unavailable")
 // ErrConsentRequired reports a permitted member whose approval no longer
 // matches its configuration. Only a new consent fixes it.
 var ErrConsentRequired = errors.New("consent required")
+
+// ConnectionRequiredError reports a visible, permitted member whose upstream
+// refused the caller's missing, expired or rejected credential before the tool
+// was called. The user fixes it through Connect; naming the server reveals
+// nothing the caller's Servers listing does not.
+type ConnectionRequiredError struct {
+	// Server is the member slug to pass to Connect.
+	Server string
+}
+
+func (e *ConnectionRequiredError) Error() string {
+	return fmt.Sprintf("server %q requires the user to connect", e.Server)
+}
 
 // ErrExecutionRevoked is terminal for the admitted execution, even if its
 // credentials or policy become available again later.
@@ -136,13 +151,57 @@ func (h *CatalogHost) members(ctx context.Context) ([]Server, Lister, error) {
 	return permitted, list, nil
 }
 
-// Servers returns permitted prefixes without enumerating upstream tools.
+// Servers lists visible members independently of the tool invocation allowlist.
 func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, error) {
-	servers, _, err := h.members(ctx)
+	if args.Server != "" && !validConnectionServer(args.Server) {
+		return nil, ErrToolUnavailable
+	}
+	var servers []Server
+	var err error
+	if backend, ok := h.backend.(ConnectionBackend); ok {
+		servers, err = backend.DiscoveryServers(ctx)
+	} else {
+		servers, _, err = h.backend.Members(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list servers: %w", err)
+	}
+	if len(servers) > maxMembers {
+		return nil, fmt.Errorf("gateway exceeds code-mode member limit")
+	}
+	visible := make([]Server, 0, len(servers))
+	for _, server := range servers {
+		if server.Slug != "" && !strings.Contains(server.Slug, pathSeparator) && (args.Server == "" || server.Slug == args.Server) {
+			visible = append(visible, server)
+		}
+	}
+	page, err := PaginateServers(h.scope+"\x00"+args.Server, args, visible)
 	if err != nil {
 		return nil, err
 	}
-	return PaginateServers(h.scope, args, servers)
+	if args.Verify {
+		verifier, ok := h.backend.(ConnectionVerifier)
+		if !ok {
+			return nil, fmt.Errorf("live verification unavailable")
+		}
+		verifyCtx, cancel := context.WithTimeout(ctx, verificationDeadline)
+		defer cancel()
+		slugs := make([]string, len(page.Items))
+		for i := range page.Items {
+			slugs[i] = page.Items[i].Slug
+		}
+		connections, err := verifier.VerifyConnections(verifyCtx, slugs)
+		if err != nil {
+			return nil, fmt.Errorf("verify server page: %w", err)
+		}
+		if len(connections) != len(page.Items) {
+			return nil, fmt.Errorf("invalid verification result count")
+		}
+		for i := range page.Items {
+			page.Items[i].Connection = connections[i]
+		}
+	}
+	return page, nil
 }
 
 // Search enumerates relevant members on demand and bounds upstream concurrency.
@@ -285,7 +344,7 @@ func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawM
 	}
 	raw, err := h.backend.Call(ctx, path, arguments)
 	if err != nil {
-		if errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
+		if _, connect := errors.AsType[*ConnectionRequiredError](err); connect || errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
 			return nil, &callNotDispatchedError{cause: fmt.Errorf("invoke tool: %w", err)}
 		}
 		var dispatch *DispatchError
@@ -336,4 +395,39 @@ func publicDefinition(raw json.RawMessage, path string) (json.RawMessage, error)
 		return nil, fmt.Errorf("encode definition: %w", err)
 	}
 	return definition, nil
+}
+
+// ConnectionBackend owns recovery independently of an execution's tool allowlist.
+// Implementations must refresh identity and restrict results to visible members.
+type ConnectionBackend interface {
+	DiscoveryServers(context.Context) ([]Server, error)
+	Connect(context.Context, string) (*ConnectionAction, error)
+}
+
+func validConnectionServer(server string) bool {
+	return server != "" && len(server) <= 1024 &&
+		!strings.Contains(server, "--") && strings.TrimSpace(server) == server
+}
+
+func (h *CatalogHost) Connect(ctx context.Context, server string) (*ConnectionAction, error) {
+	if !validConnectionServer(server) {
+		return nil, fmt.Errorf("connect requires an exact server slug")
+	}
+	backend, ok := h.backend.(ConnectionBackend)
+	if !ok {
+		return nil, ErrToolUnavailable
+	}
+	result, err := backend.Connect(ctx, server)
+	if err != nil {
+		return nil, fmt.Errorf("connect server: %w", err)
+	}
+	return result, nil
+}
+
+// ConnectionVerifier probes a page under one refreshed authorization snapshot.
+// Results follow the input order; member failures stay in their own state.
+// Only snapshot/authorization failures fail the page. The context bounds the
+// entire batch, including snapshot acquisition and queued probes.
+type ConnectionVerifier interface {
+	VerifyConnections(context.Context, []string) ([]*ConnectionState, error)
 }

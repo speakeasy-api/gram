@@ -1467,6 +1467,7 @@ func EncodeListDelegableGrantsRequest(encoder func(*http.Request) goahttp.Encode
 		for _, value := range p.ToolsetIds {
 			values.Add("toolset_ids", value)
 		}
+		values.Add("carry_exclusions", fmt.Sprintf("%v", p.CarryExclusions))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -4929,6 +4930,8 @@ func DecodeDeleteResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 func unmarshalAgentSessionResponseBodyToAgentsAgentSession(v *AgentSessionResponseBody) *agents.AgentSession {
 	res := &agents.AgentSession{
 		ID:               *v.ID,
+		SubjectKind:      *v.SubjectKind,
+		WorkloadSubject:  v.WorkloadSubject,
 		ProjectID:        v.ProjectID,
 		IssuerID:         *v.IssuerID,
 		IssuerSlug:       *v.IssuerSlug,

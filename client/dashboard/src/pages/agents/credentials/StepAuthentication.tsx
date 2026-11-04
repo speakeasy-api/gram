@@ -1,6 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import type { JSX } from "react";
-import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import { useState, type JSX } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -18,7 +17,7 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
-import { ServerAccounts } from "../AgentKeyServers";
+import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -26,21 +25,30 @@ import type { InventoryServer } from "./useServerInventory";
 export function StepAuthentication({
   servers,
   connections,
-  agent,
   allServers,
   onRemove,
 }: {
   servers: InventoryServer[];
   connections: OwnerConnections;
-  agent?: ManagedAgent;
   allServers: boolean;
   onRemove: (id: string) => void;
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
-  const displayedConnections = agent
-    ? (connections.assignedByServer ?? connections.byServer)
-    : connections.byServer;
+  const [openRows, setOpenRows] = useState<string[]>([]);
+  // Editing shows the agent's assigned connection, unless it no longer works
+  // and the editor has a usable one: saving assigns that in its place,
+  // exactly as creating does. Until the editor's own connection is known,
+  // its checking or error state stands rather than a premature verdict.
+  const displayedConnections = new Map(connections.byServer);
+  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
+    const own = connections.byServer.get(serverId)?.status;
+    const keepOwn =
+      assigned.status !== "ready" &&
+      assigned.status !== "not-required" &&
+      (own === "ready" || own === "checking" || own === "error");
+    if (!keepOwn) displayedConnections.set(serverId, assigned);
+  }
   const missing = servers.filter(
     (server) =>
       server.issuerId &&
@@ -51,9 +59,10 @@ export function StepAuthentication({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP authentication"
-        description="Choose how the agent connects to each selected MCP server. Open a row to manage its connection, or remove a server here."
+        title="MCP sign-in"
+        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
       />
+      <SignInPath hop="mcp" />
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}
@@ -65,7 +74,14 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
-      <Accordion type="multiple" className="border-border border">
+      {/* Every row starts closed: its badge already says how Speakeasy signs
+          in, and a row opens only to manage that connection. */}
+      <Accordion
+        type="multiple"
+        value={openRows}
+        onValueChange={setOpenRows}
+        className="border-border border"
+      >
         {servers.map((server) => {
           const connection = displayedConnections.get(server.id);
           const shared =
@@ -123,10 +139,14 @@ export function StepAuthentication({
                       />
                     )}
                     <Badge
+                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // says how Speakeasy signs in to that server.
                       variant={
                         expired || connection?.status === "missing"
                           ? "warning"
-                          : "neutral"
+                          : shared || connection?.status === "ready"
+                            ? "information"
+                            : "neutral"
                       }
                       size="sm"
                     >
@@ -166,13 +186,6 @@ export function StepAuthentication({
                     This server uses a shared credential. No personal connection
                     is needed.
                   </Text>
-                ) : agent ? (
-                  <ServerAccounts
-                    compact
-                    agent={agent}
-                    servers={[server]}
-                    onReady={() => {}}
-                  />
                 ) : (
                   <div className="flex flex-wrap items-center gap-3 py-1">
                     <div className="min-w-0 flex-1">

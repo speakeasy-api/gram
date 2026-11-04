@@ -128,7 +128,7 @@ func TestValidatorBoundaryNonUserStrategiesCannotCarryUser(t *testing.T) {
 	}{
 		{want: mcpidentity.KindAssistant, ctx: func() context.Context { return boundary.StampAssistant(t.Context()) }},
 		{want: mcpidentity.KindAPIKey, ctx: func() context.Context { return boundary.StampAPIKey(t.Context(), "key_test") }},
-		{want: mcpidentity.KindChatSession, ctx: func() context.Context { return boundary.StampChatSession(t.Context()) }},
+		{want: mcpidentity.KindChatSession, ctx: func() context.Context { return boundary.StampChatSession(t.Context(), "") }},
 	}
 	for _, tt := range tests {
 		identity, ok := mcpidentity.FromContext(tt.ctx())

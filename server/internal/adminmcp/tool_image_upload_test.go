@@ -44,7 +44,7 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 	require.Equal(t, `printf 'Authorization: Bearer %s' "$UPLOAD_TOKEN" | curl -fsS -X PUT -H @- --data-binary @icon.png 'https://admin.example.test/admin/assets.uploadImage'`, out.ExampleCommand)
 	require.NotContains(t, out.ExampleCommand, "upload-token", "the example keeps the token out of command arguments")
 	require.Equal(t, "Bearer upload-token", out.Headers["Authorization"])
-	require.NotContains(t, out.AllowedContentTypes, "image/svg+xml")
+	require.Contains(t, out.AllowedContentTypes, "image/svg+xml")
 
 	_, err = createImageUploadURL(ctx, uploads, WriteConfig{})
 	require.ErrorIs(t, err, ErrWriteDisabled)

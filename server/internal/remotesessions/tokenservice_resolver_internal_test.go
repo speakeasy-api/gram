@@ -10,6 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPrincipalAPIKeyAuthorizer(t *testing.T) {
+	t.Parallel()
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	auth := &contextvalues.AuthContext{APIKeyID: uuid.NewString()}
+	key := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), auth, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "credential-authorizer"})
+	authorizer, ok := principalAPIKeyAuthorizer(key, urn.NewUserSubject("credential-authorizer"))
+	require.True(t, ok, "an agent key reads its authorizer's own connection")
+	require.Equal(t, "credential-authorizer", authorizer)
+	_, ok = principalAPIKeyAuthorizer(key, urn.NewUserSubject("someone-else"))
+	require.False(t, ok, "never another user's connection")
+	_, ok = principalAPIKeyAuthorizer(key, urn.NewAgentSubject(uuid.MustParse(agent.ID)))
+	require.False(t, ok, "an agent subject keeps the exact attachment")
+	session := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), auth, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "credential-authorizer"})
+	authorizer, ok = principalAPIKeyAuthorizer(session, urn.NewUserSubject("credential-authorizer"))
+	require.True(t, ok, "an admitted agent session reads its authorizer's own connection too")
+	require.Equal(t, "credential-authorizer", authorizer)
+	workload := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), auth, urn.NewWorkloadPrincipal(uuid.New(), "run"), contextvalues.PrincipalCredential{AuthorizerUserID: "credential-authorizer"})
+	_, ok = principalAPIKeyAuthorizer(workload, urn.NewUserSubject("credential-authorizer"))
+	require.False(t, ok, "a workload is never an agent principal")
+	legacy := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{UserID: "credential-authorizer", APIKeyID: uuid.NewString()})
+	_, ok = principalAPIKeyAuthorizer(legacy, urn.NewUserSubject("credential-authorizer"))
+	require.False(t, ok, "a legacy key is unchanged")
+}
+
 func TestRemoteSessionCallerPrincipal(t *testing.T) {
 	t.Parallel()
 	id := uuid.New()

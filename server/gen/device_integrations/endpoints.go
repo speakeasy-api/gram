@@ -26,6 +26,8 @@ type Endpoints struct {
 	RetrySchedule      goa.Endpoint
 	ListManagedDevices goa.Endpoint
 	GetCoverage        goa.Endpoint
+	ListFleetDevices   goa.Endpoint
+	GetFleetCoverage   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "deviceIntegrations" service with
@@ -44,6 +46,8 @@ func NewEndpoints(s Service) *Endpoints {
 		RetrySchedule:      NewRetryScheduleEndpoint(s, a.APIKeyAuth),
 		ListManagedDevices: NewListManagedDevicesEndpoint(s, a.APIKeyAuth),
 		GetCoverage:        NewGetCoverageEndpoint(s, a.APIKeyAuth),
+		ListFleetDevices:   NewListFleetDevicesEndpoint(s, a.APIKeyAuth),
+		GetFleetCoverage:   NewGetFleetCoverageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -60,6 +64,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RetrySchedule = m(e.RetrySchedule)
 	e.ListManagedDevices = m(e.ListManagedDevices)
 	e.GetCoverage = m(e.GetCoverage)
+	e.ListFleetDevices = m(e.ListFleetDevices)
+	e.GetFleetCoverage = m(e.GetFleetCoverage)
 }
 
 // NewListProvidersEndpoint returns an endpoint function that calls the method
@@ -409,5 +415,75 @@ func NewGetCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.GetCoverage(ctx, p)
+	}
+}
+
+// NewListFleetDevicesEndpoint returns an endpoint function that calls the
+// method "listFleetDevices" of service "deviceIntegrations".
+func NewListFleetDevicesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListFleetDevicesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListFleetDevices(ctx, p)
+	}
+}
+
+// NewGetFleetCoverageEndpoint returns an endpoint function that calls the
+// method "getFleetCoverage" of service "deviceIntegrations".
+func NewGetFleetCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetFleetCoveragePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetFleetCoverage(ctx, p)
 	}
 }

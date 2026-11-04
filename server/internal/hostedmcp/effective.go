@@ -19,26 +19,26 @@ func IsCanonical(server *mcpserversrepo.McpServer, toolsetID uuid.UUID) bool {
 }
 
 // ServerHosting is toolset's hosting state (enabled, public, session issuer) read from its canonical
-// wrapper, which owns that state; without a canonical wrapper the toolset columns stand.
+// wrapper, which owns that state; a toolset without one is not hosted.
 func ServerHosting(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) hostingstate.Hosting {
 	if !IsCanonical(wrapper, toolset.ID) {
-		return hostingstate.ToolsetColumns(toolset).Hosting
+		return hostingstate.NotHosted()
 	}
 	return hostingstate.FromServer(toolset.ExternalOauthServerID, wrapper.Visibility, wrapper.UserSessionIssuerID)
 }
 
 // LoadServerState loads toolset's canonical wrapper and returns its ServerHosting hosting; wrapper is nil when
-// there is none. A server that kept the toolset's id but no longer serves it leaves the toolset disabled.
+// there is none, and the toolset is then not hosted. That includes a server that kept the toolset's id but left it.
 func LoadServerState(ctx context.Context, db toolsetsrepo.DBTX, toolset toolsetsrepo.Toolset) (hostingstate.Hosting, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return ServerHosting(toolset, nil), nil, nil
+		return hostingstate.NotHosted(), nil, nil
 	case err != nil:
 		return hostingstate.NotHosted(), nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
 	}
 	if !IsCanonical(&wrapper, toolset.ID) {
-		return hostingstate.Kept(hostingstate.ToolsetColumns(toolset).UserSessionIssuerID), nil, nil
+		return hostingstate.NotHosted(), nil, nil
 	}
 	return ServerHosting(toolset, &wrapper), &wrapper, nil
 }

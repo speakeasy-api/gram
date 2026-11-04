@@ -20,6 +20,7 @@ export function anActivityLog(overrides: Partial<AuditLog> = {}): AuditLog {
     actorDisplayName: "Example Operator",
     action: "organization:settings_updated",
     actingSurface: "dashboard",
+    category: "configuration",
     subjectId: "org_1",
     subjectType: "organization",
     subjectDisplayName: "Test Org",

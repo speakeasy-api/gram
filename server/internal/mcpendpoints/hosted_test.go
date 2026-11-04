@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -78,7 +79,7 @@ func (f *hostedAddressFixture) payload(slug string, mutate func(*gen.UpdateMcpEn
 	return payload
 }
 
-// requireProjected returns the hosted server's single endpoint and asserts the toolset hosting columns stay unset.
+// requireProjected returns the hosted server's single endpoint and asserts the toolset has no legacy alias.
 func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Context) mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
@@ -90,10 +91,9 @@ func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Contex
 func (f *hostedAddressFixture) endpoints(t *testing.T, ctx context.Context) []mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	require.NoError(t, err)
-	require.False(t, toolset.McpSlug.Valid, "endpoint writes never touch the toolset hosting columns")
-	require.False(t, toolset.CustomDomainID.Valid, "endpoint writes never touch the toolset hosting columns")
+	require.Equal(t, legacyalias.None(), alias, "endpoint writes never give the toolset a legacy alias")
 	endpoints, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
 	require.NoError(t, err)
 	return endpoints

@@ -1,11 +1,13 @@
 import type { useRoutes } from "@/routes";
 
 const VALID_TABS = [
+  "setup",
   "overview",
   "tools",
   "resources",
   "prompts",
   "inspect",
+  "skills",
   "team-access",
   "guardrails",
   "sessions",
@@ -94,6 +96,8 @@ export function mcpServerTabHref(
   tab: TabValue,
 ): string {
   switch (tab) {
+    case "setup":
+      return routes.mcp.details.setup.href(mcpServerSlug);
     case "overview":
       return routes.mcp.details.overview.href(mcpServerSlug);
     case "tools":
@@ -104,6 +108,8 @@ export function mcpServerTabHref(
       return routes.mcp.details.prompts.href(mcpServerSlug);
     case "inspect":
       return routes.mcp.details.inspect.href(mcpServerSlug);
+    case "skills":
+      return routes.mcp.details.skills.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.details.teamAccess.href(mcpServerSlug);
     case "guardrails":

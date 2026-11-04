@@ -159,6 +159,29 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	return enabled, err
 }
 
+const isFeatureExplicitlyEnabled = `-- name: IsFeatureExplicitlyEnabled :one
+SELECT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = $1
+      AND feature_name = $2
+      AND deleted IS FALSE
+)::boolean AS enabled
+`
+
+type IsFeatureExplicitlyEnabledParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Only an active row counts: unlike IsFeatureEnabled, an organization that
+// never configured the inverted gateway setting reads as not turned off.
+func (q *Queries) IsFeatureExplicitlyEnabled(ctx context.Context, arg IsFeatureExplicitlyEnabledParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isFeatureExplicitlyEnabled, arg.OrganizationID, arg.FeatureName)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const listProOrganizations = `-- name: ListProOrganizations :many
 SELECT id
 FROM organization_metadata

@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import UploadOpenAPI from "./UploadOpenAPI";
 import FunctionsOnboarding from "./FunctionsOnboarding";
@@ -110,29 +111,8 @@ vi.mock("@/components/upload-asset/step", () => {
 vi.mock("@/components/upload-asset/stepper/use-stepper", () => ({
   useStepper: () => ({ state: "completed", meta: { current: {} } }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      goTo: vi.fn(),
-      add: {
-        fromSource: {
-          Link: ({
-            queryParams,
-            children,
-          }: {
-            queryParams: Record<string, string>;
-            children: ReactNode;
-          }) => (
-            <a
-              href={"/from-existing-source?" + new URLSearchParams(queryParams)}
-            >
-              {children}
-            </a>
-          ),
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 afterEach(cleanup);
 beforeEach(() => {
@@ -147,24 +127,26 @@ beforeEach(() => {
   state.attachmentError = null;
 });
 it("keeps function gateway context when continuing from CLI instructions to source selection", () => {
-  render(<FunctionsOnboarding />);
+  render(<FunctionsOnboarding />, { wrapper: MemoryRouter });
   expect(
     screen
       .getByRole("link", { name: /select deployed function/i })
       .getAttribute("href"),
-  ).toBe("/from-existing-source?attachToGateway=gateway");
+  ).toBe(
+    "/org/projects/project/mcp/add/from-existing-source?attachToGateway=gateway",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(state.cancel).toHaveBeenCalled();
 });
 it("does not add gateway actions to standalone function instructions", () => {
   state.gatewayId = null;
-  render(<FunctionsOnboarding />);
+  render(<FunctionsOnboarding />, { wrapper: MemoryRouter });
   expect(
     screen.queryByRole("link", { name: /select deployed function/i }),
   ).toBeNull();
 });
 it("passes gateway completion into OpenAPI creation and prevents leaving for inventory prematurely", () => {
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: MemoryRouter });
   expect(state.deploy).toHaveBeenCalledWith(
     expect.objectContaining({ gateway: state }),
   );
@@ -175,7 +157,7 @@ it("passes gateway completion into OpenAPI creation and prevents leaving for inv
 it("replaces OpenAPI creation steps with attachment recovery after creation", () => {
   state.createdServerId = "server";
   state.attachmentError = "Attachment failed";
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: MemoryRouter });
   expect(state.deploy).not.toHaveBeenCalled();
   expect(screen.getByText("Attachment failed")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /retry/i }));
@@ -183,7 +165,7 @@ it("replaces OpenAPI creation steps with attachment recovery after creation", ()
 });
 it("keeps standalone OpenAPI continue navigation", () => {
   state.gatewayId = null;
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: MemoryRouter });
   expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
 });
 
@@ -191,7 +173,7 @@ it.each([UploadOpenAPI, FunctionsOnboarding])(
   "requires project-level MCP write for gateway onboarding (%s)",
   (Component) => {
     state.scopes.delete("mcp:write:project");
-    render(<Component />);
+    render(<Component />, { wrapper: MemoryRouter });
     expect(state.deploy).not.toHaveBeenCalled();
     expect(screen.queryByText("CLI instructions")).toBeNull();
     expect(
@@ -204,7 +186,7 @@ it.each([UploadOpenAPI, FunctionsOnboarding])(
   (Component) => {
     state.gatewayId = null;
     state.scopes = new Set(["project:write:project"]);
-    render(<Component />);
+    render(<Component />, { wrapper: MemoryRouter });
     if (Component === UploadOpenAPI) expect(state.deploy).toHaveBeenCalled();
     else expect(screen.getByText("CLI instructions")).toBeTruthy();
   },

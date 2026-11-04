@@ -129,7 +129,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		NextCursor: nil,
 	}
 
-	toolKinds := map[urn.ToolKind]any{}
+	toolKinds := make(map[urn.ToolKind]any)
 	for _, t := range payload.ToolTypes {
 		switch t {
 		case types.ToolType(urn.ToolKindHTTP),

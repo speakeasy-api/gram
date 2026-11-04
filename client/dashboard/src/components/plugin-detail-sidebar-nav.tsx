@@ -43,9 +43,10 @@ import { useRoles } from "@gram/client/react-query/roles";
 import {
   LayoutDashboard,
   Settings as SettingsIcon,
-  Sparkles,
+  Terminal,
   Users,
 } from "lucide-react";
+import { pluginUpToDate } from "@/pages/plugins/plugin-sync-state";
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
 
@@ -78,7 +79,7 @@ function DistributionPluginSidebarNav(): React.JSX.Element | null {
         {
           key: PLUGIN_SKILLS_SECTION_ID,
           title: "Skills",
-          Icon: Sparkles,
+          Icon: Terminal,
           href: `${pluginSectionHref(routes, pluginId, PLUGIN_SKILLS_SECTION_ID)}${location.search}`,
           active: true,
         },
@@ -175,7 +176,7 @@ function PluginSidebarContent({
 
   const items: DetailSidebarNavItem[] = [
     sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard),
-    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Sparkles),
+    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Terminal),
     ...(showAssignments
       ? [sectionItem(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments", Users)]
       : []),
@@ -196,8 +197,9 @@ function PluginSidebarContent({
     : undefined;
   // Only the explicit booleans are a known freshness — an undefined upToDate
   // (connection predates fingerprinting) must not read as "Up to date".
-  const hasUnpublishedChanges = publishStatus?.upToDate === false;
-  const isUpToDate = publishStatus?.upToDate === true;
+  const upToDate = pluginUpToDate(publishStatus, plugin?.slug);
+  const hasUnpublishedChanges = upToDate === false;
+  const isUpToDate = upToDate === true;
   const showMarketplaceInfo =
     !!publishStatus?.connected &&
     (hasUnpublishedChanges || isUpToDate || !!cleanVersion);

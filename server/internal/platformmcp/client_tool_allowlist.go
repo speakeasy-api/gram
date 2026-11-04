@@ -16,6 +16,8 @@ import (
 // covers one complete outcome is easier to review and to use than the full
 // administrator catalogue. list_projects is the one read outside that path:
 // the default_project_not_found recovery tells the agent to call it.
+// list_my_servers, search_my_tools, describe_tools and execute_tool let ChatGPT use the
+// servers it installed through this same connection, with no second connector.
 //
 // This is a usability filter, not a security boundary. Every caller is still
 // entitled to every tool its grants allow; RBAC discovery filtering and each
@@ -29,8 +31,12 @@ var chatGPTToolAllowlist = []string{
 	"get_setup_handoff",
 	"get_mcp_readiness",
 	"get_my_install_instructions",
-	"search_gram_docs",
+	"search_speakeasy_docs",
 	"list_projects",
+	"list_my_servers",
+	"search_my_tools",
+	"describe_tools",
+	"execute_tool",
 }
 
 // chatGPTProductID is the aivendors registry product whose CIMD documents

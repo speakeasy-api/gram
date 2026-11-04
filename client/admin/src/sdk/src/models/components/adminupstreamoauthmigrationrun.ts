@@ -53,7 +53,7 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   selectionsWritten: number;
   /**
-   * Servers marked as needing upstream authentication because they offer a backfilled auth client.
+   * Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.
    */
   serversMarkedRequiringUpstreamAuth?: number | undefined;
   /**

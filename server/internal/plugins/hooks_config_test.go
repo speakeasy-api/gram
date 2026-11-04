@@ -103,3 +103,34 @@ func TestPluginsService_UpdateMarketplaceSettings_RenameDefersHooksWhenNotEligib
 	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID),
 		"a deferred rename must not regenerate the hooks subtree or mint a hooks key")
 }
+
+// After an org rename, an org held on its published hooks keeps the hooks
+// subtree under the old name's directories, and the shared manifests keep
+// pointing there. Automatic publishes must fingerprint the manifests the same
+// way, or each one would read them as changed and regenerate the MCP packages.
+func TestPluginsService_OrgRenameWithCarriedHooksStopsRepublishing(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	// Empty provider: the org is not cleared for a newer hooks version, so
+	// its published hooks subtree is carried rather than regenerated.
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
+	f := newAutoSyncFixtureFor(t, ctx, ti, mock)
+
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Carried Hooks Rename")
+	oldClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	oldHooksDir := oldClaudeObservability + "/"
+	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir))
+	renameOrganization(t, ctx, ti.conn, orgID, "Carried Hooks Renamed")
+	newClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	newHooksDir := newClaudeObservability + "/"
+
+	f.automaticPublish(t, ctx)
+	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir), "the hooks subtree stays under the old name")
+	require.Empty(t, filesWithPrefix(mock.lastPushedFiles, newHooksDir))
+
+	mock.pushFilesCalled = false
+	again := f.automaticPublish(t, ctx)
+	require.True(t, again.Skipped, "nothing changed since the last automatic publish")
+	require.False(t, mock.pushFilesCalled)
+}

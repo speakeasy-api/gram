@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -48,9 +49,9 @@ type serverIdentity struct {
 }
 
 func parseSiteURL(raw string) (*url.URL, error) {
-	siteURL, err := url.Parse(raw)
-	if err != nil || siteURL.Hostname() == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
-		return nil, fmt.Errorf("site URL must be an absolute HTTP(S) URL with a host")
+	siteURL, err := mcpregistry.ParseAssetBaseURL(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid site URL: %w", err)
 	}
 	return siteURL, nil
 }

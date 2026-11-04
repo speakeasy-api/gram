@@ -1170,22 +1170,16 @@ SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
 -- Resolves who may connect to one MCP resource without an access rule, as the
 -- same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 -- connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
--- A gateway toolset is public when its MCP endpoint is, and serves nobody
--- while its MCP endpoint is switched off. A hosted toolset reads its
--- canonical wrapper's visibility; the wrapper row itself reports the same id,
--- and 'disabled' wins between them. A gateway
+-- A hosted toolset reads its canonical wrapper's visibility, and one without
+-- a wrapper serves nobody; the wrapper row itself reports the same id, and
+-- 'disabled' wins between them. A gateway
 -- (meta server) is reported as such: it has no connect check of its own, each
 -- member server is checked instead. Resources are found by the same
 -- identifiers and tenancy rules as FindMCPResourceProject.
 SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
-    (CASE
-      WHEN cw.id IS NOT NULL THEN cw.visibility
-      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
-      WHEN toolsets.mcp_is_public THEN 'public'
-      ELSE 'private'
-    END)::text AS visibility,
+    COALESCE(cw.visibility, 'disabled')::text AS visibility,
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
@@ -1195,6 +1189,12 @@ SELECT resource_type, visibility FROM (
     AND toolsets.id = sqlc.arg(resource_id)::uuid
     AND toolsets.deleted IS FALSE
     AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
   UNION ALL
   SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
   FROM mcp_servers
@@ -1951,3 +1951,8 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: GetRemoteSessionRowDigestFixture :one
+-- Test fixture: a digest of the whole stored row, so a test can prove it was
+-- not touched without reading any credential value.
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = @id;

@@ -795,6 +795,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	var authorizer *string
 	if credential, ok := principalcredential.FromContext(ctx); ok && lookup == lookupAuthClient {
 		authorizer = &credential.Credential.AuthorizerUserID
+	} else if keyAuthorizer, ok := principalAPIKeyAuthorizer(ctx, subject); ok && lookup == lookupAuthClient {
+		authorizer = &keyAuthorizer
 	}
 	var principalID uuid.UUID
 	var attached bool
@@ -1117,7 +1119,7 @@ func (s *RefreshService) refreshSessionTokens(
 	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(client.IssuerUrl)
 	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.

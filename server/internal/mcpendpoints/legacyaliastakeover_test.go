@@ -5,15 +5,19 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	legacyaliasrepo "github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -34,7 +38,7 @@ func seedCustomDomainAliasInOtherProject(t *testing.T, ctx context.Context, ti *
 	// The alias's domain row may belong to any organization; only one live domain per organization is allowed.
 	domainID := seedCustomDomain(t, ctx, ti.conn, "org-alias-"+suffix)
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, project.ID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
 	seedCanonicalToolsetWrapper(t, ctx, ti.conn, project.ID, toolset.ID)
 	return project.ID, toolset, slug
 }
@@ -115,10 +119,45 @@ func TestCustomDomainAliasInDeletedProjectFreesPlatformSlug(t *testing.T) {
 	projectID, _, slug := seedCustomDomainAliasInOtherProject(t, ctx, ti)
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	require.False(t, platformSlugAvailable(t, ctx, ti, slug, none, none))
+	platform := legacyalias.Alias{Slug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: none}
+	taken, err := legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{platform})
+	require.NoError(t, err)
+	require.True(t, taken[platform], "the platform address of a custom-domain alias is taken")
 
-	_, err := projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
 	require.NoError(t, err)
 	require.True(t, platformSlugAvailable(t, ctx, ti, slug, none, none))
+	taken, err = legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{platform})
+	require.NoError(t, err)
+	require.False(t, taken[platform])
+}
+
+// A custom-domain alias in a deleted project no longer holds its own custom-domain address.
+func TestCustomDomainAliasInDeletedProjectFreesItsAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, toolset, _ := seedCustomDomainAliasInOtherProject(t, ctx, ti)
+	alias, err := legacyalias.Get(ctx, ti.conn, projectID, toolset.ID)
+	require.NoError(t, err)
+	require.True(t, alias.CustomDomainID.Valid)
+	check := legacyalias.TakenCheck{Slug: alias.Slug.String, CustomDomainID: alias.CustomDomainID, ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: uuid.NullUUID{}}
+
+	held, err := legacyalias.Taken(ctx, ti.conn, check)
+	require.NoError(t, err)
+	require.True(t, held)
+	taken, err := legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{alias})
+	require.NoError(t, err)
+	require.True(t, taken[alias])
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
+	require.NoError(t, err)
+	held, err = legacyalias.Taken(ctx, ti.conn, check)
+	require.NoError(t, err)
+	require.False(t, held)
+	taken, err = legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{alias})
+	require.NoError(t, err)
+	require.False(t, taken[alias])
 }
 
 func TestPlatformAliasOwnerIsNotBlockedByCustomDomainAlias(t *testing.T) {
@@ -159,16 +198,11 @@ func TestHostedAliasCannotMoveOntoAnotherCustomDomainAliasSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newHostedAddressFixture(t, "pro")
-	_, err := toolsetsrepo.New(f.ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-		Name: f.toolset.Name, Description: f.toolset.Description, DefaultEnvironmentSlug: f.toolset.DefaultEnvironmentSlug,
-		McpSlug: conv.ToPGText(f.endpoint.Slug), McpIsPublic: false, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpEnabled: true, ToolSelectionMode: f.toolset.ToolSelectionMode, Slug: f.toolset.Slug, ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, f.ti.conn, f.projectID, f.toolset.ID, f.endpoint.Slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, _, slug := seedCustomDomainAliasInOtherProject(t, ctx, f.ti)
 	domain := f.activeDomain(t, ctx, "own-"+uuid.NewString()[:8]+".example.com")
 
-	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+	_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
 		McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(slug), CustomDomainID: new(domain.ID.String()),
 	})
 	require.NoError(t, err, "the custom-domain endpoint itself does not touch the platform")
@@ -179,9 +213,9 @@ func TestHostedAliasCannotMoveOntoAnotherCustomDomainAliasSlug(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 	require.Contains(t, err.Error(), "already taken")
-	stored, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	stored, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	require.NoError(t, err)
-	require.Equal(t, f.endpoint.Slug, stored.McpSlug.String)
+	require.Equal(t, f.endpoint.Slug, stored.Slug.String)
 	require.False(t, stored.CustomDomainID.Valid)
 }
 
@@ -196,7 +230,7 @@ func TestCheckSlugAvailabilityLetsServerClaimItsOwnAlias(t *testing.T) {
 	slug := authCtx.OrganizationSlug + "-own-alias-" + suffix
 	domainID := seedCustomDomain(t, ctx, ti.conn, "own-alias-"+suffix)
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
 	seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
 
 	check := func(serverID *string) bool {
@@ -230,13 +264,13 @@ func TestMovingPlatformAliasDoesNotHideOtherCustomDomainAlias(t *testing.T) {
 	_, other, slug := seedCustomDomainAliasInOtherProject(t, ctx, ti)
 	mover := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 
-	served, err := toolsetsrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{
+	served, err := legacyaliasrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, legacyaliasrepo.OtherCustomDomainAliasServedOnPlatformParams{
 		Slug: conv.ToPGText(slug), ToolsetID: mover.ID,
 	})
 	require.NoError(t, err)
 	require.True(t, served, "the mover's own platform alias leaves with it, so the other alias would contend")
 
-	served, err = toolsetsrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{
+	served, err = legacyaliasrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, legacyaliasrepo.OtherCustomDomainAliasServedOnPlatformParams{
 		Slug: conv.ToPGText(slug), ToolsetID: other.ID,
 	})
 	require.NoError(t, err)

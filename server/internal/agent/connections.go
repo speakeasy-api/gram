@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -68,38 +69,163 @@ func (s *Service) WithConnectionStatuses(statuses MemberConnectionStatuses) *Ser
 // way GetPlugins resolves it, so an org install key reads the vouched user's
 // state: only whether each server is signed in, never a credential.
 func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnectionsPayload) (*gen.GetMyConnectionsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if _, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
-		return nil, oops.E(oops.CodeForbidden, nil, "sign-in state belongs to a person; an agent identity has none")
-	}
-	email, err := pollingEmail(authCtx, conv.PtrValOr(payload.Email, ""))
+	member, err := s.resolveMember(ctx, payload.Email, "sign-in state")
 	if err != nil {
 		return nil, err
+	}
+	result := &gen.GetMyConnectionsResult{Servers: []*gen.AgentServerConnection{}}
+	// Remote sessions belong to a user; an address with no membership has none.
+	if member.userID == "" {
+		return result, nil
+	}
+	serverRows, err := s.memberServers(ctx, member)
+	if err != nil {
+		return nil, err
+	}
+	if len(serverRows) == 0 {
+		return result, nil
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, member.organizationID, grantPrincipals(member.principals))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading member grants").LogError(ctx, s.logger)
+	}
+	// Hidden is a display preference: if it can't be read, report every
+	// server as shown rather than fail the sign-in state.
+	hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, member.organizationID, member.userID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "hidden mcp servers unavailable", attr.SlogError(err), attr.SlogOrganizationID(member.organizationID))
+		hidden = nil
+	}
+
+	// The device agent holds no Platform MCP connection, so the principal carries
+	// none and reads no acting surface.
+	principal := platformmcp.Principal{UserID: member.userID, OrganizationID: member.organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
+	for _, row := range serverRows {
+		entry, ok := s.serverConnection(ctx, principal, grants, row, *pluginServerID(row))
+		if !ok {
+			continue
+		}
+		if row.McpServerID.Valid && hidden[row.McpServerID.UUID] {
+			entry.Hidden = new(true)
+		}
+		result.Servers = append(result.Servers, entry)
+	}
+	return result, nil
+}
+
+// HideMcpServer hides an MCP server for the enrolled user. It writes the same
+// preference as the gateway consent page, so hiding in either place hides in
+// both. Only a server in the plugins delivered to the user can be hidden.
+func (s *Service) HideMcpServer(ctx context.Context, payload *gen.HideMcpServerPayload) error {
+	serverID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
+	}
+	member, err := s.resolveMember(ctx, payload.Email, "hidden servers")
+	if err != nil {
+		return err
+	}
+	if member.userID == "" {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	serverRows, err := s.memberServers(ctx, member)
+	if err != nil {
+		return err
+	}
+	idx := slices.IndexFunc(serverRows, func(row repo.ListAgentPluginServersRow) bool {
+		return row.McpServerID.Valid && row.McpServerID.UUID == serverID
+	})
+	if idx < 0 {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	// Only a server getMyConnections would list: delivery alone isn't enough
+	// when the member can't read the server itself.
+	row := serverRows[idx]
+	grants, err := authz.LoadGrants(ctx, s.db, member.organizationID, grantPrincipals(member.principals))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading member grants").LogError(ctx, s.logger)
+	}
+	principal := platformmcp.Principal{UserID: member.userID, OrganizationID: member.organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
+	if _, ok := s.serverConnection(ctx, principal, grants, row, *pluginServerID(row)); !ok {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	if err := hiddenmcpservers.Hide(ctx, s.db, member.organizationID, member.userID, serverID); err != nil {
+		if errors.Is(err, hiddenmcpservers.ErrServerNotFound) {
+			return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "error hiding mcp server").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// UnhideMcpServer shows a hidden MCP server again for the enrolled user. It
+// needs no plugin check: a user may always clear their own preference.
+func (s *Service) UnhideMcpServer(ctx context.Context, payload *gen.UnhideMcpServerPayload) error {
+	serverID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
+	}
+	member, err := s.resolveMember(ctx, payload.Email, "hidden servers")
+	if err != nil {
+		return err
+	}
+	if member.userID == "" {
+		return nil
+	}
+	if err := hiddenmcpservers.Unhide(ctx, s.db, member.organizationID, member.userID, serverID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error unhiding mcp server").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// agentMember is the person a device agent call acts for.
+type agentMember struct {
+	organizationID string
+	// userID is empty when the email belongs to no member of the organization.
+	userID     string
+	principals []string
+}
+
+// resolveMember resolves the user the way GetPlugins does (the per-user key's
+// owner, or the email an org install key vouches) and charges the member's
+// budget. Agent identities are refused; what names the personal data they
+// have none of.
+func (s *Service) resolveMember(ctx context.Context, vouchedEmail *string, what string) (agentMember, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return agentMember{}, oops.C(oops.CodeUnauthorized)
+	}
+	if _, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return agentMember{}, oops.E(oops.CodeForbidden, nil, "%s belongs to a person; an agent identity has none", what)
+	}
+	email, err := pollingEmail(authCtx, conv.PtrValOr(vouchedEmail, ""))
+	if err != nil {
+		return agentMember{}, err
 	}
 
 	organizationID := authCtx.ActiveOrganizationID
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
+		return agentMember{}, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
-	result := &gen.GetMyConnectionsResult{Servers: []*gen.AgentServerConnection{}}
-	// Remote sessions belong to a user; an address with no membership has none.
-	userID := memberUserID(principals)
-	if userID == "" {
-		return result, nil
+	member := agentMember{organizationID: organizationID, userID: memberUserID(principals), principals: principals}
+	if member.userID == "" {
+		return member, nil
 	}
 	// Charged per member after the membership check, so addresses outside
 	// the organization never create limiter state.
-	if err := s.allowConnectionsRead(ctx, organizationID, userID); err != nil {
-		return nil, err
+	if err := s.allowConnectionsRead(ctx, organizationID, member.userID); err != nil {
+		return agentMember{}, err
 	}
+	return member, nil
+}
 
+// memberServers lists the distinct servers in the plugins delivered to the
+// member, in the order the device receives them.
+func (s *Service) memberServers(ctx context.Context, member agentMember) ([]repo.ListAgentPluginServersRow, error) {
 	pluginRows, err := s.repo.GetAgentPluginSet(ctx, repo.GetAgentPluginSetParams{
-		OrganizationID: organizationID,
-		PrincipalUrns:  principals,
+		OrganizationID: member.organizationID,
+		PrincipalUrns:  member.principals,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").LogError(ctx, s.logger)
@@ -115,10 +241,10 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 		}
 	}
 	if len(pluginIDs) == 0 {
-		return result, nil
+		return nil, nil
 	}
 	serverRows, err := s.repo.ListAgentPluginServers(ctx, repo.ListAgentPluginServersParams{
-		OrganizationID: organizationID,
+		OrganizationID: member.organizationID,
 		PluginIds:      pluginIDs,
 	})
 	if err != nil {
@@ -127,27 +253,17 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	slices.SortStableFunc(serverRows, func(a, b repo.ListAgentPluginServersRow) int {
 		return pluginOrder[a.PluginID] - pluginOrder[b.PluginID]
 	})
-	grants, err := authz.LoadGrants(ctx, s.db, organizationID, grantPrincipals(principals))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error loading member grants").LogError(ctx, s.logger)
-	}
-
-	// The device agent holds no Platform MCP connection, so the principal carries
-	// none and reads no acting surface.
-	principal := platformmcp.Principal{UserID: userID, OrganizationID: organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
 	seen := make(map[string]bool, len(serverRows))
+	distinct := make([]repo.ListAgentPluginServersRow, 0, len(serverRows))
 	for _, row := range serverRows {
 		id := pluginServerID(row)
 		if id == nil || seen[*id] {
 			continue
 		}
 		seen[*id] = true
-		entry, ok := s.serverConnection(ctx, principal, grants, row, *id)
-		if ok {
-			result.Servers = append(result.Servers, entry)
-		}
+		distinct = append(distinct, row)
 	}
-	return result, nil
+	return distinct, nil
 }
 
 // allowConnectionsRead charges one read to the member's budget. A limiter
@@ -171,7 +287,7 @@ func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, user
 // read or connect is omitted; trouble reading one server reports it as
 // unknown rather than failing the rest.
 func (s *Service) serverConnection(ctx context.Context, principal platformmcp.Principal, grants []authz.Grant, row repo.ListAgentPluginServersRow, id string) (*gen.AgentServerConnection, bool) {
-	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil}
+	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil, Hidden: nil}
 	// A gateway's members sign in separately; its own connect page covers them.
 	if !row.McpServerID.Valid || s.connectionStatuses == nil {
 		return entry, true

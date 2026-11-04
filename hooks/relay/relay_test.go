@@ -588,6 +588,65 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	require.FileExists(t, authFile+".reauth-needed")
 }
 
+// TestAgentKeyOutranksCachedSignIn: a plugin installed for an agent records
+// the agent's events under its own key even when a person has signed in on
+// the same machine, while the same cache still wins over a shared org key.
+func TestAgentKeyOutranksCachedSignIn(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=personal-key\nproject=default\nemail=developer@example.com\norg=org-1\n"), 0o600))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+
+	agentCfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	res := invoke(t, agentCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	orgCfg := agentCfg
+	orgCfg.HooksAPIKey = "shared-org-key"
+	orgCfg.AgentKey = false
+	res = invoke(t, orgCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	require.Equal(t, 2, fs.count())
+	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"), "an agent's key must outrank a cached personal sign-in")
+	require.Equal(t, "personal-key", fs.headers[1].Get("Gram-Key"), "a cached sign-in still outranks the shared org key")
+	require.FileExists(t, authFile, "using the agent's key must leave the person's sign-in in place")
+}
+
+// TestEnvKeyOutranksAgentKey: SPEAKEASY_AI_HOOKS_API_KEY stays the explicit
+// top-priority credential, even over an agent's baked key.
+func TestEnvKeyOutranksAgentKey(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key")
+
+	c, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	require.True(t, ok)
+	require.Equal(t, "env-key", c.APIKey)
+	require.Equal(t, credEnv, c.Source)
+}
+
+// TestAgentKeyReadFromPluginConfig: the agent_key flag in speakeasy.json
+// reaches the relay config, and an env-supplied org key, which is never an
+// agent's, clears it.
+func TestAgentKeyReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","org":"org-1","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + cfgPath})
+	require.Equal(t, "agent-key", cfg.HooksAPIKey)
+	require.True(t, cfg.AgentKey)
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
+	require.True(t, LoadConfig(cfg).AgentKey)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+	loaded := LoadConfig(cfg)
+	require.Equal(t, "env-org-key", loaded.HooksAPIKey)
+	require.False(t, loaded.AgentKey)
+}
+
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
 // present: the server never confirmed the action, so blocking mode denies. A
 // 4xx status exercises the same branch as 5xx without the retry budget's
@@ -841,6 +900,7 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				ProjectSlug:  "default",
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
+				AgentKey:     false,
 				BrowserLogin: false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
@@ -878,6 +938,7 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 		ProjectSlug:  "default",
 		OrgID:        "org-1",
 		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
 		BrowserLogin: false,
 		BinaryPath:   "/tmp/speakeasy-hooks",
 	})
@@ -894,6 +955,84 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &cfg))
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
+}
+
+// TestWritePluginMarksAgentKey: a package written for an agent records the
+// agent_key marker, so its key outranks a cached personal sign-in.
+func TestWritePluginMarksAgentKey(t *testing.T) {
+	for _, agent := range []bool{true, false} {
+		dir := t.TempDir()
+		err := WritePlugin(t.Context(), "openclaw", dir, PluginConfig{
+			ServerURL:    "https://gram.test",
+			SiteURL:      "",
+			ProjectSlug:  "default",
+			OrgID:        "org-1",
+			HooksAPIKey:  "install-key",
+			AgentKey:     agent,
+			BrowserLogin: false,
+			BinaryPath:   "/tmp/speakeasy-hooks",
+		})
+		require.NoError(t, err)
+		info, err := os.Stat(filepath.Join(dir, configFileName))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "speakeasy.json carries the key")
+
+		cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(dir, configFileName)})
+		require.Equal(t, "install-key", cfg.HooksAPIKey)
+		require.Equal(t, agent, cfg.AgentKey)
+	}
+}
+
+// TestAgentKeySessionStartSkipsBrowserLogin: an agent's plugin never opens a
+// browser sign-in, even with browser login on and no cached sign-in, because
+// its own key outranks any cache that sign-in would write.
+func TestAgentKeySessionStartSkipsBrowserLogin(t *testing.T) {
+	setSpoolStateHome(t)
+	unsetClaudeLaunch(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_FORCE", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "1")
+	forceInteractiveEnv(t)
+	var opened atomic.Int32
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(string) { opened.Add(1) }
+
+	fs := newFakeServer(t, nil)
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	payload := []byte(`{"session_id":"agent-session","hook_event_name":"SessionStart","source":"startup"}`)
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Zero(t, opened.Load(), "an agent's plugin must not start a browser sign-in")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.NotEmpty(t, fs.headers)
+	require.Equal(t, "agent-key", fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+}
+
+// TestAgentKeyPluginSkipsLoginNudge: an agent's plugin with no usable key
+// still fails the prompt open, but never asks the person to sign in.
+func TestAgentKeyPluginSkipsLoginNudge(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.NotContains(t, string(res.Stdout), "additionalContext")
+	require.NotContains(t, string(res.Stdout), "login")
 }
 
 // unsetClaudeLaunch clears the env a live Claude Code session exports. Launch

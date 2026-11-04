@@ -11,11 +11,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// The slug fallback serves a toolset's frozen mcp_slug, but the canonical wrapper owns whether and how it serves.
+// The slug fallback serves a toolset's legacy alias, but the canonical wrapper owns whether and how it serves.
 func TestServePublic_LegacySlugFollowsCanonicalWrapperState(t *testing.T) {
 	t.Parallel()
 
@@ -24,8 +24,8 @@ func TestServePublic_LegacySlugFollowsCanonicalWrapperState(t *testing.T) {
 		visibility string
 		wantStatus int
 	}{
-		{name: "disabled wrapper hides a public toolset", visibility: "disabled", wantStatus: 0},
-		{name: "private wrapper gates a public toolset", visibility: "private", wantStatus: http.StatusUnauthorized},
+		{name: "disabled wrapper hides the alias", visibility: "disabled", wantStatus: 0},
+		{name: "private wrapper gates the alias", visibility: "private", wantStatus: http.StatusUnauthorized},
 		{name: "public wrapper serves anonymously", visibility: "public", wantStatus: http.StatusOK},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -37,8 +37,8 @@ func TestServePublic_LegacySlugFollowsCanonicalWrapperState(t *testing.T) {
 			require.NotNil(t, authCtx.ProjectID)
 
 			slug := "frozen-alias-" + uuid.NewString()[:8]
-			toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
-			createEndpointlessCanonicalWrapper(t, ctx, ti, toolset, tt.visibility)
+			toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+			testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: tt.visibility})
 
 			w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
 			switch tt.wantStatus {
@@ -56,8 +56,8 @@ func TestServePublic_LegacySlugFollowsCanonicalWrapperState(t *testing.T) {
 	}
 }
 
-// A private toolset whose canonical wrapper went public serves anonymously through the fallback.
-func TestServePublic_LegacySlugPrivateToolsetPublicWrapper(t *testing.T) {
+// A toolset without a canonical wrapper is not hosted, so its alias serves only once a wrapper exists.
+func TestServePublic_LegacySlugWithoutWrapperNotServed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -73,15 +73,15 @@ func TestServePublic_LegacySlugPrivateToolsetPublicWrapper(t *testing.T) {
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "private toolset without a wrapper requires auth")
+	require.Error(t, err, "toolset without a wrapper is not hosted")
+	require.Contains(t, err.Error(), "not found")
 
-	createEndpointlessCanonicalWrapper(t, ctx, ti, toolset, "public")
+	hostLegacyToolset(t, ctx, ti, toolset, slug, "public", noIssuer())
 
 	w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -99,8 +99,7 @@ func TestServePublic_MovedEndpointKeepsFrozenAlias(t *testing.T) {
 
 	oldSlug := "frozen-old-" + uuid.NewString()[:8]
 	newSlug := "moved-new-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, oldSlug)
-	createEndpointlessCanonicalWrapper(t, ctx, ti, toolset, "public")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, oldSlug)
 	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: newSlug,
 	})
@@ -111,25 +110,4 @@ func TestServePublic_MovedEndpointKeepsFrozenAlias(t *testing.T) {
 		require.NoError(t, err, slug)
 		require.Equal(t, http.StatusOK, w.Code, "slug=%s body=%s", slug, w.Body.String())
 	}
-}
-
-func createEndpointlessCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, visibility string) {
-	t.Helper()
-
-	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    toolset.ID,
-		ProjectID:             toolset.ProjectID,
-		Name:                  pgtype.Text{String: toolset.Name, Valid: true},
-		Slug:                  toolset.McpSlug,
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            visibility,
-		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
 }

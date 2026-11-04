@@ -25,7 +25,7 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 				Instructions:        instructions,
 				UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: gated},
 			}
-			bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta, metamcp.DiscoveryModeProgressive), mcpversions.SupportedMetaServer())
+			bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta, metamcp.DiscoveryModeProgressive, false), mcpversions.SupportedMetaServer())
 			require.NoError(t, err)
 			var response struct {
 				Result struct {

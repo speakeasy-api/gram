@@ -54,7 +54,60 @@ WHERE p.organization_id = @organization_id
 -- the live, enabled clients linked to it.
 SELECT s.id AS mcp_server_id,
        s.project_id,
-       s.requires_upstream_auth,
+       (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has a live upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = s.id
+             AND pend_link.project_id = s.project_id
+             AND pend_link.organization_id = @organization_id
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             JOIN remote_session_clients AS pend_client
+               ON pend_client.id = pend_assoc.remote_session_client_id
+              AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
+              AND pend_client.deleted IS FALSE
+             JOIN remote_session_issuers AS pend_issuer
+               ON pend_issuer.id = pend_client.remote_session_issuer_id
+              AND pend_issuer.deleted IS FALSE
+              AND (pend_issuer.project_id = pend_assoc.project_id
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
+             WHERE pend_assoc.mcp_server_id = s.id
+               AND pend_assoc.project_id = s.project_id
+               AND pend_assoc.organization_id = @organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             JOIN remote_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.remote_mcp_server_id
+              AND pend_source.project_id = s.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.remote_mcp_server_id = s.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             JOIN tunneled_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.tunneled_mcp_server_id
+              AND pend_source.project_id = s.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       )::boolean AS upstream_auth_pending,
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -143,6 +196,7 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = @from_version_id::uuid
   AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
   AND sel.deleted IS FALSE;
 
 -- name: RecordProfileChoice :execrows
@@ -212,6 +266,68 @@ WHERE b.organization_id = @organization_id
   AND b.deleted IS FALSE
   AND b.trigger_id IS NOT NULL
 ORDER BY b.project_id, ab.assistant_id, b.trigger_id;
+
+-- name: ListAssistantProfileTargets :many
+-- The root triggers one assistant's turns run under: each trigger bound to
+-- its workload identity, and any trigger it already has a profile for.
+SELECT t.id AS trigger_id,
+       t.name AS trigger_name
+FROM trigger_instances AS t
+WHERE t.organization_id = @organization_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM trigger_workload_bindings AS b
+      JOIN assistant_agent_bindings AS ab
+        ON ab.id = b.assistant_binding_id
+       AND ab.deleted IS FALSE
+      WHERE b.trigger_id = t.id
+        AND b.deleted IS FALSE
+        AND ab.assistant_id = @assistant_id::uuid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM execution_selection_profiles AS p
+      WHERE p.trigger_instance_id = t.id
+        AND p.assistant_id = @assistant_id::uuid
+        AND p.deleted IS FALSE
+    )
+  )
+ORDER BY t.name, t.id;
+
+-- name: ListVersionChoices :many
+-- A version's choices: an auth client, or no upstream authentication.
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth,
+       sel.source
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'execution_profile_version'
+  AND sel.credential_id = @version_id
+  AND sel.organization_id = @organization_id
+  AND sel.deleted IS FALSE
+ORDER BY sel.mcp_server_id;
+
+-- name: CopyProfileVersionChoicesExcept :exec
+-- Carries every choice of one version into the next but one server's, which
+-- an administrator is replacing or clearing.
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth,
+    auth_client_id, auth_client_attachment_scope, source
+)
+SELECT sel.project_id, sel.organization_id, sel.credential_kind, @to_version_id::uuid, sel.mcp_server_id,
+       sel.remote_session_client_id, sel.client_attachment_scope, sel.no_auth,
+       sel.auth_client_id, sel.auth_client_attachment_scope, sel.source
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'execution_profile_version'
+  AND sel.credential_id = @from_version_id::uuid
+  AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
+  AND sel.mcp_server_id <> @except_mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
 
 -- Test fixtures. Each seeds the one row its name says; nothing else uses them.
 
@@ -297,3 +413,29 @@ SELECT @organization_id, @project_id, @organization_id, @project_id,
        ab.id, @organization_id, @project_id, ab.id,
        1, generate_uuidv7(), 'workload', 1
 FROM ab;
+
+-- name: DetachAuthClientFixture :exec
+UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id AND auth_client_id = @auth_client_id AND organization_id = @organization_id;
+
+-- name: DisableAuthClientFixture :exec
+UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
+
+-- name: SetRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SeedTriggerBindingFixture :exec
+-- Binds a trigger to an assistant's existing agent binding.
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT @organization_id, @project_id, @organization_id, @project_id,
+       @trigger_id, @organization_id, @project_id, @trigger_id,
+       ab.id, @organization_id, @project_id, ab.id,
+       ab.generation, generate_uuidv7(), 'workload', 1
+FROM assistant_agent_bindings AS ab
+WHERE ab.assistant_id = @assistant_id AND ab.deleted IS FALSE;

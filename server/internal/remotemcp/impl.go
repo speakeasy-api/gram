@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -142,6 +143,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	server, err := createRemoteMCPSource(ctx, dbtx, s.audit, authCtx, remoteMCPSourceInput{
 		Name:          payload.Name,
@@ -304,6 +308,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
@@ -388,6 +395,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "claim protected resource for remote session clients").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{updatedServer.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync EMA source reach").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -510,6 +520,9 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 
@@ -547,6 +560,14 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		}
 
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").LogError(ctx, logger)
+	}
+
+	// Retire the auth clients derived from the deleted source's headers.
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{deleted.ID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync EMA source reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
 	}
 
 	// Deliberately no per-header audit event for the cascade. The parent's
@@ -663,6 +684,9 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
@@ -703,6 +727,13 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		}
 
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
+	}
+
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync EMA source reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogRemoteMcpServerHeaderCreate(ctx, dbtx, audit.LogRemoteMcpServerHeaderCreateEvent{
@@ -750,6 +781,9 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
@@ -826,6 +860,13 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server header").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync EMA source reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	afterView := mv.BuildRemoteMcpServerHeaderView(header)
 
 	if err := s.audit.LogRemoteMcpServerHeaderUpdate(ctx, dbtx, audit.LogRemoteMcpServerHeaderUpdateEvent{
@@ -873,8 +914,37 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
+
+	// Lock the parent before the header, as the other header writers and the
+	// parent's own deletion do, so the auth client sync below sees every write
+	// and never waits on a lock in the opposite order. Read unredacted through
+	// the repo: only the parent's id is wanted, so no value is revealed.
+	located, err := txRepo.GetServerHeader(ctx, repo.GetServerHeaderParams{
+		ID:        headerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, logger)
+	}
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        located.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "lock remote mcp server").LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteServerHeader(ctx, repo.DeleteServerHeaderParams{
 		ID:        headerID,
@@ -894,6 +964,13 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync EMA source reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogRemoteMcpServerHeaderDelete(ctx, dbtx, audit.LogRemoteMcpServerHeaderDeleteEvent{

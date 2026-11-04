@@ -94,11 +94,35 @@ func TestInitializeRequiresNegotiableRevision(t *testing.T) {
 	t.Parallel()
 	req := &rawRequest{Method: mcpversions.MethodInitialize, ID: mcpjsonrpc.NumberID(1), Params: json.RawMessage(`{"protocolVersion":"2025-11-25"}`)}
 	resolution := mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect}
-	require.True(t, methodAvailable(req, resolution, mcpversions.SupportedHostedToolset()))
+	require.True(t, methodAvailable(req, resolution, mcpversions.SupportedHostedToolset(), nil))
 	// A surface serving only handshake-free revisions has nothing to
 	// negotiate, so initialize is unavailable rather than answered with an
 	// empty protocolVersion.
-	require.False(t, methodAvailable(req, resolution, []string{mcpversions.Version20260728}))
+	require.False(t, methodAvailable(req, resolution, []string{mcpversions.Version20260728}, nil))
+}
+
+// TestMethodAvailable_ExtensionMethodsFollowDeclaration checks that an
+// extension's methods are admitted by the declared label rather than by the
+// revision: declared, they are available on every revision; undeclared, on
+// none. A core method is unaffected by the declaration either way.
+func TestMethodAvailable_ExtensionMethodsFollowDeclaration(t *testing.T) {
+	t.Parallel()
+	for _, version := range mcpversions.All() {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			resolution := mcpversions.Resolution{Declared: version, InEffect: version}
+			supported := mcpversions.SupportedHostedToolset()
+			for _, method := range mcpversions.ExtensionMethods() {
+				req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: method, Params: nil}
+				require.False(t, methodAvailable(req, resolution, supported, nil), "%s without a declaration", method)
+				require.False(t, methodAvailable(req, resolution, supported, []string{"example.com/other"}), "%s under another label", method)
+				require.True(t, methodAvailable(req, resolution, supported, []string{mcpversions.ExtensionSkills}), "%s under its label", method)
+			}
+
+			ping := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodPing, Params: nil}
+			require.Equal(t, methodAvailable(ping, resolution, supported, nil), methodAvailable(ping, resolution, supported, []string{mcpversions.ExtensionSkills}))
+		})
+	}
 }
 
 func TestUnavailableMethodNotificationHasNoResponse(t *testing.T) {

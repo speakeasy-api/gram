@@ -229,7 +229,13 @@ export function ToolSelectionPanel({
           tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
         };
       })
-      .filter((s) => s.tools.length > 0);
+      .filter((s) => {
+        // Keep discovery status and recovery controls visible even when the
+        // tool being searched for has not been loaded yet.
+        return (
+          s.status === "loading" || s.status === "error" || s.tools.length > 0
+        );
+      });
   }, [servers, q]);
 
   useEffect(() => {

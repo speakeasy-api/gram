@@ -27,6 +27,17 @@ import (
 // against) still republishes unconditionally.
 const pluginPublishForceSignal = "force"
 
+// pluginPublishSyncSignal is the signal payload that makes a pending run a
+// manual sync, which also publishes the pending changes of plugins whose auto
+// sync is off. It holds for that run only: once the run succeeds, a follow-up
+// run started by later signals is automatic again, so changes made to such a
+// plugin after the sync was asked for keep waiting.
+const pluginPublishSyncSignal = "sync"
+
+// pluginPublishEnqueueSignal is the signal payload of an ordinary change
+// trigger. It leaves a pending run's parameters as they are.
+const pluginPublishEnqueueSignal = "enqueue"
+
 // pluginPublishEnqueueTimeout bounds the signal-with-start RPC. Enqueuing runs
 // inline on a request that has already committed, so it must fail fast rather
 // than hold the response open through a Temporal outage.
@@ -46,6 +57,10 @@ type PluginPublishParams struct {
 	// only worth doing if the generated output actually moved); a project's
 	// first publish clears it.
 	SkipIfUnchanged bool
+	// IncludePausedPlugins makes the run a manual sync, which also publishes
+	// the pending changes of plugins whose auto sync is off. It applies to one
+	// successful run only.
+	IncludePausedPlugins bool
 }
 
 func pluginPublishWorkflowID(params PluginPublishParams) string {
@@ -74,16 +89,11 @@ func ExecutePluginPublishWorkflowDebounced(ctx context.Context, temporalEnv *ten
 
 	id := pluginPublishWorkflowID(params)
 
-	message := "enqueue"
-	if !params.SkipIfUnchanged {
-		message = pluginPublishForceSignal
-	}
-
 	run, err := temporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
 		id,
 		pluginPublishDebounceSignal(params),
-		message,
+		pluginPublishSignalMessage(params),
 		client.StartWorkflowOptions{
 			ID:                       id,
 			TaskQueue:                string(temporalEnv.Queue()),
@@ -108,6 +118,20 @@ func ExecutePluginPublishWorkflowDebounced(ctx context.Context, temporalEnv *ten
 	return run, nil
 }
 
+// pluginPublishSignalMessage is the signal payload that carries params into a
+// run already pending. A manual sync is fingerprint-gated, so it never needs
+// the force signal as well.
+func pluginPublishSignalMessage(params PluginPublishParams) string {
+	switch {
+	case params.IncludePausedPlugins:
+		return pluginPublishSyncSignal
+	case !params.SkipIfUnchanged:
+		return pluginPublishForceSignal
+	default:
+		return pluginPublishEnqueueSignal
+	}
+}
+
 // PluginPublishWorkflowDebounced is the registered workflow. Signals that
 // arrive while a publish is in flight (another change landing mid-publish)
 // coalesce into exactly one follow-up run rather than being dropped, so the
@@ -121,9 +145,18 @@ func PluginPublishWorkflowDebounced(ctx workflow.Context, params PluginPublishPa
 		func(params PluginPublishParams, message string) PluginPublishParams {
 			// A forced trigger folded into a pending run wins: skipping it would
 			// strand the publish that needed to happen regardless of fingerprint.
-			if message == pluginPublishForceSignal {
+			// A manual sync folded in wins the same way, or the pending changes
+			// it asked to publish would keep waiting.
+			switch message {
+			case pluginPublishForceSignal:
 				params.SkipIfUnchanged = false
+			case pluginPublishSyncSignal:
+				params.IncludePausedPlugins = true
 			}
+			return params
+		},
+		func(params PluginPublishParams) PluginPublishParams {
+			params.IncludePausedPlugins = false
 			return params
 		},
 	)(ctx, params)
@@ -145,10 +178,11 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 	var a *Activities
 	var result plugins.PublishProjectResult
 	if err := workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
-		ProjectID:       params.ProjectID,
-		CreatedByUserID: params.CreatedByUserID,
-		CommitMessage:   params.CommitMessage,
-		SkipIfUnchanged: params.SkipIfUnchanged,
+		ProjectID:            params.ProjectID,
+		CreatedByUserID:      params.CreatedByUserID,
+		CommitMessage:        params.CommitMessage,
+		SkipIfUnchanged:      params.SkipIfUnchanged,
+		IncludePausedPlugins: params.IncludePausedPlugins,
 	}).Get(ctx, &result); err != nil {
 		var appErr *temporal.ApplicationError
 		if errors.As(err, &appErr) && appErr.Type() == activities.ErrTypePluginActorNotMember {
@@ -162,15 +196,16 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 	return &result, nil
 }
 
-// TemporalPluginPublisher implements plugins.PluginPublishSignaler (and the
-// identical skills.PluginPublishSignaler — skills cannot import plugins) by
-// signal-with-starting the debounced per-project publish workflow.
+// TemporalPluginPublisher implements plugins.PluginSyncSignaler (and
+// skills.PluginPublishSignaler, identical to plugins.PluginPublishSignaler —
+// skills cannot import plugins) by signal-with-starting the debounced
+// per-project publish workflow.
 type TemporalPluginPublisher struct {
 	TemporalEnv *tenv.Environment
 }
 
 var (
-	_ plugins.PluginPublishSignaler      = (*TemporalPluginPublisher)(nil)
+	_ plugins.PluginSyncSignaler         = (*TemporalPluginPublisher)(nil)
 	_ domainskills.PluginPublishSignaler = (*TemporalPluginPublisher)(nil)
 )
 
@@ -178,11 +213,22 @@ var (
 // changed plugin state, so the publish is worth attempting, but it does no
 // GitHub work if the generated output turns out to be unchanged.
 func (p *TemporalPluginPublisher) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	return p.signal(ctx, projectID, createdByUserID, false)
+}
+
+// SignalPluginSync enqueues the same fingerprint-gated republish as a manual
+// sync.
+func (p *TemporalPluginPublisher) SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	return p.signal(ctx, projectID, createdByUserID, true)
+}
+
+func (p *TemporalPluginPublisher) signal(ctx context.Context, projectID uuid.UUID, createdByUserID string, includePausedPlugins bool) error {
 	if _, err := ExecutePluginPublishWorkflowDebounced(ctx, p.TemporalEnv, PluginPublishParams{
-		ProjectID:       projectID,
-		CreatedByUserID: createdByUserID,
-		CommitMessage:   "Update plugin packages",
-		SkipIfUnchanged: true,
+		ProjectID:            projectID,
+		CreatedByUserID:      createdByUserID,
+		CommitMessage:        "Update plugin packages",
+		SkipIfUnchanged:      true,
+		IncludePausedPlugins: includePausedPlugins,
 	}); err != nil {
 		return fmt.Errorf("signal plugin publish: %w", err)
 	}
@@ -210,10 +256,11 @@ func TriggerPluginPublish(ctx context.Context, temporalEnv *tenv.Environment, lo
 
 	// The request returning shouldn't drop the enqueue.
 	if _, err := ExecutePluginPublishWorkflowDebounced(context.WithoutCancel(ctx), temporalEnv, PluginPublishParams{
-		ProjectID:       projectID,
-		CreatedByUserID: createdByUserID,
-		CommitMessage:   commitMessage,
-		SkipIfUnchanged: !force,
+		ProjectID:            projectID,
+		CreatedByUserID:      createdByUserID,
+		CommitMessage:        commitMessage,
+		SkipIfUnchanged:      !force,
+		IncludePausedPlugins: false,
 	}); err != nil {
 		logger.WarnContext(ctx, "failed to enqueue plugin publish",
 			attr.SlogProjectID(projectID.String()), attr.SlogError(err))

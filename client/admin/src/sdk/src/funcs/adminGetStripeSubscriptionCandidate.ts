@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * getStripeSubscriptionCandidate admin
  *
  * @remarks
- * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+ * Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.
  */
 export function adminGetStripeSubscriptionCandidate(
   client: GramCore,

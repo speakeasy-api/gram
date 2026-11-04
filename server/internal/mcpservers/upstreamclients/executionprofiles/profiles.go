@@ -9,10 +9,10 @@
 // server's configuration, and kept: a later version carries every earlier
 // choice and only adds choices for servers that had none. A server whose
 // configuration offers exactly one client the context can use gets it; a
-// server with no auth client that an administrator decided needs no upstream
-// authentication gets an explicit no-auth choice; anything else, including a
-// server whose need is still undecided, is left without a choice, reported as
-// a gap, and never guessed. A turn with no user (userless) never chooses a
+// server offering no enabled auth client needs no upstream authentication and
+// gets an explicit no-auth choice; anything else, including a server with
+// upstream credentials no auth client records yet, is left without a choice,
+// reported as a gap, and never guessed. A turn with no user (userless) never chooses a
 // personal remote_session client or EMA, which act as a user.
 //
 // A version's choices are upstream_client_selections rows whose credential is
@@ -55,6 +55,9 @@ const (
 
 	// SourceBackfill is a version decided by the offline backfill.
 	SourceBackfill = "backfill"
+
+	// SourceAdmin is a version an administrator changed a choice in.
+	SourceAdmin = "admin"
 )
 
 // Auth client types a decision distinguishes.
@@ -82,14 +85,9 @@ const (
 	// auth client carries.
 	GapNoClient GapReason = "no_client"
 
-	// GapSetupIncomplete is a server that needs upstream authentication and
-	// offers no auth client.
+	// GapSetupIncomplete is a server with upstream credentials no auth client
+	// records yet.
 	GapSetupIncomplete GapReason = "setup_incomplete"
-
-	// GapUpstreamAuthUndecided is a server that offers no auth client and
-	// whose need for upstream authentication an administrator has not
-	// decided.
-	GapUpstreamAuthUndecided GapReason = "upstream_auth_undecided"
 )
 
 // Gap is one server a profile has no choice for.
@@ -117,6 +115,15 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 	choose := func(id uuid.UUID) (decision, *Gap) {
 		return decision{serverID: row.McpServerID, authClientID: id}, nil
 	}
+	// A server offering no enabled auth client needs no upstream sign-in and
+	// takes no credential, matching the choices an administrator may record
+	// for it, unless it has upstream credentials no auth client records yet.
+	if len(row.AuthClientIds) == 0 {
+		if row.UpstreamAuthPending {
+			return gap(GapSetupIncomplete)
+		}
+		return choose(uuid.Nil)
+	}
 	switch len(row.RegistrationIds) {
 	case 0:
 		headers, oauth := []uuid.UUID{}, false
@@ -128,18 +135,10 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 				oauth = true
 			}
 		}
-		switch {
-		case oauth || len(headers) > 1:
+		if oauth || len(headers) > 1 {
 			return gap(GapSelectionRequired)
-		case len(headers) == 1:
-			return choose(headers[0])
-		case !row.RequiresUpstreamAuth.Valid:
-			return gap(GapUpstreamAuthUndecided)
-		case row.RequiresUpstreamAuth.Bool:
-			return gap(GapSetupIncomplete)
-		default:
-			return choose(uuid.Nil)
 		}
+		return choose(headers[0])
 	case 1:
 		registration := row.RegistrationIds[0]
 		candidates, personal := []uuid.UUID{}, false
@@ -342,6 +341,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 			ToVersionID:    versionID,
 			FromVersionID:  profile.VersionID,
 			OrganizationID: target.OrganizationID,
+			ProjectID:      target.ProjectID,
 		}); err != nil {
 			return zero, fmt.Errorf("copy execution profile choices: %w", err)
 		}

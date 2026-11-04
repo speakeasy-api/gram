@@ -21,6 +21,7 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -50,7 +51,7 @@ func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.Tran
 
 // externalMCPConfig contains configuration for setting up external MCP in tests
 type externalMCPConfig struct {
-	toolset      toolsets_repo.Toolset
+	toolset      hostedToolset
 	deploymentID uuid.UUID
 	attachmentID uuid.UUID
 	toolDefID    uuid.UUID
@@ -120,30 +121,19 @@ func setupToolsetWithExternalMCP(
 
 	// Create toolset with MCP enabled
 	mcpSlug := "external-mcp-" + slug
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         orgID,
 		ProjectID:              projectID,
 		Name:                   "External MCP Test Toolset",
 		Slug:                   slug,
 		Description:            conv.ToPGText("Toolset for testing external MCP proxy"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, mcpSlug, "private", noIssuer())
 
 	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      projectID,

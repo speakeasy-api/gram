@@ -8,10 +8,14 @@ import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetMyConnections } from "../funcs/agentGetMyConnections.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
+import { agentHideMcpServer } from "../funcs/agentHideMcpServer.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
+import { agentReportCrash } from "../funcs/agentReportCrash.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
+import { agentReportState } from "../funcs/agentReportState.js";
+import { agentUnhideMcpServer } from "../funcs/agentUnhideMcpServer.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -24,6 +28,8 @@ import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
+import { ReportCrashResult } from "../models/components/reportcrashresult.js";
+import { ReportStateResult } from "../models/components/reportstateresult.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
@@ -49,6 +55,10 @@ import {
   GetDeviceAgentConfigurationSecurity,
 } from "../models/operations/getdeviceagentconfiguration.js";
 import {
+  HideAgentMcpServerRequest,
+  HideAgentMcpServerSecurity,
+} from "../models/operations/hideagentmcpserver.js";
+import {
   ListAiScanTargetsRequest,
   ListAiScanTargetsSecurity,
 } from "../models/operations/listaiscantargets.js";
@@ -61,9 +71,21 @@ import {
   ReportAgentAIScanSecurity,
 } from "../models/operations/reportagentaiscan.js";
 import {
+  ReportAgentCrashRequest,
+  ReportAgentCrashSecurity,
+} from "../models/operations/reportagentcrash.js";
+import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
 } from "../models/operations/reportagentsessionmoved.js";
+import {
+  ReportAgentStateRequest,
+  ReportAgentStateSecurity,
+} from "../models/operations/reportagentstate.js";
+import {
+  UnhideAgentMcpServerRequest,
+  UnhideAgentMcpServerSecurity,
+} from "../models/operations/unhideagentmcpserver.js";
 import {
   UpdateDeviceAgentConfigurationRequest,
   UpdateDeviceAgentConfigurationSecurity,
@@ -190,6 +212,25 @@ export class Agent extends ClientSDK {
   }
 
   /**
+   * hideMcpServer agent
+   *
+   * @remarks
+   * Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.
+   */
+  async hideMcpServer(
+    request: HideAgentMcpServerRequest,
+    security?: HideAgentMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentHideMcpServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listAiScanTargets agent
    *
    * @remarks
@@ -247,6 +288,25 @@ export class Agent extends ClientSDK {
   }
 
   /**
+   * reportCrash agent
+   *
+   * @remarks
+   * Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.
+   */
+  async reportCrash(
+    request: ReportAgentCrashRequest,
+    security?: ReportAgentCrashSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ReportCrashResult> {
+    return unwrapAsync(agentReportCrash(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * reportSessionMoved agent
    *
    * @remarks
@@ -258,6 +318,44 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(agentReportSessionMoved(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportState agent
+   *
+   * @remarks
+   * Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.
+   */
+  async reportState(
+    request: ReportAgentStateRequest,
+    security?: ReportAgentStateSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ReportStateResult> {
+    return unwrapAsync(agentReportState(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unhideMcpServer agent
+   *
+   * @remarks
+   * Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.
+   */
+  async unhideMcpServer(
+    request: UnhideAgentMcpServerRequest,
+    security?: UnhideAgentMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentUnhideMcpServer(
       this,
       request,
       security,

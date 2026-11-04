@@ -16,14 +16,12 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
-// The enabled-server count reads hosted servers from their canonical wrapper but
-// must keep counting exactly the toolsets the toolset flag counted before.
-func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
+// The enabled-server count reads hosted servers from their canonical wrapper only.
+func TestEnabledServerCountCountsCanonicalWrappers(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -33,28 +31,30 @@ func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
 	orgID := createCountOrg(t, db)
 	project := createCountProject(t, db, orgID)
 
-	// Counted: wrapped private, wrapped public, unwrapped legacy, wrapper deleted.
-	private := createCountToolset(t, db, orgID, project.ID, "wrapped-private", true, false)
+	// Counted: wrapped private, wrapped public.
+	private := createCountToolset(t, db, orgID, project.ID, "wrapped-private")
 	createWrapper(t, db, project.ID, private.ID, private.ID, visibility.Private)
-	public := createCountToolset(t, db, orgID, project.ID, "wrapped-public", true, true)
+	public := createCountToolset(t, db, orgID, project.ID, "wrapped-public")
 	createWrapper(t, db, project.ID, public.ID, public.ID, visibility.Public)
-	createCountToolset(t, db, orgID, project.ID, "legacy", true, false)
-	unwrapped := createCountToolset(t, db, orgID, project.ID, "wrapper-deleted", true, false)
+
+	// Not counted: a toolset without a wrapper, one whose wrapper was deleted, a fresh-id member wrapper,
+	// a disabled server, deleted toolsets, a remote server.
+	createCountToolset(t, db, orgID, project.ID, "legacy")
+	unwrapped := createCountToolset(t, db, orgID, project.ID, "wrapper-deleted")
 	createWrapper(t, db, project.ID, unwrapped.ID, unwrapped.ID, visibility.Private)
 	_, err = mcpserversrepo.New(db).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: unwrapped.ID, ProjectID: project.ID})
 	require.NoError(t, err)
 
-	// Not counted, as before: a fresh-id member wrapper, a disabled server, deleted toolsets, a remote server.
 	createWrapper(t, db, project.ID, uuid.New(), private.ID, visibility.Private)
-	disabled := createCountToolset(t, db, orgID, project.ID, "disabled", false, true)
+	disabled := createCountToolset(t, db, orgID, project.ID, "disabled")
 	createWrapper(t, db, project.ID, disabled.ID, disabled.ID, visibility.Disabled)
-	deleted := createCountToolset(t, db, orgID, project.ID, "deleted", true, false)
+	deleted := createCountToolset(t, db, orgID, project.ID, "deleted")
 	createWrapper(t, db, project.ID, deleted.ID, deleted.ID, visibility.Private)
 	_, err = mcpserversrepo.New(db).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: project.ID})
 	require.NoError(t, err)
 	_, err = toolsetsrepo.New(db).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: deleted.Slug, ProjectID: project.ID})
 	require.NoError(t, err)
-	orphaned := createCountToolset(t, db, orgID, project.ID, "orphaned", true, false)
+	orphaned := createCountToolset(t, db, orgID, project.ID, "orphaned")
 	createWrapper(t, db, project.ID, orphaned.ID, orphaned.ID, visibility.Private)
 	_, err = toolsetsrepo.New(db).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: orphaned.Slug, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -62,23 +62,23 @@ func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
 
 	// A deleted project's live toolsets were counted before and still are.
 	gone := createCountProject(t, db, orgID)
-	inGone := createCountToolset(t, db, orgID, gone.ID, "in-deleted-project", true, false)
+	inGone := createCountToolset(t, db, orgID, gone.ID, "in-deleted-project")
 	createWrapper(t, db, gone.ID, inGone.ID, inGone.ID, visibility.Private)
 	_, err = projectsrepo.New(db).DeleteProject(ctx, gone.ID)
 	require.NoError(t, err)
 
-	const want = 5
+	const want = 3
 	count, err := usagerepo.New(db).GetEnabledServerCount(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, int64(want), count)
 
 	metrics := collectOrgMetrics(t, db, orgID)
 	require.Equal(t, int64(want), metrics.TotalEnabledServers)
-	require.Equal(t, int64(1), metrics.PublicMCPServers, "a disabled wrapper counts by its visibility, not its toolset's frozen flag")
-	require.Equal(t, int64(4), metrics.PrivateMCPServers)
+	require.Equal(t, int64(1), metrics.PublicMCPServers, "a disabled wrapper counts by its visibility")
+	require.Equal(t, int64(2), metrics.PrivateMCPServers)
 }
 
-// A wrapped toolset counts by its wrapper's visibility, not its own flag, in both directions.
+// A wrapped toolset counts by its wrapper's visibility.
 func TestEnabledServerCountReadsWrapperVisibility(t *testing.T) {
 	t.Parallel()
 
@@ -87,20 +87,19 @@ func TestEnabledServerCountReadsWrapperVisibility(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		flag      bool
 		vis       string
 		otherProj bool
 		wantCount int64
 	}{
-		{name: "flag-enabled-wrapper-disabled", flag: true, vis: visibility.Disabled, otherProj: false, wantCount: 0},
-		{name: "flag-disabled-wrapper-private", flag: false, vis: visibility.Private, otherProj: false, wantCount: 1},
+		{name: "wrapper-disabled", vis: visibility.Disabled, otherProj: false, wantCount: 0},
+		{name: "wrapper-private", vis: visibility.Private, otherProj: false, wantCount: 1},
 		// A canonical-id wrapper in another project is not this toolset's wrapper.
-		{name: "wrapper-in-other-project", flag: false, vis: visibility.Private, otherProj: true, wantCount: 0},
+		{name: "wrapper-in-other-project", vis: visibility.Private, otherProj: true, wantCount: 0},
 	}
 	for _, tc := range cases {
 		orgID := createCountOrg(t, db)
 		project := createCountProject(t, db, orgID)
-		toolset := createCountToolset(t, db, orgID, project.ID, tc.name, tc.flag, false)
+		toolset := createCountToolset(t, db, orgID, project.ID, tc.name)
 		wrapperProject := project.ID
 		if tc.otherProj {
 			wrapperProject = createCountProject(t, db, orgID).ID
@@ -115,7 +114,7 @@ func TestEnabledServerCountReadsWrapperVisibility(t *testing.T) {
 	}
 }
 
-// A toolset whose id a non-canonical server kept after leaving it serves nothing, so its stale flags count as neither public nor private.
+// Neither a toolset whose id a non-canonical server kept after leaving it nor one without a wrapper counts.
 func TestPlatformUsageMetricsSkipsKeptToolsetIDs(t *testing.T) {
 	t.Parallel()
 
@@ -124,8 +123,8 @@ func TestPlatformUsageMetricsSkipsKeptToolsetIDs(t *testing.T) {
 
 	orgID := createCountOrg(t, db)
 	project := createCountProject(t, db, orgID)
-	public := createCountToolset(t, db, orgID, project.ID, "kept-public", false, true)
-	private := createCountToolset(t, db, orgID, project.ID, "kept-private", false, false)
+	public := createCountToolset(t, db, orgID, project.ID, "kept-public")
+	private := createCountToolset(t, db, orgID, project.ID, "kept-private")
 	for _, toolset := range []toolsetsrepo.Toolset{public, private} {
 		remote, err := remotemcprepo.New(db).CreateServer(t.Context(), remotemcprepo.CreateServerParams{
 			ID: uuid.New(), ProjectID: project.ID, Name: pgtype.Text{}, Slug: pgtype.Text{},
@@ -140,10 +139,12 @@ func TestPlatformUsageMetricsSkipsKeptToolsetIDs(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	createCountToolset(t, db, orgID, project.ID, "legacy-public", true, true)
+	createCountToolset(t, db, orgID, project.ID, "legacy-public")
+	hosted := createCountToolset(t, db, orgID, project.ID, "hosted-public")
+	createWrapper(t, db, project.ID, hosted.ID, hosted.ID, visibility.Public)
 
 	metrics := collectOrgMetrics(t, db, orgID)
-	require.Equal(t, int64(1), metrics.PublicMCPServers, "only the unwrapped legacy toolset counts")
+	require.Equal(t, int64(1), metrics.PublicMCPServers, "only the canonical wrapper counts")
 	require.Equal(t, int64(0), metrics.PrivateMCPServers)
 }
 
@@ -182,17 +183,14 @@ func createCountProject(t *testing.T, db *pgxpool.Pool, orgID string) projectsre
 	return project
 }
 
-func createCountToolset(t *testing.T, db *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string, enabled, public bool) toolsetsrepo.Toolset {
+func createCountToolset(t *testing.T, db *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string) toolsetsrepo.Toolset {
 	t.Helper()
 
-	q := toolsetsrepo.New(db)
-	mcpSlug := pgtype.Text{String: slug + "-" + uuid.NewString()[:8], Valid: true}
-	toolset, err := q.CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
+	toolset, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug,
-		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: mcpSlug, McpEnabled: enabled,
+		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(db).SetToolsetMCPPublicByID(t.Context(), testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: public, ID: toolset.ID, ProjectID: projectID}))
 	return toolset
 }
 

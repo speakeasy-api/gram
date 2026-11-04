@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
@@ -223,7 +224,10 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}()
 	// Persist an outcome even if the requesting connection has gone away. If this
 	// process dies before commit, the durable claim becomes indeterminate on read.
-	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	// Do not expire a confirmed provider result while waiting for ordinary
+	// database writers. The provider POST is not replayable; completion must
+	// wait for the ordered locks rather than discard returned credentials.
+	saveCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
 	tx, err := conn.Begin(saveCtx)
 	if err != nil {
@@ -234,6 +238,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		defer cleanupCancel()
 		_ = tx.Rollback(cleanupCtx)
 	}()
+	if err := authclientbackfill.LockEMAPreparationScope(saveCtx, tx, claim.OrganizationID, claim.ProjectID, claim.RemoteSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock identity chaining completion sources")
+	}
 	q := repo.New(tx)
 	// Lock the project before parents, including wholly inherited configurations.
 	if _, err = q.LockEMAProject(saveCtx, repo.LockEMAProjectParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID}); err != nil {
@@ -327,6 +334,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}
 	if err := s.auditIdentityChainingTransition(saveCtx, tx, before, b, client); err != nil {
 		return nil, err
+	}
+	if err := authclientbackfill.SyncEMARegistrations(saveCtx, tx, b.OrganizationID, []uuid.UUID{claim.RemoteSessionClientID.UUID, b.RemoteSessionClientID.UUID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize identity chaining auth client")
 	}
 	if err = tx.Commit(saveCtx); err != nil {
 		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err

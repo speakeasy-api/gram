@@ -136,7 +136,7 @@ type SelectionGap struct {
 func (r *Report) selectionClass(class CredentialClass) *SelectionCounts {
 	counts, ok := r.Selections[class]
 	if !ok {
-		counts = &SelectionCounts{Selections: 0, Outcomes: map[SelectionOutcome]int{}, Written: 0}
+		counts = &SelectionCounts{Selections: 0, Outcomes: make(map[SelectionOutcome]int), Written: 0}
 		r.Selections[class] = counts
 	}
 	return counts
