@@ -187,6 +187,32 @@ type Service interface {
 	// a resource is distributed through, not who may use it, so it does not widen
 	// this list.
 	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
+	// Give one principal (a member, role, agent, or everyone) a scope on a
+	// resource or activity boundary until a deadline, without changing role
+	// assignments. Once the deadline passes the grant stops authorizing new
+	// requests, with no role change or sign-out. Fails with a conflict when the
+	// principal already holds the same grant permanently, or temporarily (renew
+	// that one instead). An expired grant for the same boundary is restarted.
+	// Requires org:admin. An administrator may give themselves temporary access;
+	// the audit event records that it was self-granted. Session only: the grant is
+	// attributed to the person who gave it.
+	CreateTemporaryGrant(context.Context, *CreateTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// List the temporary grants given to one principal, with their boundary,
+	// deadline and remaining time, soonest deadline first. Organization
+	// administrators may list any principal's grants; anyone else may list only
+	// grants given to themselves (their own user:<id>). Each active grant says
+	// which other grants would still give the principal the same access once it
+	// ends. Revoked grants are removed and appear only in the audit log.
+	ListTemporaryGrants(context.Context, *ListTemporaryGrantsPayload) (res *ListTemporaryGrantsResult, err error)
+	// Move an active temporary grant's deadline, earlier or later. The boundary
+	// cannot change: to widen access, give a new grant. An expired grant cannot be
+	// renewed; give it again instead. Requires org:admin.
+	RenewTemporaryGrant(context.Context, *RenewTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// End an active temporary grant before its deadline. Only this grant ends: a
+	// permanent grant is never removed this way, and the principal's roles and
+	// other grants giving the same access are left alone. Requires org:admin,
+	// except that a member may end a grant given directly to themselves.
+	RevokeTemporaryGrant(context.Context, *RevokeTemporaryGrantPayload) (res *TemporaryGrant, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -209,7 +235,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [41]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [45]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -538,6 +564,28 @@ type CreateRolePayload struct {
 	// Optional agent IDs to assign to this role on creation. Scopes an agent
 	// cannot hold at runtime are simply not granted to it.
 	AgentIds []string
+}
+
+// CreateTemporaryGrantPayload is the payload type of the access service
+// createTemporaryGrant method.
+type CreateTemporaryGrantPayload struct {
+	SessionToken *string
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn string
+	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
+	// to read, use or manage resources can be given temporarily; org:admin,
+	// blocklist, auth client, risk policy and machine scopes cannot.
+	Scope string
+	// The resource or activity boundary. Omit to cover every resource of the
+	// scope's kind.
+	Selector *Selector
+	// When the grant stops authorizing new requests. At least five minutes and at
+	// most 24 hours from now.
+	ExpiresAt string
+	// Why the access is needed, recorded in the audit log.
+	Reason *string
 }
 
 // DeleteDirectoryRoleMappingPayload is the payload type of the access service
@@ -1190,6 +1238,25 @@ type ListShadowMCPInventoryUsersResult struct {
 	NextCursor *string
 }
 
+// ListTemporaryGrantsPayload is the payload type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsPayload struct {
+	// The principal whose grants to list, e.g. user:<id>, role:organization:<id>
+	// or agent:<id>. Members who are not organization administrators may only pass
+	// their own user URN.
+	PrincipalUrn string
+	// Include grants whose deadline has passed.
+	IncludeExpired bool
+	SessionToken   *string
+}
+
+// ListTemporaryGrantsResult is the result type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsResult struct {
+	// Temporary grants, soonest deadline first. At most 500 are returned.
+	Grants []*TemporaryGrant
+}
+
 // ListUserGrantsResult is the result type of the access service listGrants
 // method.
 type ListUserGrantsResult struct {
@@ -1202,6 +1269,16 @@ type ListUserGrantsResult struct {
 type PreviewDirectoryRoleSetupPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// RenewTemporaryGrantPayload is the payload type of the access service
+// renewTemporaryGrant method.
+type RenewTemporaryGrantPayload struct {
+	SessionToken *string
+	// The temporary grant to renew.
+	ID string
+	// The new deadline. At least five minutes and at most 24 hours from now.
+	ExpiresAt string
 }
 
 // RequestAccessPayload is the payload type of the access service requestAccess
@@ -1351,6 +1428,14 @@ type ResourceAudienceRolePlugin struct {
 	Name string
 	// Plugin slug.
 	Slug string
+}
+
+// RevokeTemporaryGrantPayload is the payload type of the access service
+// revokeTemporaryGrant method.
+type RevokeTemporaryGrantPayload struct {
+	// The temporary grant to end.
+	ID           string
+	SessionToken *string
 }
 
 // Role is the result type of the access service getRole method.
@@ -1703,6 +1788,36 @@ type SyncDirectoryGroupsPayload struct {
 type SyncDirectoryGroupsResult struct {
 	// Number of groups WorkOS returned across the organization's directories.
 	GroupCount int
+}
+
+// TemporaryGrant is the result type of the access service createTemporaryGrant
+// method.
+type TemporaryGrant struct {
+	// Temporary grant ID.
+	ID string
+	// Canonical principal URN holding the access.
+	PrincipalUrn string
+	// The scope given.
+	Scope string
+	// The resource or activity boundary.
+	Selector *Selector
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string
+	UpdatedAt string
 }
 
 // UpdateDirectoryReviewSettingsPayload is the payload type of the access
