@@ -50136,6 +50136,7 @@ paths:
             description: Target platform.
             enum:
               - claude
+              - claude-cowork
               - cursor
               - codex
               - opencode

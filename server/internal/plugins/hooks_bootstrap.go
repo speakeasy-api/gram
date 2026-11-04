@@ -56,9 +56,9 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		// tolerance flows to the binary at run time via ingest effects
 		// (hooks_fail_open), not through baked configuration.
 		Nonblocking: false,
-		// Transcript-only mode belongs to the Claude Cowork distribution alone;
-		// omitempty keeps the field out of every package rendered here.
-		TranscriptOnly: false,
+		// Set only for the Claude Cowork package; omitempty keeps every other
+		// package's speakeasy.json unchanged.
+		TranscriptOnly: cfg.TranscriptOnly,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal speakeasy.json: %w", err)

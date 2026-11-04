@@ -24756,7 +24756,7 @@ func pluginsDownloadObservabilityPluginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-observability-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-observability-plugin --platform \"claude-cowork\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDownloadCodexInstallScriptUsage() {

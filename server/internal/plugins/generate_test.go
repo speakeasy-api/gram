@@ -2282,7 +2282,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"} {
+	for _, platform := range []string{"claude", "claude-cowork", "cursor", "codex", "opencode", "copilot", "openclaw"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -4546,4 +4546,41 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
+}
+
+// The Claude Cowork package registers Stop alone and bakes transcript_only, so
+// the hooks binary ships transcripts and relays no other event. The standard
+// Claude package must stay free of the flag.
+func TestGenerateClaudeCoworkObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "default",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude-cowork")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{".claude-plugin/plugin.json", "hooks/hooks.json", "hooks/bootstrap.sh", "speakeasy.json"}, slices.Collect(maps.Keys(files)))
+
+	var meta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/plugin.json"], &meta))
+	require.Equal(t, ClaudeObservabilitySlug(cfg)+"-cowork", meta.Name)
+
+	var hooks claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files["hooks/hooks.json"], &hooks))
+	require.Equal(t, []string{"Stop"}, slices.Collect(maps.Keys(hooks.Hooks)))
+	stop := hooks.Hooks["Stop"][0].Hooks[0]
+	require.NotNil(t, stop.Async)
+	require.False(t, *stop.Async, "Cowork skips async Stop hooks")
+	require.Contains(t, stop.Command, "speakeasy.json")
+
+	var fc relay.FileConfig
+	require.NoError(t, json.Unmarshal(files["speakeasy.json"], &fc))
+	require.True(t, fc.TranscriptOnly)
+	require.Equal(t, "gram_local_secret_xyz", fc.HooksAPIKey)
+
+	standard, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+	require.NotContains(t, string(standard["speakeasy.json"]), "transcript_only")
 }

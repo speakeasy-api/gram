@@ -151,6 +151,7 @@ func openClawPlugin(p Params) ([]byte, error) {
 		HooksKeyIsAgent: true,
 		HooksOrgName:    "",
 		InstallFailOpen: p.InstallFailOpen,
+		TranscriptOnly:  false,
 	}, "openclaw")
 	if err != nil {
 		return nil, fmt.Errorf("render openclaw observability plugin: %w", err)

@@ -68,7 +68,9 @@ type Config struct {
 	// mode: it ships the session transcript on every Stop hook to the
 	// dedicated transcript endpoint and relays no other event. Policy is not
 	// enforced in this mode; it exists for observability where Claude runs
-	// plugin hooks only inside the Cowork VM.
+	// plugin hooks only inside the Cowork VM. It is read from speakeasy.json
+	// alone, never the environment: anyone who can set an environment variable
+	// on an ordinary install could otherwise switch policy enforcement off.
 	TranscriptOnly bool
 	// ConfigError records a failure to read an explicitly referenced
 	// speakeasy.json. The deployment identity is unknown, so events must not
@@ -209,9 +211,6 @@ func LoadConfig(defaults Config) Config {
 	}
 	if v := Env("HOOKS_BROWSER_LOGIN"); v != "" {
 		cfg.BrowserLogin = v == "1" || strings.EqualFold(v, "true")
-	}
-	if v := Env("HOOKS_TRANSCRIPT_ONLY"); v != "" {
-		cfg.TranscriptOnly = v == "1" || strings.EqualFold(v, "true")
 	}
 	if Env("HOOKS_NONBLOCKING") != "" || Env("HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true

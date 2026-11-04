@@ -79,6 +79,7 @@ func runInstall(args []string) int {
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
 	binary := fs.String("binary", "", "path to the speakeasy-hooks binary (defaults to this executable)")
+	transcriptOnly := fs.Bool("transcript-only", false, "ship the session transcript on Stop and relay nothing else (the Claude Cowork mode)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -95,14 +96,15 @@ func runInstall(args []string) int {
 		}
 	}
 	if err := relay.WritePlugin(context.Background(), *provider, *dir, relay.PluginConfig{
-		ServerURL:    *serverURL,
-		SiteURL:      *siteURL,
-		ProjectSlug:  *project,
-		OrgID:        *org,
-		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
-		BrowserLogin: *browserLogin,
-		BinaryPath:   binaryPath,
-		AgentKey:     false, // the environment's org key is shared, never an agent's
+		ServerURL:      *serverURL,
+		SiteURL:        *siteURL,
+		ProjectSlug:    *project,
+		OrgID:          *org,
+		HooksAPIKey:    relay.Env("HOOKS_ORG_KEY"),
+		BrowserLogin:   *browserLogin,
+		BinaryPath:     binaryPath,
+		AgentKey:       false, // the environment's org key is shared, never an agent's
+		TranscriptOnly: *transcriptOnly,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
 		return 1

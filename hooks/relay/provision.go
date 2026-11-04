@@ -32,6 +32,9 @@ type PluginConfig struct {
 	// AgentKey marks HooksAPIKey as an agent identity's own key, so it
 	// outranks a cached personal sign-in (see Config.AgentKey).
 	AgentKey bool
+	// TranscriptOnly bakes transcript_only into speakeasy.json, so the binary
+	// ships the session transcript on Stop and relays nothing else.
+	TranscriptOnly bool
 }
 
 const pluginName = "speakeasy-observability"
@@ -213,14 +216,15 @@ func alignPublishedHookEvents(provider agenthooks.Provider, dir string) error {
 // default, so binary and config can skew in either direction.
 func writeConfigFile(dir string, cfg PluginConfig) error {
 	return writeJSON(filepath.Join(dir, configFileName), FileConfig{
-		ServerURL:    cfg.ServerURL,
-		SiteURL:      cfg.SiteURL,
-		Project:      cfg.ProjectSlug,
-		Org:          cfg.OrgID,
-		HooksAPIKey:  cfg.HooksAPIKey,
-		AgentKey:     cfg.AgentKey,
-		BrowserLogin: cfg.BrowserLogin,
-		Nonblocking:  false,
+		ServerURL:      cfg.ServerURL,
+		SiteURL:        cfg.SiteURL,
+		Project:        cfg.ProjectSlug,
+		Org:            cfg.OrgID,
+		HooksAPIKey:    cfg.HooksAPIKey,
+		AgentKey:       cfg.AgentKey,
+		BrowserLogin:   cfg.BrowserLogin,
+		Nonblocking:    false,
+		TranscriptOnly: cfg.TranscriptOnly,
 	})
 }
 

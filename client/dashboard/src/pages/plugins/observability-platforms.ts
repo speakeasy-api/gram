@@ -5,6 +5,9 @@
  */
 export const OBSERVABILITY_DOWNLOAD_PLATFORMS = [
   { platform: "claude", label: "Claude" },
+  // Uploaded in Claude's admin plugin settings for Cowork: ships each
+  // session's transcript instead of relaying per-event hooks.
+  { platform: "claude-cowork", label: "Claude Cowork" },
   { platform: "cursor", label: "Cursor" },
   { platform: "codex", label: "Codex" },
   { platform: "opencode", label: "OpenCode" },

@@ -538,7 +538,30 @@ func TestSplitInlineFlagsReadsTranscriptOnly(t *testing.T) {
 	require.NotContains(t, string(b), "transcript_only", "the flag is omitted unless set, so other distributions render unchanged")
 }
 
-func TestLoadConfigReadsTranscriptOnlyFromEnv(t *testing.T) {
-	t.Setenv("SPEAKEASY_AI_HOOKS_TRANSCRIPT_ONLY", "true")
-	require.True(t, LoadConfig(Config{}).TranscriptOnly)
+// TestLoadConfigIgnoresTranscriptOnlyEnv: transcript-only mode turns policy
+// enforcement off, so only the packaged speakeasy.json may enable it.
+func TestLoadConfigIgnoresTranscriptOnlyEnv(t *testing.T) {
+	for _, name := range []string{"SPEAKEASY_AI_HOOKS_TRANSCRIPT_ONLY", "GRAM_HOOKS_TRANSCRIPT_ONLY"} {
+		t.Setenv(name, "true")
+	}
+	require.False(t, LoadConfig(Config{}).TranscriptOnly)
+}
+
+// TestWritePluginBakesTranscriptOnly: `speakeasy-hooks install
+// --transcript-only` is how local testing reaches the Cowork mode now that no
+// environment variable can switch it on.
+func TestWritePluginBakesTranscriptOnly(t *testing.T) {
+	t.Parallel()
+	for _, transcriptOnly := range []bool{true, false} {
+		dir := t.TempDir()
+		require.NoError(t, WritePlugin(t.Context(), "claude", dir, PluginConfig{
+			ServerURL:      "https://gram.test",
+			ProjectSlug:    "default",
+			BinaryPath:     "/tmp/speakeasy-hooks",
+			TranscriptOnly: transcriptOnly,
+		}))
+		fc, err := readFileConfig(filepath.Join(dir, configFileName))
+		require.NoError(t, err)
+		require.Equal(t, transcriptOnly, fc.TranscriptOnly)
+	}
 }
