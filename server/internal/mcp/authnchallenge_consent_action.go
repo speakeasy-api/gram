@@ -270,9 +270,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			return cerr
 		}
 		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		// A notice lives on the cards, which saved consent's short page doesn't show.
+		noticeURL := backURL + "&consent=required"
 		switch {
 		case errors.Is(err, errValidationRateLimited):
-			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errRemoteSessionNoUsableCredential):
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
 			return err
