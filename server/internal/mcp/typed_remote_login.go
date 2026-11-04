@@ -25,30 +25,30 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		a.Subject.String() != state.Subject.String() || a.OrganizationID == "" ||
 		a.OrganizationID != state.OrganizationID || a.ProjectID == uuid.Nil || a.ProjectID != state.ProjectID ||
 		a.ServerID == uuid.Nil || a.AuthClientID == uuid.Nil || a.RemoteSessionClientID == uuid.Nil || a.RemoteSessionClientID != state.RemoteSessionClientID {
-		return fmt.Errorf("%w: invalid typed login authorization", errTypedLoginDenied)
+		return fmt.Errorf("%w: invalid typed login authorization", remotesessions.ErrTypedAuthorizationInvalid)
 	}
 	if a.Subject.Kind != urn.SessionSubjectKindUser && a.Subject.Kind != urn.SessionSubjectKindAgent {
-		return fmt.Errorf("%w: typed login requires a represented subject", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login requires a represented subject", remotesessions.ErrTypedAuthorizationInvalid)
 	}
 	enforced, err := s.consentAuthChoicesEnforced(ctx, a.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("load typed authorization mode: %w", err)
 	}
 	if !enforced {
-		return fmt.Errorf("%w: typed login authorization is no longer enforced", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login authorization is no longer enforced", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	if state.McpServerID.Valid && state.McpServerID.UUID != a.ServerID {
-		return fmt.Errorf("%w: typed login server changed", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login server changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: a.ServerID, OrganizationID: a.OrganizationID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: typed login server no longer exists", errTypedLoginDenied)
+			return fmt.Errorf("%w: typed login server no longer exists", remotesessions.ErrTypedAuthorizationChanged)
 		}
 		return fmt.Errorf("load typed login server: %w", err)
 	}
 	if server.ProjectID != a.ProjectID {
-		return fmt.Errorf("%w: typed login project changed", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	// Only fields consumed by subject admission are needed here.
 	//nolint:exhaustruct // Callback subject admission does not resolve an endpoint.
@@ -77,7 +77,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	}
 	if (res.outcome != authClientResolved && res.outcome != authClientLegacy) || res.clientID != a.AuthClientID ||
 		(res.clientType != authClientTypeRemoteSession && res.clientType != authClientTypeEMA) || !res.choice.clientID.Valid || res.choice.clientID.UUID != a.RemoteSessionClientID {
-		return fmt.Errorf("%w: typed login binding is no longer authorized", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login binding is no longer authorized", remotesessions.ErrTypedAuthorizationChanged)
 	}
 	return nil
 }
@@ -116,7 +116,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 			}
 			if a != nil {
 				if selected != nil {
-					return nil, fmt.Errorf("%w: connection must identify one server", errTypedLoginDenied)
+					return nil, fmt.Errorf("%w: connection must identify one server", remotesessions.ErrTypedAuthorizationConfiguration)
 				}
 				selected = a
 			}

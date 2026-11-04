@@ -890,6 +890,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				logger.WarnContext(ctx, "gateway consent capture failed", attr.SlogError(err))
 				approvalError = &consentApprovalError{Message: "Tools could not be captured. This gateway cannot be approved. Try again later.", ActionURL: "", ActionLabel: ""}
 				consentProblem = mcpconnectionattempts.CodeMemberToolsMissing
+				if errors.Is(err, errConsentInventoryUnavailable) {
+					consentProblem = mcpconnectionattempts.CodeInternalError
+				}
 				if denied, ok := errors.AsType[*oops.ShareableError](err); ok && denied.Code == oops.CodeForbidden {
 					consentProblem = mcpconnectionattempts.CodeNoServerAccess
 					approvalError.Message = "You do not have access to this gateway. Request access before approving it."
@@ -1285,7 +1288,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				t.Refuse(ctx, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+				t.Refuse(ctx, remotesessions.ConnectionOutageHappened(err))
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
@@ -1422,6 +1425,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnavailable, err, "capture authorization-code endpoint authority").LogError(ctx, logger)
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return oops.E(oops.CodeBadRequest, err, "private OAuth authority is no longer valid").LogWarn(ctx, logger)
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
@@ -1466,6 +1470,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
 		if errors.Is(err, errConsentNoUsableConnection) {
+			t.Continue()
 			// Keeps the challenge, so the person can connect and approve.
 			logger.InfoContext(ctx, "consent approval refused", attr.SlogError(err))
 			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
@@ -1481,6 +1486,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	if err := s.validateDirectConsentInventory(ctx, endpoint, boundInventory, authClientPicks); err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview before approving.").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnavailable, err, "validate consent inventory credential").LogError(ctx, logger)
@@ -1543,6 +1549,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID != "" {
 		finalEndpoint, ferr := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 		if ferr != nil {
+			if removed, ok := errors.AsType[*oops.ShareableError](ferr); ok && removed.Code == oops.CodeNotFound {
+				t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			} else {
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
@@ -1566,6 +1577,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}); err != nil && !isUniqueViolation(err) {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			if errors.Is(err, pgx.ErrNoRows) {
+				t.Refuse(ctx, mcpconnectionattempts.CodeUnknownClientID)
 				return oops.E(oops.CodeNotFound, err, "oauth client not found").LogWarn(ctx, logger)
 			}
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

@@ -43,6 +43,8 @@ func federatedHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrFederatedConfiguration):
 		return mcpconnectionattempts.CodeConfigurationRequired
+	case errors.Is(err, remotesessions.ErrFederatedSignerUnavailable):
+		return mcpconnectionattempts.CodeInternalError
 	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
 		return mcpconnectionattempts.CodeIDPTransientFailure
 	case errors.Is(err, remotesessions.ErrFederatedSigning):

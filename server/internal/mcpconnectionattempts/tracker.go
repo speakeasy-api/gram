@@ -80,7 +80,7 @@ func (t *Tracker) Refuse(ctx context.Context, code Code, opts ...Option) {
 	if errors.Is(ctx.Err(), context.Canceled) {
 		switch code {
 		case CodeInternalError, CodeProviderUnreachable, CodeProviderUnavailable,
-			CodeIDPUnavailable, CodeIDPTransientFailure, CodeRemoteSessionUnavailable,
+			CodeIDPUnavailable, CodeIDPTransientFailure, CodeRemoteSessionUnavailable, CodeTunnelUnavailable,
 			CodeAIToolCheckUnavailable, CodeCIMDFetchFailed, CodeAssertionCheckUnavailable:
 			t.Continue()
 			return

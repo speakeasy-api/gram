@@ -949,7 +949,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// Recheck before persisting an agent session or issuing its tokens.
 		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
-				t.Refuse(ctx, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+				t.Refuse(ctx, remotesessions.ConnectionOutageHappened(cerr))
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
 			if !errors.Is(cerr, remotesessions.ErrNoValidToken) {

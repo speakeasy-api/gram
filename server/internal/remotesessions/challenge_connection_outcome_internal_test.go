@@ -81,3 +81,19 @@ func TestTypedAuthorizationHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, typedAuthorizationHappened(fmt.Errorf("binding revoked: %w", ErrTypedAuthorizationDenied)))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, typedAuthorizationHappened(errors.New("database unavailable")))
 }
+
+func TestTypedAuthorizationProvenance(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err  error
+		want mcpconnectionattempts.Code
+	}{
+		{ErrTypedAuthorizationDenied, mcpconnectionattempts.CodeNoServerAccess},
+		{ErrTypedAuthorizationChanged, mcpconnectionattempts.CodeConnectionChanged},
+		{ErrTypedAuthorizationInvalid, mcpconnectionattempts.CodeInternalError},
+		{ErrTypedAuthorizationConfiguration, mcpconnectionattempts.CodeConfigurationRequired},
+	} {
+		require.ErrorIs(t, tc.err, ErrTypedAuthorizationDenied)
+		require.Equal(t, tc.want, typedAuthorizationHappened(fmt.Errorf("validator: %w", tc.err)))
+	}
+}

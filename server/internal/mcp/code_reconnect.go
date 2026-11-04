@@ -28,7 +28,7 @@ type CodeReconnectBinding struct {
 	ReviewReady     bool      `json:"review_ready,omitempty"`
 	CatalogComplete bool      `json:"catalog_complete,omitempty"`
 	// CatalogCanceled marks a completed review the person canceled, which changed no tools.
-	CatalogCanceled bool `json:"catalog_canceled,omitempty"`
+	CatalogCanceled bool `json:"catalog_canceled,omitempty" msgpack:",omitempty"`
 }
 
 func (b *CodeReconnectBinding) catalogPending() bool {

@@ -409,8 +409,22 @@ func (m *ChallengeManager) SetTypedAuthorizationValidator(validator TypedAuthori
 // ErrTypedAuthorizationDenied distinguishes a changed binding or permission from an unavailable validator.
 var ErrTypedAuthorizationDenied = errors.New("typed connection is not authorized")
 
+// Preserve the denial contract while distinguishing its recording provenance.
+var (
+	ErrTypedAuthorizationChanged       = fmt.Errorf("%w: connection changed", ErrTypedAuthorizationDenied)
+	ErrTypedAuthorizationInvalid       = fmt.Errorf("%w: invalid stored authorization", ErrTypedAuthorizationDenied)
+	ErrTypedAuthorizationConfiguration = fmt.Errorf("%w: connection setup is ambiguous", ErrTypedAuthorizationDenied)
+)
+
 func typedAuthorizationHappened(err error) mcpconnectionattempts.Code {
-	if errors.Is(err, ErrTypedAuthorizationDenied) {
+	switch {
+	case errors.Is(err, ErrTypedAuthorizationInvalid):
+		return mcpconnectionattempts.CodeInternalError
+	case errors.Is(err, ErrTypedAuthorizationChanged):
+		return mcpconnectionattempts.CodeConnectionChanged
+	case errors.Is(err, ErrTypedAuthorizationConfiguration):
+		return mcpconnectionattempts.CodeConfigurationRequired
+	case errors.Is(err, ErrTypedAuthorizationDenied):
 		return mcpconnectionattempts.CodeNoServerAccess
 	}
 	return mcpconnectionattempts.CodeInternalError

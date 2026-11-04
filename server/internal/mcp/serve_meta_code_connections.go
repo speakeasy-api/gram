@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -123,8 +122,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		member.backend == metaMemberBackendProxied {
 		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
 			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
-			b.service.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeInternalError,
-				gate.fromRequest, mcpconnectionattempts.Member(member.serverID), mcpconnectionattempts.Subject(&gate.authentication.subject), mcpconnectionattempts.Detail("full_reconnect"))
+			// The browser has not started an attempt yet; a fallback is not a failed sign-in.
 			needsConsent = true
 		}
 	}

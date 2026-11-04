@@ -307,6 +307,7 @@ func TestFederatedHappened(t *testing.T) {
 
 	require.Equal(t, mcpconnectionattempts.CodeConfigurationRequired, federatedHappened(remotesessions.ErrFederatedConfiguration))
 	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, federatedHappened(remotesessions.ErrFederatedUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSignerUnavailable)))
 	require.Equal(t, mcpconnectionattempts.CodeSignInProviderError, federatedHappened(remotesessions.ErrFederatedIdentity))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(remotesessions.ErrFederatedSigning))
 }

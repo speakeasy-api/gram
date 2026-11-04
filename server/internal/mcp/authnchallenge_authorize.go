@@ -261,7 +261,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oauthAuthorityError(err).LogError(ctx, logger)
 		}
-		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)

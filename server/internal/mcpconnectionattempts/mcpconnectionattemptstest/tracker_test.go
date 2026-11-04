@@ -254,3 +254,14 @@ func TestTracker_DeadlineWithNoVerdictIsStillVisible(t *testing.T) {
 
 	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
 }
+
+func TestTracker_CanceledTunnelFailureIsSilent(t *testing.T) {
+	t.Parallel()
+	rec := New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepProviderToken)
+	cancel()
+	tracked.Refuse(ctx, mcpconnectionattempts.CodeTunnelUnavailable)
+	tracked.Finish(ctx)
+	rec.RequireNothing()
+}

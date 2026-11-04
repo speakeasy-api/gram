@@ -259,6 +259,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		return nil, err
 	}
 	s.recordListingFailures(ctx, gate, unavailable)
+
 	// Each member a failure left out is recorded as gateway discovery, so the
 	// gateway's diagnostics show what the listing is missing; exclusions such
 	// as visibility, credentials, and consent are not failures. Rows carry the
