@@ -102,18 +102,15 @@ type RiskPolicyResultsCleaner interface {
 }
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	policies         *policycore.Core
-	platformToolsets map[string]platformtools.Toolset
-	exclusions       *exclusioncore.Core
-	auth             *auth.Auth
-	authzClient      *authz.Client
-	// engine answers the enforcement profile and the chat transcript
-	// checks, which have no typed operation in this registry yet.
-	engine                       *authz.Engine
+	tracer                       trace.Tracer
+	logger                       *slog.Logger
+	db                           *pgxpool.Pool
+	repo                         *repo.Queries
+	policies                     *policycore.Core
+	platformToolsets             map[string]platformtools.Toolset
+	exclusions                   *exclusioncore.Core
+	auth                         *auth.Auth
+	authzClient                  *authz.Client
 	signaler                     RiskAnalysisSignaler
 	reconciler                   RiskExclusionReconciler
 	resultsCleaner               RiskPolicyResultsCleaner
@@ -196,7 +193,6 @@ func NewObserver(
 		exclusions:                   exclusioncore.New(db),
 		auth:                         nil,
 		authzClient:                  nil,
-		engine:                       nil,
 		signaler:                     signaler,
 		reconciler:                   nil,
 		resultsCleaner:               nil,
@@ -285,7 +281,6 @@ func NewService(
 		}),
 		auth:                         auth.New(logger, db, sessions, authzEngine),
 		authzClient:                  authorization,
-		engine:                       authzEngine,
 		signaler:                     signaler,
 		reconciler:                   reconciler,
 		resultsCleaner:               resultsCleaner,

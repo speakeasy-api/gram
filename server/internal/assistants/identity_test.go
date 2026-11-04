@@ -34,6 +34,13 @@ func newTestAuthzEngine(t *testing.T, db *pgxpool.Pool) *authz.Engine {
 	return authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 }
 
+// newTestAuthzClient decides every check the same way the engine does and
+// fails the test when the registry evaluator would disagree.
+func newTestAuthzClient(t *testing.T, db *pgxpool.Pool) *authz.Client {
+	t.Helper()
+	return authztest.NewParityClient(t, newTestAuthzEngine(t, db))
+}
+
 // seedIdentityMembers creates the organization members that own dedicated
 // assistant agents. Agent owners must be organization members.
 func seedIdentityMembers(t *testing.T, db *pgxpool.Pool) {

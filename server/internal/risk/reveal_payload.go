@@ -65,7 +65,7 @@ func (s *Service) RevealRiskResultPayload(ctx context.Context, payload *gen.Reve
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result has no revealable MCP payload")
 	}
 
-	if err := s.engine.Require(ctx, authz.ChatReadCheck(uuid.Nil.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Chat(uuid.Nil.String()).Read()); err != nil {
 		return nil, err
 	}
 

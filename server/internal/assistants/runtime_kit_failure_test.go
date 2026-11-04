@@ -25,7 +25,7 @@ func TestKitProductionTurnFailureDoesNotReplaceCanonicalAuthority(t *testing.T) 
 			var stops atomic.Int64
 			logger := testenv.NewLogger(t)
 			backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: failure, stopCalls: &stops}
-			core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", db, nil, nil, nil), mustParseURLForServiceTest(t, "https://api.example"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, db))
+			core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", db, nil, nil, nil), mustParseURLForServiceTest(t, "https://api.example"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzClient(t, db))
 			require.NoError(t, core.installKitRuntime(backend))
 			admitted, err := core.AdmitPendingThreads(t.Context(), assistant)
 			require.NoError(t, err)

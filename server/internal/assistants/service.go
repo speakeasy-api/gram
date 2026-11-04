@@ -451,7 +451,7 @@ type ServiceCore struct {
 	newAssistantRuntimeEligible func(context.Context, pgx.Tx, assistantRecord) (bool, error)
 
 	identities        *assistantidentity.Service
-	authz             *authz.Engine
+	authz             *authz.Client
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
@@ -495,7 +495,7 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 	auditLogger *audit.Logger,
 	identities *assistantidentity.Service,
-	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -511,7 +511,7 @@ func NewServiceCore(
 		newAssistantRuntimeVersion:  0,
 		newAssistantRuntimeEligible: nil,
 		identities:                  identities,
-		authz:                       authzEngine,
+		authz:                       authzClient,
 		logger:                      logger,
 		tracer:                      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                          db,
