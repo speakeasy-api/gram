@@ -15,7 +15,7 @@ packages:
 catalog:
   "@ai-sdk/react": ^4.0.154
   "@cfworker/json-schema": ^4.1.1
-  "@modelcontextprotocol/sdk": ^1.30.0
+  "@modelcontextprotocol/sdk": ^1.32.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.102.8
   "@types/react": ^19.3.0
@@ -25,7 +25,7 @@ catalog:
   ai: ^7.0.150
   "lucide-react": ^1.28.0
   typescript: 7.0.2
-  vite: ^8.3.0
+  vite: ^8.3.5
 
 autoInstallPeers: false
 

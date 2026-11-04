@@ -2817,6 +2817,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.ended IS NOT TRUE
       AND r.state = $3
     )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT $4
@@ -2854,6 +2859,11 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 //     window. Collecting it frees the deprecated backend's resources so the
 //     next admit lands on the target backend. Active/starting/expiring rows
 //     are left to finish, so a live assistant is never disrupted mid-turn.
+//  3. Retired Kit runtimes: version 3 rows own every object and credential
+//     they name, and a new row never inherits their metadata, so collecting
+//     one cannot affect the assistant's current runtime. They skip the
+//     inactivity check, which a busy assistant would never satisfy. Rows still
+//     in switch_retiring belong to the pending switch retirement sweep.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
 		arg.InactiveBefore,

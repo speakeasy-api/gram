@@ -722,6 +722,74 @@ func TestListChats_Filter_AgentID(t *testing.T) {
 	require.Equal(t, foreignAgentChat.String(), result.Chats[0].ID)
 }
 
+// An assistant's runtime chats never carry chats.agent_id: they reach the agent
+// the assistant acts as through the assistant's binding. Filtering by that
+// agent must list them next to the sessions capture stamped with it.
+func TestListChats_Filter_AgentID_MatchesBoundAssistantSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agent := seedAgent(t, ctx, ti, authCtx.UserID, "Assistant Agent")
+	bound, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Bound Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    bound,
+		AgentID:        agent,
+	})
+	require.NoError(t, err)
+
+	boundChat := seedChat(t, ctx, ti, authCtx.UserID, "", "bound assistant session")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   bound,
+		ProjectID:     ti.projectID,
+		CorrelationID: "bound",
+		ChatID:        boundChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy assistant session")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	stampedChat := seedAgentChat(t, ctx, ti, agent, "captured agent session")
+	seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	payload := defaultPayload()
+	payload.AgentID = new(agent.String())
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	ids := make([]string, 0, len(result.Chats))
+	for _, chat := range result.Chats {
+		ids = append(ids, chat.ID)
+	}
+	require.ElementsMatch(t, []string{boundChat.String(), stampedChat.String()}, ids)
+
+	// A page past the end takes its total from CountChats, which must agree.
+	payload.Offset = 10
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.Empty(t, result.Chats)
+}
+
 func TestListChats_Filter_AgentID_Invalid(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)

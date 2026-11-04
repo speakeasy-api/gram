@@ -59,6 +59,10 @@ type Server struct {
 	ListChallengeBuckets                 http.Handler
 	ResolveChallenge                     http.Handler
 	ListIdentityAccess                   http.Handler
+	CreateTemporaryGrant                 http.Handler
+	ListTemporaryGrants                  http.Handler
+	RenewTemporaryGrant                  http.Handler
+	RevokeTemporaryGrant                 http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -128,6 +132,10 @@ func New(
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 			{"ListIdentityAccess", "GET", "/rpc/access.listIdentityAccess"},
+			{"CreateTemporaryGrant", "POST", "/rpc/access.createTemporaryGrant"},
+			{"ListTemporaryGrants", "GET", "/rpc/access.listTemporaryGrants"},
+			{"RenewTemporaryGrant", "POST", "/rpc/access.renewTemporaryGrant"},
+			{"RevokeTemporaryGrant", "POST", "/rpc/access.revokeTemporaryGrant"},
 		},
 		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
@@ -169,6 +177,10 @@ func New(
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
 		ResolveChallenge:                     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
 		ListIdentityAccess:                   NewListIdentityAccessHandler(e.ListIdentityAccess, mux, decoder, encoder, errhandler, formatter),
+		CreateTemporaryGrant:                 NewCreateTemporaryGrantHandler(e.CreateTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		ListTemporaryGrants:                  NewListTemporaryGrantsHandler(e.ListTemporaryGrants, mux, decoder, encoder, errhandler, formatter),
+		RenewTemporaryGrant:                  NewRenewTemporaryGrantHandler(e.RenewTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantHandler(e.RevokeTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -217,6 +229,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
 	s.ListIdentityAccess = m(s.ListIdentityAccess)
+	s.CreateTemporaryGrant = m(s.CreateTemporaryGrant)
+	s.ListTemporaryGrants = m(s.ListTemporaryGrants)
+	s.RenewTemporaryGrant = m(s.RenewTemporaryGrant)
+	s.RevokeTemporaryGrant = m(s.RevokeTemporaryGrant)
 }
 
 // MethodNames returns the methods served.
@@ -264,6 +280,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
 	MountListIdentityAccessHandler(mux, h.ListIdentityAccess)
+	MountCreateTemporaryGrantHandler(mux, h.CreateTemporaryGrant)
+	MountListTemporaryGrantsHandler(mux, h.ListTemporaryGrants)
+	MountRenewTemporaryGrantHandler(mux, h.RenewTemporaryGrant)
+	MountRevokeTemporaryGrantHandler(mux, h.RevokeTemporaryGrant)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -2384,6 +2404,218 @@ func NewListIdentityAccessHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listIdentityAccess")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateTemporaryGrantHandler configures the mux to serve the "access"
+// service "createTemporaryGrant" endpoint.
+func MountCreateTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.createTemporaryGrant", f)
+}
+
+// NewCreateTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "createTemporaryGrant" endpoint.
+func NewCreateTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeCreateTemporaryGrantResponse(encoder)
+		encodeError    = EncodeCreateTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTemporaryGrantsHandler configures the mux to serve the "access"
+// service "listTemporaryGrants" endpoint.
+func MountListTemporaryGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listTemporaryGrants", f)
+}
+
+// NewListTemporaryGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listTemporaryGrants" endpoint.
+func NewListTemporaryGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTemporaryGrantsRequest(mux, decoder)
+		encodeResponse = EncodeListTemporaryGrantsResponse(encoder)
+		encodeError    = EncodeListTemporaryGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTemporaryGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRenewTemporaryGrantHandler configures the mux to serve the "access"
+// service "renewTemporaryGrant" endpoint.
+func MountRenewTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.renewTemporaryGrant", f)
+}
+
+// NewRenewTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "renewTemporaryGrant" endpoint.
+func NewRenewTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRenewTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeRenewTemporaryGrantResponse(encoder)
+		encodeError    = EncodeRenewTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "renewTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeTemporaryGrantHandler configures the mux to serve the "access"
+// service "revokeTemporaryGrant" endpoint.
+func MountRevokeTemporaryGrantHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.revokeTemporaryGrant", f)
+}
+
+// NewRevokeTemporaryGrantHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "revokeTemporaryGrant" endpoint.
+func NewRevokeTemporaryGrantHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeTemporaryGrantRequest(mux, decoder)
+		encodeResponse = EncodeRevokeTemporaryGrantResponse(encoder)
+		encodeError    = EncodeRevokeTemporaryGrantError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeTemporaryGrant")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

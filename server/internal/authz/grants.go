@@ -146,14 +146,16 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err != nil {
 			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
 		}
-		existingGrants, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		// Only permanent grants count as provisioned: a temporary grant given
+		// to the role must not stop its defaults from being written.
+		hasGrants, err := q.HasPermanentPrincipalGrants(ctx, repo.HasPermanentPrincipalGrantsParams{
 			OrganizationID: organizationID,
-			PrincipalUrns:  []string{principal.String()},
+			PrincipalUrn:   principal,
 		})
 		if err != nil {
 			return fmt.Errorf("list %s grants: %w", roleSlug, err)
 		}
-		if len(existingGrants) > 0 {
+		if hasGrants {
 			continue
 		}
 
