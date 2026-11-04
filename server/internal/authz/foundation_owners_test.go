@@ -143,7 +143,6 @@ var foundationFileOwners = map[string]string{
 	"internal/mcp/authnchallenge_workloadgrant.go":                  ownerI1,
 	"internal/mcp/inference_workload.go":                            ownerI1,
 	"internal/mcp/mandatory_shadow.go":                              ownerM5,
-	"internal/background/activities/organization_administrators.go": ownerX1,
 	"internal/billingnotifications/recipients.go":                   ownerX1,
 	"internal/mcp/serve_platform.go":                                ownerX3,
 	"internal/plugins/delivery_principals.go":                       ownerS2,
