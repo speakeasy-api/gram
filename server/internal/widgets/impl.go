@@ -96,18 +96,14 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize resolves the project a request runs in and checks a scope on it.
-// Membership is project:read, which every member holds: saving a chart is
-// not an administrative act.
-func (s *Service) authorize(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
+// project names the project a request runs in, from its auth context.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, err
-	}
-	return authCtx, nil
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
 }
 
 // view renders a stored widget, validating it as it is read, with the

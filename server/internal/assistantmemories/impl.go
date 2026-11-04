@@ -19,24 +19,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// requireMemoryAccess validates auth context and runs the requested authz
-// check. Returns the resolved AuthContext on success.
-func (s *Service) requireMemoryAccess(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, error) {
+// project names the project a request runs in, from its auth context.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
-
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, err
-	}
-
-	return authCtx, nil
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
 }
 
 func (s *Service) ListAssistantMemories(ctx context.Context, payload *gen.ListAssistantMemoriesPayload) (*gen.ListAssistantMemoriesResult, error) {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 
@@ -85,8 +83,11 @@ func (s *Service) ListAssistantMemories(ctx context.Context, payload *gen.ListAs
 }
 
 func (s *Service) GetAssistantMemory(ctx context.Context, payload *gen.GetAssistantMemoryPayload) (*types.AssistantMemory, error) {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Read)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.Read()); err != nil {
 		return nil, err
 	}
 
@@ -104,8 +105,11 @@ func (s *Service) GetAssistantMemory(ctx context.Context, payload *gen.GetAssist
 }
 
 func (s *Service) DeleteAssistantMemory(ctx context.Context, payload *gen.DeleteAssistantMemoryPayload) error {
-	authCtx, err := s.requireMemoryAccess(ctx, authz.ProjectRef.Write)
+	project, authCtx, err := s.project(ctx)
 	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.Write()); err != nil {
 		return err
 	}
 

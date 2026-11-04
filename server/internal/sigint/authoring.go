@@ -112,17 +112,32 @@ func (s *Service) ReadAuthoringState(ctx context.Context) (AuthoringState, error
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	return s.authoringState(ctx, tx, authz.ProjectRef.Read)
+	return s.authoringState(ctx, tx, false)
 }
 
-func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, operation func(authz.ProjectRef) authz.Operation) (AuthoringState, error) {
-	var zero AuthoringState
+// authoringProject names the project a request runs in, from its auth
+// context, and checks that the organization has signals intelligence and the
+// caller may read the project, or write it when write is set.
+func (s *Service) authoringProject(ctx context.Context, write bool) (*contextvalues.AuthContext, error) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || auth == nil || auth.ProjectID == nil {
-		return zero, oops.C(oops.CodeUnauthorized)
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	project := authz.Project(auth.ActiveOrganizationID, auth.ProjectID.String())
+	operation := project.Read()
+	if write {
+		operation = project.Write()
+	}
+	if err := s.requireAccess(ctx, auth.ActiveOrganizationID, operation); err != nil {
+		return nil, err
+	}
+	return auth, nil
+}
 
-	if err := s.requireAccess(ctx, auth.ActiveOrganizationID, operation(authz.Project(auth.ActiveOrganizationID, auth.ProjectID.String()))); err != nil {
+func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, write bool) (AuthoringState, error) {
+	var zero AuthoringState
+	auth, err := s.authoringProject(ctx, write)
+	if err != nil {
 		return zero, err
 	}
 
@@ -181,7 +196,7 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	before, err := s.authoringState(ctx, tx, authz.ProjectRef.Write)
+	before, err := s.authoringState(ctx, tx, true)
 	if err != nil {
 		return zero, "", err
 	}
@@ -196,7 +211,7 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input AuthoringInput, expectedVersion string) (AuthoringResult, error) {
 	var result AuthoringResult
 
-	before, err := s.authoringState(ctx, tx, authz.ProjectRef.Write)
+	before, err := s.authoringState(ctx, tx, true)
 	if err != nil {
 		return result, err
 	}
@@ -242,7 +257,7 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 	if err != nil {
 		return result, err
 	}
-	result.State, err = s.authoringState(ctx, tx, authz.ProjectRef.Write)
+	result.State, err = s.authoringState(ctx, tx, true)
 	return result, err
 }
 

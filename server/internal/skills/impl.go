@@ -150,29 +150,31 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	}
 }
 
-func (s *Service) requireAccess(ctx context.Context, operation func(authz.ProjectRef) authz.Operation) (*contextvalues.AuthContext, *slog.Logger, error) {
+// project names the project a request runs in, from its auth context.
+func (s *Service) project(ctx context.Context) (authz.ProjectRef, *contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+		var none authz.ProjectRef
+		return none, nil, oops.C(oops.CodeUnauthorized)
 	}
+	return authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()), authCtx, nil
+}
 
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
-		return nil, s.logger, err
-	}
-
+// skillsEnabled refuses a request when the organization does not have skills,
+// and returns the logger for the request's project.
+func (s *Service) skillsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) (*slog.Logger, error) {
 	logger := s.logger.With(
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 	)
 	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	if err != nil {
-		return nil, logger, oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, logger)
+		return logger, oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, logger)
 	}
 	if !enabled {
-		return nil, logger, oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
+		return logger, oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
 	}
-
-	return authCtx, logger, nil
+	return logger, nil
 }
 
 // requireSkillAccess accepts project-wide grants or grants for one skill. An empty
@@ -678,7 +680,14 @@ func (s *Service) recordVersion(
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -767,7 +776,14 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 }
 
 func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -868,7 +884,14 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 }
 
 func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -973,7 +996,14 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 }
 
 func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*types.Skill, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1170,7 +1200,14 @@ func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs 
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1272,7 +1309,14 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 }
 
 func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.ListSkillTagsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1289,7 +1333,14 @@ func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.Li
 }
 
 func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPayload) (*gen.ListSkillFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1379,7 +1430,14 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 }
 
 func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSuggestionPayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return err
 	}
@@ -1529,7 +1587,14 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 }
 
 func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListUnknownActivationsPayload) (*gen.ListUnknownSkillActivationsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1574,7 +1639,14 @@ func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListU
 }
 
 func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.ReadSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.ReadSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -1990,7 +2062,14 @@ func newShareToken() (string, error) {
 }
 
 func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.SkillShareLink, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return nil, err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -2084,7 +2163,14 @@ func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.
 }
 
 func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return err
 	}
@@ -2174,7 +2260,14 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 }
 
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ProjectRef.WriteSkills)
+	project, authCtx, err := s.project(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, project.WriteSkills()); err != nil {
+		return err
+	}
+	logger, err := s.skillsEnabled(ctx, authCtx)
 	if err != nil {
 		return err
 	}
