@@ -22,3 +22,9 @@ it("loads record navigation without the full SDK wrapper", async () => {
     "RecordNav",
   );
 });
+
+it("loads the command palette without the full SDK wrapper", async () => {
+  await expect(import("@/components/command-palette")).resolves.toHaveProperty(
+    "CommandPalette",
+  );
+});
