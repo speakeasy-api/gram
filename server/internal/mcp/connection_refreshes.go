@@ -12,10 +12,10 @@ import (
 // agentAdmissionRejection tells a refused agent from an admission check that could not run.
 func agentAdmissionRejection(err error) string {
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-		switch shareable.Code {
-		case oops.CodeUnauthorized:
+		if shareable.Code == oops.CodeUnauthorized {
 			return "agent_credential_invalid"
-		case oops.CodeForbidden:
+		}
+		if shareable.Code == oops.CodeForbidden {
 			return "agent_admission_denied"
 		}
 	}
