@@ -12,10 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
+
+func TestFailureHappened_InvalidRoute(t *testing.T) {
+	t.Parallel()
+
+	code, ok := FailureHappened(wire.TunnelErrorInvalidRoute)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
+}
 
 func TestClientAffinityKeyFromRequest(t *testing.T) {
 	t.Parallel()

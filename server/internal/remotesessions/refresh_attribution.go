@@ -24,7 +24,9 @@ func RefreshIn(scope mcpconnectionattempts.Scope) RefreshAttribution {
 
 // InAttempt makes the refresh a step of attempt. A zero attempt changes nothing.
 func (a RefreshAttribution) InAttempt(attempt mcpconnectionattempts.Attempt) RefreshAttribution {
-	a.attempt = attempt
+	if !attempt.IsZero() {
+		a.attempt = attempt
+	}
 	return a
 }
 

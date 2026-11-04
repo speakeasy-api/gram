@@ -1837,7 +1837,10 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 // ToolsCallRefusalInterceptor in order. They observe only.
 func (p *Proxy) runToolsCallRefusalInterceptors(ctx context.Context, refusal error) {
 	for _, interceptor := range p.ToolsCallRefusalInterceptors {
-		interceptor.InterceptToolsCallRefusal(ctx, refusal)
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallRefusalInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptToolsCallRefusal(iterCtx, refusal)
+		span.End()
 	}
 }
 

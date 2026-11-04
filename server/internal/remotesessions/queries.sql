@@ -1928,11 +1928,7 @@ SELECT
     i.registration_endpoint                AS issuer_registration_endpoint,
     c.client_id_metadata_uri               AS client_id_metadata_uri,
     c.identity_provider_connection_id      AS identity_provider_connection_id,
-    c.credential_owner                     AS credential_owner,
-    EXISTS (
-      SELECT 1 FROM remote_session_ema_bindings AS b
-      WHERE b.remote_session_client_id = c.id AND b.state IS DISTINCT FROM 'unlinked'
-    )::boolean                             AS has_active_ema_binding
+    c.credential_owner                     AS credential_owner
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -6340,3 +6336,17 @@ WHERE c.id = @auth_client_id::uuid
   AND m.deleted IS FALSE
   AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
 FOR SHARE OF c, link, m, p, r;
+
+-- name: HasActiveEMABindingForRefresh :one
+-- Resolve tenant ownership from the persisted session's identity issuer, not
+-- from a remote client that may be shared globally.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id
+  JOIN user_session_issuers AS u ON u.id = b.user_session_issuer_id
+    AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  WHERE b.remote_session_client_id = @remote_session_client_id
+    AND b.user_session_issuer_id = @user_session_issuer_id
+    AND b.state IS DISTINCT FROM 'unlinked'
+)::boolean;
