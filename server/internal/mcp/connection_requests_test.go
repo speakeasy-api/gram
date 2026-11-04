@@ -84,8 +84,8 @@ func TestNoCredentialsRecordsNothing(t *testing.T) {
 	rec.RequireNothing()
 }
 
-// An expired access token is how a healthy client learns to refresh.
-func TestExpiredBearerRecordsNothing(t *testing.T) {
+// An expired but signature-verified bearer records an actionable refusal.
+func TestExpiredBearerRecordsRejection(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -104,7 +104,8 @@ func TestExpiredBearerRecordsNothing(t *testing.T) {
 
 	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), token, nil)
 	require.Error(t, err)
-	rec.RequireNothing()
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
+	require.Equal(t, urn.NewUserSubject("expired-user").String(), row.SubjectURN)
 }
 
 // A bearer of ours names someone. One that is not ours would let a scanner write rows.
@@ -121,7 +122,7 @@ func TestRejectedBearer(t *testing.T) {
 	require.Error(t, err)
 	rec.RequireNothing()
 
-	// Ours, but minted for another server: it proves nothing about this one.
+	// Ours, but minted for another server: record the wrong-audience refusal.
 	subject := urn.NewUserSubject("rejected-user")
 	elsewhere, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,
@@ -132,7 +133,10 @@ func TestRejectedBearer(t *testing.T) {
 	require.NoError(t, err)
 	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), elsewhere, nil)
 	require.Error(t, err)
-	rec.RequireNothing()
+	wrongAudience := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
+	require.Equal(t, subject.String(), wrongAudience.SubjectURN)
+	rec = mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,

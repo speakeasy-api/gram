@@ -108,6 +108,10 @@ func (c *tunnelClientFamilies) remembered(ctx context.Context, logger *slog.Logg
 // forRow reads a session's client for a connection row. It runs on the
 // connection writer, which has no request to outlive.
 func (c *tunnelClientFamilies) forRow(logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (name, version string) {
+	key := tunnelClientCacheKey{projectID: projectID, scope: scope, session: sha256.Sum256([]byte(sessionID))}
+	if client, ok := c.cache.Get(key); ok {
+		return client.name, client.version
+	}
 	if time.Now().UnixMilli() < c.rowReadsPausedUntil.Load() {
 		return "", ""
 	}

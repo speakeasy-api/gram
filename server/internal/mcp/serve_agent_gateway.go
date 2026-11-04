@@ -269,7 +269,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
 	if err != nil {
-		return nil, agentMemberCredentialError(member)
+		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {

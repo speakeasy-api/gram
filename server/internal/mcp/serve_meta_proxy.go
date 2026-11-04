@@ -548,10 +548,14 @@ func (s *Service) executeProxiedMemberTool(
 		if _, credential := errors.AsType[memberCredentialError](err); credential {
 			s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
 		} else if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			code := failure.code
+			if code == mcpconnectionattempts.CodeInvalidRemoteSession {
+				code = gate.memberNoCredentialHappened(member)
+			}
+			s.recordMemberFailure(ctx, gate, member, code)
 		}
-		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}

@@ -474,7 +474,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		code, _ := remotemcp.UpstreamFailureHappened(status, dial.upstreamCredential(), dial.tunneled, rt.tunnelError())
 		return memberConnectionError{upstreamFailure(memberOutageMessage(member.slug, code, said), true), code}
 	case said != "":
-		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, said), false)
+		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, said), false), mcpconnectionattempts.CodeProviderRejected}
 	case isRPC && status == 0:
 		// The SDK could not send the call, so the member never saw it.
 		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "")
