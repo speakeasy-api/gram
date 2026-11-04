@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const adminAcquireStripeSubscriptionLock = `-- name: AdminAcquireStripeSubscriptionLock :exec
@@ -380,6 +381,29 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
+SELECT expires_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = 'mcp:connect'
+  AND selectors = $3
+`
+
+type AdminGetConnectGrantExpiryFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Selectors      []byte
+}
+
+// Test fixture: reads the expiry of one principal's connect grant.
+func (q *Queries) AdminGetConnectGrantExpiryFixture(ctx context.Context, arg AdminGetConnectGrantExpiryFixtureParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, adminGetConnectGrantExpiryFixture, arg.OrganizationID, arg.PrincipalUrn, arg.Selectors)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
 }
 
 const adminGetEnterpriseTrialRetryOperationIDs = `-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
@@ -875,6 +899,68 @@ func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUse
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const adminInsertAuthPermissionProvisionFixture = `-- name: AdminInsertAuthPermissionProvisionFixture :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, 'attachment')
+`
+
+type AdminInsertAuthPermissionProvisionFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// Test fixture: records a grant as provisioned by the default auth
+// permission backfill.
+func (q *Queries) AdminInsertAuthPermissionProvisionFixture(ctx context.Context, arg AdminInsertAuthPermissionProvisionFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertAuthPermissionProvisionFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
+const adminInsertPrincipalGrantFixture = `-- name: AdminInsertPrincipalGrantFixture :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4::text,
+  $5,
+  $6::timestamptz,
+  COALESCE($7::timestamptz, clock_timestamp())
+)
+`
+
+type AdminInsertPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         pgtype.Text
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Test fixture: writes a grant row as stored, including temporary, expired,
+// deny-effect and backdated rows no single writer produces together.
+func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg AdminInsertPrincipalGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminInsertPrincipalGrantFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many

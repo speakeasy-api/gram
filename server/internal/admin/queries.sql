@@ -1283,6 +1283,35 @@ SELECT
   (SELECT count(*) FROM written WHERE NOT inserted)::bigint AS extended,
   (SELECT count(*) FROM taken_over)::bigint AS taken_over;
 
+-- name: AdminInsertPrincipalGrantFixture :exec
+-- Test fixture: writes a grant row as stored, including temporary, expired,
+-- deny-effect and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+VALUES (
+  @organization_id,
+  @principal_urn,
+  @scope,
+  sqlc.narg('effect')::text,
+  @selectors,
+  sqlc.narg('expires_at')::timestamptz,
+  COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
+);
+
+-- name: AdminInsertAuthPermissionProvisionFixture :exec
+-- Test fixture: records a grant as provisioned by the default auth
+-- permission backfill.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, 'attachment');
+
+-- name: AdminGetConnectGrantExpiryFixture :one
+-- Test fixture: reads the expiry of one principal's connect grant.
+SELECT expires_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = 'mcp:connect'
+  AND selectors = @selectors;
+
 -- name: AdminBackdateUserSessionFixture :exec
 -- Test fixture: no writer backdates a session.
 UPDATE user_sessions SET created_at = @created_at WHERE id = @id;

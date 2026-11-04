@@ -3,16 +3,20 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -46,18 +50,26 @@ type fixtureGrant struct {
 	createdAt *time.Time
 }
 
+func optionalTime(v *time.Time) pgtype.Timestamptz {
+	if v == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *v, InfinityModifier: pgtype.Finite, Valid: true}
+}
+
 func (f *connectBackfillFixture) grant(g fixtureGrant) {
 	f.t.Helper()
 	raw, err := json.Marshal(g.selector)
 	require.NoError(f.t, err)
-	var effect *string
-	if g.effect != "" {
-		effect = &g.effect
-	}
-	_, err = f.db.Exec(f.ctx, `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, clock_timestamp()))`,
-		f.orgID, g.principal.String(), string(g.scope), effect, raw, g.expiresAt, g.createdAt)
+	err = repo.New(f.db).AdminInsertPrincipalGrantFixture(f.ctx, repo.AdminInsertPrincipalGrantFixtureParams{
+		OrganizationID: f.orgID,
+		PrincipalUrn:   g.principal,
+		Scope:          string(g.scope),
+		Effect:         pgtype.Text{String: g.effect, Valid: g.effect != ""},
+		Selectors:      raw,
+		ExpiresAt:      optionalTime(g.expiresAt),
+		CreatedAt:      optionalTime(g.createdAt),
+	})
 	require.NoError(f.t, err)
 }
 
@@ -67,10 +79,12 @@ func (f *connectBackfillFixture) provision(principal urn.Principal, scope authz.
 	f.t.Helper()
 	raw, err := json.Marshal(selector)
 	require.NoError(f.t, err)
-	_, err = f.db.Exec(f.ctx, `
-INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
-VALUES ($1, $2, $3, $4, 'attachment')`,
-		f.orgID, principal.String(), string(scope), raw)
+	err = repo.New(f.db).AdminInsertAuthPermissionProvisionFixture(f.ctx, repo.AdminInsertAuthPermissionProvisionFixtureParams{
+		OrganizationID: f.orgID,
+		PrincipalUrn:   principal.String(),
+		Scope:          string(scope),
+		Selectors:      raw,
+	})
 	require.NoError(f.t, err)
 }
 
@@ -78,15 +92,19 @@ func (f *connectBackfillFixture) connectExpiry(principal urn.Principal, selector
 	f.t.Helper()
 	raw, err := json.Marshal(selector)
 	require.NoError(f.t, err)
-	var expiresAt *time.Time
-	err = f.db.QueryRow(f.ctx, `
-SELECT expires_at FROM principal_grants
-WHERE organization_id = $1 AND principal_urn = $2 AND scope = 'mcp:connect' AND selectors = $3`,
-		f.orgID, principal.String(), raw).Scan(&expiresAt)
-	if err != nil {
+	expiresAt, err := repo.New(f.db).AdminGetConnectGrantExpiryFixture(f.ctx, repo.AdminGetConnectGrantExpiryFixtureParams{
+		OrganizationID: f.orgID,
+		PrincipalUrn:   principal,
+		Selectors:      raw,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false
 	}
-	return expiresAt, true
+	require.NoError(f.t, err)
+	if !expiresAt.Valid {
+		return nil, true
+	}
+	return &expiresAt.Time, true
 }
 
 func mcpSelector(resourceID string, dims ...string) authz.Selector {
