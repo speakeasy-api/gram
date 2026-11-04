@@ -298,6 +298,29 @@ func (a AgentRef) Authorize() Operation { return a.operation("authorize") }
 // Transfer asks to transfer the agent to another owner.
 func (a AgentRef) Transfer() Operation { return a.operation("transfer") }
 
+// WorkloadPolicyRef names an organization's workload identity policy for
+// typed operations. The policy is configured for the organization as a whole,
+// so the organization ID is the resource every grant names.
+type WorkloadPolicyRef struct {
+	organizationID string
+}
+
+// WorkloadPolicy names the workload identity policy of the organization. The
+// caller must have verified the organization belongs to the request's tenant.
+func WorkloadPolicy(organizationID string) WorkloadPolicyRef {
+	return WorkloadPolicyRef{organizationID: organizationID}
+}
+
+// Read asks to read the workload identity policy.
+func (w WorkloadPolicyRef) Read() Operation {
+	return newOperation("workload", "read", w.organizationID, nil)
+}
+
+// Write asks to change the workload identity policy.
+func (w WorkloadPolicyRef) Write() Operation {
+	return newOperation("workload", "write", w.organizationID, nil)
+}
+
 // MCPServerRef names one MCP server in its project for typed operations.
 // Every operation carries the project as a dimension, so a grant or block
 // bounded to one project never matches a server in another.
@@ -482,5 +505,6 @@ func typedOperations() []Operation {
 		project.ReadChats(),
 		Agent("agent", "owner").Read(), Agent("agent", "owner").Write(),
 		Agent("agent", "owner").Authorize(), Agent("agent", "owner").Transfer(),
+		WorkloadPolicy("organization").Read(), WorkloadPolicy("organization").Write(),
 	}
 }

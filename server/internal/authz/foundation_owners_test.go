@@ -90,7 +90,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/skills":               ownerS1,
 	"internal/telemetry/analytics":  ownerL1,
 	"internal/variations":           ownerP3,
-	"internal/workloadpolicy":       ownerW1,
 }
 
 var foundationFileOwners = map[string]string{

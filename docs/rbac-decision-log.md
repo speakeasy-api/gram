@@ -483,3 +483,14 @@ These resolutions are in the base branch's merge commit and are listed here so t
 
 4. **The key service gets the client beside the engine.** `auth.Auth` still takes the engine. `NewAuthorizer(engine, client)` now gets the client, so the agent decisions behind key issuance (AG1) run through it too.
 5. **Parity is proven by the key suite in shadow.** `newTestKeysService` builds the service with `authztest.NewParityClient`.
+
+## W1 (AIS-858): workload identity policy and device enrollment
+
+### Decided without reviewer input
+
+1. **Stacked on AG2, and through it on AG1 and #7590.** W1 needs AG1's agent operations. Stacking on AG2 rather than AG1 keeps one linear chain, so the inventory and corpus counts never conflict. _If reversed:_ rebase onto AG1; only `consumers.csv` and the corpus count would need regenerating.
+2. **Declaring the workload type.** The type has `reader` and `writer` grants and `read_blocked` and `write_blocked` blocks, with the same shape as the other block-carrying types. It reproduces the frozen tables: admin defaults, write implies read, and blocked-read implies blocked-write. `WorkloadPolicy(organizationID)` names the policy, with the organization ID as the resource, because the policy is configured once per organization. It gets its own `workload` migration unit, which depends on organization.
+3. **Agent authorization in workload paths now names the persisted owner.** Two checks asked for `agent:authorize` without an `owner` dimension: device join tokens, and the API-key path of subject assignment. Under #7590's selectors, an owner-scoped grant would then match any agent. Both now use `Agent(id, owner).Authorize()`. The API-key path loads the agent first. If the agent is missing from the organization, the call returns forbidden, the same answer the human path gives. `TestCreateDeviceJoinToken_HonorsAgentOwnerSelector` pins the behaviour. _If reversed:_ the old checks let an `agent:authorize {owner: X}` grant enroll devices under anyone's agent.
+4. **The enrollment precondition uses `EvaluateGrants`.** The check that an agent's own policy grants `org:device_agent_sync` now asks `Organization(org).SyncDeviceAgent()` against the loaded agent policy. The old code used `GrantsSatisfy`, which ignores blocks. No block excludes `org:device_agent_sync` in the frozen tables, so every answer stays the same.
+5. **Every stored scope is now declared.** The stored-check test no longer has an undeclared case, so all six of its checks compare in shadow. The client corpus count rises to 104 with the workload case. No W1 inventory rows remain, so the `internal/workloadpolicy` owner rule is gone.
+6. **Parity is proven by the workload suite in shadow.** `newTestService` gives the service `authztest.NewParityClient`. MCP device-agent and Platform MCP tests use the plain test client.

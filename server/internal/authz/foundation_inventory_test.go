@@ -198,6 +198,7 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"MCPServersInProject":   "",
 	"Assistant":             "",
 	"Agent":                 "",
+	"WorkloadPolicy":        "",
 	"AssistantsInProject":   "",
 	"Skill":                 "",
 	"Inference":             "",

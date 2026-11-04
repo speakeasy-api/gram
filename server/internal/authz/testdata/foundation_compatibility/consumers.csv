@@ -343,8 +343,3 @@ internal/skillefficacy/impl.go,*Service.requireProjectAccess,check,Check,scope,R
 internal/skills/impl.go,*Service.accessibleSkillIDs,loader,ResolveUserPrincipals,,,1,S2 AIS-854
 internal/telemetry/analytics/catalog.go,*Dataset.AccessCheck,check,Check,ScopeOrgAdmin,,1,P4 AIS-846
 internal/variations/impl.go,*Service.CreateGlobal,check,MCPCheck,ScopeMCPWrite,Require,1,P3 AIS-847
-internal/workloadpolicy/devices.go,*Service.CreateDeviceJoinToken,check,Check,ScopeAgentAuthorize,Require,1,W1 AIS-858
-internal/workloadpolicy/devices.go,*Service.requireDeviceEnrollmentGrant,check,Check,ScopeOrgDeviceAgentSync,GrantsSatisfy,1,W1 AIS-858
-internal/workloadpolicy/devices.go,*Service.requireDeviceEnrollmentGrant,evaluator,GrantsSatisfy,,,1,W1 AIS-858
-internal/workloadpolicy/impl.go,*Service.requireSubjectAgentAuthorization,check,Check,ScopeAgentAuthorize,Require,1,W1 AIS-858
-internal/workloadpolicy/impl.go,*Service.resolve,check,Check,scope,Require,1,W1 AIS-858

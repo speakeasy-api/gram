@@ -531,3 +531,32 @@ func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+// An agent:authorize grant bounded to one owner's agents authorizes only that
+// owner's agents.
+func TestCreateDeviceJoinToken_HonorsAgentOwnerSelector(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	agentID := newAgent(t, ctx, ti, "owner-scoped-agent")
+	payload := &gen.CreateDeviceJoinTokenPayload{
+		AgentID:          agentID.String(),
+		ExpiresInSeconds: 3600,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}
+	other := asUser(t, ctx, ti.userID+"-other")
+	withOwner := func(owner string) context.Context {
+		return authztest.WithExactGrants(t, other,
+			authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID),
+			authz.NewGrantWithSelector(authz.ScopeAgentAuthorize, authz.AgentOwnerSelector(authz.ScopeAgentAuthorize, owner)),
+		)
+	}
+
+	_, err := ti.service.CreateDeviceJoinToken(withOwner("a-different-owner"), payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.CreateDeviceJoinToken(withOwner(ti.userID), payload)
+	require.NoError(t, err)
+}
