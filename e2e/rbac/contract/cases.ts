@@ -211,6 +211,34 @@ export const CASES: ContractCase[] = [
   // Organization administration ---------------------------------------------
   {
     slice: "organization",
+    name: "rank command palette candidates",
+    method: "POST",
+    path: "/rpc/launcher.judge",
+    project: "default",
+    request: () => ({
+      body: {
+        query: "open settings",
+        context: { route: "/" },
+        candidates: [{ id: "settings", kind: "page", title: "Settings" }],
+      },
+    }),
+    expect: {
+      admin: 200,
+      member: 200,
+      reader: 200,
+      blocked: 200,
+      elsewhere: 200,
+      norole: deny,
+      // Checked against the organization only, so someone from another
+      // organization is refused rather than turned away at the project header.
+      outsider: deny,
+      consumerKey: unauthenticated,
+      producerKey: unauthenticated,
+      anonymous: unauthenticated,
+    },
+  },
+  {
+    slice: "organization",
     name: "send an invite",
     method: "POST",
     path: "/rpc/organizations.sendInvite",
