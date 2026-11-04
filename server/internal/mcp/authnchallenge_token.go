@@ -1263,7 +1263,7 @@ func (s *Service) rotateRefreshToken(
 					tracker.Continue()
 					return true, admissionErr
 				}
-				if credentialCheckFault(admissionErr) {
+				if credentialCheckFault(admissionErr) || agentAdmissionRejection(admissionErr) == "agent_admission_unavailable" {
 					return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
@@ -1491,7 +1491,7 @@ func (s *Service) rotateRefreshToken(
 			}
 		}
 		if admissionErr != nil {
-			if credentialCheckFault(admissionErr) {
+			if credentialCheckFault(admissionErr) || agentAdmissionRejection(admissionErr) == "agent_admission_unavailable" {
 				return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
@@ -1769,6 +1769,10 @@ func (s *Service) writeRefreshTokenReplay(
 			check = s.replayLiveness
 		}
 		if reason, ok := check(ctx, endpoint, payload.JTI); !ok {
+			if reason == "refresh_token_replay_lookup_failed" {
+				writeErr := writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "could not check the refreshed session; retry shortly")
+				return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 			return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
@@ -1829,7 +1833,7 @@ func (s *Service) writeRefreshTokenReplay(
 					tracker.Continue()
 					return cerr
 				}
-				if credentialCheckFault(cerr) {
+				if credentialCheckFault(cerr) || agentAdmissionRejection(cerr) == "agent_admission_unavailable" {
 					return oops.E(oops.CodeUnexpected, cerr, "admit agent session").LogError(ctx, logger)
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
@@ -2471,19 +2475,27 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 	q := usersessions_repo.New(s.db)
 	session, err := q.GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, Jti: jti})
 	if err != nil {
-		return "refresh_token_revoked", false
+		return replayLookupFailureReason(err, "refresh_token_revoked"), false
 	}
 	if !session.SignInID.Valid {
 		return "", true
 	}
 	row, err := q.LockSignInForGrant(ctx, usersessions_repo.LockSignInForGrantParams{ID: session.SignInID.UUID, OrganizationID: endpoint.OrganizationID})
 	if err != nil {
-		return "sign_in_lookup_failed", false
+		return replayLookupFailureReason(err, "sign_in_revoked"), false
 	}
 	if row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)) {
 		return "sign_in_revoked", false
 	}
 	return "", true
+}
+
+// replayLookupFailureReason distinguishes a vanished authorization from a failed check.
+func replayLookupFailureReason(err error, missing string) string {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return missing
+	}
+	return "refresh_token_replay_lookup_failed"
 }
 
 // signInRevokedForGrant reports whether the sign-in a refused issuance linked

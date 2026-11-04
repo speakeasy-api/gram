@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -303,4 +305,24 @@ func TestStoredRefreshTokenReplayOutlivesGracePeriod(t *testing.T) {
 	mr.FastForward(time.Hour)
 	_, err = service.userSessionRefreshReplayCache.Get(t.Context(), successKey)
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "the replay ends when the successor access token expires")
+}
+
+func TestRefreshReplayLookupOutage(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool) {
+		return "refresh_token_replay_lookup_failed", false
+	}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Contains(t, w.Body.String(), "temporarily_unavailable")
+	require.NotContains(t, w.Body.String(), "invalid_grant")
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+	require.Len(t, rec.Rows(), 1)
 }

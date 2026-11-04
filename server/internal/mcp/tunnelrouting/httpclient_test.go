@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -409,9 +410,39 @@ func TestHTTPClientLocalConfigurationFailure(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1")
+			resp, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
 			require.ErrorIs(t, err, ErrTransportConfiguration)
 			require.NotErrorIs(t, err, ErrNoTunnelRoute)
+		})
+	}
+}
+
+func TestHTTPClientExhaustedGatewayStatusPreserved(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status string
+		want   mcpconnectionattempts.Code
+	}{
+		{wire.TunnelErrorTunnelBusy, mcpconnectionattempts.CodeTunnelAtCapacity},
+		{wire.TunnelErrorActiveCheckFailed, mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			t.Parallel()
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(ErrorHeader, tc.status)
+				w.WriteHeader(http.StatusBadGateway)
+			}))
+			defer gateway.Close()
+			routes := route.NewRouteTable()
+			require.NoError(t, routes.Publish(t.Context(), "tunnel", gateway.URL, time.Minute))
+			resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
+			require.ErrorIs(t, err, ErrNoTunnelRoute)
+			require.Equal(t, ErrNoTunnelRoute.Error(), err.Error())
+			code, ok := FailureHappened("", err)
+			require.True(t, ok)
+			require.Equal(t, tc.want, code)
 		})
 	}
 }

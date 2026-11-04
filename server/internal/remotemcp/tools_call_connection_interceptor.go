@@ -105,7 +105,7 @@ func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, fa
 	if proxy.IsShutdownInterrupt(failure.Err) {
 		return
 	}
-	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredential{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader)); ok {
+	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredential{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
 		c.record(ctx, code)
 	}
 }
@@ -132,10 +132,24 @@ func HasConfiguredCredential(headers []proxy.ConfiguredHeader) bool {
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.
 // tunnelError is the tunnel gateway's own error status, when it answered instead of the server.
-func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool, tunnelError string) (mcpconnectionattempts.Code, bool) {
+func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool, tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
-	if tunneled && status == http.StatusBadGateway {
-		if code, ok := tunnelrouting.FailureHappened(tunnelError); ok {
+	if status == 0 {
+		for _, cause := range causes {
+			if setup, ok := errors.AsType[*proxy.ForwardSetupError](cause); ok {
+				switch setup.Kind {
+				case proxy.ForwardSetupCaller:
+					return mcpconnectionattempts.CodeInvalidRequest, true
+				case proxy.ForwardSetupConfiguration:
+					return mcpconnectionattempts.CodeCredentialMisconfigured, true
+				default:
+					return mcpconnectionattempts.CodeInternalError, true
+				}
+			}
+		}
+	}
+	if tunneled && (status == http.StatusBadGateway || status == 0) {
+		if code, ok := tunnelrouting.FailureHappened(tunnelError, causes...); ok {
 			return code, true
 		}
 	}

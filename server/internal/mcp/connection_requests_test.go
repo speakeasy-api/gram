@@ -1,12 +1,18 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,13 +23,22 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
@@ -84,8 +99,8 @@ func TestNoCredentialsRecordsNothing(t *testing.T) {
 	rec.RequireNothing()
 }
 
-// An expired but signature-verified bearer records an actionable refusal.
-func TestExpiredBearerRecordsRejection(t *testing.T) {
+// Expiry starts routine silent refresh, not an actionable reconnection failure.
+func TestExpiredBearerRecordsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -104,8 +119,7 @@ func TestExpiredBearerRecordsRejection(t *testing.T) {
 
 	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), token, nil)
 	require.Error(t, err)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
-	require.Equal(t, urn.NewUserSubject("expired-user").String(), row.SubjectURN)
+	rec.RequireNothing()
 }
 
 // A bearer of ours names someone. One that is not ours would let a scanner write rows.
@@ -563,4 +577,176 @@ func TestHostedConnectDeniedRecords(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
 	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+}
+
+// A local member-proxy refusal already has its own connection row. The SDK's
+// JSON-RPC wrapper must not add a second, misleading provider rejection.
+func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	// Billing's stub persists by organization ID on disk, unlike the isolated
+	// test databases. Give this cap fixture its own organization and project.
+	orgID := "org-" + uuid.NewString()
+	org, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Usage fixture", Slug: orgID})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{OrganizationID: org.ID, Name: "Usage fixture", Slug: "usage-fixture"})
+	require.NoError(t, err)
+	caller := *auth
+	caller.ActiveOrganizationID, caller.ProjectID = org.ID, &project.ID
+	auth = &caller
+	ctx = contextvalues.SetAuthContext(ctx, auth)
+	require.NoError(t, orgrepo.New(ti.conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{ID: auth.ActiveOrganizationID, GramAccountType: string(billing.TierBase)}))
+	require.NoError(t, os.MkdirAll("scratch", 0750))
+	usageFile := filepath.Join("scratch", "billingusage-"+auth.ActiveOrganizationID+".local.json")
+	require.NoError(t, os.WriteFile(usageFile, []byte(`{"ToolCalls":2000,"IncludedToolCalls":1,"HasActiveSubscription":false}`), 0600))
+	t.Cleanup(func() { require.NoError(t, os.Remove(usageFile)) })
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, meta.ID, "remote member", "member", 1, upstream.url)
+	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{"name": "member--ping", "arguments": map[string]any{}})
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "tool usage limit reached")
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeUsageLimitReached)
+	require.Len(t, rec.Rows(), 1)
+	for _, request := range upstream.journal() {
+		require.NotEqual(t, "tools/call", request.rpcMethod)
+	}
+}
+
+// Match direct servers: successful HTTP carrying tool errors does not imply an
+// authentication or connection failure, regardless of the JSON-RPC error code.
+func TestGatewayToolErrorsRecordNothing(t *testing.T) {
+	t.Parallel()
+	for _, code := range []int{-32601, -32602, -32603, -32000, 0} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			slug := "meta-" + uuid.NewString()
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+			upstream := newRecordingUpstream(t, "ping")
+			target, err := url.Parse(upstream.url)
+			require.NoError(t, err)
+			forward := httputil.NewSingleHostReverseProxy(target)
+			var calls atomic.Int32
+			failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost {
+					body, readErr := io.ReadAll(r.Body)
+					if !assert.NoError(t, readErr) {
+						return
+					}
+					r.Body = io.NopCloser(bytes.NewReader(body))
+					var rpc struct {
+						Method string          `json:"method"`
+						ID     json.RawMessage `json:"id"`
+					}
+					if !assert.NoError(t, json.Unmarshal(body, &rpc)) {
+						return
+					}
+					if rpc.Method == "tools/call" {
+						calls.Add(1)
+						w.Header().Set("Content-Type", "application/json")
+						assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "error": map[string]any{"code": code, "message": "tool request failed"}}))
+						return
+					}
+				}
+				forward.ServeHTTP(w, r)
+			}))
+			t.Cleanup(failing.Close)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, meta.ID, "remote member", "member", 1, failing.URL)
+			envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{"name": "member--ping", "arguments": map[string]any{}})
+			text, isError := metaToolResultText(t, envelope)
+			require.True(t, isError)
+			if code == 0 {
+				require.Contains(t, text, `server "member" rejected the call:`)
+			} else {
+				require.Equal(t, `server "member" rejected the call: tool request failed`, text)
+			}
+			require.Equal(t, int32(1), calls.Load())
+			rec.RequireNothing()
+		})
+	}
+}
+
+func TestGatewayHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
+	t.Parallel()
+	for _, oauth := range []bool{false, true} {
+		t.Run(fmt.Sprint(oauth), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			slug := "meta-" + uuid.NewString()
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+			member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic)
+			tool := "test_tool"
+			want := mcpconnectionattempts.CodeCredentialMisconfigured
+			who := mcpconnectionattempts.WhoAdmin
+			if oauth {
+				ti.addToolWithDualSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+				tool = "dual_sec_tool"
+				want, who = mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.WhoPerson
+			} else {
+				ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			rpc := executeMetaTool(t, ti, slug, "", member.slug+"--"+tool)
+			text, isError := metaToolResultText(t, rpc)
+			require.True(t, isError)
+			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, want)
+			require.Equal(t, string(who), row.WhoFixes)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+func TestGatewayUnknownCachedToolRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
+	connection := g.approve(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	g.ti.service.SetConnectionRecorder(rec.Recorder)
+	for _, name := range []string{"source--does_not_exist", "nonexistent--tool_000"} {
+		response := g.call(t, connection.token, name)
+		require.Contains(t, response.Body.String(), remotemcp.ToolNotApprovedMessage)
+	}
+	rec.RequireNothing()
+}
+
+func TestFreshRefreshSuppressesOnlyDuplicateGateRow(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outage")
+	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	var calls atomic.Int32
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+	first, freshErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, freshErr)
+	rows := rec.Rows()
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+	second, cachedErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.EqualError(t, cachedErr, freshErr.Error())
+	require.Equal(t, first.Code, second.Code)
+	require.Equal(t, first.Body.String(), second.Body.String())
+	require.EqualValues(t, 1, calls.Load())
+	rows = rec.Rows()
+	require.Len(t, rows, 2)
+	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
 }

@@ -1007,7 +1007,11 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoRoute) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeTunnelUnavailable, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			code := mcpconnectionattempts.CodeTunnelUnavailable
+			if classified, ok := tunnelrouting.FailureHappened("", err); ok {
+				code = classified
+			}
+			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		tagTunnelOutage(w, err)
 		return err

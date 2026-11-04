@@ -71,6 +71,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
@@ -524,7 +525,7 @@ func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true, nil)
 	return ctx, ti, recorder
 }
 
@@ -547,7 +548,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, guardianOpts...)
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, nil, guardianOpts...)
 }
 
 func buildTestMCPService(
@@ -565,6 +566,7 @@ func buildTestMCPService(
 	callerAssertions *mcpauthz.Issuer,
 	serverURLOverride string,
 	withPlatformMCPReadTools bool,
+	refreshRecorder *mcpconnectionattempts.Recorder,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -677,6 +679,7 @@ func buildTestMCPService(
 			clientCredentials.use(clientcredentials.New(logger, conn, enc, m, cacheAdapter))
 			return clientCredentials
 		}),
+		remotesessions.WithConnectionRecorder(refreshRecorder),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
 		remotesessions.WithProtectedResourceProber(protectedResources),
 	)
