@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -67,6 +68,19 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID: org, ProjectID: proj, IssuerID: s.det("inference-workload-issuer"), AgentID: s.det("inference-agent"),
 			})
 		}, 1, "demo seed postflight: expected one project-scoped inference workload with explicit agent and owner access, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDBuiltinSlackBinding(ctx, repo.PostflightIDBuiltinSlackBindingParams{
+				ProjectID: proj,
+				IssuerID:  s.det("issuer-slack"),
+				OrgID:     org,
+			})
+		}, 1, "demo seed postflight: expected one project-owned built-in Slack inbound binding, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDBuiltinSlackAuthClient(ctx, repo.PostflightIDBuiltinSlackAuthClientParams{
+				ProjectID: proj, OrgID: org, ServerID: builtinmcp.ID(proj, builtinmcp.Slack),
+				IssuerID: s.det("issuer-slack"), AuthClientID: s.det("auth-client-builtin-slack-token"),
+			})
+		}, 1, "demo seed postflight: expected one private built-in Slack server with a typed demo credential, found %d"},
 		// The seed never creates API keys: any row left here was minted by a
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)

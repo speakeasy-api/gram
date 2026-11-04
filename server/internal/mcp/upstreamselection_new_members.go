@@ -31,7 +31,7 @@ func (c *memberChoices) recordNewMemberChoices(ctx context.Context, logger *slog
 	}
 	var missing []uuid.UUID
 	for _, member := range members {
-		if member.backend != metaMemberBackendProxied {
+		if !c.typedMember(member) {
 			continue
 		}
 		if _, ok := resolved[member.serverID]; !ok {

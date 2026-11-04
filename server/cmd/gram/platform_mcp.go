@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -544,6 +545,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithBuiltinMCPs(newPlatformMCPBuiltinMCPs(config)).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -1326,6 +1328,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithBuiltinMCPs(newPlatformMCPBuiltinMCPs(config)).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -1446,4 +1449,13 @@ func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platfo
 		Connection:   ratelimit.New(limitStore, platformmcp.DeploymentRedeployConnectionLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.DeploymentRedeployOrganizationLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	})
+}
+
+// Built-in management requires a canonical endpoint resolver and atomic audit.
+// Incomplete composition preserves the tool contracts as unavailable.
+func newPlatformMCPBuiltinMCPs(config platformMCPConfig) platformmcp.BuiltinMCPManagement {
+	if config.DB == nil || config.AuditLogger == nil || config.CallbackOrigins.OrganizationHosts == nil {
+		return nil
+	}
+	return builtinmcp.NewStore(config.DB, config.AuditLogger, config.CallbackOrigins.OrganizationHosts)
 }

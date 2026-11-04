@@ -10,6 +10,8 @@ type Base string
 const (
 	// MCP serves stored endpoints at /mcp/{slug}.
 	MCP Base = "mcp"
+	// Builtin serves code-owned project resources.
+	Builtin Base = "mcp/builtin"
 	// OrganizationGateway serves an organization's gateway at
 	// /mcp/gateway/{organizationSlug}.
 	OrganizationGateway Base = "mcp/gateway"
@@ -22,6 +24,8 @@ func (b Base) Resolve() (Base, bool) {
 	switch b {
 	case "", MCP:
 		return MCP, true
+	case Builtin:
+		return Builtin, true
 	case OrganizationGateway:
 		return OrganizationGateway, true
 	default:

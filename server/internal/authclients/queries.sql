@@ -286,12 +286,13 @@ INSERT INTO mcp_auth_clients (
 RETURNING *;
 
 -- name: LockAttachableMCPServer :one
--- A proxied (remote or tunneled) MCP server in the organization, locked so
+-- A live MCP server in the organization, locked so
 -- attachments to it serialize.
 SELECT
   ms.id,
   ms.project_id,
   ms.name,
+  ms.builtin_backend,
   (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
   (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
 FROM mcp_servers ms

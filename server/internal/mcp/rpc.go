@@ -90,6 +90,7 @@ func hostedListCacheHints(mcpIsPublic, authenticated bool) *cacheHints {
 // also keeps the initialize response and per-result _meta in agreement.
 var (
 	serverInfoHostedToolset   = serverInfo{Name: "Speakeasy", Version: "0.0.0"}
+	serverInfoBuiltin         = serverInfo{Name: "Speakeasy Built-in MCP", Version: "0.0.0"}
 	serverInfoPlatformToolset = serverInfo{Name: "Speakeasy Platform Toolset", Version: "0.0.0"}
 	serverInfoMetaServer      = serverInfo{Name: "Speakeasy Gateway", Version: "0.0.0"}
 )

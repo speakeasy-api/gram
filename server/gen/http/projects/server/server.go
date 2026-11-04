@@ -19,6 +19,8 @@ import (
 // Server lists the projects service endpoint HTTP handlers.
 type Server struct {
 	Mounts                   []*MountPoint
+	ListBuiltinMcpServers    http.Handler
+	UpdateBuiltinMcpServer   http.Handler
 	GetProject               http.Handler
 	CreateProject            http.Handler
 	UpdateProject            http.Handler
@@ -57,6 +59,8 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"ListBuiltinMcpServers", "GET", "/rpc/projects.listBuiltinMcpServers"},
+			{"UpdateBuiltinMcpServer", "POST", "/rpc/projects.updateBuiltinMcpServer"},
 			{"GetProject", "GET", "/rpc/projects.get"},
 			{"CreateProject", "POST", "/rpc/projects.create"},
 			{"UpdateProject", "POST", "/rpc/projects.update"},
@@ -67,6 +71,8 @@ func New(
 			{"DeleteProject", "DELETE", "/rpc/projects.delete"},
 			{"SetOrganizationWhitelist", "POST", "/rpc/projects.setOrganizationWhitelist"},
 		},
+		ListBuiltinMcpServers:    NewListBuiltinMcpServersHandler(e.ListBuiltinMcpServers, mux, decoder, encoder, errhandler, formatter),
+		UpdateBuiltinMcpServer:   NewUpdateBuiltinMcpServerHandler(e.UpdateBuiltinMcpServer, mux, decoder, encoder, errhandler, formatter),
 		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
 		CreateProject:            NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
 		UpdateProject:            NewUpdateProjectHandler(e.UpdateProject, mux, decoder, encoder, errhandler, formatter),
@@ -84,6 +90,8 @@ func (s *Server) Service() string { return "projects" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.ListBuiltinMcpServers = m(s.ListBuiltinMcpServers)
+	s.UpdateBuiltinMcpServer = m(s.UpdateBuiltinMcpServer)
 	s.GetProject = m(s.GetProject)
 	s.CreateProject = m(s.CreateProject)
 	s.UpdateProject = m(s.UpdateProject)
@@ -100,6 +108,8 @@ func (s *Server) MethodNames() []string { return projects.MethodNames[:] }
 
 // Mount configures the mux to serve the projects endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountListBuiltinMcpServersHandler(mux, h.ListBuiltinMcpServers)
+	MountUpdateBuiltinMcpServerHandler(mux, h.UpdateBuiltinMcpServer)
 	MountGetProjectHandler(mux, h.GetProject)
 	MountCreateProjectHandler(mux, h.CreateProject)
 	MountUpdateProjectHandler(mux, h.UpdateProject)
@@ -114,6 +124,112 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the projects endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountListBuiltinMcpServersHandler configures the mux to serve the "projects"
+// service "listBuiltinMcpServers" endpoint.
+func MountListBuiltinMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/projects.listBuiltinMcpServers", f)
+}
+
+// NewListBuiltinMcpServersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "projects" service "listBuiltinMcpServers" endpoint.
+func NewListBuiltinMcpServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListBuiltinMcpServersRequest(mux, decoder)
+		encodeResponse = EncodeListBuiltinMcpServersResponse(encoder)
+		encodeError    = EncodeListBuiltinMcpServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listBuiltinMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateBuiltinMcpServerHandler configures the mux to serve the
+// "projects" service "updateBuiltinMcpServer" endpoint.
+func MountUpdateBuiltinMcpServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/projects.updateBuiltinMcpServer", f)
+}
+
+// NewUpdateBuiltinMcpServerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "projects" service "updateBuiltinMcpServer" endpoint.
+func NewUpdateBuiltinMcpServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateBuiltinMcpServerRequest(mux, decoder)
+		encodeResponse = EncodeUpdateBuiltinMcpServerResponse(encoder)
+		encodeError    = EncodeUpdateBuiltinMcpServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateBuiltinMcpServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountGetProjectHandler configures the mux to serve the "projects" service

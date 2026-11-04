@@ -540,6 +540,9 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		return s.describeCachedMember(ctx, gate, member)
 	}
+	if member.backend == metaMemberBackendBuiltin {
+		return s.describeBuiltinMember(ctx, gate, member)
+	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)
 	}

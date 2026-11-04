@@ -16,29 +16,31 @@ import (
 
 // Client is the "metaMcp" service client.
 type Client struct {
-	CreateMetaMcpServerEndpoint goa.Endpoint
-	GetMetaMcpServerEndpoint    goa.Endpoint
-	ListMetaMcpServersEndpoint  goa.Endpoint
-	UpdateMetaMcpServerEndpoint goa.Endpoint
-	DeleteMetaMcpServerEndpoint goa.Endpoint
-	ListMetaMcpMembersEndpoint  goa.Endpoint
-	AddMetaMcpMemberEndpoint    goa.Endpoint
-	UpdateMetaMcpMemberEndpoint goa.Endpoint
-	RemoveMetaMcpMemberEndpoint goa.Endpoint
+	CreateMetaMcpServerEndpoint     goa.Endpoint
+	GetMetaMcpServerEndpoint        goa.Endpoint
+	ListMetaMcpServersEndpoint      goa.Endpoint
+	UpdateMetaMcpServerEndpoint     goa.Endpoint
+	DeleteMetaMcpServerEndpoint     goa.Endpoint
+	ListMetaMcpMembersEndpoint      goa.Endpoint
+	SetBuiltinMetaMcpMemberEndpoint goa.Endpoint
+	AddMetaMcpMemberEndpoint        goa.Endpoint
+	UpdateMetaMcpMemberEndpoint     goa.Endpoint
+	RemoveMetaMcpMemberEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "metaMcp" service client given the endpoints.
-func NewClient(createMetaMcpServer, getMetaMcpServer, listMetaMcpServers, updateMetaMcpServer, deleteMetaMcpServer, listMetaMcpMembers, addMetaMcpMember, updateMetaMcpMember, removeMetaMcpMember goa.Endpoint) *Client {
+func NewClient(createMetaMcpServer, getMetaMcpServer, listMetaMcpServers, updateMetaMcpServer, deleteMetaMcpServer, listMetaMcpMembers, setBuiltinMetaMcpMember, addMetaMcpMember, updateMetaMcpMember, removeMetaMcpMember goa.Endpoint) *Client {
 	return &Client{
-		CreateMetaMcpServerEndpoint: createMetaMcpServer,
-		GetMetaMcpServerEndpoint:    getMetaMcpServer,
-		ListMetaMcpServersEndpoint:  listMetaMcpServers,
-		UpdateMetaMcpServerEndpoint: updateMetaMcpServer,
-		DeleteMetaMcpServerEndpoint: deleteMetaMcpServer,
-		ListMetaMcpMembersEndpoint:  listMetaMcpMembers,
-		AddMetaMcpMemberEndpoint:    addMetaMcpMember,
-		UpdateMetaMcpMemberEndpoint: updateMetaMcpMember,
-		RemoveMetaMcpMemberEndpoint: removeMetaMcpMember,
+		CreateMetaMcpServerEndpoint:     createMetaMcpServer,
+		GetMetaMcpServerEndpoint:        getMetaMcpServer,
+		ListMetaMcpServersEndpoint:      listMetaMcpServers,
+		UpdateMetaMcpServerEndpoint:     updateMetaMcpServer,
+		DeleteMetaMcpServerEndpoint:     deleteMetaMcpServer,
+		ListMetaMcpMembersEndpoint:      listMetaMcpMembers,
+		SetBuiltinMetaMcpMemberEndpoint: setBuiltinMetaMcpMember,
+		AddMetaMcpMemberEndpoint:        addMetaMcpMember,
+		UpdateMetaMcpMemberEndpoint:     updateMetaMcpMember,
+		RemoveMetaMcpMemberEndpoint:     removeMetaMcpMember,
 	}
 }
 
@@ -174,6 +176,29 @@ func (c *Client) ListMetaMcpMembers(ctx context.Context, p *ListMetaMcpMembersPa
 		return
 	}
 	return ires.(*ListMetaMcpMembersResult), nil
+}
+
+// SetBuiltinMetaMcpMember calls the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+// SetBuiltinMetaMcpMember may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetBuiltinMetaMcpMember(ctx context.Context, p *SetBuiltinMetaMcpMemberPayload) (res *types.MetaMcpMember, err error) {
+	var ires any
+	ires, err = c.SetBuiltinMetaMcpMemberEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.MetaMcpMember), nil
 }
 
 // AddMetaMcpMember calls the "addMetaMcpMember" endpoint of the "metaMcp"

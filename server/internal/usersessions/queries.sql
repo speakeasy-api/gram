@@ -295,11 +295,14 @@ WHERE issuer.id = @id
   );
 
 -- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
--- The live MCP servers and meta MCP servers attached to an issuer, each read
+-- The live MCP servers, meta MCP servers, and built-ins attached to an issuer, each read
 -- through its own live project in the organization. A hosted toolset is listed
--- as its canonical MCP server. Pages by id across both kinds.
+-- as its canonical MCP server. Pages by id across all resource kinds.
+-- Built-in settings IDs are opaque pagination positions; handlers return
+-- their stable endpoint identities.
 SELECT
     attachment.kind,
+    attachment.builtin_key,
     attachment.id,
     attachment.name,
     attachment.slug,
@@ -308,6 +311,7 @@ SELECT
 FROM (
     SELECT
         'mcp_server'::text AS kind,
+        ''::text AS builtin_key,
         server.id,
         COALESCE(server.name, server.slug, server.id::text)::text AS name,
         COALESCE(server.slug, '')::text AS slug,
@@ -317,11 +321,13 @@ FROM (
     JOIN projects AS project ON project.id = server.project_id
     WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
       AND server.deleted IS FALSE
+      AND server.builtin_backend IS DISTINCT FROM 'slack'
       AND project.organization_id = @organization_id::text
       AND project.deleted IS FALSE
     UNION ALL
     SELECT
         'meta_mcp_server'::text,
+        ''::text,
         meta_server.id,
         meta_server.name,
         ''::text,
@@ -331,6 +337,20 @@ FROM (
     JOIN projects AS project ON project.id = meta_server.project_id
     WHERE meta_server.user_session_issuer_id = @user_session_issuer_id::uuid
       AND meta_server.deleted IS FALSE
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'builtin_mcp_server'::text,
+        builtin.builtin_key,
+        builtin.id,
+        ('Built-in MCP: ' || builtin.builtin_key)::text,
+        builtin.builtin_key,
+        project.id,
+        project.name
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = @user_session_issuer_id::uuid
       AND project.organization_id = @organization_id::text
       AND project.deleted IS FALSE
 ) AS attachment
@@ -348,6 +368,7 @@ SELECT (
         JOIN projects AS project ON project.id = server.project_id
         WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
           AND server.deleted IS FALSE
+      AND server.builtin_backend IS DISTINCT FROM 'slack'
           AND project.organization_id = @organization_id::text
           AND project.deleted IS FALSE
     ) + (
@@ -356,6 +377,14 @@ SELECT (
         JOIN projects AS project ON project.id = meta_server.project_id
         WHERE meta_server.user_session_issuer_id = @user_session_issuer_id::uuid
           AND meta_server.deleted IS FALSE
+          AND project.organization_id = @organization_id::text
+          AND project.deleted IS FALSE
+    )
+    + (
+        SELECT COUNT(*)
+        FROM builtin_mcp_settings AS builtin
+        JOIN projects AS project ON project.id = builtin.project_id
+        WHERE builtin.user_session_issuer_id = @user_session_issuer_id::uuid
           AND project.organization_id = @organization_id::text
           AND project.deleted IS FALSE
     )
@@ -462,6 +491,16 @@ FROM (
     AND cimd.deleted IS FALSE
     AND cimd.project_id IS NOT NULL
     AND cimd.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT builtin.id
+  FROM builtin_mcp_settings AS builtin
+  JOIN projects AS project ON project.id = builtin.project_id
+  WHERE builtin.user_session_issuer_id = @user_session_issuer_id
+    AND project.organization_id = @organization_id::text
+    AND project.deleted IS FALSE
+    AND builtin.project_id <> @target_project_id::uuid
 
   UNION ALL
 
@@ -1017,6 +1056,12 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE issuer.id = @source_issuer_id
   AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM builtin_mcp_settings AS builtin
+    JOIN projects AS builtin_project ON builtin_project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND builtin_project.deleted IS FALSE
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS scoped_issuer
@@ -1043,6 +1088,15 @@ WHERE issuer.id = @id
   AND issuer.project_id = @project_id::uuid
   AND issuer.deleted IS FALSE
   AND NOT EXISTS (
+    SELECT 1
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND project.deleted IS FALSE
+      AND builtin.project_id = issuer.project_id
+
+    UNION ALL
+
     SELECT 1
     FROM mcp_servers AS server
     WHERE server.user_session_issuer_id = issuer.id
@@ -1079,6 +1133,15 @@ SELECT EXISTS (
       AND issuer.deleted IS FALSE
       AND EXISTS (
         SELECT 1
+        FROM builtin_mcp_settings AS builtin
+        JOIN projects AS project ON project.id = builtin.project_id
+        WHERE builtin.user_session_issuer_id = issuer.id
+          AND project.deleted IS FALSE
+          AND builtin.project_id = issuer.project_id
+
+        UNION ALL
+
+        SELECT 1
         FROM mcp_servers AS server
         WHERE server.user_session_issuer_id = issuer.id
           AND server.deleted IS FALSE
@@ -1096,6 +1159,7 @@ SELECT EXISTS (
 
 -- name: ListOrganizationUserSessionIssuerMCPServers :many
 SELECT server.id,
+       ''::text AS builtin_key,
        COALESCE(server.name, server.slug, server.id::text)::text AS name,
        project.id AS project_id,
        project.name AS project_name
@@ -1107,9 +1171,25 @@ WHERE issuer.id = @user_session_issuer_id
   AND issuer.organization_id = @organization_id::text
   AND issuer.deleted IS FALSE
   AND server.deleted IS FALSE
+      AND server.builtin_backend IS DISTINCT FROM 'slack'
   AND project.deleted IS FALSE
   AND project.organization_id = issuer.organization_id
-ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id;
+UNION ALL
+SELECT builtin.id,
+       builtin.builtin_key,
+       ('Built-in MCP: ' || builtin.builtin_key)::text AS name,
+       project.id AS project_id,
+       project.name AS project_name
+FROM user_session_issuers AS issuer
+JOIN builtin_mcp_settings AS builtin ON builtin.user_session_issuer_id = issuer.id
+JOIN projects AS project ON project.id = builtin.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = @organization_id::text
+  AND issuer.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = issuer.organization_id
+ORDER BY project_name, name, id;
 
 -- name: ListOrganizationUserSessionIssuerToolsets :many
 -- Toolsets on the issuer through their canonical wrapper's issuer.
@@ -1160,6 +1240,15 @@ WHERE issuer.id = @id
   AND issuer.organization_id = @organization_id::text
   AND issuer.deleted IS FALSE
   AND NOT EXISTS (
+    SELECT 1
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND project.deleted IS FALSE
+      AND project.organization_id = issuer.organization_id
+
+    UNION ALL
+
     SELECT 1
     FROM mcp_servers AS server
     JOIN projects AS project ON project.id = server.project_id
@@ -3047,3 +3136,17 @@ RETURNING id;
 
 -- name: WithdrawWorkloadAdmissionFixture :exec
 UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: ClearAssistantWorkloadClientMarkersForTest :exec
+-- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
+UPDATE user_session_clients
+SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
+WHERE id = @client_id AND organization_id = @organization_id;
+
+-- name: CountUserSessionIssuerBuiltinBindings :one
+SELECT COUNT(*)::int
+FROM builtin_mcp_settings AS builtin
+JOIN projects AS project ON project.id = builtin.project_id
+WHERE builtin.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND project.organization_id = @organization_id::text
+  AND project.deleted IS FALSE;

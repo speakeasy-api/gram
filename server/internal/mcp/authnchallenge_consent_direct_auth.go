@@ -68,8 +68,8 @@ func sameConsentAuthClient(a, b *uuid.UUID) bool {
 	return *a == *b
 }
 
-// validateDirectConsentInventory leaves hosted and builtin inventories alone;
-// only proxied direct servers capture a typed upstream credential.
+// validateDirectConsentInventory binds proxied and credential-consuming built-in
+// inventories to their typed credential. Hosted and approvals inventories are unchanged.
 func (s *Service) validateDirectConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, inventory *consentToolInventory, picks map[uuid.UUID]uuid.UUID) error {
 	if inventory == nil || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return nil
@@ -78,7 +78,7 @@ func (s *Service) validateDirectConsentInventory(ctx context.Context, endpoint *
 	if err != nil {
 		return fmt.Errorf("load consent backend: %w", err)
 	}
-	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid && !credentialConsumingBuiltin(server.BuiltinBackend.String) {
 		return nil
 	}
 	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)

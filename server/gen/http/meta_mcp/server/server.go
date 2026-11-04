@@ -18,16 +18,17 @@ import (
 
 // Server lists the metaMcp service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	CreateMetaMcpServer http.Handler
-	GetMetaMcpServer    http.Handler
-	ListMetaMcpServers  http.Handler
-	UpdateMetaMcpServer http.Handler
-	DeleteMetaMcpServer http.Handler
-	ListMetaMcpMembers  http.Handler
-	AddMetaMcpMember    http.Handler
-	UpdateMetaMcpMember http.Handler
-	RemoveMetaMcpMember http.Handler
+	Mounts                  []*MountPoint
+	CreateMetaMcpServer     http.Handler
+	GetMetaMcpServer        http.Handler
+	ListMetaMcpServers      http.Handler
+	UpdateMetaMcpServer     http.Handler
+	DeleteMetaMcpServer     http.Handler
+	ListMetaMcpMembers      http.Handler
+	SetBuiltinMetaMcpMember http.Handler
+	AddMetaMcpMember        http.Handler
+	UpdateMetaMcpMember     http.Handler
+	RemoveMetaMcpMember     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -63,19 +64,21 @@ func New(
 			{"UpdateMetaMcpServer", "POST", "/rpc/metaMcp.update"},
 			{"DeleteMetaMcpServer", "DELETE", "/rpc/metaMcp.delete"},
 			{"ListMetaMcpMembers", "GET", "/rpc/metaMcp.listMembers"},
+			{"SetBuiltinMetaMcpMember", "POST", "/rpc/metaMcp.setBuiltinMember"},
 			{"AddMetaMcpMember", "POST", "/rpc/metaMcp.addMember"},
 			{"UpdateMetaMcpMember", "POST", "/rpc/metaMcp.updateMember"},
 			{"RemoveMetaMcpMember", "DELETE", "/rpc/metaMcp.removeMember"},
 		},
-		CreateMetaMcpServer: NewCreateMetaMcpServerHandler(e.CreateMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
-		GetMetaMcpServer:    NewGetMetaMcpServerHandler(e.GetMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
-		ListMetaMcpServers:  NewListMetaMcpServersHandler(e.ListMetaMcpServers, mux, decoder, encoder, errhandler, formatter),
-		UpdateMetaMcpServer: NewUpdateMetaMcpServerHandler(e.UpdateMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
-		DeleteMetaMcpServer: NewDeleteMetaMcpServerHandler(e.DeleteMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
-		ListMetaMcpMembers:  NewListMetaMcpMembersHandler(e.ListMetaMcpMembers, mux, decoder, encoder, errhandler, formatter),
-		AddMetaMcpMember:    NewAddMetaMcpMemberHandler(e.AddMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
-		UpdateMetaMcpMember: NewUpdateMetaMcpMemberHandler(e.UpdateMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
-		RemoveMetaMcpMember: NewRemoveMetaMcpMemberHandler(e.RemoveMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
+		CreateMetaMcpServer:     NewCreateMetaMcpServerHandler(e.CreateMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
+		GetMetaMcpServer:        NewGetMetaMcpServerHandler(e.GetMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
+		ListMetaMcpServers:      NewListMetaMcpServersHandler(e.ListMetaMcpServers, mux, decoder, encoder, errhandler, formatter),
+		UpdateMetaMcpServer:     NewUpdateMetaMcpServerHandler(e.UpdateMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
+		DeleteMetaMcpServer:     NewDeleteMetaMcpServerHandler(e.DeleteMetaMcpServer, mux, decoder, encoder, errhandler, formatter),
+		ListMetaMcpMembers:      NewListMetaMcpMembersHandler(e.ListMetaMcpMembers, mux, decoder, encoder, errhandler, formatter),
+		SetBuiltinMetaMcpMember: NewSetBuiltinMetaMcpMemberHandler(e.SetBuiltinMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
+		AddMetaMcpMember:        NewAddMetaMcpMemberHandler(e.AddMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
+		UpdateMetaMcpMember:     NewUpdateMetaMcpMemberHandler(e.UpdateMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
+		RemoveMetaMcpMember:     NewRemoveMetaMcpMemberHandler(e.RemoveMetaMcpMember, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -90,6 +93,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateMetaMcpServer = m(s.UpdateMetaMcpServer)
 	s.DeleteMetaMcpServer = m(s.DeleteMetaMcpServer)
 	s.ListMetaMcpMembers = m(s.ListMetaMcpMembers)
+	s.SetBuiltinMetaMcpMember = m(s.SetBuiltinMetaMcpMember)
 	s.AddMetaMcpMember = m(s.AddMetaMcpMember)
 	s.UpdateMetaMcpMember = m(s.UpdateMetaMcpMember)
 	s.RemoveMetaMcpMember = m(s.RemoveMetaMcpMember)
@@ -106,6 +110,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateMetaMcpServerHandler(mux, h.UpdateMetaMcpServer)
 	MountDeleteMetaMcpServerHandler(mux, h.DeleteMetaMcpServer)
 	MountListMetaMcpMembersHandler(mux, h.ListMetaMcpMembers)
+	MountSetBuiltinMetaMcpMemberHandler(mux, h.SetBuiltinMetaMcpMember)
 	MountAddMetaMcpMemberHandler(mux, h.AddMetaMcpMember)
 	MountUpdateMetaMcpMemberHandler(mux, h.UpdateMetaMcpMember)
 	MountRemoveMetaMcpMemberHandler(mux, h.RemoveMetaMcpMember)
@@ -411,6 +416,60 @@ func NewListMetaMcpMembersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listMetaMcpMembers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "metaMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetBuiltinMetaMcpMemberHandler configures the mux to serve the
+// "metaMcp" service "setBuiltinMetaMcpMember" endpoint.
+func MountSetBuiltinMetaMcpMemberHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/metaMcp.setBuiltinMember", f)
+}
+
+// NewSetBuiltinMetaMcpMemberHandler creates a HTTP handler which loads the
+// HTTP request and calls the "metaMcp" service "setBuiltinMetaMcpMember"
+// endpoint.
+func NewSetBuiltinMetaMcpMemberHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetBuiltinMetaMcpMemberRequest(mux, decoder)
+		encodeResponse = EncodeSetBuiltinMetaMcpMemberResponse(encoder)
+		encodeError    = EncodeSetBuiltinMetaMcpMemberError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setBuiltinMetaMcpMember")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "metaMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

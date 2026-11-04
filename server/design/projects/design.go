@@ -15,6 +15,7 @@ var _ = Service("projects", func() {
 	})
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	builtinMCPMethods()
 
 	Method("getProject", func() {
 		Description("Get project details by slug.")

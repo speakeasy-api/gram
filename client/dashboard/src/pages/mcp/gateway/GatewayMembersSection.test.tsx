@@ -1,3 +1,10 @@
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-one" }),
+}));
+vi.mock("./BuiltinGatewayMembersSection", () => ({
+  BuiltinGatewayAddSection: () => null,
+  BuiltinMemberEnvironmentCell: () => null,
+}));
 import {
   cleanup,
   fireEvent,

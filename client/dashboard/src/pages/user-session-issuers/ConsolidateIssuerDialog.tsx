@@ -77,7 +77,10 @@ export function ConsolidateIssuerDialog({
   // and not one whose refresh failed.
   const current =
     preflight.isFetching || preflight.isError ? undefined : preflight.data;
-  const canSubmit = current?.canMigrate === true && !migrate.isPending;
+  const canSubmit =
+    current?.canMigrate === true &&
+    current.builtinBindingCount === 0 &&
+    !migrate.isPending;
 
   return (
     <Dialog
@@ -258,6 +261,8 @@ function ConsolidateImpact({
   }
 
   const blockers = [
+    preflight.builtinBindingCount > 0 &&
+      `${plural(preflight.builtinBindingCount, "built-in MCP server is", "built-in MCP servers are")} bound to this authorization server. An administrator must explicitly rebind each one in its Inbound OAuth settings before consolidating. Built-in bindings are not migrated automatically.`,
     preflight.platformOwned &&
       "One of these is managed by the Speakeasy Platform MCP, so it can't be consolidated. Choose another target.",
     preflight.conflictingClientIds.length > 0 &&

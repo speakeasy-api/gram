@@ -396,7 +396,9 @@ func attachTx(ctx context.Context, queries *repo.Queries, organizationID string,
 		return server, fmt.Errorf("lock mcp server: %w", err)
 	}
 	switch {
-	case !server.Proxied:
+	case server.BuiltinBackend.Valid && (server.BuiltinBackend.String != "slack" || client.ClientType != authz.AuthClientTypeStaticCredential):
+		return server, &AttachRefusedError{Code: AttachInvalid, Message: "built-in Slack only offers static credential auth clients"}
+	case !server.Proxied && !server.BuiltinBackend.Valid:
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "only remote and tunneled MCP servers offer auth clients; hosted toolsets keep their own authentication"}
 	case server.Tunneled && (client.ClientType == authz.AuthClientTypeStaticCredential || client.ClientType == authz.AuthClientTypePassThrough):
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "tunneled MCP servers are not sent a client's headers; offer them an OAuth-backed client instead"}

@@ -437,7 +437,7 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 // reaches.
 const gatewayAuthClientParam = "auth_client."
 
-// gatewayConsentAuthChoices is each proxied member's upstream credential
+// gatewayConsentAuthChoices is each credential-consuming member's upstream credential
 // choice on a gateway's consent page, with the picks the page's query names.
 // It is nil where typed auth client resolution is not enforced.
 func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
@@ -449,7 +449,7 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 	picked := map[uuid.UUID]uuid.UUID{}
 	query := r.URL.Query()
 	for _, member := range members {
-		if member.backend != metaMemberBackendProxied {
+		if !consentMemberHasAuthChoices(member) {
 			continue
 		}
 		servers = append(servers, consentAuthServer{id: member.serverID, projectID: member.projectID})

@@ -202,6 +202,73 @@ func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg Postfl
 	return count, err
 }
 
+const postflightIDBuiltinSlackAuthClient = `-- name: PostflightIDBuiltinSlackAuthClient :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+JOIN mcp_server_auth_clients link
+  ON link.mcp_server_id = s.id AND link.project_id = s.project_id
+ AND link.organization_id = p.organization_id AND link.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = link.auth_client_id AND ac.project_id = s.project_id
+ AND ac.organization_id = p.organization_id AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_auth_client_headers header
+  ON header.auth_client_id = ac.id AND header.organization_id = ac.organization_id
+ AND header.deleted IS FALSE
+WHERE p.organization_id = $1::text AND s.project_id = $2::uuid
+  AND s.id = $3::uuid AND s.builtin_backend = 'slack'
+  AND s.visibility = 'private' AND s.requires_upstream_auth AND s.deleted IS FALSE
+  AND s.user_session_issuer_id = $4::uuid
+  AND ac.id = $5::uuid AND ac.client_type = 'static_credential'
+  AND header.name = 'SLACK_BOT_TOKEN' AND header.is_secret
+  AND header.value = 'xoxb-DEMO-NOT-A-REAL-TOKEN'
+`
+
+type PostflightIDBuiltinSlackAuthClientParams struct {
+	OrgID        string
+	ProjectID    uuid.UUID
+	ServerID     uuid.UUID
+	IssuerID     uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) PostflightIDBuiltinSlackAuthClient(ctx context.Context, arg PostflightIDBuiltinSlackAuthClientParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDBuiltinSlackAuthClient,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.ServerID,
+		arg.IssuerID,
+		arg.AuthClientID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDBuiltinSlackBinding = `-- name: PostflightIDBuiltinSlackBinding :one
+SELECT count(*) FROM builtin_mcp_settings AS settings
+JOIN user_session_issuers AS issuer ON issuer.id = settings.user_session_issuer_id
+WHERE settings.project_id = $1::uuid
+  AND settings.builtin_key = 'slack'
+  AND settings.user_session_issuer_bound
+  AND issuer.id = $2::uuid
+  AND issuer.project_id = settings.project_id
+  AND issuer.organization_id = $3::text
+`
+
+type PostflightIDBuiltinSlackBindingParams struct {
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) PostflightIDBuiltinSlackBinding(ctx context.Context, arg PostflightIDBuiltinSlackBindingParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDBuiltinSlackBinding, arg.ProjectID, arg.IssuerID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDChainingClient = `-- name: PostflightIDChainingClient :one
 SELECT count(*) FROM remote_session_clients
 WHERE project_id = $1::uuid AND id = $2::uuid

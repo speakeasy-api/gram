@@ -971,11 +971,22 @@ LEFT JOIN meta_mcp_server_members AS m
   ON m.mcp_server_id = s.id
  AND m.meta_mcp_server_id = $2::uuid
  AND m.deleted IS FALSE
+LEFT JOIN builtin_mcp_server_members AS bm
+  ON bm.builtin_key = s.builtin_backend
+ AND bm.project_id = s.project_id
+ AND bm.meta_mcp_server_id = $2::uuid
+ AND EXISTS (
+   SELECT 1 FROM meta_mcp_servers AS gateway
+   WHERE gateway.id = bm.meta_mcp_server_id
+     AND gateway.project_id = s.project_id
+     AND gateway.organization_id = p.organization_id
+     AND gateway.deleted IS FALSE
+ )
 WHERE s.id = ANY($3::uuid[])
   AND s.deleted IS FALSE
   -- The subject bounds the lineage lookup to one person's sessions, which an
   -- index serves, across every sign-in the credential was rotated through.
-  AND COALESCE(m.created_at, s.created_at) > (
+  AND COALESCE(bm.created_at, m.created_at, s.created_at) > (
     SELECT min(us.created_at)
     FROM user_sessions AS us
     WHERE us.subject_urn = $4::text

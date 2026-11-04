@@ -17,7 +17,7 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp",
 		Title:       "Get One MCP Server",
-		Description: "Get a summary of one MCP server already set up in a named project. " + GetMCPToolPagingNote,
+		Description: "Get a summary of one MCP server already set up in a named project. Immutable built-ins such as Slack are separate: external administrators use list_builtin_mcps/get_builtin_mcp. " + GetMCPToolPagingNote,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPInput) (*mcp.CallToolResult, MCP, error) {
 		principal, err := principalFromToolContext(ctx)

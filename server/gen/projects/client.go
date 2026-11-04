@@ -15,6 +15,8 @@ import (
 
 // Client is the "projects" service client.
 type Client struct {
+	ListBuiltinMcpServersEndpoint    goa.Endpoint
+	UpdateBuiltinMcpServerEndpoint   goa.Endpoint
 	GetProjectEndpoint               goa.Endpoint
 	CreateProjectEndpoint            goa.Endpoint
 	UpdateProjectEndpoint            goa.Endpoint
@@ -27,8 +29,10 @@ type Client struct {
 }
 
 // NewClient initializes a "projects" service client given the endpoints.
-func NewClient(getProject, createProject, updateProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, setOrganizationWhitelist goa.Endpoint) *Client {
+func NewClient(listBuiltinMcpServers, updateBuiltinMcpServer, getProject, createProject, updateProject, listProjects, setLogo, listAllowedOrigins, upsertAllowedOrigin, deleteProject, setOrganizationWhitelist goa.Endpoint) *Client {
 	return &Client{
+		ListBuiltinMcpServersEndpoint:    listBuiltinMcpServers,
+		UpdateBuiltinMcpServerEndpoint:   updateBuiltinMcpServer,
 		GetProjectEndpoint:               getProject,
 		CreateProjectEndpoint:            createProject,
 		UpdateProjectEndpoint:            updateProject,
@@ -39,6 +43,52 @@ func NewClient(getProject, createProject, updateProject, listProjects, setLogo, 
 		DeleteProjectEndpoint:            deleteProject,
 		SetOrganizationWhitelistEndpoint: setOrganizationWhitelist,
 	}
+}
+
+// ListBuiltinMcpServers calls the "listBuiltinMcpServers" endpoint of the
+// "projects" service.
+// ListBuiltinMcpServers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListBuiltinMcpServers(ctx context.Context, p *ListBuiltinMcpServersPayload) (res *ListBuiltinMcpServersResult, err error) {
+	var ires any
+	ires, err = c.ListBuiltinMcpServersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListBuiltinMcpServersResult), nil
+}
+
+// UpdateBuiltinMcpServer calls the "updateBuiltinMcpServer" endpoint of the
+// "projects" service.
+// UpdateBuiltinMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateBuiltinMcpServer(ctx context.Context, p *UpdateBuiltinMcpServerPayload) (res *BuiltinMcpServer, err error) {
+	var ires any
+	ires, err = c.UpdateBuiltinMcpServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BuiltinMcpServer), nil
 }
 
 // GetProject calls the "getProject" endpoint of the "projects" service.

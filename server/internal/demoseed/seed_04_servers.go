@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 )
@@ -70,6 +71,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		CodeGatewayID: s.det("issuer-code-gateway"),
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuers: %w", err)
+	}
+
+	if err := s.q.ServersInsertBuiltinSlackSettings(ctx, repo.ServersInsertBuiltinSlackSettingsParams{
+		ID:        s.det("builtin-slack-settings"),
+		ProjectID: proj,
+		IssuerID:  s.det("issuer-slack"),
+	}); err != nil {
+		return fmt.Errorf("insert demo built-in slack settings: %w", err)
+	}
+
+	if err := s.q.ServersInsertBuiltinSlackServer(ctx, repo.ServersInsertBuiltinSlackServerParams{
+		ID: builtinmcp.ID(proj, builtinmcp.Slack), ProjectID: proj, OrgID: org, IssuerID: s.det("issuer-slack"),
+	}); err != nil {
+		return fmt.Errorf("insert demo built-in Slack server: %w", err)
 	}
 
 	if err := s.q.ServersInsertMCPServers(ctx, repo.ServersInsertMCPServersParams{
@@ -631,7 +646,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 }
 
 // seedAuthClients records Linear's personal client as the upstream OAuth
-// migration derives it, and two clients an administrator created: a token
+// migration derives it, and administrator-created clients: a built-in Slack
+// demo token, a token
 // shared by two servers and a pass-through of the caller's own GitHub token,
 // with who may use the shared token, and the token chosen for an app that
 // signs in to Linear without a browser.
@@ -640,6 +656,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
+		{ID: s.det("auth-client-builtin-slack-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Built-in Slack demo token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
@@ -654,6 +671,21 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		Name: "Authorization", Value: "Bearer demo-placeholder",
 	}); err != nil {
 		return fmt.Errorf("insert demo auth client header: %w", err)
+	}
+	// Typed credentials use the same tenant-scoped association and audience
+	// provisioning as other servers. The post-seed auth migration provisions
+	// mcp:auth for principals whose ordinary MCP grants reach this server.
+	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
+		ID: s.det("auth-client-builtin-slack-token-header"), AuthClientID: s.det("auth-client-builtin-slack-token"), OrgID: org,
+		Name: "SLACK_BOT_TOKEN", Value: "xoxb-DEMO-NOT-A-REAL-TOKEN",
+	}); err != nil {
+		return fmt.Errorf("insert demo built-in Slack auth header: %w", err)
+	}
+	if err := s.q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+		ID: s.det("auth-client-assoc-builtin-slack"), ProjectID: proj, OrgID: org,
+		McpServerID: builtinmcp.ID(proj, builtinmcp.Slack), AuthClientID: s.det("auth-client-builtin-slack-token"),
+	}); err != nil {
+		return fmt.Errorf("associate demo built-in Slack auth client: %w", err)
 	}
 	if err := s.q.ServersInsertAuthClientForwardedHeader(ctx, repo.ServersInsertAuthClientForwardedHeaderParams{
 		ID: s.det("auth-client-github-forwarded-header"), AuthClientID: s.det("auth-client-github-forwarded"), OrgID: org,

@@ -26,6 +26,10 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return projectBase && log.subjectSlug
         ? `${projectBase}/mcp/${mcpServerRouteParam({ id: log.subjectId, slug: log.subjectSlug })}`
         : null;
+    case "builtin_mcp_server":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/mcp/builtin/${log.subjectSlug}`
+        : null;
     case "environment":
       return projectBase && log.subjectSlug
         ? `${projectBase}/environments/${log.subjectSlug}`

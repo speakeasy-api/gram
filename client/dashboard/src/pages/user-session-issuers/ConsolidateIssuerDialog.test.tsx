@@ -93,6 +93,7 @@ function preflight(
 ): OrganizationUserSessionIssuerMigratePreflight {
   return {
     canMigrate: true,
+    builtinBindingCount: 0,
     platformOwned: false,
     clientCount: 2,
     sessionCount: 3,
@@ -273,3 +274,22 @@ describe("ConsolidateIssuerDialog", () => {
     expect(screen.queryByText(/No other authorization server/)).toBeNull();
   });
 });
+
+it.each([false, true])(
+  "blocks live built-in bindings even when canMigrate is %s",
+  (canMigrate) => {
+    testState.preflight = preflight({ canMigrate, builtinBindingCount: 2 });
+    renderDialog();
+    expect(screen.getByText(/2 built-in MCP servers are bound/)).toBeDefined();
+    expect(
+      screen.getByText(/administrator must explicitly rebind/),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Built-in bindings are not migrated automatically/),
+    ).toBeDefined();
+    const submit = screen.getByRole("button", { name: "Consolidate" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(submit);
+    expect(testState.mutate).not.toHaveBeenCalled();
+  },
+);

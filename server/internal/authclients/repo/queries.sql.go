@@ -1049,6 +1049,7 @@ SELECT
   ms.id,
   ms.project_id,
   ms.name,
+  ms.builtin_backend,
   (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
   (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
 FROM mcp_servers ms
@@ -1067,14 +1068,15 @@ type LockAttachableMCPServerParams struct {
 }
 
 type LockAttachableMCPServerRow struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Name      pgtype.Text
-	Proxied   bool
-	Tunneled  bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Name           pgtype.Text
+	BuiltinBackend pgtype.Text
+	Proxied        bool
+	Tunneled       bool
 }
 
-// A proxied (remote or tunneled) MCP server in the organization, locked so
+// A live MCP server in the organization, locked so
 // attachments to it serialize.
 func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachableMCPServerParams) (LockAttachableMCPServerRow, error) {
 	row := q.db.QueryRow(ctx, lockAttachableMCPServer, arg.OrganizationID, arg.ID)
@@ -1083,6 +1085,7 @@ func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachabl
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.BuiltinBackend,
 		&i.Proxied,
 		&i.Tunneled,
 	)

@@ -41,6 +41,10 @@ type Client struct {
 	// listMetaMcpMembers endpoint.
 	ListMetaMcpMembersDoer goahttp.Doer
 
+	// SetBuiltinMetaMcpMember Doer is the HTTP client used to make requests to the
+	// setBuiltinMetaMcpMember endpoint.
+	SetBuiltinMetaMcpMemberDoer goahttp.Doer
+
 	// AddMetaMcpMember Doer is the HTTP client used to make requests to the
 	// addMetaMcpMember endpoint.
 	AddMetaMcpMemberDoer goahttp.Doer
@@ -73,20 +77,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMetaMcpServerDoer: doer,
-		GetMetaMcpServerDoer:    doer,
-		ListMetaMcpServersDoer:  doer,
-		UpdateMetaMcpServerDoer: doer,
-		DeleteMetaMcpServerDoer: doer,
-		ListMetaMcpMembersDoer:  doer,
-		AddMetaMcpMemberDoer:    doer,
-		UpdateMetaMcpMemberDoer: doer,
-		RemoveMetaMcpMemberDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		CreateMetaMcpServerDoer:     doer,
+		GetMetaMcpServerDoer:        doer,
+		ListMetaMcpServersDoer:      doer,
+		UpdateMetaMcpServerDoer:     doer,
+		DeleteMetaMcpServerDoer:     doer,
+		ListMetaMcpMembersDoer:      doer,
+		SetBuiltinMetaMcpMemberDoer: doer,
+		AddMetaMcpMemberDoer:        doer,
+		UpdateMetaMcpMemberDoer:     doer,
+		RemoveMetaMcpMemberDoer:     doer,
+		RestoreResponseBody:         restoreBody,
+		scheme:                      scheme,
+		host:                        host,
+		decoder:                     dec,
+		encoder:                     enc,
 	}
 }
 
@@ -229,6 +234,30 @@ func (c *Client) ListMetaMcpMembers() goa.Endpoint {
 		resp, err := c.ListMetaMcpMembersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("metaMcp", "listMetaMcpMembers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetBuiltinMetaMcpMember returns an endpoint that makes HTTP requests to the
+// metaMcp service setBuiltinMetaMcpMember server.
+func (c *Client) SetBuiltinMetaMcpMember() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetBuiltinMetaMcpMemberRequest(c.encoder)
+		decodeResponse = DecodeSetBuiltinMetaMcpMemberResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetBuiltinMetaMcpMemberRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetBuiltinMetaMcpMemberDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("metaMcp", "setBuiltinMetaMcpMember", err)
 		}
 		return decodeResponse(resp)
 	}

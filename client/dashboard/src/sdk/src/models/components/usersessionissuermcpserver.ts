@@ -17,6 +17,7 @@ export const UserSessionIssuerMcpServerKind = {
   McpServer: "mcp_server",
   Toolset: "toolset",
   MetaMcpServer: "meta_mcp_server",
+  BuiltinMcpServer: "builtin_mcp_server",
 } as const;
 /**
  * Which kind of MCP server this is.
@@ -26,7 +27,7 @@ export type UserSessionIssuerMcpServerKind = OpenEnum<
 >;
 
 /**
- * A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.
+ * A live MCP server, toolset, meta MCP server, or built-in MCP server attached to a user_session_issuer.
  */
 export type UserSessionIssuerMcpServer = {
   /**

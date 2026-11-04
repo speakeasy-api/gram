@@ -46,6 +46,9 @@ import (
 // only after confirming the underlying endpoint is issuer-gated (the
 // user_session_issuer_id column is Valid).
 type ResolvedMcpEndpoint struct {
+	// BuiltinID identifies the code-owned backend; McpServerID holds its persisted auth identity.
+	BuiltinID uuid.NullUUID
+
 	// AudienceURN is the JWT audience string used by ValidateBearer and
 	// Mint. Toolset-keyed endpoints use urn.NewToolset(toolset.ID).String();
 	// mcp_server-keyed endpoints use urn.NewUserSessionIssuer(issuerID).String().
@@ -85,6 +88,9 @@ type ResolvedMcpEndpoint struct {
 	// issuer's configuration onto this endpoint. The runtime issuer gate builds
 	// toolset endpoints without it and stamps them only when a token needs it.
 	issuerStamped bool
+
+	// builtinOAuthError disables only OAuth, never independent machine credentials.
+	builtinOAuthError error
 
 	// McpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
@@ -252,6 +258,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 			McpSlug:                   e.Slug,
 			CustomDomainID:            e.CustomDomainID,
 			McpServerID:               e.McpServerID,
+			BuiltinID:                 e.BuiltinID,
 			MetaMcpServerID:           e.MetaMcpServerID,
 			ToolsetID:                 e.ToolsetID,
 			IsPublic:                  &isPublic,
@@ -278,6 +285,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 		McpSlug:                   e.Slug,
 		CustomDomainID:            e.CustomDomainID,
 		McpServerID:               e.McpServerID,
+		BuiltinID:                 e.BuiltinID,
 		MetaMcpServerID:           e.MetaMcpServerID,
 		ToolsetID:                 e.ToolsetID,
 		IsPublic:                  &isPublic,
@@ -307,6 +315,9 @@ func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
 // endpoint.
 func (e *ResolvedMcpEndpoint) LogWith(logger *slog.Logger) *slog.Logger {
 	args := []any{attr.SlogProjectID(e.ProjectID.String())}
+	if e.BuiltinID.Valid {
+		args = append(args, attr.SlogBuiltinMcpServerID(e.BuiltinID.UUID.String()))
+	}
 	if e.ToolsetID.Valid {
 		args = append(args, attr.SlogToolsetID(e.ToolsetID.UUID.String()))
 	}
@@ -413,6 +424,9 @@ func (e *ResolvedMcpEndpoint) ValidateGrant(ctx context.Context, ref EndpointRef
 }
 
 func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
+	if e.BuiltinID != ref.BuiltinID {
+		return errToolsetEndpointMismatch
+	}
 	if err := ref.Authority.ValidateEndpointRef(ref.BaseURL, ref.CustomDomainID); err != nil {
 		return errToolsetEndpointMismatch
 	}
@@ -487,6 +501,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 	routeBase mcproute.Base,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
+		BuiltinID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
@@ -494,6 +509,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		IsPublic:                  mcpServer.Visibility == mcpservers.VisibilityPublic,
 		idJAGConfigured:           false,
 		issuerStamped:             false,
+		builtinOAuthError:         nil,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -546,6 +562,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	routeBase mcproute.Base,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
+		BuiltinID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
@@ -553,6 +570,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		IsPublic:                  false,
 		idJAGConfigured:           false,
 		issuerStamped:             false,
+		builtinOAuthError:         nil,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:           uuid.NullUUID{UUID: metaServer.ID, Valid: true},
@@ -575,6 +593,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 // consent form action all need to match the caller's surface.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, alias legacyalias.Alias, routeBase mcproute.Base) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
+		BuiltinID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
@@ -582,6 +601,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting h
 		IsPublic:                  hosting.Public,
 		idJAGConfigured:           false,
 		issuerStamped:             false,
+		builtinOAuthError:         nil,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -648,6 +668,16 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		return nil, errToolsetEndpointMismatch
 	}
 	ref.RouteBase = routeBase
+	if routeBase == mcproute.Builtin {
+		endpoint, err := s.loadBuiltinEndpointByRef(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if !ref.BuiltinID.Valid || ref.BuiltinID != endpoint.BuiltinID {
+			return nil, errToolsetEndpointMismatch
+		}
+		return endpoint, nil
+	}
 	if routeBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, ref.McpSlug)
 		if err != nil {

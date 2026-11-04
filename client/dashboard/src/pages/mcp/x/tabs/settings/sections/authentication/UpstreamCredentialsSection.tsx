@@ -39,8 +39,17 @@ export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
  */
 export function UpstreamCredentialsSection({
   mcpServer,
+  builtinSlack = false,
 }: {
-  mcpServer: McpServer;
+  mcpServer: Pick<
+    McpServer,
+    | "id"
+    | "projectId"
+    | "remoteMcpServerId"
+    | "tunneledMcpServerId"
+    | "userSessionIssuerId"
+  >;
+  builtinSlack?: boolean;
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin");
@@ -76,11 +85,13 @@ export function UpstreamCredentialsSection({
             </AuthRow>
           ) : (
             <>
-              <RequirementRow
-                remoteMcpServerId={mcpServer.remoteMcpServerId}
-                status={query.data.status}
-                canManage={canManage}
-              />
+              {!builtinSlack && (
+                <RequirementRow
+                  remoteMcpServerId={mcpServer.remoteMcpServerId}
+                  status={query.data.status}
+                  canManage={canManage}
+                />
+              )}
               <AuthRow
                 label="Credentials"
                 hint="Turning one off or changing who can use it applies on every server that uses it."
@@ -138,6 +149,7 @@ export function UpstreamCredentialsSection({
           projectId={mcpServer.projectId}
           remoteMcpServerId={mcpServer.remoteMcpServerId}
           tunneled={!!mcpServer.tunneledMcpServerId}
+          builtinSlack={builtinSlack}
           onOpenChange={setAdding}
         />
       ) : null}

@@ -197,7 +197,7 @@ func (s *Service) headlessTargetServers(ctx context.Context, endpoint *ResolvedM
 		}
 		servers := make([]consentAuthServer, 0, len(members))
 		for _, member := range members {
-			if member.backend == metaMemberBackendProxied {
+			if consentMemberHasAuthChoices(member) {
 				servers = append(servers, consentAuthServer{id: member.serverID, projectID: member.projectID})
 			}
 		}

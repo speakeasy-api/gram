@@ -707,3 +707,33 @@ WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
   AND agent_grant.selectors = jsonb_build_object(
     'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
   AND owner_grant.selectors = agent_grant.selectors;
+-- name: PostflightIDBuiltinSlackBinding :one
+SELECT count(*) FROM builtin_mcp_settings AS settings
+JOIN user_session_issuers AS issuer ON issuer.id = settings.user_session_issuer_id
+WHERE settings.project_id = @project_id::uuid
+  AND settings.builtin_key = 'slack'
+  AND settings.user_session_issuer_bound
+  AND issuer.id = @issuer_id::uuid
+  AND issuer.project_id = settings.project_id
+  AND issuer.organization_id = @org_id::text;
+
+-- name: PostflightIDBuiltinSlackAuthClient :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+JOIN mcp_server_auth_clients link
+  ON link.mcp_server_id = s.id AND link.project_id = s.project_id
+ AND link.organization_id = p.organization_id AND link.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = link.auth_client_id AND ac.project_id = s.project_id
+ AND ac.organization_id = p.organization_id AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_auth_client_headers header
+  ON header.auth_client_id = ac.id AND header.organization_id = ac.organization_id
+ AND header.deleted IS FALSE
+WHERE p.organization_id = @org_id::text AND s.project_id = @project_id::uuid
+  AND s.id = @server_id::uuid AND s.builtin_backend = 'slack'
+  AND s.visibility = 'private' AND s.requires_upstream_auth AND s.deleted IS FALSE
+  AND s.user_session_issuer_id = @issuer_id::uuid
+  AND ac.id = @auth_client_id::uuid AND ac.client_type = 'static_credential'
+  AND header.name = 'SLACK_BOT_TOKEN' AND header.is_secret
+  AND header.value = 'xoxb-DEMO-NOT-A-REAL-TOKEN';
