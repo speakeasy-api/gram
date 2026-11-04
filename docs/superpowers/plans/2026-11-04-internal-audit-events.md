@@ -143,13 +143,13 @@ Update both tool descriptions/contracts to explain this classification without w
 - [ ] Render an existing UI-styled badge next to the row's action text; no toggle/filter or new component abstraction:
 
 ```tsx
-{
-  log.isInternal ? (
+<>
+  {log.isInternal ? (
     <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs">
       Internal
     </span>
-  ) : null;
-}
+  ) : null}
+</>
 ```
 
 Use the existing row variable and nearby badge conventions. Keep visible label accessible as text. No Command K change: existing route/resource set is unchanged.

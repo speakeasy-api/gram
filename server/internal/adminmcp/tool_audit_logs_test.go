@@ -401,6 +401,11 @@ func TestAuditLogEntriesInternalClassification(t *testing.T) {
 	status, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, `"isError":true`)
-	require.Contains(t, string(data), `"is_internal":false`)
-	require.Contains(t, string(data), `"is_internal":true`)
+	var output ListAuditLogEntriesOutput
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Len(t, output.Entries, 2)
+	require.Equal(t, "ordinary", output.Entries[0].ID)
+	require.False(t, output.Entries[0].IsInternal)
+	require.Equal(t, "internal", output.Entries[1].ID)
+	require.True(t, output.Entries[1].IsInternal)
 }

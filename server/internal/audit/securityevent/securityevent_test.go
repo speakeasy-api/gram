@@ -133,11 +133,11 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	q := repo.New(conn)
 
 	orgID := uuid.NewString()
-	insertConfiguration := func(organizationID, actorType, actorID string, action audit.Action, subjectID string) uuid.UUID {
+	insertConfiguration := func(organizationID, actorType, actorID string, action audit.Action, subjectID string, internal bool) uuid.UUID {
 		t.Helper()
 		row, err := configuration.InsertAuditLog(ctx, auditrepo.InsertAuditLogParams{
 			OrganizationID: organizationID,
-			IsInternal:     action == audit.ActionWorkloadAdmissionAdmit,
+			IsInternal:     internal,
 			ActorID:        actorID,
 			ActorType:      actorType,
 			Action:         string(action),
@@ -167,23 +167,24 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	runtimeSubjects := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	var moving []uuid.UUID
 	for _, subject := range runtimeSubjects {
-		moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, subject))
+		moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, subject, false))
 	}
-	moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0]))
-	moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[1]))
+	moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0], false))
+	moving = append(moving, insertConfiguration(orgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[1], false))
 
 	// A person's withdrawal of a runtime admission stays: older entries cannot
 	// tell an issuer cascade from a direct withdrawal. So does a person's own
 	// admission, and the same subject in another organization.
-	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[2])
+	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[2], false)
 	human := uuid.NewString()
-	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionAdmit, human)
-	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, human)
-	insertConfiguration(uuid.NewString(), "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0])
+	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionAdmit, human, false)
+	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, human, false)
+	insertConfiguration(uuid.NewString(), "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0], false)
 
-	// Another organization's runtime entry, which its own batches move.
+	// Another organization's deliberately classified fixture verifies that
+	// moving rows preserves an existing flag; admission itself is not internal.
 	otherOrgID := uuid.NewString()
-	otherRuntime := insertConfiguration(otherOrgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, uuid.NewString())
+	otherRuntime := insertConfiguration(otherOrgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, uuid.NewString(), true)
 
 	before, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{IncludeInternalEvents: true, OrganizationID: orgID})
 	require.NoError(t, err)
@@ -221,6 +222,9 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	require.Len(t, otherLeft, 1, "a batch moves only its own organization's entries")
 	require.Equal(t, otherRuntime, otherLeft[0].ID)
 	require.EqualValues(t, 1, move(otherOrgID))
+	classified, err := audittestrepo.New(conn).GetSecurityAuditLogInternal(ctx, otherRuntime)
+	require.NoError(t, err)
+	require.True(t, classified)
 
 	admitted, err = securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), nativeSubject, uuid.MustParse(human)})
 	require.NoError(t, err)
@@ -236,7 +240,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 		row := security[len(security)-1-i]
 		require.Equal(t, id, row.ID)
 		require.Equal(t, seqByID[id], row.Seq)
-		require.Equal(t, row.Action == string(audit.ActionWorkloadAdmissionAdmit), row.IsInternal)
+		require.False(t, row.IsInternal)
 		require.Less(t, row.Seq, security[0].Seq)
 	}
 
@@ -245,6 +249,7 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	require.Len(t, left, 3, "the person-made entries stay in the configuration log")
 	for _, row := range left {
 		require.Equal(t, "user", row.ActorType)
+		require.False(t, row.IsInternal)
 	}
 }
 

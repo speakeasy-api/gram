@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	adminHTTP "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminHTTP "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -642,11 +642,16 @@ func TestInternalClassificationResponse(t *testing.T) {
 		log, err := adminActivityLog(auditrepo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
 		require.NoError(t, err)
 		require.Equal(t, internal, log.IsInternal)
-		body, err := json.Marshal(adminHTTP.AuditLogResponseBody{IsInternal: log.IsInternal})
-		require.NoError(t, err)
-		var fields map[string]any
-		require.NoError(t, json.Unmarshal(body, &fields))
-		require.Contains(t, fields, "is_internal")
-		require.Equal(t, internal, fields["is_internal"])
+		recorder := httptest.NewRecorder()
+		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{log}, NextCursor: nil}
+		require.NoError(t, adminHTTP.EncodeListOrganizationActivityResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var body struct {
+			Logs []map[string]any `json:"logs"`
+		}
+		require.NoError(t, json.NewDecoder(recorder.Body).Decode(&body))
+		require.Len(t, body.Logs, 1)
+		require.Contains(t, body.Logs[0], "is_internal")
+		require.Equal(t, internal, body.Logs[0]["is_internal"])
 	}
 }
