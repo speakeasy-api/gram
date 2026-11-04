@@ -406,7 +406,10 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	auth, err := s.consentDirectPreviewAuth(ctx, endpoint, challengeState, postedAuthClient)
 	if err != nil {
-		return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnavailable, err, "resolve consent transport credential").LogError(ctx, logger)
 	}
 	if err := bindDirectConsentInventory(&draft, auth); err != nil {
 		return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview.").LogWarn(ctx, logger)
