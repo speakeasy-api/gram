@@ -37,13 +37,13 @@ type Service struct {
 	db     *pgxpool.Pool
 	repo   *repo.Queries
 	auth   *auth.Auth
-	authz  *authz.Engine
+	authz  *authz.Client
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client) *Service {
 	logger = logger.With(attr.SlogComponent("packages"))
 
 	return &Service{
@@ -52,7 +52,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:     db,
 		repo:   repo.New(db),
 		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		authz:  authzClient,
 	}
 }
 
@@ -76,7 +76,7 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -130,7 +130,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -210,7 +210,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -290,7 +290,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -355,7 +355,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 

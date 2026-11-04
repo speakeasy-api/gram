@@ -113,12 +113,13 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	require.NoError(t, worker.Start(), "start temporal worker")
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzClient := authztest.NewParityClient(t, authzEngine)
 	toolsSvc := tools.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, nil, nil)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, authzClient, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
-	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient)
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false)
-	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
+	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, authzClient, auditLogger)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,
