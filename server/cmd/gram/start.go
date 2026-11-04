@@ -1740,7 +1740,7 @@ func newStartCommand() *cli.Command {
 			// this break-glass transport mounted but explicitly unavailable until
 			// that safe lifecycle composition exists.
 			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
-			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
+			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger)
 			if err != nil {
 				return fmt.Errorf("build customer killswitch service: %w", err)
 			}

@@ -129,7 +129,6 @@ var foundationFileOwners = map[string]string{
 	"internal/agentmanagement/delegable.go":                         ownerAG2,
 	"internal/agentmanagement/policy.go":                            ownerAG2,
 	"internal/chat/conversation_access.go":                          ownerC3,
-	"internal/killswitches/authorized_service.go":                   ownerO2,
 	"internal/mcp/authclientresolve.go":                             ownerM5,
 	"internal/mcp/authnchallenge_workloadgrant.go":                  ownerI1,
 	"internal/mcp/inference_workload.go":                            ownerI1,
@@ -143,17 +142,17 @@ var foundationFileOwners = map[string]string{
 }
 
 var foundationFunctionOwners = map[string]string{
-	"internal/assistantidentity/actor.go canDelegateInference":                      ownerI1,
-	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":       ownerI1,
-	"internal/background/activities/process_workos_org_events.go handleRoleDeleted": ownerO2,
-	"internal/chat/impl.go *Service.GetAssistantSessionSummary":                     ownerC3,
-	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                              ownerC3,
-	"internal/chat/impl.go *Service.chatVisibilityScope":                            ownerC3,
-	"internal/skillefficacy/impl.go *Service.QueryInsights":                         ownerC1,
-	"internal/skillefficacy/impl.go *Service.requireProjectAccess":                  ownerAS1,
-	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
-	"internal/killswitches/authorized_service.go":                                   ownerO2,
-	"internal/productfeatures/impl.go *Service.authorizeOrganization":               ownerO2,
+	"internal/assistantidentity/actor.go canDelegateInference":                ownerI1,
+	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed": ownerI1,
+	"internal/access/impl.go *Service.ListGrants":                             ownerX4,
+	"internal/access/impl.go *Service.assignChallengeRole":                    ownerX1,
+	"internal/access/impl.go listRoleGrantsFromGrants":                        ownerX4,
+	"internal/chat/impl.go *Service.GetAssistantSessionSummary":               ownerC3,
+	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                        ownerC3,
+	"internal/chat/impl.go *Service.chatVisibilityScope":                      ownerC3,
+	"internal/skillefficacy/impl.go *Service.QueryInsights":                   ownerC1,
+	"internal/skillefficacy/impl.go *Service.requireProjectAccess":            ownerAS1,
+	"internal/skills/impl.go *Service.accessibleSkillIDs":                     ownerS2,
 }
 
 // foundationOwner returns the ticket that migrates consumer. Scope metadata
@@ -171,6 +170,10 @@ func foundationOwner(c inventoryConsumer) string {
 	case c.Category == categoryProjection:
 		return ownerX1
 	case c.Category == categoryWriter && strings.HasPrefix(c.Entry, "Seed"):
+		return ownerX1
+	case dir == "internal/access" && (c.Category == categoryLoader || c.Category == categoryWriter):
+		return ownerX1
+	case c.File == "internal/background/activities/process_workos_org_events.go" && c.Category == categoryWriter:
 		return ownerX1
 	case c.Category == categoryWiring && dir != "internal/demoseed":
 		return ownerF5

@@ -14,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -70,7 +71,7 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	facade, err := killswitches.NewFacade(lifecycle)
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	authorized, err := killswitches.NewAuthorizedService(facade, authzEngine)
+	authorized, err := killswitches.NewAuthorizedService(facade, authztest.NewParityClient(t, authzEngine))
 	require.NoError(t, err)
 	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
 	require.True(t, ok)

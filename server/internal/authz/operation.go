@@ -176,6 +176,16 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// ReadOrOrganizationRead asks to read the project or, failing that, its
+// organization: either alternative allows, and a block on one does not stop
+// the other.
+func (p ProjectRef) ReadOrOrganizationRead() Operation {
+	return newAlternatives("project", "read_or_organization_read",
+		p.Read(),
+		Organization(p.organizationID).Read(),
+	)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -185,6 +195,6 @@ func typedOperations() []Operation {
 	project := Project("organization", "project")
 	return []Operation{
 		org.Read(), org.Administer(), org.SyncDeviceAgent(), org.IngestHooks("project"),
-		project.Read(), project.Write(), project.PublishPlugin(),
+		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
 	}
 }

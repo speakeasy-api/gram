@@ -57,7 +57,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) (*Service, error) {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, auditLogger *audit.Logger) (*Service, error) {
 	registry, err := mcptoolexecution.NewRegistry(db)
 	if err != nil {
 		return nil, fmt.Errorf("build MCP tool-call killswitch registry: %w", err)
@@ -78,7 +78,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	if err != nil {
 		return nil, fmt.Errorf("build killswitch facade: %w", err)
 	}
-	authorized, err := killswitches.NewAuthorizedService(facade, authzEngine)
+	authorized, err := killswitches.NewAuthorizedService(facade, authzClient)
 	if err != nil {
 		return nil, fmt.Errorf("build authorized killswitch service: %w", err)
 	}
