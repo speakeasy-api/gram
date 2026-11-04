@@ -1,6 +1,9 @@
-import { ExternalLinkIcon } from "lucide-react";
+import { AlertTriangleIcon, ExternalLinkIcon } from "lucide-react";
+
 import type { JSX } from "react";
 import type { SlugGuideHint } from "./registryPromotionGuides";
+import { cn } from "@/lib/utils";
+import { tone } from "@/lib/tone";
 
 export function PromotionSlugGuideHint({
   id,
@@ -12,14 +15,25 @@ export function PromotionSlugGuideHint({
   return (
     <div id={id} aria-live="polite" className="mt-1 text-xs">
       {hint?.kind === "existing" && (
-        <div className="space-y-1 rounded-md border border-amber-500/40 p-2">
-          <p>
-            A setup guide for <strong>{hint.title}</strong> already uses this
-            slug. Publishing links this server to that guide and won&apos;t
-            request a new one. Only keep this slug if it&apos;s the same
-            provider.
-          </p>
-          <GuideLink url={hint.url} />
+        <div
+          className={cn(
+            "flex items-start gap-2 rounded-md border p-2",
+            tone.warning,
+          )}
+        >
+          <AlertTriangleIcon
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0"
+          />
+          <div className="space-y-1">
+            <p>
+              <span className="sr-only">Warning: </span>A setup guide for{" "}
+              <strong>{hint.title}</strong> already uses this slug. Publishing
+              links this server to that guide and won&apos;t request a new one.
+              Only keep this slug if it&apos;s the same provider.
+            </p>
+            <GuideLink url={hint.url} />
+          </div>
         </div>
       )}
       {hint?.kind === "endpoint" && (

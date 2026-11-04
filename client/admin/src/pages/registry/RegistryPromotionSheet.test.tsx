@@ -596,10 +596,10 @@ const setupGuides = [
   { slug: "slack", title: "Slack" },
   { slug: "box", title: "Box" },
 ];
-it("warns when the slug already belongs to another guide and updates as it is edited", async () => {
+it("warns without blocking when the slug belongs to another guide and updates as it is edited", async () => {
   api.candidate.mockResolvedValue({
     ...candidate,
-    suggestedMetadata: metadata,
+    suggestedMetadata: { ...metadata, authMode: "none" },
     setupGuides,
     setupGuidesVersion: "v0.3.9",
   });
@@ -614,6 +614,15 @@ it("warns when the slug already belongs to another guide and updates as it is ed
       .textContent,
   ).toContain("(v0.3.9)");
   fireEvent.change(slug, { target: { value: "box" } });
+  expect(screen.getByText("Warning:")).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
   expect(screen.getByText(/already uses this slug/).textContent).toContain(
     "Box",
   );
@@ -643,6 +652,7 @@ it("notes an endpoint-matched slug instead of warning, without blocking publicat
     (await screen.findByText(/guide for this endpoint/)).textContent,
   ).toContain("Slack");
   expect(screen.queryByText(/already uses this slug/)).toBeNull();
+  expect(screen.queryByText("Warning:")).toBeNull();
   fireEvent.click(screen.getByRole("checkbox"));
   const button = screen.getByRole("button", {
     name: "Publish catalog entry",
