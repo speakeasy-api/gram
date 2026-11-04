@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIResponse } from "@playwright/test";
 import { ApiClient } from "../lib/api.ts";
 import { credentialFor, lazyWorld, type Persona } from "../lib/personas.ts";
 import { CASES, type CaseContext } from "./cases.ts";
@@ -28,21 +28,23 @@ for (const c of CASES) {
             : c.project === "sandbox"
               ? world.sandboxProjectSlug
               : null;
-        const fx = c.prepare ? await c.prepare(ctx) : {};
-        const { query, body } = c.request ? c.request(ctx, fx) : {};
-        const api = new ApiClient(request, credentialFor(world, persona));
-        const res = await api.call(c.method, c.path, {
-          project,
-          ...(query ? { query } : {}),
-          ...(body === undefined ? {} : { body }),
-          ...(c.bearer
-            ? {
-                bearer: true,
-                headers: { Accept: "application/json, text/event-stream" },
-              }
-            : {}),
-        });
+        let fx: Record<string, string> = {};
+        let res: APIResponse | undefined;
         try {
+          fx = c.prepare ? await c.prepare(ctx) : {};
+          const { query, body } = c.request ? c.request(ctx, fx) : {};
+          const api = new ApiClient(request, credentialFor(world, persona));
+          res = await api.call(c.method, c.path, {
+            project,
+            ...(query ? { query } : {}),
+            ...(body === undefined ? {} : { body }),
+            ...(c.bearer
+              ? {
+                  bearer: true,
+                  headers: { Accept: "application/json, text/event-stream" },
+                }
+              : {}),
+          });
           expect(
             res.status(),
             `${c.method} ${c.path} as ${persona}: ${(await res.text()).slice(0, 300)}`,

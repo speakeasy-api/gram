@@ -34,9 +34,13 @@ export type ContractCase = {
     ctx: CaseContext,
     fx: Fixture,
   ) => { query?: Record<string, string>; body?: unknown };
-  // Runs after every call, whatever its status. `res` is the persona's answer,
-  // so a cleanup can remove what an allowed create made.
-  cleanup?: (ctx: CaseContext, fx: Fixture, res: APIResponse) => Promise<void>;
+  // Runs after every attempt, whatever happened. `res` is the persona's answer
+  // when there was one, so a cleanup can remove what an allowed create made.
+  cleanup?: (
+    ctx: CaseContext,
+    fx: Fixture,
+    res: APIResponse | undefined,
+  ) => Promise<void>;
   expect: Partial<Record<Persona, number>>;
   // Present the credential as a bearer token (MCP gateway calls).
   bearer?: boolean;
@@ -62,8 +66,8 @@ const sessionOnly = {
   anonymous: unauthenticated,
 } as const;
 
-async function bodyOf<T>(res: APIResponse): Promise<T | undefined> {
-  if (!res.ok()) return undefined;
+async function bodyOf<T>(res: APIResponse | undefined): Promise<T | undefined> {
+  if (!res?.ok()) return undefined;
   try {
     return (await res.json()) as T;
   } catch {
@@ -99,7 +103,7 @@ async function deleteToolset(ctx: CaseContext, fx: Fixture): Promise<void> {
 async function deleteCreatedToolset(
   ctx: CaseContext,
   project: string,
-  res: APIResponse,
+  res: APIResponse | undefined,
 ) {
   const created = await bodyOf<{ slug: string }>(res);
   if (created) await deleteToolset(ctx, { toolsetSlug: created.slug, project });

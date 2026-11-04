@@ -19,7 +19,8 @@ export default defineConfig({
   // "current user", so the suite runs serially.
   workers: 1,
   fullyParallel: false,
-  timeout: 60_000,
+  // Above the dashboard login journey's own two-minute wait.
+  timeout: 180_000,
   expect: { timeout: 15_000 },
   retries: 0,
   reporter: process.env["CI"]

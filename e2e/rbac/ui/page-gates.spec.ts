@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { expectAllowed, expectDenied, pageAs } from "../lib/browser.ts";
+import { env } from "../lib/env.ts";
 import type { UserPersona } from "../lib/personas.ts";
 
 // Which dashboard pages each persona may open. One row per page: `allowed`
@@ -18,7 +19,7 @@ type PageGate = {
 };
 
 const SANDBOX = "/speakeasy/projects/rbac-e2e-sandbox";
-const DEFAULT = "/speakeasy/projects/default";
+const DEFAULT = `/speakeasy/projects/${env.projectSlug}`;
 
 const GATES: PageGate[] = [
   {
