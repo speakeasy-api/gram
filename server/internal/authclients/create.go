@@ -531,7 +531,7 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 				return nil, fmt.Errorf("header %q reads request header %q, which is not a valid HTTP header name", name, source)
 			}
 		}
-		check := proxy.ConfiguredHeader{IsRequired: in.IsRequired, Name: name, StaticValue: value, ValueFromRequestHeader: source}
+		check := proxy.ConfiguredHeader{IsSecret: in.IsSecret, IsRequired: in.IsRequired, Name: name, StaticValue: value, ValueFromRequestHeader: source}
 		switch err := proxy.CheckRemoteHeader(check); {
 		case err == nil:
 		case errors.Is(err, proxy.ErrAuthorizationSource):

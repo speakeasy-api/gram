@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
@@ -193,6 +194,35 @@ func (s *Service) RemoteLoginState(ctx context.Context, state string) (remoteses
 // connection link's login.
 func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote remotesessions.RemoteLoginState) (bool, error) {
 	return s.verifyConnectionRecoveryCompletion(r, remote)
+}
+
+// TagTunnelOutage and ErrTunnelNoRoute expose the answer every tunneled path shares.
+var (
+	TagTunnelOutage  = tagTunnelOutage
+	ErrTunnelNoRoute = errTunnelNoRoute
+)
+
+// SetDB swaps only the pool the service reads endpoints through, to fail that first read.
+func (s *Service) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
+// ConnectionRouteFailureForOutage is what Code Mode reports for a connection in an outage.
+func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool) (string, string) {
+	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
+}
+
+// RemoteSessionUnavailableError exposes the answer for a required connection in an outage.
+var RemoteSessionUnavailableError = remoteSessionUnavailableError
+
+// SetAuthzEngine swaps the authorization engine, to make it fail.
+func (s *Service) SetAuthzEngine(engine *authz.Engine) {
+	s.authz = engine
+}
+
+// SetChatSessionsManager swaps the store revocation checks read, to take it down.
+func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
+	s.chatSessionsManager = manager
 }
 
 // ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.

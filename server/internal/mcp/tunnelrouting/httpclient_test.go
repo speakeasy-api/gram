@@ -1,6 +1,7 @@
 package tunnelrouting
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -293,6 +294,79 @@ func TestHTTPClientAllGatewaysUnreachable(t *testing.T) {
 	candidates, err := routes.Candidates(t.Context(), "tunnel-1")
 	require.NoError(t, err)
 	require.Empty(t, candidates)
+}
+
+// A failed cleanup is our store failing too, whatever else went wrong on the way.
+func TestHTTPClientUnpublishFailureNamesTheRouteStore(t *testing.T) {
+	t.Parallel()
+
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+	noSession := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer noSession.Close()
+
+	for name, gateway := range map[string]string{"unreachable": deadURL, "no live session": noSession.URL} {
+		routeTable := route.NewRouteTable()
+		require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", gateway, time.Minute))
+		routes := &unpublishErrorStore{Store: routeTable, err: errors.New("redis down"), calls: 0}
+
+		resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://as.customer.internal/oauth/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+		require.Nil(t, resp, name)
+		require.ErrorIs(t, err, ErrRouteStoreUnavailable, name)
+		require.Equal(t, 1, routes.calls, name)
+	}
+
+	// The caller's own context ending the cleanup says nothing about the store.
+	for name, gateway := range map[string]string{"unreachable": deadURL, "no live session": noSession.URL} {
+		for _, callerErr := range []error{context.Canceled, context.DeadlineExceeded} {
+			routeTable := route.NewRouteTable()
+			require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", gateway, time.Minute))
+			routes := &unpublishErrorStore{Store: routeTable, err: callerErr, calls: 0}
+
+			resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://as.customer.internal/oauth/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp, name)
+			require.ErrorIs(t, err, ErrNoTunnelRoute, name)
+			require.NotErrorIs(t, err, ErrRouteStoreUnavailable, name)
+		}
+	}
+}
+
+// A failure after the request may have been sent never carries an earlier cleanup's route store marker.
+func TestHTTPClientSentRequestFailureDropsRouteStoreMarker(t *testing.T) {
+	t.Parallel()
+
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer broken.Close()
+
+	// Selection is random; retry until the dead route is drawn, and fails cleanup, first.
+	for range 64 {
+		routeTable := route.NewRouteTable()
+		require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", deadURL, time.Minute))
+		require.NoError(t, routeTable.Publish(t.Context(), "tunnel-1", broken.URL, time.Minute))
+		routes := &unpublishErrorStore{Store: routeTable, err: errors.New("redis down"), calls: 0}
+
+		resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://as.customer.internal/oauth/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+		require.Nil(t, resp)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrRouteStoreUnavailable)
+		if routes.calls == 1 {
+			require.Contains(t, err.Error(), "redis down")
+			return
+		}
+	}
+	t.Fatal("the dead route was never drawn first")
 }
 
 func TestHTTPClientBlockedGatewayAddressIsNotUnpublished(t *testing.T) {

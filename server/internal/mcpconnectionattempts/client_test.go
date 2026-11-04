@@ -211,12 +211,15 @@ func TestReportedClient_HeldBackRowsReadNothing(t *testing.T) {
 	var written atomic.Int32
 	recorder := NewCapturing(func(Row) { written.Add(1) }, logsOn)
 	recorder.limiter = newOnceLimiter()
+	recorder.queue = make(chan Row, 1)
+	scope := testScope()
 	for range 50 {
-		recorder.Once(t.Context(), testScope(), StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) {
+		recorder.Once(t.Context(), scope, StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) {
 			reads.Add(1)
 			return "cursor", ""
 		}))
 	}
+	require.Positive(t, written.Load(), "the burst must reach the limiter, not the queue reserve")
 	require.Equal(t, written.Load(), reads.Load())
 	require.Less(t, reads.Load(), int32(50))
 }

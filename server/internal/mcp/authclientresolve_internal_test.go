@@ -830,6 +830,8 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, "Authorization", headers[0].Name)
 		require.Equal(t, "Bearer static-secret", headers[0].StaticValue)
 		require.True(t, headers[0].IsRequired)
+		require.True(t, headers[0].IsSecret)
+		require.False(t, headers[1].IsSecret)
 		require.Equal(t, "X-Caller-Tenant", headers[1].ValueFromRequestHeader)
 
 		other, err := f.service.loadAuthClientHeaders(ctx, "org_"+uuid.NewString(), []uuid.UUID{id})
