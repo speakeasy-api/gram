@@ -626,6 +626,7 @@ export function LogsTools({
     accountType,
     agentNamesById,
     agentOptions,
+    defaultTypes,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
@@ -745,6 +746,7 @@ export function LogsTools({
       }
     },
     [
+      defaultTypes,
       setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
