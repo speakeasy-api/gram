@@ -42,6 +42,7 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import { ScopedToolLogsEmptyState } from "@/components/observe/ScopedToolLogsEmptyState";
 import {
   SKILL_LOAD_CHANNEL_LABELS,
   selectedLoadedVia,
@@ -1822,18 +1823,8 @@ function LogsToolsTableContent({
   }
 
   if (traces.length === 0) {
-    // Scoped to one identity, an empty list means that identity made no
-    // calls in the period, not that capture is missing for the project.
     if (!hasActiveFilters && embedded) {
-      return (
-        <div className="py-12 text-center">
-          <span className="text-muted-foreground text-sm">
-            {localToolsHidden
-              ? "No tool calls other than local tools from this identity in this period."
-              : "No tool calls from this identity in this period."}
-          </span>
-        </div>
-      );
+      return <ScopedToolLogsEmptyState localToolsHidden={localToolsHidden} />;
     }
 
     if (!hasActiveFilters) {
