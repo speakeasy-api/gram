@@ -16,10 +16,11 @@ The HTML report lands in `e2e/.playwright/rbac-report`.
 
 ## Who the tests act as
 
-The global setup (`global-setup.ts`, `lib/personas.ts`) logs in through the real
-OAuth flow of the local identity provider once per persona, assigns roles
-through `access.updateMemberRoles` as the seeded organization admin, and stores
-each session. Nothing uses the `X-Gram-Scope-Override` dev header, because that
+The global setup (`global-setup.ts`, `lib/personas.ts`) logs each user persona
+in through the real OAuth flow of the local identity provider, assigns its role
+through `access.updateMemberRoles` as the seeded organization admin, logs it in
+again so its stored session postdates the assignment, and mints the two API
+keys. Nothing uses the `X-Gram-Scope-Override` dev header, because that
 would skip the principal and role resolution an authorization change touches.
 
 | Persona                      | What it holds                                                                                                      |
@@ -28,6 +29,7 @@ would skip the principal and role resolution an authorization change touches.
 | `member`                     | built-in Member role                                                                                               |
 | `reader`                     | custom role: `org:read`, `project:read`                                                                            |
 | `blocked`                    | custom role: project and MCP read/write on every project, plus `project:blocked_write` on the default project only |
+| `elsewhere`                  | `project:read` everywhere, MCP read/write/connect only on the sandbox project                                      |
 | `norole`                     | organization member with no role                                                                                   |
 | `outsider`                   | user whose only organization is a different one                                                                    |
 | `consumerKey`, `producerKey` | organization API keys with those key scopes                                                                        |
@@ -52,7 +54,8 @@ the sandbox), toolset create/read/update/clone/delete and MCP server create/upda
 key scopes, an MCP client's `tools/list` and `tools/call` through the gateway,
 assistant create/read/update/delete and execution profiles, agent
 registration, role creation and role reassignment. Each row
-lists the status every persona must get; rows create their own fixtures and
+lists the status each persona it covers must get (personas that cannot use an
+interface, such as sessions on the MCP gateway, are left out of some rows); rows create their own fixtures and
 clean up after themselves.
 
 **Dashboard page gates** (`ui/page-gates.spec.ts`). Organization admin pages,

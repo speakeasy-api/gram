@@ -235,7 +235,7 @@ export async function provisionWorld(): Promise<World> {
     for (const persona of USER_PERSONAS) {
       const email = `${persona}@${EMAIL_DOMAIN}`;
       const user = await idp.ensureUser(email, `RBAC E2E ${persona}`);
-      await idp.ensureMembership(
+      await idp.ensureOnlyMembership(
         user.id,
         persona === "outsider" ? outsideOrg.id : idpOrgs.id,
       );

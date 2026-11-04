@@ -48,10 +48,17 @@ const world = lazyWorld();
 test.describe("read sweep", () => {
   test.afterAll(() => {
     if (!updating) return;
+    // Only a complete recording replaces the baseline, so a run that failed
+    // part-way cannot leave old and new rows mixed, and endpoints dropped from
+    // the list drop out of the file.
+    const missing = READ_SWEEP_ENDPOINTS.filter((e) => !(e in recorded));
+    if (missing.length > 0) {
+      throw new Error(
+        `baseline not written: ${missing.length} endpoints were not recorded`,
+      );
+    }
     const sorted = Object.fromEntries(
-      Object.entries({ ...baseline, ...recorded }).sort(([a], [b]) =>
-        a.localeCompare(b),
-      ),
+      Object.entries(recorded).sort(([a], [b]) => a.localeCompare(b)),
     );
     fs.writeFileSync(baselineFile, `${JSON.stringify(sorted, null, 2)}\n`);
   });

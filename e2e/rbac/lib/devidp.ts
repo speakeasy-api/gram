@@ -51,22 +51,29 @@ export class DevIdp {
   }
 
   async ensureOrg(slug: string, name: string): Promise<DevIdpOrg> {
-    const page = await this.call<{ items: DevIdpOrg[] }>(
-      "organizations.list",
-      {},
-    );
-    return (
-      page.items.find((o) => o.slug === slug) ??
-      (await this.call<DevIdpOrg>("organizations.create", { slug, name }))
-    );
+    let cursor = "";
+    do {
+      const page = await this.call<{
+        items: DevIdpOrg[];
+        next_cursor?: string;
+      }>("organizations.list", cursor ? { cursor } : {});
+      const hit = page.items.find((o) => o.slug === slug);
+      if (hit) return hit;
+      cursor = page.next_cursor ?? "";
+    } while (cursor);
+    return this.call<DevIdpOrg>("organizations.create", { slug, name });
   }
 
-  async ensureMembership(userId: string, orgId: string): Promise<void> {
-    const page = await this.call<{ items: unknown[] }>("memberships.list", {
-      user_id: userId,
-      organization_id: orgId,
-    });
-    if (page.items.length > 0) return;
+  // Makes orgId the user's only organization, so a persona's organization
+  // cannot drift between runs.
+  async ensureOnlyMembership(userId: string, orgId: string): Promise<void> {
+    const page = await this.call<{
+      items: { id: string; organization_id: string }[];
+    }>("memberships.list", { user_id: userId });
+    for (const m of page.items.filter((m) => m.organization_id !== orgId)) {
+      await this.call("memberships.delete", { id: m.id });
+    }
+    if (page.items.some((m) => m.organization_id === orgId)) return;
     await this.call("memberships.create", {
       user_id: userId,
       organization_id: orgId,
