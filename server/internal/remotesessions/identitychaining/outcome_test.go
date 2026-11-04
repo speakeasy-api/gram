@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // Only a transient failure that never reached the provider is repeated.
@@ -35,4 +37,18 @@ func TestExhaustedOutcomeIsNotSafeToRepeat(t *testing.T) {
 		require.False(t, outcome.SafeToRepeat(), "a combined outcome omits individual submission details")
 	}
 	require.True(t, exhausted([]Outcome{safe}).SafeToRepeat(), "a single provider retains its complete outcome")
+}
+
+// Only a kept sign-in paused after a refusal reads as retained.
+func TestDelegationOutcomeRetained(t *testing.T) {
+	t.Parallel()
+
+	kept := delegationOutcome(remotesessions.ErrDelegationRetainedConfiguration)
+	require.Equal(t, ReasonConfigurationRequired, kept.Reason)
+	require.True(t, kept.Retained)
+
+	noToken := delegationOutcome(remotesessions.ErrDelegationConfiguration)
+	require.Equal(t, ReasonConfigurationRequired, noToken.Reason)
+	require.False(t, noToken.Retained)
+	require.False(t, delegationUnchecked.Retained)
 }

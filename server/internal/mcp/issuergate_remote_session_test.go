@@ -486,13 +486,13 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			require.Equal(t, 1, acquired, "the gate tries chaining before answering")
 			switch {
 			case tc.refusal.retryable:
-				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "retry shortly")
+				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "Try again in a moment.")
 				require.Empty(t, w.Header().Get("WWW-Authenticate"))
 			case refused.ProviderRefusal():
 				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
 				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 			default:
-				require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "contact your administrator")
+				require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "Contact your administrator.")
 				require.Empty(t, w.Header().Get("WWW-Authenticate"))
 			}
 		})

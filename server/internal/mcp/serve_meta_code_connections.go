@@ -50,7 +50,7 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		state.Consent = "approved"
 		if err := b.service.validateCatalogMember(ctx, gate, member); err != nil {
 			state.Consent = "unknown"
-			if _, consent := errors.AsType[catalogConsentError](err); consent {
+			if needsNewConsent(err) {
 				state.Consent = "required"
 			}
 		} else {
@@ -61,6 +61,14 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 				}
 			}
 		}
+	}
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
+		if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); !reconnect {
+			state.Consent = "unknown"
+			state.Instructions = message
+			return state
+		}
+		state.Consent = "required"
 	}
 	if gate.catalogRecoveryOnly || (member.authClient != nil && member.authClient.outcome == authClientGap) {
 		state.Consent = "required"
@@ -80,6 +88,9 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	member, ok := findMetaMember(members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
+	}
+	if err := b.connectRefusal(ctx, gate, member); err != nil {
+		return nil, err
 	}
 	if !codeConnectAvailable(gate) {
 		return nil, codemode.ErrToolUnavailable
@@ -132,7 +143,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		instructions = "Open authorization_url to connect this service, then review and approve the refreshed gateway tools. Then start a fresh execution and check access; do not replay an earlier program."
 	} else if needsConsent {
 		reason = "consent_required"
-		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your MCP client and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
+		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your AI app and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
 	}
 	action := &codemode.ConnectionAction{Server: server, Status: "authorization_required", Reason: reason, AuthorizationURL: link.String(), ExpiresAt: &expires, ClientReconnectRequired: needsConsent && ticket.CodeReconnect.CatalogID == uuid.Nil, Instructions: instructions}
 	if b.connections.actions == nil {
@@ -140,6 +151,18 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	}
 	b.connections.actions[server] = action
 	return action, nil
+}
+
+// connectRefusal stops a sign-in link for a stale choice that consent can't replace.
+func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
+		return nil
+	}
+	message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+	if reconnect {
+		return nil
+	}
+	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
 }
 
 // codeConnectAvailable reports whether Connect can mint a link bound to the
@@ -211,6 +234,13 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {
+		if needsNewConsent(err) {
+			state.Authentication = "unknown"
+			if state.Consent == "required" {
+				state.Authentication = "reauth_required"
+			}
+			return state
+		}
 		_, needsSignIn := errors.AsType[memberCredentialError](err)
 		if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
 			state.Authentication = "reauth_required"

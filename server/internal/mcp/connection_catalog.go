@@ -41,7 +41,7 @@ var errConnectionCatalogExpired = errors.New("connection catalog expired; give c
 var errConnectionCatalogTooLarge = errors.New("approved tool definitions exceed the supported size")
 
 // catalogMemberNotApproved explains a member outside the approved catalog.
-const catalogMemberNotApproved = "This server was not approved. Give consent again to add it."
+const catalogMemberNotApproved = "This server was not approved. Reconnect this gateway in your AI app to add it."
 
 // consentRejectionReason is the log reason for an approval that cannot serve a
 // request. Clients see only a sign-in challenge or consent_required, so these
@@ -458,12 +458,12 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return s.rejectCatalogMember(ctx, gate, member, consentRejectionAuthenticationChanged, "This server's authentication changed. Give consent again to approve it.",
+			return s.rejectCatalogMember(ctx, gate, member, consentRejectionAuthenticationChanged, "This server's authentication changed. Reconnect this gateway in your AI app to approve it.",
 				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
 	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
-		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Give consent again to approve it.",
+		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
 			map[string]bool{"configuration_hash_present": member.configurationHash != "", "approved_hash_recorded": approved.BackendHash != ""})
 	}
 	return nil
@@ -513,6 +513,15 @@ type consentDiagnosticKey struct {
 type catalogConsentError struct{ *metaMemberError }
 
 func (e catalogConsentError) Unwrap() error { return e.metaMemberError }
+
+// needsNewConsent reports a consent mismatch or a stale choice; the latter may need an administrator instead.
+func needsNewConsent(err error) bool {
+	if _, consent := errors.AsType[catalogConsentError](err); consent {
+		return true
+	}
+	_, stale := errors.AsType[memberStaleChoiceError](err)
+	return stale
+}
 
 func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, error) {
 	hashes := make(map[uuid.UUID]string, len(ids))

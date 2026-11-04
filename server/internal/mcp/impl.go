@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -193,7 +194,7 @@ type Service struct {
 	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
-	mandatoryShadowLog *mandatoryShadowLog
+	mandatoryShadowLog *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -273,6 +274,10 @@ type Service struct {
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
 	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
 	connectionCatalogCache cache.Cache
+	// staleNoAuthLog dedupes stale no-auth choice warnings.
+	staleNoAuthLog *onceLog
+	// staleChoiceConsent briefly remembers whether consent can replace a stale choice.
+	staleChoiceConsent *expirable.LRU[string, bool]
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -631,7 +636,7 @@ func NewService(
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
-		mandatoryShadowLog:        newMandatoryShadowLog(),
+		mandatoryShadowLog:        newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -706,6 +711,8 @@ func NewService(
 			cache.SuffixNone,
 		),
 		connectionCatalogCache: cacheImpl,
+		staleNoAuthLog:         newOnceLog(),
+		staleChoiceConsent:     expirable.NewLRU[string, bool](staleChoiceConsentSize, nil, staleChoiceConsentTTL),
 		codeExecutor:           codeExecutor,
 		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,
