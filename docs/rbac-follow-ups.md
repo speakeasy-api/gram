@@ -35,7 +35,7 @@ Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migratio
 
 The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout.
 
-14. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1).
+14. **X1, catalogue, validation and seeding (AIS-873).** Derive these from the compiled registry. X1 also waits on the agent and workload declarations (AG1, AG2, W1). X1 also deletes the engine helper `ResolveOrganizationAdminEmails`, which only the old path of `Client.OrganizationAdministratorEmails` still calls.
 15. **X2, runtime and key policy projections (AIS-874).**
 16. **X4, demo seed and dashboard gates (AIS-876).** This includes the "blocked" label for shared sign-in that was deferred from the MCP stack.
 17. **Move `org:hooks_ingest` to a project scope.** It is declared on the organization with a project selector key but decided per project. Moving it changes stored grants, so it waits for shadow data.
@@ -44,7 +44,7 @@ The RFC lets the engine and scope tables go only after production shadow compari
     - access grant loaders and writers, and grant loading through `LoadGrants` for plugin servers, device-agent connections and role snapshots (M6 decision 6);
     - the engine itself: the old-mode decider adapter from item 3, the old and shadow routing modes, the shadow recorder and the migration flags;
     - the missing-client fallbacks for workers and commands (O3, O5, O6 activities and billing);
-    - the `allows` callback in `resolveOrganizationAudience`, which exists only so old, shadow and new modes share the member walk: inline the registry decision into `Client.OrganizationAdministratorEmails` and delete `ResolveOrganizationAdminEmails` (raised in review on #8481);
+    - the `allows` callback in `resolveOrganizationAudience`, which exists only so old, shadow and new modes share the member walk: inline the registry decision into `Client.OrganizationAdministratorEmails` (raised in review on #8481);
     - the auth-client backfill planner (`authclientbackfill`), once X1 retires the tables it writes;
     - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
     - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
