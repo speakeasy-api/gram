@@ -14,10 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -390,6 +392,30 @@ func TestResolveOutageEvidence(t *testing.T) {
 		{"lock contention", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, mcpconnectionattempts.Code{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.want, resolveFailureHappened(tc.cause)) })
+	}
+}
+
+// A refresh that waited on another request made no call of its own, so the gate writes no row for it.
+func TestRecordRemoteSessionRejectionSuppression(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		cause error
+		want  int
+	}{
+		{"waited on another refresh", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, 0},
+		{"token endpoint outage", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}), 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
+			s := &Service{logger: testenv.NewLogger(t), metrics: metrics, connections: rec.Recorder}
+			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org", ProjectID: uuid.New(), McpServerID: validUUID(uuid.New())}
+			authentication := &issuerGateAuthentication{endpoint: endpoint, subject: urn.NewAgentSubject(uuid.New())}
+			s.recordRemoteSessionRejection(t.Context(), authentication, "rejected", issuerGateReasonRemoteSessionUnavailable, resolveFailureHappened(tc.cause), tc.cause)
+			require.Len(t, rec.Rows(), tc.want)
+		})
 	}
 }
 
