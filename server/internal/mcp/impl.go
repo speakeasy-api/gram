@@ -1665,11 +1665,18 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Check security schemes before dispatching any RPC — including initialize.
 	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
 	// their OAuth flow, so we can't defer this to individual RPC handlers.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, cfg.isPublic, mcpInputs)
+	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
 	if err != nil {
 		return err
 	}
 	if !satisfied {
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			scope := mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
+			if cfg.mcpServerID != nil {
+				scope = mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+			}
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, failureCode, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+		}
 		if oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",
