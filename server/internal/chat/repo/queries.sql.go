@@ -1112,7 +1112,7 @@ func (q *Queries) GetChatSessionCount(ctx context.Context, arg GetChatSessionCou
 }
 
 const getChatTitlesByIDs = `-- name: GetChatTitlesByIDs :many
-SELECT id, title FROM chats
+SELECT id, title, title_manually_set FROM chats
 WHERE id = ANY($1::uuid[])
   AND project_id = ANY($2::uuid[])
   AND deleted IS FALSE
@@ -1124,8 +1124,9 @@ type GetChatTitlesByIDsParams struct {
 }
 
 type GetChatTitlesByIDsRow struct {
-	ID    uuid.UUID
-	Title pgtype.Text
+	ID               uuid.UUID
+	Title            pgtype.Text
+	TitleManuallySet bool
 }
 
 func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDsParams) ([]GetChatTitlesByIDsRow, error) {
@@ -1137,7 +1138,7 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	var items []GetChatTitlesByIDsRow
 	for rows.Next() {
 		var i GetChatTitlesByIDsRow
-		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.TitleManuallySet); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2694,8 +2695,10 @@ SELECT
   l.device_hostname,
   l.created_at,
   pc.title AS parent_title,
+  COALESCE(pc.title_manually_set, FALSE)::boolean AS parent_title_manually_set,
   (pc.id IS NOT NULL)::boolean AS parent_captured,
   cc.title AS child_title,
+  COALESCE(cc.title_manually_set, FALSE)::boolean AS child_title_manually_set,
   (cc.id IS NOT NULL)::boolean AS child_captured
 FROM chat_session_links l
 LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
@@ -2723,19 +2726,21 @@ type ListChatSessionLinksParams struct {
 }
 
 type ListChatSessionLinksRow struct {
-	ParentChatID   uuid.UUID
-	ChildChatID    uuid.NullUUID
-	ChildSessionID pgtype.Text
-	Kind           string
-	TargetHarness  string
-	SourceSurface  pgtype.Text
-	ActorEmail     pgtype.Text
-	DeviceHostname pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	ParentTitle    pgtype.Text
-	ParentCaptured bool
-	ChildTitle     pgtype.Text
-	ChildCaptured  bool
+	ParentChatID           uuid.UUID
+	ChildChatID            uuid.NullUUID
+	ChildSessionID         pgtype.Text
+	Kind                   string
+	TargetHarness          string
+	SourceSurface          pgtype.Text
+	ActorEmail             pgtype.Text
+	DeviceHostname         pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	ParentTitle            pgtype.Text
+	ParentTitleManuallySet bool
+	ParentCaptured         bool
+	ChildTitle             pgtype.Text
+	ChildTitleManuallySet  bool
+	ChildCaptured          bool
 }
 
 // Session-lineage edges touching any of the requested chats, either as the
@@ -2776,8 +2781,10 @@ func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionL
 			&i.DeviceHostname,
 			&i.CreatedAt,
 			&i.ParentTitle,
+			&i.ParentTitleManuallySet,
 			&i.ParentCaptured,
 			&i.ChildTitle,
+			&i.ChildTitleManuallySet,
 			&i.ChildCaptured,
 		); err != nil {
 			return nil, err
@@ -3043,6 +3050,7 @@ WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.title_manually_set,
     c.session_surface,
     c.user_id,
     c.external_user_id,
@@ -3196,6 +3204,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.title_manually_set,
     cc.session_surface,
     cc.user_id,
     cc.external_user_id,
@@ -3225,6 +3234,7 @@ limited_chats AS (
   SELECT
     fc.id,
     fc.title,
+    fc.title_manually_set,
     fc.user_id,
     fc.external_user_id,
     fc.created_at,
@@ -3265,6 +3275,7 @@ page_chats AS (
   SELECT
     lc.id,
     lc.title,
+    lc.title_manually_set,
     lc.user_id,
     lc.external_user_id,
     lc.created_at,
@@ -3328,7 +3339,7 @@ page_chats AS (
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.title_manually_set, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3346,6 +3357,7 @@ chat_attribution AS (
 SELECT
   lc.id,
   lc.title,
+  lc.title_manually_set,
   lc.user_id,
   lc.external_user_id,
   lc.source,
@@ -3396,6 +3408,7 @@ type ListChatsParams struct {
 type ListChatsRow struct {
 	ID                   uuid.UUID
 	Title                pgtype.Text
+	TitleManuallySet     bool
 	UserID               pgtype.Text
 	ExternalUserID       pgtype.Text
 	Source               pgtype.Text
@@ -3458,6 +3471,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
+			&i.TitleManuallySet,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Source,
