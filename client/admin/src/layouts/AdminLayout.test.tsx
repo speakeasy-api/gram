@@ -1,3 +1,4 @@
+import { createRootRoute, createRoute } from "@tanstack/react-router";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Tailwind's `@layer` blocks and does not resolve `svh`.
 import stylesheet from "@/index.css?inline";
 import type { AdminSessionInfo } from "@/lib/gramAdminApi";
-import { renderWithApp } from "@/test/harness";
+import { renderRouteTree } from "@/test/harness";
 import { AdminLayout } from "./AdminLayout";
 
 // A ceiling that resolves to the viewport, however it is spelled. `min-h-svh`
@@ -68,10 +69,23 @@ function scrollRegionWithin(root: Element): Element {
   return regions[0]!;
 }
 
+// Exercise the outlet with a matched child instead of triggering a not-found
+// warning from a bare root. The real stylesheet still supplies declarations.
+async function renderLayout(): Promise<void> {
+  const root = createRootRoute({ component: AdminLayout });
+  const index = createRoute({
+    getParentRoute: () => root,
+    path: "/",
+    component: () => <div>Layout content</div>,
+  });
+  await renderRouteTree(root.addChildren([index]));
+  expect(screen.getByText("Layout content")).toBeTruthy();
+}
+
 describe("AdminLayout", () => {
   it("caps the shell at the viewport", async () => {
     stubSession();
-    await renderWithApp(<AdminLayout />);
+    await renderLayout();
 
     const wrapper = document.querySelector('[data-slot="sidebar-wrapper"]');
     expect(wrapper).not.toBeNull();
@@ -87,7 +101,7 @@ describe("AdminLayout", () => {
 
   it("keeps one scroll region and lets every element above it shrink", async () => {
     stubSession();
-    await renderWithApp(<AdminLayout />);
+    await renderLayout();
 
     const inset = screen.getByRole("main");
     const scrollRegion = scrollRegionWithin(inset);
