@@ -80,7 +80,11 @@ export function AgentFederatedAccess({
                 // Each running sandbox gets its own sign-in when it starts and
                 // loses it when it stops, so they are counted, not listed.
                 detail={`${row.count} running ${row.count === 1 ? "sandbox" : "sandboxes"}`}
-                trailing={<WorkloadIssuerPolicy issuer={row.issuer} />}
+                trailing={
+                  row.showPolicy ? (
+                    <WorkloadIssuerPolicy issuer={row.issuer} />
+                  ) : undefined
+                }
               />
             ) : (
               <IdentityPanelRow
@@ -171,7 +175,13 @@ export function AgentFederatedAccess({
 }
 
 type FederatedAccessRow =
-  | { kind: "runtime"; issuer: WorkloadIssuer; count: number }
+  | {
+      kind: "runtime";
+      issuer: WorkloadIssuer;
+      // The issuer's policy control shows once, on its first row.
+      showPolicy: boolean;
+      count: number;
+    }
   | {
       kind: "admission";
       admission: WorkloadAdmission;
@@ -220,7 +230,13 @@ function federatedAccessRows(
       if (existing) {
         existing.count += 1;
       } else {
-        const row = { kind: "runtime" as const, issuer, count: 1 };
+        const row = {
+          kind: "runtime" as const,
+          issuer,
+          showPolicy: !issuersShown.has(issuer.id),
+          count: 1,
+        };
+        issuersShown.add(issuer.id);
         runtimeRows.set(issuer.id, row);
         rows.push(row);
       }

@@ -681,7 +681,7 @@ function OrgAuditLogsInner() {
     }
     parts.push(
       category === "security"
-        ? "Showing security activity: machine access such as agents' runtimes admitting their workload identity."
+        ? "Showing security activity: machine access and other activity that isn't a settings change."
         : "Showing configuration changes.",
     );
     parts.push(`Currently showing ${logs.length} audit log entries.`);
@@ -966,7 +966,7 @@ function OrgAuditLogsInner() {
     <ResourceListPage
       scope="org:read"
       title="Audit Logs"
-      description="Review changes to your organization's configuration, and security activity such as agents' runtimes admitting their workload identity. Filter by project, action, or actor."
+      description="Review changes to your organization's configuration, and security activity such as machine access. Filter by project, action, or actor."
     >
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />

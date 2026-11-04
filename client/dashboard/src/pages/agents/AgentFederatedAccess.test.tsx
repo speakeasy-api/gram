@@ -310,3 +310,44 @@ it("keeps a customer's own admission on its row when it only carries the runtime
     screen.getByRole("button", { name: "Remove Build cluster access" }),
   ).toBeTruthy();
 });
+
+it("shows the runtime issuer's policy control once when it also has an ordinary admission", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_kit",
+    name: `kit-runtime-${"0".repeat(32)}`,
+    issuer: "https://issuer.example",
+    jwksUri: "https://issuer.example/jwks",
+    description: "",
+    tags: ["kit-runtime"],
+    allowAssertionReuse: true,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "proj_example",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [issuer];
+  mocks.admissions = [
+    admission({
+      id: "adm_manual",
+      workloadIssuerId: issuer.id,
+      issuerName: issuer.name,
+      matchKind: "exact",
+      name: "manual",
+    }),
+    admission({
+      id: "adm_kit",
+      workloadIssuerId: issuer.id,
+      issuerName: issuer.name,
+      matchKind: "exact",
+      name: `kit-runtime-00000000-0000-0000-0000-000000000001-${"0".repeat(32)}`,
+    }),
+  ];
+  renderPanel();
+  expect(screen.getByText("Assistant runtime")).toBeTruthy();
+  expect(
+    screen.getAllByRole("button", {
+      name: `Edit ${issuer.name} issuer policy`,
+    }),
+  ).toHaveLength(1);
+});
