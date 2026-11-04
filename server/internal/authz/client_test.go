@@ -363,3 +363,35 @@ func TestChallengeChecksRecordEveryAlternative(t *testing.T) {
 	require.Equal(t, ScopePluginWrite, checks.focus(1, -1).Scope, "without a deciding option the first option is the focus")
 	require.Equal(t, ScopeProjectRead, checks.focus(0, -1).Scope)
 }
+
+func TestClientDeviceAgentAndHookOperations(t *testing.T) {
+	t.Parallel()
+
+	role := "role:organization:role_1"
+	org := Organization(fixtureOrgID)
+	for _, mode := range []MigrationMode{MigrationModeOld, MigrationModeNew} {
+		client, _ := newRoutedTestClient(t, nil, fixedModes(mode), nil)
+
+		t.Run(mode.String()+" hook ingestion is bounded to the granted project", func(t *testing.T) {
+			t.Parallel()
+			ctx := humanClientContext(t, grantOf(role, string(ScopeOrgHooksIngest), ResourceKindOrg, fixtureOrgID, SelectorKeyProjectID, "proj_1"))
+			require.NoError(t, client.Require(ctx, org.IngestHooks("proj_1")))
+			require.Error(t, client.Require(ctx, org.IngestHooks("proj_2")))
+			require.Error(t, client.Require(ctx, org.SyncDeviceAgent()))
+		})
+
+		t.Run(mode.String()+" device agent sync", func(t *testing.T) {
+			t.Parallel()
+			ctx := humanClientContext(t, grantOf(role, string(ScopeOrgDeviceAgentSync), ResourceKindOrg, fixtureOrgID))
+			require.NoError(t, client.Require(ctx, org.SyncDeviceAgent()))
+			require.Error(t, client.Require(ctx, org.IngestHooks("proj_1")))
+			require.Error(t, client.Require(ctx, org.Administer()))
+		})
+
+		t.Run(mode.String()+" organization admin covers both", func(t *testing.T) {
+			t.Parallel()
+			ctx := humanClientContext(t, grantOf(role, string(ScopeOrgAdmin), ResourceKindOrg, fixtureOrgID))
+			require.NoError(t, client.Require(ctx, org.SyncDeviceAgent(), org.IngestHooks("proj_1")))
+		})
+	}
+}

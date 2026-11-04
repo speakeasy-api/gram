@@ -131,6 +131,19 @@ func (o OrganizationRef) Administer() Operation {
 	return newOperation("organization", "administer", o.id, nil)
 }
 
+// SyncDeviceAgent asks to sync device agents for the organization.
+func (o OrganizationRef) SyncDeviceAgent() Operation {
+	return newOperation("organization", "sync_device_agent", o.id, nil)
+}
+
+// IngestHooks asks to ingest hook events into one of the organization's
+// projects. The operation always names the project, so a grant bounded to
+// another project never matches. The caller must have verified that the
+// project belongs to the organization.
+func (o OrganizationRef) IngestHooks(projectID string) Operation {
+	return newOperation("organization", "ingest_hooks", o.id, map[string]string{SelectorKeyProjectID: projectID})
+}
+
 // ProjectRef names one project in its organization for typed operations.
 type ProjectRef struct {
 	organizationID string
@@ -171,7 +184,7 @@ func typedOperations() []Operation {
 	org := Organization("organization")
 	project := Project("organization", "project")
 	return []Operation{
-		org.Read(), org.Administer(),
+		org.Read(), org.Administer(), org.SyncDeviceAgent(), org.IngestHooks("project"),
 		project.Read(), project.Write(), project.PublishPlugin(),
 	}
 }

@@ -92,17 +92,17 @@ func admittedAgentContext(t *testing.T, ctx context.Context, ti *testInstance, g
 	raw, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, policy)
 	require.NoError(t, err)
 
-	ti.service.authz = authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+	ti.service.authzClient = authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
 		DevMode:                          false,
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
-	})
+	}))
 	requestCtx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, contextvalues.PrincipalCredential{
 		AuthorizerUserID:       ownerUserID,
 		DelegatedGrants:        raw,
 		DelegatedGrantsVersion: int32(runtimepolicy.DelegatedPolicyVersion2),
 	})
-	prepared, err := ti.service.authz.PrepareContext(requestCtx)
+	prepared, err := ti.service.authzClient.PrepareContext(requestCtx)
 	if err != nil {
 		return requestCtx, fmt.Errorf("admit agent credential: %w", err)
 	}
