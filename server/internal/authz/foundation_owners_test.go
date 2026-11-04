@@ -147,6 +147,7 @@ var foundationFileOwners = map[string]string{
 	"internal/background/activities/custom_domain_health.go":    ownerO5,
 	"internal/background/activities/directory_review_emails.go": ownerO3,
 	"internal/chat/conversation_access.go":                      ownerC3,
+	"internal/killswitches/authorized_service.go":               ownerO2,
 	"internal/mcp/authclientresolve.go":                         ownerM5,
 	"internal/mcp/authnchallenge_workloadgrant.go":              ownerI1,
 	"internal/mcp/inference_workload.go":                        ownerI1,
@@ -166,6 +167,7 @@ var foundationFunctionOwners = map[string]string{
 	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                                                                 ownerC3,
 	"internal/chat/impl.go *Service.chatVisibilityScope":                                                               ownerC3,
 	"internal/skills/impl.go *Service.accessibleSkillIDs":                                                              ownerS2,
+	"internal/productfeatures/impl.go *Service.authorizeOrganization":                                                  ownerO2,
 }
 
 // foundationOwner returns the ticket that migrates consumer. Scope metadata
