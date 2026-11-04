@@ -88,7 +88,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
-	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{}, nil)
 	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		predicate := agentmanagement.OwnedAgentAuthorize
 		if write {
@@ -351,7 +351,7 @@ func TestEditorsAttachOnlyTheirOwnSessionsAndReplaceAssignments(t *testing.T) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
-	authorizer := agentmanagement.NewAuthorizer(bindingDelegatedEngine{})
+	authorizer := agentmanagement.NewAuthorizer(bindingDelegatedEngine{}, nil)
 	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		predicate := agentmanagement.OwnedAgentAuthorize
 		if write {
@@ -410,7 +410,7 @@ func TestEditorsAttachOnlyTheirOwnSessionsAndReplaceAssignments(t *testing.T) {
 	require.Equal(t, urn.NewUserSubject(owner).String(), listed.Items[0].RemoteSession.SubjectUrn)
 	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	authorizer = agentmanagement.NewAuthorizer(bindingDelegatedEngine{authorizeOnly: true})
+	authorizer = agentmanagement.NewAuthorizer(bindingDelegatedEngine{authorizeOnly: true}, nil)
 	_, err = ti.service.BeginBindingRefresh(ctx, &gen.BeginBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), BindingID: attached.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.CompleteBindingRefresh(ctx, &gen.CompleteBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), AttemptID: refreshAttempt.AttemptID})

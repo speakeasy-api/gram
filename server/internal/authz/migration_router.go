@@ -110,6 +110,7 @@ func DefaultMigrationUnits() []MigrationUnit {
 		{Name: "environment", Types: []string{"environment"}, DependsOn: []string{"project"}},
 		{Name: "inference", Types: []string{"inference"}, DependsOn: []string{"project"}},
 		{Name: "chat", Types: []string{"chat"}, DependsOn: []string{"project"}},
+		{Name: "agent", Types: []string{"agent"}, DependsOn: []string{"organization"}},
 	}
 }
 

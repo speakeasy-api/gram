@@ -34,6 +34,17 @@ func NewAgentAccess(callerUserID string, grants []Grant) AgentAccess {
 	return AgentAccess{grants: BindSelectorValue(grants, SelectorKeyOwner, AgentOwnerSelf, callerUserID)}
 }
 
+// Grants returns a copy of the grants with caller-relative owner selectors
+// bound to the caller, for evaluating existing-agent operations through the
+// typed authorization client.
+func (a AgentAccess) Grants() []Grant {
+	grants := slices.Clone(a.grants)
+	for i := range grants {
+		grants[i].Selector = maps.Clone(grants[i].Selector)
+	}
+	return grants
+}
+
 // Allows reports delegated authority over an existing agent. The owner must be
 // the current persisted owner, not a caller-supplied ownership claim.
 func (a AgentAccess) Allows(scope Scope, agentID, ownerUserID string) bool {

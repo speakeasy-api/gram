@@ -120,7 +120,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	refresher := remotesessions.NewRefreshService(ti.logger, meter, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
 	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meter, ti.conn, ti.sessionManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, _ bool) error {
-		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine, nil).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
 		if err != nil {
 			return fmt.Errorf("authorize refresh test: %w", err)
 		}

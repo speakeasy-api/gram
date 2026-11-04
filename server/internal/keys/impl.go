@@ -75,7 +75,7 @@ func NewService(
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
-		authorizer:  agentmanagement.NewAuthorizer(authzEngine),
+		authorizer:  agentmanagement.NewAuthorizer(authzEngine, nil),
 		keyPrefix:   fullKeyPrefix,
 	}
 }

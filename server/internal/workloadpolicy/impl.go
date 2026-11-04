@@ -920,7 +920,7 @@ func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx
 			Dimensions:   nil,
 		})
 	}
-	_, _, err := agentmanagement.NewAuthorizer(s.authz).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
+	_, _, err := agentmanagement.NewAuthorizer(s.authz, nil).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
 		return fmt.Errorf("authorize workload subject agent: %w", err)
 	}

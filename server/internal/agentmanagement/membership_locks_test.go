@@ -59,7 +59,7 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 				for _, scope := range []authz.Scope{authz.ScopeAgentWrite, authz.ScopeAgentTransfer, authz.ScopeAgentAuthorize} {
 					allow(engine, scope, agent.ID)
 				}
-				authorizer := NewAuthorizer(engine)
+				authorizer := NewAuthorizer(engine, nil)
 				ctx := validatedHumanContext(t, "org-lock-order", caller)
 				err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 					recorder := &membershipLockRecorder{DBTX: tx, t: t}
@@ -101,7 +101,7 @@ func TestAgentOwnerLockRejectsOwnershipChangeDuringAcquisition(t *testing.T) {
 	agent := createAgent(t, db, "org-lock-order", "z-user", "Owner race agent")
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	allow(engine, authz.ScopeAgentAuthorize, agent.ID)
-	authorizer := NewAuthorizer(engine)
+	authorizer := NewAuthorizer(engine, nil)
 	ctx := validatedHumanContext(t, "org-lock-order", "a-user")
 	err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		recorder := &membershipLockRecorder{DBTX: tx, t: t, onAgent: func() {

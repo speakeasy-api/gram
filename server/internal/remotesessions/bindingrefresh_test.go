@@ -33,7 +33,7 @@ func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
 			auth, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
-			authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+			authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{}, nil)
 			denied := false
 			ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 				if denied {

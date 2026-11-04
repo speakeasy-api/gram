@@ -174,8 +174,16 @@ func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams)
 		if err != nil {
 			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
 		}
-		access := authz.NewAgentAccess(p.ActorUserID, grants)
-		if !access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID) {
+		// No grant covers an agent whose owner is unknown.
+		if agent.OwnerUserID == "" {
+			return agentrepo.Agent{}, ErrAgentUnauthorized
+		}
+		bound := authz.NewAgentAccess(p.ActorUserID, grants).Grants()
+		allowed, err := s.authz.EvaluateGrants(ctx, bound, authz.Agent(agent.ID.String(), agent.OwnerUserID).Authorize())
+		if err != nil {
+			return agentrepo.Agent{}, fmt.Errorf("check agent authorization: %w", err)
+		}
+		if !allowed {
 			return agentrepo.Agent{}, ErrAgentUnauthorized
 		}
 	}

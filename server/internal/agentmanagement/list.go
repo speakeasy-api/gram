@@ -11,7 +11,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -141,8 +140,14 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			if err != nil {
 				return nil, s.serviceError(ctx, err, "evaluate agent permissions")
 			}
-			if !ownsUnblockedAgent(human, agent) && !human.access.Allows(authz.ScopeAgentRead, agent.ID.String(), agent.OwnerUserID) {
-				continue
+			if !ownsUnblockedAgent(human, agent) {
+				visible, err := s.authorizer.visible(ctx, human, agent)
+				if err != nil {
+					return nil, s.serviceError(ctx, err, "evaluate agent visibility")
+				}
+				if !visible {
+					continue
+				}
 			}
 			readable = append(readable, agent)
 			permissionsByID[agent.ID.String()] = permissions

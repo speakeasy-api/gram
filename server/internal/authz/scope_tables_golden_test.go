@@ -71,6 +71,7 @@ func acceptedSelectorKeys(scope Scope) []string {
 		SelectorKeyClientType:      AuthClientTypeRemoteSession,
 		SelectorKeyConnectionOwner: "owner",
 		SelectorKeyUpstreamClient:  "upstream",
+		SelectorKeyOwner:           "owner",
 	}
 	var accepted []string
 	for key, value := range probes {

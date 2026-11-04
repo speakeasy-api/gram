@@ -1523,7 +1523,7 @@ func newStartCommand() *cli.Command {
 			agentService.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
-			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
+			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1832,7 +1832,7 @@ func newStartCommand() *cli.Command {
 				if write {
 					predicate = agentmanagement.OwnedAgentSetup
 				}
-				authorizer := agentmanagement.NewAuthorizer(authzEngine)
+				authorizer := agentmanagement.NewAuthorizer(authzEngine, authzClient)
 				_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 				if err != nil && !write {
 					_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
