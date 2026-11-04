@@ -678,14 +678,11 @@ describe("organizations list", () => {
     });
     const input = screen.getByLabelText("Search organizations");
 
-    fireEvent.change(input, { target: { value: "acme " } });
-
-    await waitFor(
-      () => {
-        expect(router.state.location.searchStr).toContain("q=acme");
-      },
-      { timeout: 2000 },
-    );
+    await withFakeTimers(async (tick) => {
+      fireEvent.change(input, { target: { value: "acme " } });
+      await tick(DEBOUNCE_MS);
+      expect(router.state.location.searchStr).toContain("q=acme");
+    });
     expect((input as HTMLInputElement).value).toBe("acme ");
   });
 
@@ -1286,16 +1283,13 @@ describe("organizations list", () => {
 
     // The box writes to the URL itself, so nothing tells the pager. Only the
     // signature the render compares can catch this one.
-    fireEvent.change(screen.getByLabelText("Search organizations"), {
-      target: { value: "acme" },
+    await withFakeTimers(async (tick) => {
+      fireEvent.change(screen.getByLabelText("Search organizations"), {
+        target: { value: "acme" },
+      });
+      await tick(DEBOUNCE_MS);
+      expect(lastListParams().q).toBe("acme");
     });
-
-    await waitFor(
-      () => {
-        expect(lastListParams().q).toBe("acme");
-      },
-      { timeout: 2000 },
-    );
     expect(lastListParams().page).toBe(1);
   });
 
