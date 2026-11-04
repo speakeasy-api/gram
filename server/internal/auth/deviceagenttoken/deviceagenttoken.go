@@ -242,17 +242,11 @@ func (i *Issuer) admittedAgent(ctx context.Context) (AssignedAgent, error) {
 	return AssignedAgent{Principal: principal, Agent: agent}, nil
 }
 
-// ContextPreparer prepares a request's policies for authorization. The typed
-// authorization client satisfies it, and so does the engine.
-type ContextPreparer interface {
-	PrepareContext(ctx context.Context) (context.Context, error)
-}
-
 // Admit authenticates raw and admits its workload through client, keeping the
 // workload as actor and recording its agent. Refusals are CodeUnauthorized so
 // the device exchanges again; a failure that reached no decision is
 // CodeUnexpected.
-func (i *Issuer) Admit(ctx context.Context, raw string, client ContextPreparer) (_ context.Context, _ AssignedAgent, err error) {
+func (i *Issuer) Admit(ctx context.Context, raw string, client *authz.Client) (_ context.Context, _ AssignedAgent, err error) {
 	defer func() {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeUnauthorized {
 			MarkInvalidToken(ctx)
