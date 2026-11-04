@@ -437,15 +437,8 @@ const (
 
 	// remoteSessionUnavailableMessage tells the client the failure is
 	// temporary and the request can be retried unchanged.
-	remoteSessionUnavailableMessage = "The upstream authorization server for this MCP server is temporarily unavailable. Retry shortly."
+	remoteSessionUnavailableMessage = "This MCP server can't get the credential it needs right now. Retry shortly. If it keeps happening, ask your administrator."
 )
-
-// remoteSessionUnavailableRetryAfter is the Retry-After on a 503 for a
-// temporarily unavailable upstream token endpoint. Refresh attempts for one
-// session are single-flighted, so retrying sooner mostly queues behind the
-// same failing attempt; 30 seconds lets a brief upstream outage pass without
-// holding a user's request for long.
-const remoteSessionUnavailableRetryAfter = 30 * time.Second
 
 func issuerGateFailureReason(err error) string {
 	switch {
@@ -471,9 +464,38 @@ func issuerGateFailureReason(err error) string {
 		return issuerGateReasonRevocationUnavailable
 	case errors.Is(err, errWorkloadSessionOutOfReach):
 		return issuerGateReasonWorkloadSessionOutOfReach
+	case credentialCheckFault(err):
+		return "credential_check_failed"
 	default:
 		return issuerGateReasonInvalidBearerToken
 	}
+}
+
+// issuerGateCheckUnavailableMessage answers a credential check that could not finish.
+const issuerGateCheckUnavailableMessage = "Speakeasy can't check your access right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
+
+// issuerGateCheckUnavailable reports a credential never judged; a gone row is an answer, not an outage.
+func issuerGateCheckUnavailable(ctx context.Context, err error) bool {
+	if errors.Is(err, errCredentialRejected) || errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	// The caller's own deadline is no outage.
+	if ctx.Err() == nil && oops.IsInfrastructureFailure(err) {
+		return true
+	}
+	return errors.Is(err, sessiontokens.ErrRevocationUnavailable)
+}
+
+// credentialCheckFault reports a credential check that failed on our side without judging it.
+func credentialCheckFault(err error) bool {
+	if err == nil || errors.Is(err, errCredentialRejected) {
+		return false
+	}
+	if oops.IsStoreFailure(err) || errors.Is(err, errWorkloadSessionAdmissionLoad) {
+		return true
+	}
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && shareable.Code == oops.CodeUnexpected
 }
 
 // issuerGateReasonWorkloadSessionOutOfReach: a live workload session minted
@@ -894,7 +916,7 @@ func (s *Service) contextForSessionSubject(
 				return nil, fmt.Errorf("%w: %w", errIssuerGateCallerProfile, err)
 			}
 			if profile == nil || profile.UserID != subject.ID {
-				return nil, fmt.Errorf("%w: profile does not match session subject", errIssuerGateCallerProfile)
+				return nil, fmt.Errorf("%w: %w: profile does not match session subject", errCredentialRejected, errIssuerGateCallerProfile)
 			}
 			authCtx.Email = &profile.Email
 		}
@@ -1144,6 +1166,8 @@ func (s *Service) authenticateIssuerGate(
 			// provenance stays KindAssistant and must never be treated as an
 			// authoritative acting user.
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
+		} else if oops.IsInfrastructureFailure(aerr) {
+			valErr = aerr
 		}
 	}
 	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
@@ -1177,6 +1201,12 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		if issuerGateCheckUnavailable(ctx, valErr) {
+			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
+		}
+		if credentialCheckFault(valErr) {
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, valErr, "check credential").LogError(ctx, s.logger)
+		}
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")
 		}
@@ -1307,8 +1337,22 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 // required upstream token endpoint that is temporarily unavailable, so every
 // path that hits one tells the client the same thing and paces its retries.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
-	w.Header().Set("Retry-After", strconv.Itoa(int(remoteSessionUnavailableRetryAfter.Seconds())))
-	return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage)
+	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
+		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")
+		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+		return outage
+	}
+	return outageError(w, err, remoteSessionUnavailableMessage)
+}
+
+// outageError is a 503 with Retry-After: RFC 6749 and RFC 6750 define no outage code here.
+func outageError(w http.ResponseWriter, err error, message string) *oops.ShareableError {
+	setOutageRetryAfter(w)
+	return oops.E(oops.CodeUnavailable, err, "%s", message)
+}
+
+func setOutageRetryAfter(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", strconv.Itoa(int(oops.OutageRetryAfter.Seconds())))
 }
 
 // recordRemoteSessionRejection logs and counts an issuer-gate rejection whose

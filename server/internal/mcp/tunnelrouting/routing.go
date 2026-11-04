@@ -64,6 +64,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	headers := []proxy.ConfiguredHeader{
 		{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelID,
 			StaticValue:            tunnelID,
 			ValueFromRequestHeader: "",
@@ -72,6 +73,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	if forwardToken != "" {
 		headers = append(headers, proxy.ConfiguredHeader{
 			IsRequired:             true,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelForwardToken,
 			StaticValue:            forwardToken,
 			ValueFromRequestHeader: "",
@@ -80,6 +82,7 @@ func Headers(tunnelID, forwardToken, clientAffinityKey string) []proxy.Configure
 	if clientAffinityKey != "" {
 		headers = append(headers, proxy.ConfiguredHeader{
 			IsRequired:             false,
+			IsSecret:               false,
 			Name:                   wire.HeaderTunnelConsumerSession,
 			StaticValue:            clientAffinityKey,
 			ValueFromRequestHeader: "",

@@ -206,7 +206,6 @@ func TestToolsCallConnections_KillswitchRefusals(t *testing.T) {
 func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 	t.Parallel()
 
-	reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
 	attribution := func() *ConnectionAttribution {
 		return &ConnectionAttribution{
 			Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
@@ -217,16 +216,37 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 		}
 	}
 
-	rec := mcpconnectionattemptstest.New(t)
-	configured := []proxy.ConfiguredHeader{{IsRequired: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}}
-	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", configured), reject, continueCheckpoint())
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
-	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
-
-	forwarded := mcpconnectionattemptstest.New(t)
-	fromCaller := []proxy.ConfiguredHeader{{IsRequired: false, Name: "Authorization", StaticValue: "", ValueFromRequestHeader: "Authorization"}}
-	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), forwarded.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", fromCaller), reject, continueCheckpoint())
-	forwarded.RequireNothing()
+	for _, tc := range []struct {
+		name   string
+		header proxy.ConfiguredHeader
+		admin  bool
+	}{
+		{"workspace", proxy.ConfiguredHeader{Name: "X-Workspace", StaticValue: "workspace"}, false},
+		{"authorization", proxy.ConfiguredHeader{Name: "authorization", StaticValue: "Bearer key"}, true},
+		{"secret API key", proxy.ConfiguredHeader{Name: "X-Api-Key", IsSecret: true, StaticValue: "key"}, true},
+		{"custom secret", proxy.ConfiguredHeader{Name: "X-Custom", IsSecret: true, StaticValue: "key"}, true},
+		{"empty secret", proxy.ConfiguredHeader{Name: "X-Api-Key", IsSecret: true}, false},
+		{"forwarded authorization", proxy.ConfiguredHeader{Name: "Authorization", ValueFromRequestHeader: "X-Caller-Key"}, false},
+		{"forwarded secret", proxy.ConfiguredHeader{Name: "X-Api-Key", IsSecret: true, ValueFromRequestHeader: "X-Caller-Key"}, false},
+		{"forwarding wins over static", proxy.ConfiguredHeader{Name: "Authorization", IsSecret: true, StaticValue: "ignored", ValueFromRequestHeader: "X-Caller-Key"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			headers := []proxy.ConfiguredHeader{tc.header}
+			require.Equal(t, tc.admin, HasConfiguredCredential(headers))
+			for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+				rec := mcpconnectionattemptstest.New(t)
+				reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }
+				serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
+				if tc.admin {
+					row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+					require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+				} else {
+					rec.RequireNothing()
+				}
+			}
+		})
+	}
 }
 
 // A caller that went away says nothing about the server.

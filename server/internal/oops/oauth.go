@@ -55,6 +55,7 @@ func OAuthErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http
 		if err == nil {
 			return
 		}
+		err = answerOutage(r.Context(), logger, w, err)
 
 		status := http.StatusInternalServerError
 		body := oautherr.RFC6749Error{Code: oautherr.CodeServerError, Description: "the request could not be completed", URI: ""}

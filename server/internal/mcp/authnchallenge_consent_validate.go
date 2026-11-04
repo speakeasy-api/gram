@@ -41,14 +41,28 @@ var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not 
 // errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
 var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
 
-// errValidationRateLimited marks a verify refused before any probe ran.
+// errValidationRateLimited marks a verify that ran no probe: rate limited, or another refresh is running.
 var errValidationRateLimited = errors.New("remote session validation rate limited")
 
 // validationRate caps verifies per consent challenge.
 var validationRate = ratelimit.PerMinute(6)
 
+// errValidationUnfinished marks a verify an outage stopped; the connect page reports it.
+var errValidationUnfinished = errors.New("remote session validation did not finish")
+
+// verifyHitStoreOutage rules out the caller's own deadline, which is no outage.
+func verifyHitStoreOutage(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && oops.IsInfrastructureFailure(err)
+}
+
+// validationUnfinishedNotice follows a Verify that reached no verdict; it says nothing about now.
+const validationUnfinishedNotice = "Your last Verify didn't finish. Try again shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
+
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
+
+// refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
+const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
 
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
@@ -117,10 +131,25 @@ func (s *Service) probeRemoteSession(
 	)
 	for _, projectID := range tokenProjectIDs {
 		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if verifyHitStoreOutage(ctx, rerr) {
+			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
+			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
+			if candidate.SessionUnavailable() {
+				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
+					return errValidationRateLimited
+				}
+				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
+					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
+				} else {
+					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
+				}
+				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
+			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break
 		}
