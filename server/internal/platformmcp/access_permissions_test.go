@@ -14,7 +14,7 @@ func TestDescribeAccessPermissionsFollowsTheCatalogue(t *testing.T) {
 
 	output := describeAccessPermissions()
 	require.NotEmpty(t, output.Scopes)
-	require.NotEmpty(t, output.Workflows)
+	require.NotEmpty(t, output.Tasks)
 
 	bySlug := make(map[string]AccessPermission, len(output.Scopes))
 	for _, permission := range output.Scopes {
@@ -50,11 +50,11 @@ func TestDescribeAccessPermissionsFollowsTheCatalogue(t *testing.T) {
 	require.Equal(t, "tool_logs", bySlug["log:read"].Sensitivity)
 	require.Equal(t, "View tool logs", bySlug["log:read"].Label)
 
-	for _, workflow := range output.Workflows {
-		require.NotEmpty(t, workflow.Slug)
-		require.NotEmpty(t, workflow.Label)
-		for _, scope := range workflow.Scopes {
-			require.Contains(t, bySlug, scope, "workflow %s names a scope the tool does not describe", workflow.Slug)
+	for _, task := range output.Tasks {
+		require.NotEmpty(t, task.Slug)
+		require.NotEmpty(t, task.Label)
+		for _, scope := range task.Scopes {
+			require.Contains(t, bySlug, scope, "task %s names a scope the tool does not describe", task.Slug)
 		}
 	}
 }
@@ -67,11 +67,11 @@ func TestDescribeAccessPermissionsOutputsOnlyAllowlistedFields(t *testing.T) {
 			Slug: "log:read", Label: "View tool logs", Category: "log", ResourceKind: "project",
 			Description: "Read tool calls.", Sensitive: true, Sensitivity: "tool_logs", SubScopes: []string{},
 		}},
-		Workflows: []AccessWorkflow{{Slug: "session_review", Label: "Review other members' sessions", Scopes: []string{"chat:read", "log:read"}}},
+		Tasks: []AccessTask{{Slug: "session_review", Label: "Review other members' sessions", Scopes: []string{"chat:read", "log:read"}}},
 	}
 	require.ElementsMatch(t, []string{
 		"scopes", "slug", "label", "category", "resource_kind", "description", "sensitive", "sensitivity", "sub_scopes",
-		"workflows", "slug", "label", "scopes",
+		"tasks", "slug", "label", "scopes",
 	}, decodeKeys(t, output))
 
 	encoded, err := json.Marshal(describeAccessPermissions())

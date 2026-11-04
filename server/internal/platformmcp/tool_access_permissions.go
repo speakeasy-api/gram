@@ -17,7 +17,7 @@ func registerAccessPermissionsTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "describe_access_permissions",
 		Title:       "Describe Access Permissions",
-		Description: "Describe every permission a role can hold, in the words the dashboard uses: its label, what a holder can do, how it is grouped, which permissions it includes, and whether it is sensitive and why. Also lists workflows, the tasks that need several permissions together, so a missing one can be explained in context. This is product configuration, the same for every organization: it names no role, member, grant or resource. Use it to explain what a permission or role gives, and name any sensitive permission a role to be created or assigned carries before asking for confirmation.",
+		Description: "Describe every permission a role can hold, in the words the dashboard uses: its label, what a holder can do, how it is grouped, which permissions it includes, and whether it is sensitive and why. Also lists tasks, the jobs that need several permissions together, so a missing one can be explained in context. This is product configuration, the same for every organization: it names no role, member, grant or resource. Use it to explain what a permission or role gives, and name any sensitive permission a role to be created or assigned carries before asking for confirmation.",
 		Annotations: readOnlyAnnotations(),
 	}, accessPermissionsMeta, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, DescribeAccessPermissionsOutput, error) {
 		return nil, describeAccessPermissions(), nil

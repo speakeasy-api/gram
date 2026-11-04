@@ -22,16 +22,16 @@ type AccessPermission struct {
 	SubScopes []string `json:"sub_scopes"`
 }
 
-// AccessWorkflow is a task that needs several permissions end to end.
-type AccessWorkflow struct {
+// AccessTask is a task that needs several permissions end to end.
+type AccessTask struct {
 	Slug   string   `json:"slug"`
 	Label  string   `json:"label"`
 	Scopes []string `json:"scopes"`
 }
 
 type DescribeAccessPermissionsOutput struct {
-	Scopes    []AccessPermission `json:"scopes"`
-	Workflows []AccessWorkflow   `json:"workflows"`
+	Scopes []AccessPermission `json:"scopes"`
+	Tasks  []AccessTask       `json:"tasks"`
 }
 
 // describeAccessPermissions projects the scope catalogue the way
@@ -65,17 +65,17 @@ func describeAccessPermissions() DescribeAccessPermissionsOutput {
 		scopes = append(scopes, permission)
 	}
 
-	catalogWorkflows := authz.Workflows()
-	workflows := make([]AccessWorkflow, 0, len(catalogWorkflows))
-	for _, workflow := range catalogWorkflows {
-		names := make([]string, 0, len(workflow.Scopes))
-		for _, scope := range workflow.Scopes {
+	catalogTasks := authz.Tasks()
+	tasks := make([]AccessTask, 0, len(catalogTasks))
+	for _, task := range catalogTasks {
+		names := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
 			names = append(names, string(scope))
 		}
-		workflows = append(workflows, AccessWorkflow{Slug: workflow.Slug, Label: workflow.Label, Scopes: names})
+		tasks = append(tasks, AccessTask{Slug: task.Slug, Label: task.Label, Scopes: names})
 	}
 
-	return DescribeAccessPermissionsOutput{Scopes: scopes, Workflows: workflows}
+	return DescribeAccessPermissionsOutput{Scopes: scopes, Tasks: tasks}
 }
 
 // roleGrantScopes lists the scopes a role's grants name, for comparing what
