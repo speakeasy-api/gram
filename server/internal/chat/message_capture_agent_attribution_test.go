@@ -1,0 +1,258 @@
+package chat_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// withoutHumanIdentity clones the session auth context into the shape a
+// machine credential produces: same tenant and project, no user, no session.
+func withoutHumanIdentity(t *testing.T, ctx context.Context) *contextvalues.AuthContext {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.UserID = ""
+	clone.ExternalUserID = ""
+	clone.Email = nil
+	clone.APIKeyScopes = nil
+	clone.SessionID = nil
+	return &clone
+}
+
+// agentCredentialCtx makes ctx look like a completion authenticated with the
+// agent's principal API key: the agent is the authenticated actor and its owner
+// is recorded only as the authorizer.
+func agentCredentialCtx(t *testing.T, ctx context.Context, agentID uuid.UUID, ownerUserID string) context.Context {
+	t.Helper()
+	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String())
+	credential := contextvalues.PrincipalCredential{AuthorizerUserID: ownerUserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}
+	return contextvalues.WithPrincipalAPIKeyAuthorization(ctx, withoutHumanIdentity(t, ctx), actor, credential)
+}
+
+// workloadForAgentCtx makes ctx look like an admitted workload acting for the
+// agent: the workload stays the actor and the agent is recorded on the context.
+func workloadForAgentCtx(t *testing.T, ctx context.Context, agentID uuid.UUID) context.Context {
+	t.Helper()
+	ctx = contextvalues.WithAuthenticatedActor(ctx, withoutHumanIdentity(t, ctx), urn.NewWorkloadPrincipal(uuid.New(), "attribution-workload"))
+	return contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+}
+
+// memberCtxForUser returns a member session for userID holding no chat grants,
+// so only authorship or agent ownership can open a session.
+func memberCtxForUser(t *testing.T, ti *chatTestInstance, userID string) context.Context {
+	t.Helper()
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.UserID = userID
+	return authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &clone))
+}
+
+func completionRequest(ti *chatTestInstance, chatID uuid.UUID, userID string) openrouter.CompletionRequest {
+	req := makeRequest(chatID, ti.projectID, ti.orgID, openrouter.CreateMessageUser("hello from an agent"))
+	req.UserID = userID
+	return req
+}
+
+// A completion made with an agent's credential records the agent on the session
+// and no human identity, so the session takes the agent-only shape that lets the
+// agent's owner open it without chat:read. Nobody else can.
+func TestStartOrResumeChat_AgentCredentialStampsAgentWithoutHumanIdentity(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "Completion agent")
+	chatID := uuid.New()
+	// request.UserID stays empty because the agent credential's auth context
+	// carries no human identity; it must land as NULL, not "".
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, authCtx.UserID), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.True(t, row.AgentID.Valid, "the acting agent is recorded on the session")
+	require.Equal(t, agentID, row.AgentID.UUID)
+	require.False(t, row.UserID.Valid, "an agent credential never attributes the session to a human")
+	require.False(t, row.ExternalUserID.Valid)
+
+	ownerCtx := authztest.WithExactGrants(t, ctx)
+	res, err := ti.service.LoadChat(ownerCtx, loadPayload(chatID.String()))
+	require.NoError(t, err, "the agent's owner opens the agent's session without chat:read")
+	require.Equal(t, chatID.String(), res.ID)
+
+	otherCtx := memberCtxForUser(t, ti, "other-member-"+uuid.NewString())
+	_, err = ti.service.LoadChat(otherCtx, loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A workload admitted for an agent is that agent's activity too.
+func TestStartOrResumeChat_WorkloadForAgentStampsAgent(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "Workload agent")
+	chatID := uuid.New()
+	_, err := strategy.StartOrResumeChat(workloadForAgentCtx(t, ctx, agentID), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.True(t, row.AgentID.Valid)
+	require.Equal(t, agentID, row.AgentID.UUID)
+	require.False(t, row.UserID.Valid)
+	require.False(t, row.ExternalUserID.Valid)
+}
+
+// Defensive invariant: no authenticator produces an agent actor together with a
+// human user today, but if one ever does, the human identity wins. The agent is
+// attribution only, and owning the agent does not open the human's session.
+func TestStartOrResumeChat_AgentActorKeepsHumanIdentityWhenPresent(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentOwner := "agent-owner-" + uuid.NewString()
+	agentID := seedAgent(t, ctx, ti, agentOwner, "Agent with a human turn")
+	chatID := uuid.New()
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, agentOwner), completionRequest(ti, chatID, authCtx.UserID))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.True(t, row.AgentID.Valid)
+	require.Equal(t, agentID, row.AgentID.UUID)
+	require.True(t, row.UserID.Valid)
+	require.Equal(t, authCtx.UserID, row.UserID.String)
+
+	_, err = ti.service.LoadChat(authztest.WithExactGrants(t, ctx), loadPayload(chatID.String()))
+	require.NoError(t, err, "the human who performed the turn opens it")
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, agentOwner), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A human completion is untouched: user_id as before, no agent recorded.
+func TestStartOrResumeChat_HumanCompletionRecordsNoAgent(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	chatID := uuid.New()
+	_, err := strategy.StartOrResumeChat(ctx, completionRequest(ti, chatID, authCtx.UserID))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.False(t, row.AgentID.Valid)
+	require.True(t, row.UserID.Valid)
+	require.Equal(t, authCtx.UserID, row.UserID.String)
+}
+
+// The agent stamp is fill-once: a later turn by another agent on the same chat
+// id cannot reassign the session, and a later turn by the same agent is a no-op.
+func TestStartOrResumeChat_AgentStampIsFillOnce(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	first := seedAgent(t, ctx, ti, authCtx.UserID, "First agent")
+	second := seedAgent(t, ctx, ti, authCtx.UserID, "Second agent")
+	chatID := uuid.New()
+
+	for _, agentID := range []uuid.UUID{first, second, first} {
+		_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, authCtx.UserID), completionRequest(ti, chatID, ""))
+		require.NoError(t, err)
+	}
+
+	row := chatRow(t, ti, chatID)
+	require.True(t, row.AgentID.Valid)
+	require.Equal(t, first, row.AgentID.UUID)
+}
+
+// A session created before NULL attribution existed holds user_id = "". A later
+// agent turn names the agent on it, but the empty string is left alone, so the
+// session is not retroactively opened to the agent's owner.
+func TestStartOrResumeChat_PreExistingEmptyIdentityIsNamedNotOpened(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "Agent resuming an old session")
+	// The capture path wrote "" for an empty user id before this change.
+	chatID := uuid.New()
+	_, err := repo.New(ti.conn).UpsertChat(ctx, repo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(""),
+		ExternalUserID: conv.ToPGText(""),
+		AgentID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Title:          conv.ToPGText("captured before attribution"),
+	})
+	require.NoError(t, err)
+
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, authCtx.UserID), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	after := chatRow(t, ti, chatID)
+	require.True(t, after.AgentID.Valid, "the resumed session is named after its agent")
+	require.Equal(t, agentID, after.AgentID.UUID)
+	require.True(t, after.UserID.Valid, "an existing empty identity is not rewritten")
+	require.Empty(t, after.UserID.String)
+
+	_, err = ti.service.LoadChat(authztest.WithExactGrants(t, ctx), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// An agent from another organization never lands on the chat: the stamp
+// resolves the agent against the caller's tenant at write time.
+func TestStartOrResumeChat_ForeignTenantAgentIsNotRecorded(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	otherOrg := "other-org-" + uuid.NewString()[:8]
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: otherOrg, Name: "Other org", Slug: otherOrg})
+	require.NoError(t, err)
+	foreignAgent := seedAgentInOrg(t, ctx, ti, otherOrg, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "foreign-owner", "Foreign agent")
+
+	chatID := uuid.New()
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, foreignAgent, authCtx.UserID), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.False(t, row.AgentID.Valid, "a foreign tenant's agent is never recorded")
+	require.False(t, row.UserID.Valid)
+}

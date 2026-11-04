@@ -52,12 +52,21 @@ DO UPDATE SET
 RETURNING id;
 
 -- name: UpsertChat :one
+-- agent_id records the Speakeasy agent a completion acted for, so the agent's
+-- owner can find and open the session and a session list can name the agent.
+-- The id arrives from the server-stamped authenticated actor, never from
+-- client input, and the scalar subquery resolves it against a live agent in the
+-- caller's organization at write time: chats.agent_id carries no foreign key
+-- (agents is declared after chats), so this guard is what keeps the column from
+-- naming a deleted agent or one belonging to another tenant. A human turn passes
+-- NULL and the subquery is never evaluated against the index.
 INSERT INTO chats (
     id
   , project_id
   , organization_id
   , user_id
   , external_user_id
+  , agent_id
   , title
   , created_at
   , updated_at
@@ -68,6 +77,13 @@ VALUES (
     @organization_id,
     @user_id,
     @external_user_id,
+    (
+      SELECT a.id
+      FROM agents a
+      WHERE a.id = sqlc.narg(agent_id)::uuid
+        AND a.organization_id = @organization_id
+        AND a.deleted IS FALSE
+    ),
     @title,
     NOW(),
     NOW()
@@ -93,6 +109,16 @@ ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
     ) THEN NULL
     ELSE chats.deleted_at
 END
+-- Fill-once agent attribution: a session is created on its first turn and
+-- reused for every later one, so a session that started before the stamp
+-- existed is named on its next agent turn, and a later caller can never
+-- reassign an existing session to a different agent. EXCLUDED.agent_id is the
+-- tenant-checked subquery result above, and the WHERE below pins the row to the
+-- caller's project, so the guard holds on the conflict path too. The human
+-- identity columns are left as they are: an existing row keeps its author, and
+-- an empty-string user_id from before NULL attribution stays empty, which
+-- names the agent without opening the session to its owner.
+  , agent_id = COALESCE(chats.agent_id, EXCLUDED.agent_id)
 -- The conflict target is the bare primary key, so a caller supplying another
 -- project's chat id would otherwise land on that row and get its id back from
 -- RETURNING. Rejecting the conflict yields no row, which the caller maps to an
