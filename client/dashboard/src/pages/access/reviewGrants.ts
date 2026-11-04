@@ -66,7 +66,7 @@ export function addedPermissions(
 }
 
 /** The permissions a set of roles gives, in catalogue order, closed over inclusion. */
-export function permissionsOfRoles(
+function permissionsOfRoles(
   roles: readonly Pick<Role, "grants">[],
   catalogue: ScopeCatalogue,
 ): string[] {
