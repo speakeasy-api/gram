@@ -36,10 +36,12 @@ import (
 const (
 	transcriptUploadPath = "/transcript"
 	transcriptSchemaV1   = "claude.transcript.v1"
+
 	// transcriptChunkBytes (4 MiB) bounds the transcript bytes one chunk read
 	// consumes, shipped or skipped, so a long run of bookkeeping lines is
 	// crossed a chunk at a time with the Stop budget checked in between.
 	transcriptChunkBytes = 4 << 20
+
 	// transcriptMaxLineBytes (8 MiB) bounds a single transcript line. A longer
 	// line (an enormous tool result) is skipped rather than blocking the
 	// offset forever. A line at the cap plus its envelope stays under the
@@ -47,13 +49,16 @@ const (
 	// server/internal/hooks) even uncompressed: the server would answer a
 	// larger body 413, which settles the chunk and drops the line.
 	transcriptMaxLineBytes = 8 << 20
+
 	// transcriptMaxEntries is the server's per-upload entry cap
 	// (claudeTranscriptMaxEntries); a larger chunk would be answered 413 and
 	// dropped the same way.
 	transcriptMaxEntries = 20000
+
 	// transcriptReadBufferBytes (64 KiB) holds typical transcript lines whole;
 	// longer lines are assembled from buffer-sized fragments.
 	transcriptReadBufferBytes = 64 << 10
+
 	// transcriptResponseLimit (64 KiB) bounds how much of a response is read;
 	// the acknowledgement is a few bytes of JSON.
 	transcriptResponseLimit = 64 << 10
@@ -61,8 +66,8 @@ const (
 
 // transcriptShipBudget bounds the whole upload on one Stop. Claude runs Stop
 // synchronously, so the budget is time the user waits; anything left over is
-// shipped on the next Stop. A var so tests can shrink it.
-var transcriptShipBudget = 15 * time.Second
+// shipped on the next Stop.
+const transcriptShipBudget = 15 * time.Second
 
 // transcriptUpload is the request body of POST /transcript.
 type transcriptUpload struct {
@@ -153,14 +158,15 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 				r.debugf("transcript read failed path=%s offset=%d: %v", path, offset, err)
 				return
 			}
+			if chunk.start != offset {
+				// The file was replaced. Record the restart now, even when nothing
+				// is complete yet or this upload fails: if the new file then grows
+				// past the old offset, resuming from there would land mid-line and
+				// skip what precedes it.
+				writeTranscriptHighWater(marker, chunk.start)
+			}
 			if chunk.end == chunk.start {
 				return
-			}
-			if chunk.start != offset {
-				// The file was replaced. Record the restart now: if this upload
-				// fails and the new file then grows past the old offset, a retry
-				// from there would land mid-line and skip what precedes it.
-				writeTranscriptHighWater(marker, chunk.start)
 			}
 			if len(chunk.entries) > 0 {
 				upload.OffsetStart, upload.OffsetEnd, upload.Entries = chunk.start, chunk.end, chunk.entries

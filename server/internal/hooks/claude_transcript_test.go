@@ -214,6 +214,11 @@ func TestClaudeTranscriptEndpointRejectsInvalidRequests(t *testing.T) {
 	tooMany := claudeTranscriptUploadBody(uuid.NewString(), nil)
 	tooMany["entries"] = rawEntries(slices.Repeat([]string{"{}"}, claudeTranscriptMaxEntries+1))
 	require.Equal(t, http.StatusRequestEntityTooLarge, claudeTranscriptRequest(t, h, tooMany, ahpAuthHeaders).Code)
+
+	// Compresses far below the body cap but decodes past the decoded cap.
+	inflated := claudeTranscriptUploadBody(uuid.NewString(), nil)
+	inflated["cwd"] = strings.Repeat("x", claudeTranscriptMaxDecodedBytes)
+	require.Equal(t, http.StatusRequestEntityTooLarge, claudeTranscriptRequest(t, h, inflated, ahpAuthHeaders).Code)
 }
 
 // TestClaudeTranscriptEntriesStopPastCap: decoding gives up at the first entry

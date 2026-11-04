@@ -43,8 +43,10 @@ const (
 	TranscriptPath = "/transcript"
 
 	claudeTranscriptSchemaV1 = "claude.transcript.v1"
+
 	// claudeTranscriptOrigin marks rows stored from an uploaded transcript.
 	claudeTranscriptOrigin = "claude-transcript"
+
 	// claudeTranscriptIDPrefix namespaces transcript entry uuids in
 	// external_message_id so they cannot collide with other import sources.
 	claudeTranscriptIDPrefix = "claude-transcript:"
@@ -53,13 +55,16 @@ const (
 	// which is usually gzip-compressed. The hooks binary sizes its longest
 	// line (transcriptMaxLineBytes in hooks/relay) to fit under it.
 	claudeTranscriptMaxBodyBytes = 10 << 20
+
 	// claudeTranscriptMaxDecodedBytes (32 MiB) bounds the decompressed body so
 	// a small compressed request cannot expand without limit.
 	claudeTranscriptMaxDecodedBytes = 32 << 20
+
 	// claudeTranscriptMaxEntries bounds the entries in one upload. The binary
 	// batches about 4 MiB of transcript per upload, far fewer entries than
 	// this at real entry sizes, and stops a chunk at the same cap.
 	claudeTranscriptMaxEntries = 20000
+
 	// claudeTranscriptPersistTimeout bounds the detached write of one upload.
 	// A full upload is a few thousand rows, which store well within it.
 	claudeTranscriptPersistTimeout = 30 * time.Second
@@ -68,19 +73,36 @@ const (
 // claudeTranscriptUpload is the request body: a contiguous run of raw
 // transcript JSONL lines plus the session identity they belong to.
 type claudeTranscriptUpload struct {
+	// SchemaVersion selects the transcript format; only
+	// claudeTranscriptSchemaV1 is accepted.
 	SchemaVersion string `json:"schema_version"`
-	SessionID     string `json:"session_id"`
+
+	// SessionID is the Claude session the entries belong to.
+	SessionID string `json:"session_id"`
+
 	// Adapter is the hook source slug: "cowork" when the binary detected the
 	// Cowork runtime, otherwise "claude".
-	Adapter   string `json:"adapter"`
-	Cwd       string `json:"cwd"`
-	Hostname  string `json:"hostname"`
+	Adapter string `json:"adapter"`
+
+	// Cwd is the session's working directory, when the hook reported one.
+	Cwd string `json:"cwd"`
+
+	// Hostname is the machine the binary ran on.
+	Hostname string `json:"hostname"`
+
+	// UserEmail is the signed-in user's email, when the binary resolved one.
 	UserEmail string `json:"user_email"`
-	// OffsetStart and OffsetEnd are the byte range of the transcript file the
-	// entries were read from. Diagnostic only.
-	OffsetStart int64                   `json:"offset_start"`
-	OffsetEnd   int64                   `json:"offset_end"`
-	Entries     claudeTranscriptEntries `json:"entries"`
+
+	// OffsetStart is the transcript file offset the entries were read from.
+	// The server does not use it; it helps when diagnosing the binary.
+	OffsetStart int64 `json:"offset_start"`
+
+	// OffsetEnd is the transcript file offset just past the last line read.
+	// Like OffsetStart, the server does not use it.
+	OffsetEnd int64 `json:"offset_end"`
+
+	// Entries are the raw transcript JSONL lines, one JSON object each.
+	Entries claudeTranscriptEntries `json:"entries"`
 }
 
 // errClaudeTranscriptTooManyEntries rejects an upload carrying more than
@@ -144,7 +166,7 @@ func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 			attr.SlogError(err),
 			attr.SlogProjectID(authCtx.ProjectID.String()),
 		)
-		http.Error(w, err.Error(), status)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
 
@@ -231,7 +253,7 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 		return 0, err
 	}
 
-	rows := claudeTranscriptRows(upload.Entries, time.Now().UTC())
+	rows := claudeTranscriptRows(upload.Entries, s.now().UTC())
 	if len(rows) == 0 {
 		return 0, nil
 	}

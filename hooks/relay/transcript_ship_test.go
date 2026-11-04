@@ -266,6 +266,32 @@ func TestTranscriptOnlyRecordsRestartOfReplacedFile(t *testing.T) {
 	require.Equal(t, []string{"u-1", "big", "u-2"}, entryUUIDs(t, uploads[1]))
 }
 
+// TestTranscriptOnlyRecordsRestartOfUnfinishedReplacement: a replacement
+// holding only a line still being written ships nothing, but its restart must
+// still be recorded, or once that line grows past the old offset the next Stop
+// would resume inside it and skip it.
+func TestTranscriptOnlyRecordsRestartOfUnfinishedReplacement(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	shipped := transcriptUser + transcriptAssistant
+	appendTranscript(t, transcript, shipped)
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	// The replacement's first line ends past the old offset.
+	first := paddedTranscriptLine("user", "r-1", 2*len(shipped), "x")
+	cut := len(shipped) / 2
+	require.NoError(t, os.WriteFile(transcript, []byte(first[:cut]), 0o600))
+	invokeClaude(t, cfg, claudeStop(transcript))
+	appendTranscript(t, transcript, first[cut:]+transcriptLater)
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2)
+	require.Equal(t, []string{"r-1", "u-2"}, entryUUIDs(t, uploads[1]))
+}
+
 // TestTranscriptOnlyKeepsChunkWithoutAcknowledgement: a 200 that is not the
 // endpoint's acknowledgement, such as a single-page app answering an
 // unrouted path, must not move the offset.
@@ -510,4 +536,9 @@ func TestSplitInlineFlagsReadsTranscriptOnly(t *testing.T) {
 	b, err := json.Marshal(FileConfig{ServerURL: "https://app.example.test", Project: "default"})
 	require.NoError(t, err)
 	require.NotContains(t, string(b), "transcript_only", "the flag is omitted unless set, so other distributions render unchanged")
+}
+
+func TestLoadConfigReadsTranscriptOnlyFromEnv(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_TRANSCRIPT_ONLY", "true")
+	require.True(t, LoadConfig(Config{}).TranscriptOnly)
 }
