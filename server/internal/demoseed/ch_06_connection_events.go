@@ -117,6 +117,10 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 			}
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
+			if ending.what == mcpconnectionattempts.CodeRejectedByMember {
+				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
+				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+			}
 			switch ending.step {
 			case mcpconnectionattempts.StepProviderRefresh:
 				opts = append(opts, mcpconnectionattempts.Provider(demoConnectionProvider))
@@ -128,6 +132,11 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 				return nil, fmt.Errorf("build connection request event: %w", err)
 			}
 			row.TraceID = md5Hex(s.name(key))
+			if ending.step == mcpconnectionattempts.StepMCPRequest || ending.step == mcpconnectionattempts.StepInboundToken {
+				client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
+				row.ClientFamily, row.ClientVersion = client.family, client.version
+				row.DeviceKey = s.connectionDevice(key)
+			}
 			rows = append(rows, row)
 		}
 	}

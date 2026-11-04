@@ -28,7 +28,26 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		steps[row.Step] = true
 		outcomes[row.Step+"/"+row.Reason] = true
 		outcomes[row.Step+"/"+row.StepResult] = true
-		require.Empty(t, row.MemberID, "no member should be attributed to a different gateway")
+		if row.Reason != "" {
+			meaning, ok := mcpconnectionattempts.MeaningOf(row.Reason)
+			require.True(t, ok, row.Reason)
+			require.Equal(t, string(meaning.Outcome), row.Outcome)
+		} else {
+			require.Equal(t, "connected", row.Outcome)
+		}
+		if row.Step == "mcp_request" || row.Step == "inbound_token" {
+			require.NotEmpty(t, row.ClientFamily)
+			require.NotEmpty(t, row.ClientVersion)
+			require.Regexp(t, `^[0-9a-f]{32}$`, row.DeviceKey)
+		}
+		if row.Reason == "rejected_by_member" {
+			require.Equal(t, "meta", row.ServerKind)
+			require.Equal(t, s.projectID(), row.ProjectID)
+			require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
+			require.Equal(t, s.det("mcpserver-support").String(), row.MemberID)
+		} else {
+			require.Empty(t, row.MemberID, "no member should be attributed to a different gateway")
+		}
 		switch row.Step {
 		case "inbound_token":
 			require.Equal(t, "refresh_token", row.GrantType)
