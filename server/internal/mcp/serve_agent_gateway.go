@@ -8,6 +8,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -17,9 +18,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"goa.design/goa/v3/security"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -85,13 +88,31 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
+	// A project-scoped agent's gateway serves its project alone: members come
+	// only from it, and the caller's auth context names it, which
+	// project-bound runtimes such as Platform tools require. An
+	// organization-wide agent has no project, so its gateway keeps spanning
+	// projects.
+	projectID, err := s.agentGatewayProjectID(ctx, authCtx.ActiveOrganizationID, agentID)
+	if err != nil {
+		return err
+	}
+	if projectID != uuid.Nil {
+		// Copy: the key's auth context is shared with the request it came from.
+		scoped := *authCtx
+		scoped.ProjectID = &projectID
+		scoped.ProjectSlug = nil
+		ctx = contextvalues.SetAuthContext(ctx, &scoped)
+		r = r.WithContext(ctx)
+	}
+
 	// Synthetic, never persisted: the meta runtime is shaped around rows, and
 	// an agent gateway has none. Only the fields the runtime reads are
 	// meaningful; the rest are zeroed rather than invented.
 	metaServer := &metamcprepo.MetaMcpServer{
 		ID:             agentGatewayID(agentID),
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      uuid.Nil,
+		ProjectID:      projectID,
 		// No issuer: the agent key is the credential, so the OAuth issuer gate
 		// must not run. Leaving this invalid is what keeps it off.
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -107,13 +128,29 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		Deleted:           false,
 	}
 	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct // synthetic: only the fields the meta runtime reads are meaningful
-		ProjectID: uuid.Nil,
+		ProjectID: projectID,
 	}
 
 	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, organization: false}, nil); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
 	}
 	return nil
+}
+
+// agentGatewayProjectID is the project the agent is scoped to, or uuid.Nil for
+// an organization-wide agent.
+func (s *Service) agentGatewayProjectID(ctx context.Context, organizationID string, agentID uuid.UUID) (uuid.UUID, error) {
+	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agentID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "load agent").LogError(ctx, s.logger)
+	}
+	if !agent.ProjectID.Valid {
+		return uuid.Nil, nil
+	}
+	return agent.ProjectID.UUID, nil
 }
 
 // enforceAgentGatewayCustomDomainLockdown 403s a platform-host agent gateway

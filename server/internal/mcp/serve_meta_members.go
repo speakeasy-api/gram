@@ -231,12 +231,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
-		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
 			issuer = gate.userSessionIssuerID
-			scopeProjectID = gate.projectID
 		}
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, gate.projectID)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -280,7 +278,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
 // (the agent gateway) skips that check. A nonzero scopeProjectID restricts
-// candidates before admission and credential association for project gateways.
+// candidates before admission and credential association for project gateways
+// and for a project-scoped agent's gateway.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve

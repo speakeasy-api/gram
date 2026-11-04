@@ -39,6 +39,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -101,12 +102,28 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, grantedServer)
 
-	// Credential policy: the immutable ceiling on this one key.
+	token := mintAgentGatewayKey(t, ctx, ti, agent.ID, grantedServer)
+
+	return agentGatewayFixture{
+		agent: agent, token: token,
+		granted: grantedSlug, grantedProject: project.Slug,
+		denied: deniedSlug, open: publicSlug,
+	}
+}
+
+// mintAgentGatewayKey issues an agent key whose credential policy, the
+// immutable ceiling on this one key, admits only resourceID in the caller's
+// project.
+func mintAgentGatewayKey(t *testing.T, ctx context.Context, ti *testInstance, agentID, resourceID uuid.UUID) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
-			authz.SelectorKeyResourceID:   grantedServer.String(),
+			authz.SelectorKeyResourceID:   resourceID.String(),
 			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
 		},
 	}})
@@ -122,18 +139,13 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 		Name:                   "gateway key " + uuid.NewString()[:8],
 		KeyPrefix:              prefix,
 		KeyHash:                hash,
-		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agentID).String(), Valid: true},
 		DelegatedGrants:        delegated,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-
-	return agentGatewayFixture{
-		agent: agent, token: token,
-		granted: grantedSlug, grantedProject: project.Slug,
-		denied: deniedSlug, open: publicSlug,
-	}
+	return token
 }
 
 // serveAgentGatewayHTTP drives the handler the way the router does, including
@@ -616,4 +628,113 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// seedProjectAgent creates an agent scoped to projectID, grants it and its
+// owner mcp:connect on resourceID, and issues it a key for that resource.
+func seedProjectAgent(t *testing.T, ctx context.Context, ti *testInstance, projectID, resourceID uuid.UUID) (agentsrepo.Agent, string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+		Name:           "Project agent " + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, resourceID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), resourceID)
+	return agent, mintAgentGatewayKey(t, ctx, ti, agent.ID, resourceID)
+}
+
+// A Platform tool runs in its server's project. A project-scoped agent's
+// gateway runs every call in the agent's project, so execute_tool reaches the
+// Platform runtime with the project it requires. An organization-wide agent's
+// gateway still spans projects and carries none.
+func TestServeAgentGateway_ProjectAgentExecutesPlatformTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "platform-member-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "user-sessions", "list")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	// Serve the granted wrapper from the toolset. Toolset-backed grants key on
+	// the toolset, so grants and keys name it.
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	agent, token := seedProjectAgent(t, ctx, ti, projectID, toolset.ID)
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.granted + "--platform_list_user_sessions", "arguments": map[string]any{},
+		},
+	})
+
+	response, err := serveAgentGatewayHTTP(t, ti, agent.ID.String(), token, call)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
+	orgWideToken := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
+	response, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), orgWideToken, call)
+	require.NoError(t, err)
+	require.Contains(t, response.Body.String(), "platform tool requires project auth context")
+}
+
+// A project-scoped agent's gateway admits members from the agent's project
+// only, even a public server another project serves. An organization-wide
+// agent's gateway keeps listing it.
+func TestServeAgentGateway_ProjectAgentAdmitsOnlyItsProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "other",
+		Slug:           "other-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherSlug := "elsewhere-" + uuid.NewString()[:8]
+	metaOther := createMetaMcpEndpoint(t, ctx, ti.conn, other.ID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	seedMetaMember(t, ctx, ti.conn, other.ID, metaOther.ID, "other project member", otherSlug, 0, mcpservers.VisibilityPublic)
+
+	agent, token := seedProjectAgent(t, ctx, ti, *authCtx.ProjectID, mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted))
+	listServers := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	})
+
+	w, err := serveAgentGatewayHTTP(t, ti, agent.ID.String(), token, listServers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), fx.granted)
+	require.Contains(t, w.Body.String(), fx.open)
+	require.NotContains(t, w.Body.String(), otherSlug)
+
+	w, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, listServers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), otherSlug)
 }
