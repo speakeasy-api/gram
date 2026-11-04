@@ -163,6 +163,39 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// EnvironmentRef names one environment in its project for typed
+// operations. Every operation carries the project as a dimension, so a grant
+// or block bounded to one project never matches an environment in another.
+type EnvironmentRef struct {
+	projectID string
+	id        string
+}
+
+// Environment names an environment. The caller must have verified that the
+// environment belongs to the project.
+func Environment(projectID, environmentID string) EnvironmentRef {
+	return EnvironmentRef{projectID: projectID, id: environmentID}
+}
+
+// EnvironmentsInProject names the environments of a project as a whole, for
+// operations that are not about one existing environment, such as creating
+// one, or answering for a slug that matches none without revealing whether
+// it exists. The project's ID stands in as the environment ID, so only a
+// grant that covers every environment of the project matches.
+func EnvironmentsInProject(projectID string) EnvironmentRef {
+	return EnvironmentRef{projectID: projectID, id: projectID}
+}
+
+// Read asks to view the environment and its entries.
+func (e EnvironmentRef) Read() Operation {
+	return newOperation("environment", "read", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
+}
+
+// Write asks to change, clone or delete the environment.
+func (e EnvironmentRef) Write() Operation {
+	return newOperation("environment", "write", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -170,8 +203,10 @@ func (p ProjectRef) PublishPlugin() Operation {
 func typedOperations() []Operation {
 	org := Organization("organization")
 	project := Project("organization", "project")
+	environment := Environment("project", "environment")
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
+		environment.Read(), environment.Write(),
 	}
 }

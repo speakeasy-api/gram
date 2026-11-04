@@ -30,6 +30,7 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 	require.NoError(t, err)
 
 	declared := []Scope{
+		ScopeEnvironmentBlockedRead, ScopeEnvironmentBlockedWrite, ScopeEnvironmentRead, ScopeEnvironmentWrite,
 		ScopeLogRead,
 		ScopeMCPAuth, ScopeMCPBlockedAuth, ScopeMCPBlockedConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite,
 		ScopeMCPConnect, ScopeMCPRead, ScopeMCPWrite,
