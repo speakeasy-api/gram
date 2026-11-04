@@ -84,10 +84,11 @@ func NewClientInMode(t *testing.T, engine *authz.Engine, mode authz.MigrationMod
 }
 
 // NewParityClient builds the default client with every default migration unit
-// in shadow mode and a recorder that fails the test on any disagreement or
-// unfinished comparison. The engine still answers every call, so a service's
-// existing assertions hold, and each organization-bound decision the tests
-// make is also checked against the registry evaluator.
+// in shadow mode and a recorder that fails the test on any disagreement, any
+// skipped comparison and any timeout. A comparison the test's own
+// cancellation cut short is ignored. The engine still answers every call, so
+// a service's existing assertions hold, and each organization-bound decision
+// the tests make is also checked against the registry evaluator.
 func NewParityClient(t *testing.T, engine *authz.Engine) *authz.Client {
 	t.Helper()
 
@@ -116,7 +117,9 @@ type parityRecorder struct {
 }
 
 func (r *parityRecorder) RecordShadowComparison(_ context.Context, c authz.ShadowComparison) {
-	if !c.Outcome.Disagrees() && c.Outcome != authz.ShadowFailed && c.Outcome != authz.ShadowSkipped {
+	// A request the test cancelled on purpose proves nothing either way.
+	canceled := c.Outcome == authz.ShadowFailed && c.Detail == "canceled"
+	if canceled || (!c.Outcome.Disagrees() && c.Outcome != authz.ShadowFailed && c.Outcome != authz.ShadowSkipped) {
 		return
 	}
 	r.mu.Lock()
