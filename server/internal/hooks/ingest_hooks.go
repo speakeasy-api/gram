@@ -2275,6 +2275,11 @@ func toolResultDetailsMCPServer(result any) string {
 	switch r := result.(type) {
 	case nil:
 		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
 	case string:
 		raw = []byte(r)
 	default:

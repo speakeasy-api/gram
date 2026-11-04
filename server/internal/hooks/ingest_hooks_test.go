@@ -1841,6 +1841,11 @@ func TestCanonicalTelemetryToolSource(t *testing.T) {
 			want:    "",
 		},
 		{
+			name:    "it never splits an MCP-looking tool name without the marker",
+			payload: openClawToolPayload("tool.completed", "speakeasy__execute_tool", map[string]any{"details": map[string]any{"status": "ok"}}, nil),
+			want:    "",
+		},
+		{
 			name:    "it ignores the marker from other adapters",
 			payload: fromClaude,
 			want:    "",
