@@ -65,6 +65,8 @@ type Dependencies struct {
 
 	// Connections records renewal outcomes; nil records nothing.
 	Connections *mcpconnectionattempts.Recorder
+	// RefreshPaused reports that the provider recently rejected the client itself.
+	RefreshPaused func(context.Context, Provider) bool
 }
 
 type RefreshFailure string
@@ -73,8 +75,12 @@ const (
 	RefreshAmbiguous       RefreshFailure = "ambiguous"
 	RefreshInvalidGrant    RefreshFailure = "invalid_grant"
 	RefreshConfiguration   RefreshFailure = "configuration"
+	RefreshClientRejected  RefreshFailure = "client_rejected"
+	RefreshSetup           RefreshFailure = "setup"
 	RefreshInvalidIdentity RefreshFailure = "invalid_identity"
 	RefreshRetryable       RefreshFailure = "retryable"
+	// RefreshSetupRetryable is a transient fault before the request was sent.
+	RefreshSetupRetryable RefreshFailure = "setup_retryable"
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.

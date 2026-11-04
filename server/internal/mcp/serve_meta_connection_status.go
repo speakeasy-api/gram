@@ -103,6 +103,9 @@ func (s *Service) handleMetaConnectionStatusCall(
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string) {
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+				return s.staleMemberStatus(ctx, logger, gate, member)
+			}
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
 		}
 		for _, outcome := range gate.catalog.MemberOutcomes {
@@ -134,6 +137,9 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
 	if err != nil {
+		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+			return s.staleMemberStatus(ctx, logger, gate, member)
+		}
 		return metamcp.SignInError, memberErrorMessage(err)
 	}
 	if !dial.anonymous {
@@ -193,6 +199,15 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 		}
 		return required[member.serverID], nil
 	}
+}
+
+// staleMemberStatus gives a stale choice the call's remedy; the connect page can't fix it.
+func (s *Service) staleMemberStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
+	message, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
+	if reconnect {
+		return metamcp.SignInNeedsConsent, message
+	}
+	return metamcp.SignInActionRequired, message
 }
 
 func memberErrorMessage(err error) string {

@@ -182,6 +182,14 @@ type memberCredentialError struct{ *metaMemberError }
 
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
 
+// memberStaleChoiceError is a member whose no-auth choice predates its sign-in setup.
+type memberStaleChoiceError struct {
+	memberCredentialError
+	reason string
+}
+
+func (e memberStaleChoiceError) Unwrap() error { return e.memberCredentialError }
+
 // dialMetaMember routes a member for dispatch and counts the routing outcome.
 func (s *Service) dialMetaMember(
 	ctx context.Context,
@@ -488,8 +496,8 @@ func (s *Service) executeProxiedMemberTool(
 		} else if failure, ok := errors.AsType[memberConnectionError](err); ok {
 			s.recordMemberFailure(ctx, gate, member, failure.code)
 		}
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
