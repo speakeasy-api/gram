@@ -53,6 +53,9 @@ func (c *Client) RequireLoaded(ctx context.Context, policies LoadedPolicies, ops
 // EvaluateLoaded reports whether policies allow every operation, without
 // recording a challenge. It errors only when an operation cannot be decided.
 func (c *Client) EvaluateLoaded(ctx context.Context, policies LoadedPolicies, ops ...Operation) (bool, error) {
+	if err := c.loadedAdmissible(ctx); err != nil {
+		return false, err
+	}
 	if err := c.validateLoaded(ops); err != nil {
 		return false, c.engine.mapError(ctx, err)
 	}
