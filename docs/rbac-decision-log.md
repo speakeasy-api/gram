@@ -441,7 +441,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 ## Declaration language follow-up (AIS-880)
 
-Tiago approved the new direction for the declaration language on 2026-11-04. This change applies it to the default declarations on the integration branch. No stored scope, compiled projection or decision changes: `TestSchemaProjectionsMatchFrozenTables` and the foundation corpus pass unchanged.
+Tiago approved the new direction for the declaration language on 2026-11-04. This change applies it to the default declarations on the integration branch. No stored scope, compiled projection or decision changes: `TestSchemaProjectionsMatchFrozenTables` and the foundation corpus pass unchanged. `Registry.Fingerprint()` does change once, because it hashes the renamed compiled field names; shadow records carry the new value, and that is an identifier change, not a behaviour change.
 
 ### Decided without reviewer input
 
