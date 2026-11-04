@@ -156,6 +156,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		nil,
 		nil,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		audit.NewLogger(),
 		captureEnabledFeatures{},
 		nil,
