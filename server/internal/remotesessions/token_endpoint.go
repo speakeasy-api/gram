@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -55,12 +57,17 @@ func (e *TokenEndpoint) LogValue() slog.Value         { return slog.StringValue(
 
 // Post sends one grant authenticated as the endpoint's client and returns a
 // successful response carrying an access token. Provider rejections, transport
-// failures and signing failures are *TokenEndpointError; it never retries.
+// failures and signing failures are *TokenEndpointError; a client assertion key
+// that is missing is ErrTokenEndpointConfiguration; it never retries.
 func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenResponse, error) {
 	var none TokenResponse
 	req, err := NewTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
 	if err != nil {
 		if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
+			// A missing key fails every attempt the same way, so it is the administrator's to repair.
+			if errors.Is(err, errClientAssertionKeyUnconfigured) || errors.Is(err, pgx.ErrNoRows) {
+				return none, fmt.Errorf("sign client assertion: %w", ErrTokenEndpointConfiguration)
+			}
 			return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: false, Signing: true}
 		}
 		return none, fmt.Errorf("build token request: %w", err)

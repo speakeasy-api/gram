@@ -354,7 +354,9 @@ func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 
 			ctx, fx := seedMetaValidationFixture(t, "verify-fail-"+uuid.NewString()[:8])
 			var healthy atomic.Bool
+			var tokenRequests atomic.Int64
 			tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				tokenRequests.Add(1)
 				w.Header().Set("Content-Type", "application/json")
 				if healthy.Load() {
 					_, _ = io.WriteString(w, `{"access_token":"recovered-token","token_type":"Bearer","expires_in":3600}`)
@@ -388,16 +390,25 @@ func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 				require.Contains(t, page, `value="disconnect"`)
 			}
 
+			require.EqualValues(t, 1, tokenRequests.Load())
 			healthy.Store(true)
 			if tc.status == http.StatusServiceUnavailable || tc.status == http.StatusTooManyRequests {
 				w, err := postValidate(t, fx, fx.clientID)
 				require.NoError(t, err)
 				require.Equal(t, http.StatusSeeOther, w.Code)
 				require.Equal(t, consentPagePath(fx)+"&validate_unfinished="+fx.clientID.String(), w.Header().Get("Location"), "retry waits for the outage cooldown")
+				require.EqualValues(t, 1, tokenRequests.Load(), "cooldown prevents another provider request")
+				require.Empty(t, fx.member.drain(), "cooldown prevents a member probe")
 				// Model the cooldown elapsing without sleeping through it.
 				require.NoError(t, fx.ti.cacheAdapter.Delete(ctx, remotesessions.RefreshCooldownKey(storedSession(t, ctx, fx))))
 			}
 			requireValidated(t, fx)
+			require.EqualValues(t, 2, tokenRequests.Load(), "recovery refreshes exactly once")
+			recovered := storedSession(t, ctx, fx)
+			accessToken, err := fx.ti.enc.Decrypt(recovered.AccessTokenEncrypted)
+			require.NoError(t, err)
+			require.Equal(t, "recovered-token", accessToken)
+			require.True(t, recovered.LastValidatedAt.Valid)
 		})
 	}
 }
