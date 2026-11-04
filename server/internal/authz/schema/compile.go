@@ -666,7 +666,7 @@ func (c *compiler) validateAlternatives(t *TypeDecl) {
 				anyBlock = true
 			}
 		}
-		if dup := firstDuplicateRef(a.options); dup != nil {
+		if dup := firstDuplicateRef(a.options); dup != nil && !a.instances {
 			c.problemf("%s: alternative %s.%s listed twice", where, dup.Type, dup.Permission)
 		}
 		if a.veto && !anyBlock {

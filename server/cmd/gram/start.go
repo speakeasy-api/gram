@@ -1744,7 +1744,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build customer killswitch service: %w", err)
 			}
 			killswitchapi.Attach(mux, killswitchService)
-			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
+			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL).
 				WithFeatureProvider(featureFlags)
 			skills.Attach(mux, skillsService)

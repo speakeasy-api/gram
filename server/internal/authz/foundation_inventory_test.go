@@ -197,6 +197,7 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"MCPServersInProject":   "",
 	"Assistant":             "",
 	"AssistantsInProject":   "",
+	"Skill":                 "",
 }
 
 // engineEntryPoints are Engine methods whose names are distinctive enough to

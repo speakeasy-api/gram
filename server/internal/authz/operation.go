@@ -170,6 +170,35 @@ func (p ProjectRef) ReadSkills() Operation {
 	return newOperation("skill", "read", p.id, nil)
 }
 
+// WriteSkills asks to change the project's skills as a collection, such as
+// creating or importing one. Like ReadSkills it targets the project ID, the
+// resource collection-wide skill grants are stored against.
+func (p ProjectRef) WriteSkills() Operation {
+	return newOperation("skill", "write", p.id, nil)
+}
+
+// SkillRef names one skill in its project for typed operations.
+type SkillRef struct {
+	projectID string
+	id        string
+}
+
+// Skill names a skill. The caller must have verified that the skill belongs
+// to the project.
+func Skill(projectID, skillID string) SkillRef {
+	return SkillRef{projectID: projectID, id: skillID}
+}
+
+// Read asks to read the skill. Skill grants are stored either against the
+// project, covering every skill in it, or against one skill, so the
+// operation passes with either; a block on either refuses it.
+func (k SkillRef) Read() Operation {
+	return newAlternatives("skill", "project_or_skill_read",
+		newOperation("skill", "read", k.projectID, nil),
+		newOperation("skill", "read", k.id, nil),
+	)
+}
+
 // AssistantRef names one assistant in its project for typed operations.
 // Every operation carries the project as a dimension, so a grant bounded to
 // one project never matches an assistant in another.
@@ -295,7 +324,7 @@ func typedOperations() []Operation {
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
-		project.ReadSkills(),
+		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
 	}

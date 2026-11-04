@@ -117,7 +117,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/risk/policylifecycle":                          ownerR1,
 	"internal/shadowmcp/admission":                           ownerR1,
 	"internal/skillefficacy":                                 ownerO7,
-	"internal/skills":                                        ownerS1,
 	"internal/slackdirectoryconnections":                     ownerO3,
 	"internal/spendrules":                                    ownerO6,
 	"internal/telemetry":                                     ownerL1,
