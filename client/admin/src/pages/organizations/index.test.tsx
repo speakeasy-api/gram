@@ -307,6 +307,12 @@ function openOn(trigger: HTMLElement): void {
   });
 }
 
+// Keep row queries inside the named table region rather than traversing the
+// sidebar and page chrome. Roles and accessible names remain the selectors.
+function tableQueries(): ReturnType<typeof within> {
+  return within(screen.getByRole("region", { name: "Organizations table" }));
+}
+
 // Reached through the name link, so a test names the row the way an operator
 // would rather than by position.
 function rowFor(link: HTMLElement): HTMLTableRowElement {
@@ -334,7 +340,7 @@ function cellUnder(row: HTMLElement, header: string): HTMLElement {
 // the control the way an operator does. Waiting on it is also waiting for the
 // rows, and it is present whether or not the name column is visible.
 function peekTrigger(name: string): Promise<HTMLElement> {
-  return screen.findByRole("button", { name: `Peek at ${name}` });
+  return tableQueries().findByRole("button", { name: `Peek at ${name}` });
 }
 
 async function peekOn(name: string): Promise<HTMLElement> {
@@ -1305,7 +1311,9 @@ describe("organizations list", () => {
       throw new Error("the row under test needs its optional fields set");
     }
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     // The Name cell puts the name in the text and the slug in the href, so a
     // cell that reads the wrong field cannot satisfy both.
     expect(link.getAttribute("href")).toBe(`/organizations/${FIRST_ORG.slug}`);
@@ -1351,7 +1359,9 @@ describe("organizations list", () => {
   it("reads a dash in the trial cell of an organization that never trialled", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    const link = await screen.findByRole("link", { name: SECOND_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: SECOND_ORG.name,
+    });
     const trialCell = cellUnder(rowFor(link), "Trial");
 
     // The dash is what an operator reads; the words behind it are what a
@@ -1386,7 +1396,9 @@ describe("organizations list", () => {
       initialPath: "/organizations",
     });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     // Past the two controls and the name link, so the click lands on the row
     // body rather than on something that handles it first. Named by its header
     // rather than counted, because a control column added beside the others
@@ -1410,7 +1422,9 @@ describe("organizations list", () => {
       initialPath: "/organizations",
     });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     fireEvent.click(link, { button: 0, metaKey: true });
 
     // The browser opens the link in a background tab and the row handler has to
@@ -1430,7 +1444,9 @@ describe("organizations list", () => {
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     link.focus();
     expect(document.activeElement).toBe(link);
 
@@ -1439,7 +1455,7 @@ describe("organizations list", () => {
       expect(next.hasAttribute("disabled")).toBe(false);
     });
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     // Keyed by index, React reuses this node for the next page's record and
     // relabels it under the operator's focus. No focus event fires, so the next
@@ -1487,19 +1503,23 @@ describe("organizations list peek", () => {
 
   it("highlights the row it is peeking at and no other", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
 
     await peekOn(FIRST_ORG.name);
 
     expect(isPeeked(link)).toBe(true);
-    expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
-      false,
-    );
+    expect(
+      isPeeked(tableQueries().getByRole("link", { name: SECOND_ORG.name })),
+    ).toBe(false);
   });
 
   it("walks peek down the list and stops at the last row", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
@@ -1510,9 +1530,9 @@ describe("organizations list peek", () => {
     // Nothing else speaks when the panel already holds the focus and the
     // record under it changes.
     expect(announcement()).toBe(`Peeking at ${SECOND_ORG.name}.`);
-    expect(isPeeked(screen.getByRole("link", { name: SECOND_ORG.name }))).toBe(
-      true,
-    );
+    expect(
+      isPeeked(tableQueries().getByRole("link", { name: SECOND_ORG.name })),
+    ).toBe(true);
     expect(isPeeked(first)).toBe(false);
 
     // On to the last row, and then nowhere: paging replaces the row nodes the
@@ -1547,7 +1567,9 @@ describe("organizations list peek", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(FIRST_ORG.name);
 
-    const second = rowFor(screen.getByRole("link", { name: SECOND_ORG.name }));
+    const second = rowFor(
+      tableQueries().getByRole("link", { name: SECOND_ORG.name }),
+    );
     const scrollIntoView = vi.spyOn(second, "scrollIntoView");
 
     fireEvent.keyDown(peekPanel(), { key: "ArrowDown" });
@@ -1630,7 +1652,9 @@ describe("organizations list peek", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
     ).toEqual(["", "Name", "Slug", "Type", "Actions"]);
-    expect(screen.getByRole("link", { name: FIRST_ORG.name })).toBeTruthy();
+    expect(
+      tableQueries().getByRole("link", { name: FIRST_ORG.name }),
+    ).toBeTruthy();
 
     fireEvent.keyDown(peekPanel(), { key: "Escape" });
 
@@ -1639,8 +1663,10 @@ describe("organizations list peek", () => {
 
   it("leaves the arrow keys to the Columns menu while it is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
-    const second = screen.getByRole("link", { name: SECOND_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
+    const second = tableQueries().getByRole("link", { name: SECOND_ORG.name });
     await peekOn(FIRST_ORG.name);
 
     openOn(screen.getByRole("button", { name: "Columns" }));
@@ -1654,7 +1680,9 @@ describe("organizations list peek", () => {
 
   it("leaves Escape to the Columns menu while it is open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     openOn(screen.getByRole("button", { name: "Columns" }));
@@ -1683,7 +1711,7 @@ describe("organizations list peek", () => {
       expect(next.hasAttribute("disabled")).toBe(false);
     });
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     await waitFor(() => {
       expect(
@@ -1903,7 +1931,9 @@ describe("organizations list peek", () => {
 
   it("leaves a key alone once something nearer has answered it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     // React listens at the root, so a native listener on the panel stands in
@@ -1968,7 +1998,9 @@ describe("organizations list peek", () => {
       total: 101,
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     const next = screen.getByRole("button", { name: "Next" });
@@ -2012,7 +2044,9 @@ describe("organizations list peek", () => {
 
   it("ignores the arrow keys pressed on a control inside the panel", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const first = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const first = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     // Inside the panel, and not the panel. The panel's own record navigation
@@ -2162,7 +2196,7 @@ describe("organizations list peek", () => {
 
   it("keeps an empty status region on the page before anything is peeked", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // A live region injected together with its text is not reliably announced,
     // so the region has to be on the page before it has anything to say.
@@ -2194,7 +2228,9 @@ describe("organizations list peek", () => {
       initialPath: "/organizations",
     });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     const slugCell = cellUnder(rowFor(link), "Slug");
 
     fireEvent.click(slugCell, { altKey: true });
@@ -2211,7 +2247,9 @@ describe("organizations list peek", () => {
   it("announces an alt-click peek the same way the control does", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const region = await screen.findByRole("status");
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
 
     fireEvent.click(cellUnder(rowFor(link), "Slug"), { altKey: true });
 
@@ -2224,7 +2262,9 @@ describe("organizations list peek", () => {
 
   it("closes the peek when the same row is alt-clicked again", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     const slugCell = cellUnder(rowFor(link), "Slug");
 
     fireEvent.click(slugCell, { altKey: true });
@@ -2243,7 +2283,9 @@ describe("organizations list peek", () => {
       initialPath: "/organizations",
     });
 
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     fireEvent.click(cellUnder(rowFor(link), "Slug"));
 
     await waitFor(() => {
@@ -2264,7 +2306,9 @@ describe("organizations list peek", () => {
       const { router } = await renderRouteTree(routeTree, {
         initialPath: "/organizations",
       });
-      const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+      const link = await tableQueries().findByRole("link", {
+        name: FIRST_ORG.name,
+      });
 
       fireEvent.click(cellUnder(rowFor(link), "Slug"), { [modifier]: true });
 
@@ -2283,7 +2327,9 @@ describe("organizations list peek", () => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
 
     // Dispatched by hand, because the assertion is on the event rather than on
     // the DOM: a browser reads Alt on an anchor as "save link", so the row has
@@ -2307,7 +2353,9 @@ describe("organizations list peek", () => {
       const { router } = await renderRouteTree(routeTree, {
         initialPath: "/organizations",
       });
-      const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+      const link = await tableQueries().findByRole("link", {
+        name: FIRST_ORG.name,
+      });
 
       const event = createEvent.click(link, { altKey: true, [modifier]: true });
       fireEvent(link, event);
@@ -2344,7 +2392,7 @@ describe("organizations list peek", () => {
 
   it("will not let the Columns menu hide the control", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     const item = screen.getByRole("menuitemcheckbox", { name: "Actions" });
@@ -2474,7 +2522,7 @@ describe("organizations list peek", () => {
 
   it("keeps the peek open for a column the peek was not hiding", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // Hidden before the peek opens. Peek leaves this column visible, and a
     // column the menu already reports as checked is not one an operator can
@@ -2501,7 +2549,7 @@ describe("organizations list peek", () => {
 
   it("says nothing about the peek when a column is toggled with none open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Members" }));
@@ -2518,7 +2566,7 @@ describe("organizations list peek", () => {
 
   it("says nothing about the peek when a column peek never touches is toggled with none open", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Slug" }));
@@ -2551,7 +2599,7 @@ describe("organizations list peek", () => {
       expect(next.hasAttribute("disabled")).toBe(false);
     });
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     // The scroll box around the table, reached through the table it holds
     // rather than by class: it is the nearest thing to where the operator was.
@@ -2602,7 +2650,7 @@ describe("organizations list peek", () => {
     // live control. An unguarded rescue would take it off them.
     next.focus();
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     expect(document.activeElement).toBe(next);
   });
@@ -2642,7 +2690,7 @@ describe("organizations list write actions", () => {
 
   it("repaints the row out of the answer rather than asking for the list again", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: LIVE.name });
+    const link = await tableQueries().findByRole("link", { name: LIVE.name });
     expect(cellUnder(rowFor(link), "Disabled").textContent).toBe("-");
 
     await openRowMenu(LIVE.name);
@@ -2660,7 +2708,7 @@ describe("organizations list write actions", () => {
     expect(mocks.listOrganizations).toHaveBeenCalledTimes(1);
     // The row that was written, and no other. A cache update keyed on the
     // wrong thing repaints every row with one record.
-    const other = screen.getByRole("link", { name: FIRST_ORG.name });
+    const other = tableQueries().getByRole("link", { name: FIRST_ORG.name });
     expect(cellUnder(rowFor(other), "Disabled").textContent).toBe(
       shortDate(FIRST_ORG.disabled_at ?? ""),
     );
@@ -2669,7 +2717,7 @@ describe("organizations list write actions", () => {
   // Unlike the row, which repaints from the answer the write already returned.
   it("asks for the platform totals again after a write", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: LIVE.name });
+    await tableQueries().findByRole("link", { name: LIVE.name });
     const before = mocks.getOrganizationStats.mock.calls.length;
     expect(before).toBeGreaterThan(0);
 
@@ -2697,7 +2745,7 @@ describe("organizations list write actions", () => {
     // Held open, so the cancel catches it before it has answered once.
     mocks.getOrganizationStats.mockReturnValueOnce(new Promise(() => {}));
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: LIVE.name });
+    await tableQueries().findByRole("link", { name: LIVE.name });
     expect(mocks.getOrganizationStats.mock.calls.length).toBe(1);
 
     await openRowMenu(LIVE.name);
@@ -2765,7 +2813,7 @@ describe("organizations list write actions", () => {
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: LIVE.name });
+    await tableQueries().findByRole("link", { name: LIVE.name });
 
     await openRowMenu(LIVE.name);
     await confirmDisable();
@@ -2781,7 +2829,7 @@ describe("organizations list write actions", () => {
     // The row is drawn from the answer, and there was no answer. A row that
     // repaints off the request instead shows the operator a state the server
     // never reached, and the list is the only place they would notice.
-    const link = screen.getByRole("link", { name: LIVE.name });
+    const link = tableQueries().getByRole("link", { name: LIVE.name });
     expect(cellUnder(rowFor(link), "Disabled").textContent).toBe("-");
     expect(announcement()).toBe(
       `Could not disable ${LIVE.name}: organization is already disabled`,
@@ -2914,7 +2962,7 @@ describe("organizations list write actions", () => {
 
   it("will not let the Columns menu take the row menu away", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     openOn(screen.getByRole("button", { name: "Columns" }));
     const item = screen.getByRole("menuitemcheckbox", { name: "Actions" });
@@ -3117,7 +3165,7 @@ describe("organizations list actions column", () => {
 
   it("puts the column last and leaves it there when peek opens", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     expect(headers().at(-1)).toBe("Actions");
 
@@ -3131,7 +3179,7 @@ describe("organizations list actions column", () => {
 
   it("marks the actions column sticky at the right edge, above its neighbours and no wider than its contents", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // Both halves of the column, because a pin on the header alone leaves the
     // cells sliding under a header that stayed put. happy-dom lays nothing
@@ -3153,7 +3201,9 @@ describe("organizations list actions column", () => {
 
   it("gives the pinned cells opaque colours rather than a transparent one", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
 
     // The header's own colour, not the header row's: the pinned cell paints
     // above its neighbours, so it needs one of its own to cover their text.
@@ -3174,7 +3224,9 @@ describe("organizations list actions column", () => {
 
   it("keeps the row's hover and expanded colours free of an alpha", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     const classes = [...rowFor(link).classList];
 
     // The base row tints these two states at half alpha. Inherited, that alpha
@@ -3188,7 +3240,9 @@ describe("organizations list actions column", () => {
 
   it("leaves the peeked row one colour for the pinned cell to inherit", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
     await peekOn(FIRST_ORG.name);
 
     // One colour on the row, not two. Both classes present would leave the
@@ -3199,7 +3253,7 @@ describe("organizations list actions column", () => {
 
   it("holds both controls in the one cell, the peek trigger first", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // Peek is the read action and the more frequent one; the menu holds the
     // writes. Read by accessible name, which is what a screen reader
@@ -3213,7 +3267,7 @@ describe("organizations list actions column", () => {
 
   it("keeps both controls on the keyboard, peek before the menu", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // Adjacent stops in the sequential order Tab walks, which is also the
     // assertion that neither one dropped out of it.
@@ -3296,7 +3350,7 @@ describe("organizations list bulk account type", () => {
 
   it("says nothing is selected until a row is ticked", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     expect(screen.getByText("Nothing selected")).toBeTruthy();
     // The action appears with the selection. Offering it against nothing would
@@ -3324,7 +3378,7 @@ describe("organizations list bulk account type", () => {
   // checked in a browser.
   it("keeps the Columns control in the strip in both states", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
     const bar = screen.getByText("Nothing selected").parentElement;
     if (!bar) throw new Error("the strip has no element");
     expect(within(bar).getByRole("button", { name: "Columns" })).toBeTruthy();
@@ -3338,7 +3392,7 @@ describe("organizations list bulk account type", () => {
 
   it("ticks every row on the page from the header checkbox", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     fireEvent.click(selectAll());
 
@@ -3350,7 +3404,7 @@ describe("organizations list bulk account type", () => {
 
   it("unticks every row on the page from the header checkbox", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     fireEvent.click(selectAll());
     fireEvent.click(selectAll());
@@ -3387,7 +3441,9 @@ describe("organizations list bulk account type", () => {
 
   it("puts the row's checkbox ahead of everything else in it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    const link = await screen.findByRole("link", { name: FIRST_ORG.name });
+    const link = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
 
     // The select column is leftmost and the actions column is pinned to the
     // right edge, so the keyboard has to walk the row the way the eye does:
@@ -3401,7 +3457,7 @@ describe("organizations list bulk account type", () => {
 
   it("pins the select column to the left edge, in both the header and the rows", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // The list is wider than the window at every width an operator uses, so an
     // unpinned checkbox scrolls off the left while the actions column holds the
@@ -3434,7 +3490,7 @@ describe("organizations list bulk account type", () => {
 
   it("leaves the row's own controls alone when a checkbox is ticked", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     await tick(FIRST_ORG.name);
 
@@ -3464,7 +3520,7 @@ describe("organizations list bulk account type", () => {
       expect(next.hasAttribute("disabled")).toBe(false);
     });
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     // A selection that survives a page is a selection the operator cannot see.
     // The count would still read 1 and the row it names would be off screen.
@@ -3515,10 +3571,10 @@ describe("organizations list bulk account type", () => {
       expect(next.hasAttribute("disabled")).toBe(false);
     });
     fireEvent.click(next);
-    await screen.findByRole("link", { name: NEXT_PAGE_ORG.name });
+    await tableQueries().findByRole("link", { name: NEXT_PAGE_ORG.name });
 
     fireEvent.click(screen.getByRole("button", { name: "Previous" }));
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     // The page the selection was made on is back, so a selection that was only
     // hidden by the page change rather than dropped shows up again here. The
@@ -3580,7 +3636,7 @@ describe("organizations list bulk account type", () => {
 
   it("unticks one row and keeps the rest", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     fireEvent.click(selectAll());
     await tick(SECOND_ORG.name);
@@ -3697,7 +3753,7 @@ describe("organizations list bulk account type", () => {
 
   it("asks for the list again once the write lands", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
     const before = mocks.listOrganizations.mock.calls.length;
 
     await tick(FIRST_ORG.name);
@@ -3985,7 +4041,7 @@ const CREATED_ORG: AdminOrganization = {
 describe("organizations list create organization", () => {
   it("offers the create control in the toolbar", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     const control = screen.getByRole("button", { name: "Create organization" });
     // In the search box's own row, not the strip inside the table: this is the
@@ -4000,7 +4056,7 @@ describe("organizations list create organization", () => {
 
   it("announces a created organization through the page's live region", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
 
     fireEvent.click(
       screen.getByRole("button", { name: "Create organization" }),
@@ -4061,7 +4117,7 @@ describe("organizations list create organization: a refusal", () => {
     // tree, so the rows are unreachable by role until the operator is out of
     // the dialog. Closing it is their next move anyway.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await screen.findByRole("link", { name: FIRST_ORG.name });
+    await tableQueries().findByRole("link", { name: FIRST_ORG.name });
   });
 });
 
