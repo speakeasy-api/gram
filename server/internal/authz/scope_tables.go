@@ -43,6 +43,8 @@ type undeclaredScope struct {
 // default: workload:read alone discloses which machines an organization
 // recognises, which is its trust policy, so a member who needs to see it gets
 // an explicit grant through a custom role.
+//
+//exhaustive:ignore
 var undeclaredScopes = map[Scope]undeclaredScope{
 	ScopeRoot:                 {visibility: scopeVisibilityInternal, satisfiedBy: nil, exclusion: "", roles: nil},
 	ScopeAgentRead:            {visibility: scopeVisibilityUserVisible, satisfiedBy: nil, exclusion: "", roles: []string{SystemRoleAdmin}},

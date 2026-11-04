@@ -13,6 +13,7 @@ func TestBuildScopeTables_RejectsScopeDeclaredTwice(t *testing.T) {
 
 	reg, err := DefaultRegistry()
 	require.NoError(t, err)
+	//exhaustive:ignore
 	_, err = buildScopeTables(reg, map[Scope]undeclaredScope{
 		ScopeMCPRead: {visibility: scopeVisibilityUserVisible, satisfiedBy: nil, exclusion: "", roles: nil},
 	})
