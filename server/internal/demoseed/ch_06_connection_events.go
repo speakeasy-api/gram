@@ -214,7 +214,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 	return append(rows, last), nil
 }
 
-// stoppedAttemptRows is an attempt with no final row, stopped on a failed provider sign-in, with one member's status.
+// stoppedAttemptRows stops on a failed provider sign-in; project gateways also show an active member.
 func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key string, first mcpconnectionattempts.Row) ([]mcpconnectionattempts.Row, error) {
 	rows := []mcpconnectionattempts.Row{first}
 	at := attempt.StartedAt().Add(connectionAttemptLength)
@@ -224,11 +224,15 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	}
 	failed.TraceID = md5Hex(s.name(key + "-failed-step"))
 	failed.ClientFamily, failed.DeviceKey = first.ClientFamily, first.DeviceKey
-	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-github")))
+	rows = append(rows, failed)
+	if first.ServerID != s.det("metamcp-1").String() {
+		return rows, nil
+	}
+	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-support")))
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	member.TraceID = md5Hex(s.name(key + "-member"))
 	member.ClientFamily, member.DeviceKey = first.ClientFamily, first.DeviceKey
-	return append(rows, failed, member), nil
+	return append(rows, member), nil
 }
