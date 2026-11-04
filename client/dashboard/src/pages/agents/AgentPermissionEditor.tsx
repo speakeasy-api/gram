@@ -217,76 +217,77 @@ export function AgentPermissionEditor({
             page before making changes.
           </Text>
         )}
-        <RolePermissionsSection
-          groups={groups}
-          subjectLabel="this agent"
-          selectedScopes={new Set(Object.keys(draft))}
-          disabled={
-            save.isPending ||
-            reload.isPending ||
-            needsReload ||
-            scopesLoading ||
-            scopesError ||
-            !agent.permissions.write
-          }
-          onToggleScope={(slug) => {
-            if (
+        {/* Without the catalogue the picker is empty, and an empty picker
+            reads as an agent with no permissions. */}
+        {!scopesLoading && !scopesError && (
+          <RolePermissionsSection
+            groups={groups}
+            subjectLabel="this agent"
+            selectedScopes={new Set(Object.keys(draft))}
+            disabled={
               save.isPending ||
               reload.isPending ||
               needsReload ||
-              scopesLoading ||
-              scopesError ||
               !agent.permissions.write
-            )
-              return;
-            setChangedScopes((previous) => new Set(previous).add(slug));
-            setDraft((previous) => {
-              const next = { ...previous };
-              if (slug in next) delete next[slug];
-              else {
-                const definition = policyScopes.find(
-                  (item) => item.slug === slug,
-                );
-                next[slug] =
-                  definition && isAgentPolicyNarrowable(definition.resourceType)
-                    ? []
-                    : null;
-              }
-              return next;
-            });
-          }}
-          renderScopeRule={(definition) => {
-            const resource = policyScopes.find(
-              (item) => item.slug === definition.slug,
-            );
-            if (!resource || !isAgentPolicyNarrowable(resource.resourceType))
-              return (
-                <Text small muted>
-                  {agentPolicyUnrestrictedLabel(resource?.resourceType)}
-                </Text>
-              );
-            return (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={
-                  save.isPending ||
-                  reload.isPending ||
-                  needsReload ||
-                  !agent.permissions.write
+            }
+            onToggleScope={(slug) => {
+              if (
+                save.isPending ||
+                reload.isPending ||
+                needsReload ||
+                !agent.permissions.write
+              )
+                return;
+              setChangedScopes((previous) => new Set(previous).add(slug));
+              setDraft((previous) => {
+                const next = { ...previous };
+                if (slug in next) delete next[slug];
+                else {
+                  const definition = policyScopes.find(
+                    (item) => item.slug === slug,
+                  );
+                  next[slug] =
+                    definition &&
+                    isAgentPolicyNarrowable(definition.resourceType)
+                      ? []
+                      : null;
                 }
-                onClick={() => setEditingScope(definition.slug)}
-                aria-label={`Choose resources for ${definition.slug}`}
-              >
-                {computeRuleLabel(
-                  draft[definition.slug] ?? null,
-                  resource.resourceType,
-                  organization.projects,
-                )}
-              </Button>
-            );
-          }}
-        />
+                return next;
+              });
+            }}
+            renderScopeRule={(definition) => {
+              const resource = policyScopes.find(
+                (item) => item.slug === definition.slug,
+              );
+              if (!resource || !isAgentPolicyNarrowable(resource.resourceType))
+                return (
+                  <Text small muted>
+                    {agentPolicyUnrestrictedLabel(resource?.resourceType)}
+                  </Text>
+                );
+              return (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    save.isPending ||
+                    reload.isPending ||
+                    needsReload ||
+                    !agent.permissions.write
+                  }
+                  onClick={() => setEditingScope(definition.slug)}
+                  aria-label={`Choose resources for ${definition.slug}`}
+                >
+                  {computeRuleLabel(
+                    draft[definition.slug] ?? null,
+                    resource.resourceType,
+                    organization.projects,
+                  )}
+                </Button>
+              );
+            }}
+          />
+        )}
         {authorizationError && (
           <Text role="alert" destructive>
             {authorizationError}
@@ -330,6 +331,8 @@ export function AgentPermissionEditor({
               save.isPending ||
               reload.isPending ||
               needsReload ||
+              scopesLoading ||
+              scopesError ||
               !!authorizationError ||
               !agent.permissions.write ||
               incomplete

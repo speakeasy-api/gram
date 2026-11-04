@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   close: vi.fn<() => void>(),
   allowedProjects: ["project_one", "project_two", "project_three"],
   permissionsLoading: false,
+  scopesLoading: false,
+  scopesError: false,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -65,23 +67,30 @@ const policyScope = (
 });
 vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
   useListAgentPolicyScopes: () => ({
-    data: {
-      scopes: [
-        policyScope("inference:execute", "inference", "Run inference"),
-        policyScope("mcp:connect", "mcp", "Connect to MCP servers"),
-        policyScope("mcp:read", "mcp", "View MCP servers", ["mcp:connect"]),
-        policyScope("mcp:write", "mcp", "Manage MCP servers", ["mcp:read"]),
-        policyScope("project:read", "project", "View projects"),
-        policyScope(
-          "org:device_agent_sync",
-          "org",
-          "Sync device agent plugins",
-        ),
-        policyScope("org:hooks_ingest", "org", "Send hook events"),
-      ],
-    },
-    isLoading: false,
-    isError: false,
+    data:
+      mocks.scopesLoading || mocks.scopesError
+        ? undefined
+        : {
+            scopes: [
+              policyScope("inference:execute", "inference", "Run inference"),
+              policyScope("mcp:connect", "mcp", "Connect to MCP servers"),
+              policyScope("mcp:read", "mcp", "View MCP servers", [
+                "mcp:connect",
+              ]),
+              policyScope("mcp:write", "mcp", "Manage MCP servers", [
+                "mcp:read",
+              ]),
+              policyScope("project:read", "project", "View projects"),
+              policyScope(
+                "org:device_agent_sync",
+                "org",
+                "Sync device agent plugins",
+              ),
+              policyScope("org:hooks_ingest", "org", "Send hook events"),
+            ],
+          },
+    isLoading: mocks.scopesLoading,
+    isError: mocks.scopesError,
   }),
 }));
 vi.mock("@/pages/access/useOrgMcpServers", () => ({
@@ -143,6 +152,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.allowedProjects = ["project_one", "project_two", "project_three"];
   mocks.permissionsLoading = false;
+  mocks.scopesLoading = false;
+  mocks.scopesError = false;
   mocks.create.mockResolvedValue({});
   mocks.remove.mockResolvedValue({});
 });
@@ -313,6 +324,56 @@ describe("Agent permission editor", () => {
       ).disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("shows the catalogue label beside each permission's slug", () => {
+    setup([inferenceGrant("project_one")]);
+    openPlatform();
+    expect(screen.getByText("Run inference")).toBeTruthy();
+    expect(screen.getByText("inference:execute")).toBeTruthy();
+    expect(screen.getByText("Run inference.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    expect(screen.getByText("View projects")).toBeTruthy();
+    expect(screen.getByText("project:read")).toBeTruthy();
+    expect(screen.getByText("MCP servers")).toBeTruthy();
+  });
+  it("withholds the picker and Save while the permission catalogue loads", () => {
+    mocks.scopesLoading = true;
+    setup([inferenceGrant("project_one")]);
+    expect(
+      screen.getByText("Loading the permissions an agent can hold…"),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText("No platform permissions")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add permissions" }),
+    ).toBeNull();
+    const save = screen.getByRole("button", {
+      name: "Save permissions",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it("withholds the picker and Save when the permission catalogue fails to load", () => {
+    mocks.scopesError = true;
+    setup([inferenceGrant("project_one")]);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "could not be loaded",
+    );
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText("No platform permissions")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add permissions" }),
+    ).toBeNull();
+    const save = screen.getByRole("button", {
+      name: "Save permissions",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();

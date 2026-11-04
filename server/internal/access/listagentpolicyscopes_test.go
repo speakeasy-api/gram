@@ -8,6 +8,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 // The dashboard's agent permission editor offers exactly this list. It used
@@ -59,4 +61,27 @@ func TestService_ListAgentPolicyScopes_OffersExactlyTheRuntimeSafeScopes(t *test
 	for _, scope := range result.Scopes {
 		require.Equal(t, labels[scope.Slug], scope.Label, scope.Slug)
 	}
+}
+
+// An owner configuring their own agent holds no organization grant, so the
+// list must not need one.
+func TestService_ListAgentPolicyScopes_NeedsNoOrganizationGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	result, err := ti.service.ListAgentPolicyScopes(authztest.WithExactGrants(t, ctx), &gen.ListAgentPolicyScopesPayload{})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Scopes)
+}
+
+func TestService_ListAgentPolicyScopes_Unauthorized(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx = contextvalues.SetAuthContext(ctx, nil)
+
+	_, err := ti.service.ListAgentPolicyScopes(ctx, &gen.ListAgentPolicyScopesPayload{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing auth context")
 }

@@ -314,7 +314,7 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
-  const { catalogue } = useAgentPolicyScopes();
+  const { catalogue, isError: catalogueError } = useAgentPolicyScopes();
   // Credential restrictions are listed and edited in their own panel.
   const rows = canRead
     ? (grants.data ?? []).filter(
@@ -355,6 +355,12 @@ export function AgentIdentityPermissions({
     }
     content = (
       <>
+        {catalogueError && (
+          <Text small muted className="px-4 pt-3">
+            Permission names could not be loaded, so only their identifiers are
+            shown.
+          </Text>
+        )}
         {[...byScope].map(([scope, grants]) => {
           // `Text` with no children is a loading skeleton, so a scope the
           // catalogue does not describe (e.g. `mcp:blocked_*`, or any scope
@@ -367,9 +373,12 @@ export function AgentIdentityPermissions({
               key={scope}
               className="border-border space-y-1 border-b px-4 py-3 last:border-b-0"
             >
+              {/* "Run inference (inference:execute)", as scopeTitle reads;
+                  the slug keeps its own span so it stays monospaced. */}
               <Text>
-                {entry?.label ? `${entry.label} ` : ""}
+                {entry?.label ? `${entry.label} (` : ""}
                 <span className="font-mono">{scope}</span>
+                {entry?.label ? ")" : ""}
               </Text>
               {description && (
                 <Text small muted>
