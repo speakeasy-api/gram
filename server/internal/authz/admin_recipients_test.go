@@ -1,7 +1,10 @@
 package authz
 
 import (
+	"context"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +22,37 @@ func TestResolveOrganizationAdminEmails_UsesEffectiveGrantsAndDeterministicDedup
 	seedOrganization(t, ctx, db, organizationID)
 	require.NoError(t, SeedSystemRoleGrants(ctx, db, organizationID))
 
+	seedAdminAudience(t, ctx, db, organizationID)
+
+	recipients, err := ResolveOrganizationAdminEmails(ctx, db, organizationID)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"Alpha@example.test", "zeta@example.test"}, recipients)
+}
+
+func TestResolveOrganizationAdminEmails_ReturnsPartialAudienceWithResolutionError(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db := newTestDB(t)
+	organizationID := "org-admin-recipients-partial"
+	seedOrganization(t, ctx, db, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, db, organizationID))
+	seedActiveOrganizationUser(t, ctx, db, organizationID, "good-admin")
+	seedRoleAssignmentForUser(t, ctx, db, organizationID, "good-admin", SystemRoleAdmin)
+	seedActiveOrganizationUser(t, ctx, db, organizationID, urn.AllUsersPrincipalID)
+
+	recipients, err := ResolveOrganizationAdminEmails(ctx, db, organizationID)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+	require.Equal(t, []string{"good-admin@example.com"}, recipients)
+}
+
+// seedAdminAudience seeds members whose administrators, after blocks and
+// case-insensitive email dedupe, are Alpha@example.test and zeta@example.test.
+func seedAdminAudience(t *testing.T, ctx context.Context, db *pgxpool.Pool, organizationID string) {
+	t.Helper()
 	seedActiveOrganizationUser(t, ctx, db, organizationID, "admin-alpha")
 	seedRoleAssignmentForUser(t, ctx, db, organizationID, "admin-alpha", SystemRoleAdmin)
 	seedActiveOrganizationUser(t, ctx, db, organizationID, "admin-alpha-duplicate")
@@ -45,28 +79,4 @@ func TestResolveOrganizationAdminEmails_UsesEffectiveGrantsAndDeterministicDedup
 		})
 		require.NoError(t, err)
 	}
-
-	recipients, err := ResolveOrganizationAdminEmails(ctx, db, organizationID)
-
-	require.NoError(t, err)
-	require.Equal(t, []string{"Alpha@example.test", "zeta@example.test"}, recipients)
-}
-
-func TestResolveOrganizationAdminEmails_ReturnsPartialAudienceWithResolutionError(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newTestDB(t)
-	organizationID := "org-admin-recipients-partial"
-	seedOrganization(t, ctx, db, organizationID)
-	require.NoError(t, SeedSystemRoleGrants(ctx, db, organizationID))
-	seedActiveOrganizationUser(t, ctx, db, organizationID, "good-admin")
-	seedRoleAssignmentForUser(t, ctx, db, organizationID, "good-admin", SystemRoleAdmin)
-	seedActiveOrganizationUser(t, ctx, db, organizationID, urn.AllUsersPrincipalID)
-
-	recipients, err := ResolveOrganizationAdminEmails(ctx, db, organizationID)
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrPrincipalInvalid)
-	require.Equal(t, []string{"good-admin@example.com"}, recipients)
 }

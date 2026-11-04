@@ -21,7 +21,7 @@ import (
 // SyncApplications records a sync request so the coordinator's next pass runs
 // the connection, and nudges the coordinator.
 func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplicationsPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (s *Service) kickApplicationSync(ctx context.Context, logger *slog.Logger) 
 
 // ListApplications returns the snapshot with live assignment counts and the last run.
 func (s *Service) ListApplications(ctx context.Context, payload *gen.ListApplicationsPayload) (*gen.ListIdentityProviderConnectionApplicationsResult, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, false)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, false)
 	if err != nil {
 		return nil, err
 	}

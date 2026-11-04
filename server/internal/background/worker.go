@@ -503,6 +503,7 @@ func NewTemporalWorker(
 		opts.ExpectedARecords,
 		opts.SiteURL,
 		opts.OrgHosts,
+		opts.AuthzClient,
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.StripeClient,

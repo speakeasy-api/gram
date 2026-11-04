@@ -29,25 +29,25 @@ import (
 // dashboard surface holds to every identifier the same subject's activity is
 // recorded under.
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	auth     *auth.Auth
-	authz    *authz.Engine
-	resolver *identity.Resolver
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	auth        *auth.Auth
+	authzClient *authz.Client
+	resolver    *identity.Resolver
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client) *Service {
 	logger = logger.With(attr.SlogComponent("identity"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/identityapi"),
-		logger:   logger,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		resolver: identity.NewResolver(logger, db),
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/identityapi"),
+		logger:      logger,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authzClient: authzClient,
+		resolver:    identity.NewResolver(logger, db),
 	}
 }
 
@@ -78,7 +78,7 @@ func (s *Service) Resolve(ctx context.Context, payload *gen.ResolvePayload) (*ge
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 

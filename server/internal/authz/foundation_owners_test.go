@@ -82,15 +82,12 @@ var foundationPackageOwners = map[string]string{
 	"internal/dataexports":                                   ownerO7,
 	"internal/demoseed":                                      ownerX4,
 	"internal/deployments":                                   ownerP2,
-	"internal/deviceintegrations":                            ownerO3,
 	"internal/environments":                                  ownerE1,
 	"internal/externalcredentials":                           ownerO4,
 	"internal/externalkeys":                                  ownerO4,
 	"internal/externalmcp":                                   ownerP3,
 	"internal/hiddenmcpservers":                              ownerM2,
 	"internal/hooks":                                         ownerO8,
-	"internal/identityapi":                                   ownerO3,
-	"internal/identityproviderconnections":                   ownerO3,
 	"internal/internalsessionissuers":                        ownerO4,
 	"internal/jsonwebkeysets":                                ownerO4,
 	"internal/keys":                                          ownerAG2,
@@ -129,7 +126,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/sigint":                                        ownerP4,
 	"internal/skillefficacy":                                 ownerO7,
 	"internal/skills":                                        ownerS1,
-	"internal/slackdirectoryconnections":                     ownerO3,
 	"internal/spendrules":                                    ownerO6,
 	"internal/telemetry":                                     ownerL1,
 	"internal/telemetry/analytics":                           ownerL1,
@@ -167,14 +163,15 @@ var foundationFileOwners = map[string]string{
 }
 
 var foundationFunctionOwners = map[string]string{
-	"internal/assistantidentity/actor.go canDelegateInference":                      ownerI1,
-	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":       ownerI1,
-	"internal/background/activities/process_workos_org_events.go handleRoleDeleted": ownerO2,
-	"internal/productfeatures/impl.go *Service.authorizeOrganization":               ownerO2,
-	"internal/chat/impl.go *Service.GetAssistantSessionSummary":                     ownerC3,
-	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                              ownerC3,
-	"internal/chat/impl.go *Service.chatVisibilityScope":                            ownerC3,
-	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
+	"internal/assistantidentity/actor.go canDelegateInference":                                                         ownerI1,
+	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":                                          ownerI1,
+	"internal/background/activities/directory_review_emails.go *DirectoryReviewEmails.organizationAdministratorEmails": ownerX1,
+	"internal/background/activities/process_workos_org_events.go handleRoleDeleted":                                    ownerO2,
+	"internal/chat/impl.go *Service.GetAssistantSessionSummary":                                                        ownerC3,
+	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                                                                 ownerC3,
+	"internal/chat/impl.go *Service.chatVisibilityScope":                                                               ownerC3,
+	"internal/skills/impl.go *Service.accessibleSkillIDs":                                                              ownerS2,
+	"internal/productfeatures/impl.go *Service.authorizeOrganization":                                                  ownerO2,
 }
 
 // foundationOwner returns the ticket that migrates consumer. Scope metadata

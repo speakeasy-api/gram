@@ -47,7 +47,7 @@ const stateTTL = 10 * time.Minute
 type Service struct {
 	db            *pgxpool.Pool
 	auth          *auth.Auth
-	authz         *authz.Engine
+	authzClient   *authz.Client
 	audit         *audit.Logger
 	cache         cache.Cache
 	encryption    *encryption.Client
@@ -61,8 +61,8 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, auditLogger *audit.Logger, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL, scheduler SyncScheduler) *Service {
-	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authz: engine, audit: auditLogger, cache: stateCache, encryption: enc, provider: provider, syncScheduler: scheduler, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
+func NewService(logger *slog.Logger, tp trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, engine *authz.Engine, authzClient *authz.Client, auditLogger *audit.Logger, stateCache cache.Cache, enc *encryption.Client, provider Provider, siteURL *url.URL, scheduler SyncScheduler) *Service {
+	return &Service{db: db, auth: auth.New(logger, db, sessions, engine), authzClient: authzClient, audit: auditLogger, cache: stateCache, encryption: enc, provider: provider, syncScheduler: scheduler, siteURL: siteURL, tracer: tp.Tracer("github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"), logger: logger}
 }
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -89,7 +89,7 @@ func (s *Service) authorizePerson(ctx context.Context, userID string) (*contextv
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	if userID == "" || userID != ac.UserID {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 			return nil, err
 		}
 	}

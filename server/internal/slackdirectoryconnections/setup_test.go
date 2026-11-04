@@ -85,7 +85,7 @@ func newService(t *testing.T) (context.Context, *fixture) {
 	require.NoError(t, err)
 	scheduler := &testSyncScheduler{}
 	build := func(oauth slackdirectoryconnections.Provider) *slackdirectoryconnections.Service {
-		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, audit.NewLogger(), store, enc, oauth, site, scheduler)
+		return slackdirectoryconnections.NewService(logger, tp, db, sessions, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), store, enc, oauth, site, scheduler)
 	}
 	return ctx, &fixture{build: build, service: build(provider), scheduler: scheduler, db: db, provider: provider, enc: enc, cache: store, auth: ac}
 }

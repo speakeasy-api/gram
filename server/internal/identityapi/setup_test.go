@@ -64,7 +64,7 @@ func newTestIdentityService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
-		service: identityapi.NewService(logger, tracerProvider, conn, sessionManager, authzEngine),
+		service: identityapi.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine)),
 		conn:    conn,
 	}
 }

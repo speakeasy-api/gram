@@ -60,7 +60,8 @@ type ShadowComparison struct {
 	OrganizationID string
 	// Units are the migration units the call touched.
 	Units []string
-	// Entry is the client entry point: require, evaluate or match_many.
+	// Entry is the client entry point: require, evaluate, evaluate_grants,
+	// match_many or audience.
 	Entry string
 	// Permissions are the typed permissions the call asked for, such as
 	// project.read, in call order.
@@ -70,7 +71,8 @@ type ShadowComparison struct {
 	// classifies a new_error, and is empty otherwise.
 	Detail string
 	// Duration is how long the registry evaluator ran, or how long the
-	// comparison waited before it gave up.
+	// comparison waited before it gave up. For an audience it is the sum of
+	// the registry evaluator's per-member decisions, without the grant reads.
 	Duration time.Duration
 	// BuildVersion is the server build that ran the comparison.
 	BuildVersion string
@@ -195,6 +197,25 @@ func (s *shadowComparer) compare(ctx context.Context, entry string, rt route, op
 		record.Outcome, record.Detail = ShadowFailed, "canceled"
 	}
 	s.recorder.RecordShadowComparison(ctx, record)
+}
+
+// recordAudience records a comparison the caller already ran in full, such
+// as an audience resolution that asks both evaluators about each member
+// while it reads their grants once. It is not bounded by the budget: the
+// registry evaluator does no I/O, and the caller owns the reads.
+func (s *shadowComparer) recordAudience(ctx context.Context, organizationID string, rt route, ops []Operation, old, got shadowAnswer, duration time.Duration) {
+	outcome, detail := classifyShadow(old, got)
+	s.recorder.RecordShadowComparison(ctx, ShadowComparison{
+		OrganizationID: organizationID,
+		Units:          rt.units,
+		Entry:          "audience",
+		Permissions:    operationPermissions(ops),
+		Outcome:        outcome,
+		Detail:         detail,
+		Duration:       duration,
+		BuildVersion:   s.buildVersion,
+		ModelVersion:   s.modelVersion,
+	})
 }
 
 var errShadowPanic = errors.New("shadow evaluation panicked")

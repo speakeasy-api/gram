@@ -240,6 +240,7 @@ func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, ma
 			ti.conn,
 			sessionManager,
 			authzEngine,
+			authztest.NewParityClient(t, authzEngine),
 			audit.NewLogger(),
 			features,
 			provisioner,

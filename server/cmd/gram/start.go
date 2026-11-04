@@ -1590,12 +1590,12 @@ func newStartCommand() *cli.Command {
 				callbackURL := serverURL.JoinPath(slackdirectoryconnections.CallbackPath)
 				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-client-id"), c.String("slack-client-secret"), callbackURL.String())
 			}
-			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
+			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
-			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
+			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient))
 			authService := auth.NewService(
 				logger,
 				tracerProvider,
@@ -1778,7 +1778,7 @@ func newStartCommand() *cli.Command {
 			issuerService.SetEMAIssuerTokenPurger(remotesessions.NewEMAIssuerTokenPurger(db))
 			internalsessionissuers.Attach(mux, issuerService)
 			internalsessionissuers.AttachDiscovery(mux, db, logger)
-			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
+			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, authzClient, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
 			registryValidator, err := mcpregistry.LoadValidator()
 			if err != nil {

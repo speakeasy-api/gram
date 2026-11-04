@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
@@ -214,6 +215,7 @@ func NewActivities(
 	expectedARecords []netip.Addr,
 	siteURL *url.URL,
 	orgHosts *orghost.Resolver,
+	authzClient *authz.Client,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
 	stripeClient stripeclient.Client,
@@ -421,7 +423,7 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
-		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
+		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts, authzClient),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),

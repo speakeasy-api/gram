@@ -118,7 +118,7 @@ type Service struct {
 	logger        *slog.Logger
 	db            *pgxpool.Pool
 	auth          *auth.Auth
-	authz         *authz.Engine
+	authzClient   *authz.Client
 	audit         *audit.Logger
 	features      feature.Provider
 	provisioner   *Provisioner
@@ -170,6 +170,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	features feature.Provider,
 	provisioner *Provisioner,
@@ -185,7 +186,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
+		authzClient: authzClient,
 		audit:       auditLogger,
 		features:    features,
 		provisioner: provisioner,
@@ -225,13 +226,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // authorize runs RBAC; a mutation additionally refuses support sessions and non-principal API keys.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) authorize(ctx context.Context, operation func(authz.OrganizationRef) authz.Operation, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, operation(authz.Organization(authCtx.ActiveOrganizationID))); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -384,7 +385,7 @@ func (s *Service) allow(ctx context.Context, logger *slog.Logger, limiter *ratel
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +767,7 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 }
 
 func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientIDPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -870,7 +871,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 // ReplaceClientSecret keeps the previous secret and status when Okta rejects
 // the new one, so a mistyped secret never breaks a working connection.
 func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceClientSecretPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -954,7 +955,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 }
 
 func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMethodPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1027,7 +1028,7 @@ func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMetho
 }
 
 func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1242,7 +1243,7 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIdentityProviderConnectionResult, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgRead, false)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Read, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1265,7 +1266,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIde
 }
 
 func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1324,7 +1325,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 }
 
 func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrganizationRef.Administer, true)
 	if err != nil {
 		return nil, err
 	}

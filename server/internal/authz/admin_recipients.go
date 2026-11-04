@@ -16,11 +16,6 @@ import (
 // resolution errors so notification callers can deliver to the partial
 // audience and still retry the failed resolution.
 func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizationID string) ([]string, error) {
-	users, err := repo.New(db).ListAccessNotificationUsers(ctx, organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("list organization notification users: %w", err)
-	}
-
 	check := Check{
 		Scope:           ScopeOrgAdmin,
 		ResourceKind:    "",
@@ -29,6 +24,24 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 		selectorMatch:   selectorMatchNormal,
 		representedUser: "",
 	}
+	return resolveOrganizationAudience(ctx, db, organizationID, func(_ string, grants []Grant) (bool, error) {
+		evaluation, err := evaluateGrantCheck(grants, check)
+		if err != nil {
+			return false, err
+		}
+		return evaluation.Grant != nil, nil
+	})
+}
+
+// resolveOrganizationAudience returns the distinct email addresses of active
+// organization members whose live grants allows accepts, with any per-member
+// resolution errors.
+func resolveOrganizationAudience(ctx context.Context, db repo.DBTX, organizationID string, allows func(userID string, grants []Grant) (bool, error)) ([]string, error) {
+	users, err := repo.New(db).ListAccessNotificationUsers(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization notification users: %w", err)
+	}
+
 	type recipient struct {
 		email  string
 		userID string
@@ -46,12 +59,12 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 			resolutionErrors = append(resolutionErrors, fmt.Errorf("load grants for organization user %q: %w", user.ID, err))
 			continue
 		}
-		evaluation, err := evaluateGrantCheck(grants, check)
+		allowed, err := allows(user.ID, grants)
 		if err != nil {
 			resolutionErrors = append(resolutionErrors, fmt.Errorf("evaluate grants for organization user %q: %w", user.ID, err))
 			continue
 		}
-		if evaluation.Grant == nil {
+		if !allowed {
 			continue
 		}
 
