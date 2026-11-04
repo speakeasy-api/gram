@@ -13,28 +13,17 @@ import (
 )
 
 // ReadableConversations filters bounded reference candidates without reading
-// transcripts. Grants are evaluated as one batch rather than per-candidate refusals;
-// the shared per-chat gate retains owner, runtime and external-token semantics.
+// transcripts. Each chat's read permission, ownership included, is matched
+// as one batch rather than as per-candidate refusals; the shared per-chat
+// gate retains the runtime and external-token semantics.
 func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]string, error) {
 	visible := []string{}
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || auth == nil || auth.ProjectID == nil || len(ids) == 0 || authz.CheckSensitiveContentAccess(ctx) != nil {
 		return visible, nil
 	}
-	ops := make([]authz.Operation, len(ids))
-	for i, id := range ids {
-		ops[i] = authz.Chat(id).Read()
-	}
-	granted, err := s.authzClient.MatchMany(ctx, ops)
-	if err != nil {
-		return nil, fmt.Errorf("filter conversation grants: %w", err)
-	}
-	allowed := make(map[string]bool, len(ids))
-	for i, id := range ids {
-		if granted[i] {
-			allowed[id] = true
-		}
-	}
+	chats := make([]repo.GetChatRow, 0, len(ids))
+	ops := make([]authz.Operation, 0, len(ids))
 	for _, raw := range ids {
 		id, err := uuid.Parse(raw)
 		if err != nil {
@@ -47,9 +36,24 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 		if err != nil {
 			return nil, fmt.Errorf("load conversation reference: %w", err)
 		}
-		grant := allowed[raw]
+		op, err := s.chatOperation(ctx, chat, chatAccessRead)
+		if err != nil {
+			return nil, fmt.Errorf("name conversation check: %w", err)
+		}
+		chats = append(chats, chat)
+		ops = append(ops, op)
+	}
+	if len(ops) == 0 {
+		return visible, nil
+	}
+	granted, err := s.authzClient.MatchMany(ctx, ops)
+	if err != nil {
+		return nil, fmt.Errorf("filter conversation grants: %w", err)
+	}
+	for i, chat := range chats {
+		grant := granted[i]
 		if err := s.authorizeChatAccess(ctx, auth, chat, chatAccessRead, &grant); err == nil {
-			visible = append(visible, raw)
+			visible = append(visible, chat.ID.String())
 		}
 	}
 	return visible, nil

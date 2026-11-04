@@ -3,6 +3,7 @@ package authz
 import (
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/authz/schema"
 )
@@ -27,7 +28,7 @@ type legacyForm struct {
 // operation. A permission that answers no stored scope, such as one built
 // only from ownership facts, has no equivalent and returns false.
 func (c *Client) legacyCheck(op Operation) (Check, bool) {
-	def, ok := c.registry.Permission(op.permission)
+	def, ok := c.grantPart(op.permission)
 	if !ok || def.AnswersScope == "" {
 		return Check{Scope: "", ResourceKind: c.registryKind(op.permission.Type), ResourceID: op.instance.resourceID, Dimensions: maps.Clone(op.instance.dimensions), selectorMatch: selectorMatchNormal, representedUser: ""}, false
 	}
@@ -124,4 +125,53 @@ func operationForCheck(registry *schema.Registry, check Check) (Operation, error
 		op = op.WithStrictMatch()
 	}
 	return op, nil
+}
+
+// grantPart returns the permission whose stored scope the engine checks for
+// ref. That is ref itself when it answers a scope. A permission that answers
+// none but is a union of exactly one scope-answering permission and attribute
+// branches, such as chat.read = read_grant | is(author) | ..., is checked as
+// that permission: the attribute branches are answered before the engine is
+// asked (see allowedByAttributesOld).
+func (c *Client) grantPart(ref schema.PermissionRef) (schema.PermissionDefinition, bool) {
+	def, ok := c.registry.Permission(ref)
+	if !ok || def.AnswersScope != "" || def.Expr.Op() != schema.OpUnion {
+		return def, ok
+	}
+	var grant schema.PermissionDefinition
+	found := false
+	for _, branch := range def.Expr.Operands() {
+		if branch.Op() == schema.OpPerm {
+			target, ok := c.registry.Permission(schema.PermissionRef{Type: ref.Type, Permission: branch.Name()})
+			if !ok || target.AnswersScope == "" || found {
+				return def, true
+			}
+			grant, found = target, true
+			continue
+		}
+		if c.readsGrants(ref.Type, branch) {
+			return def, true
+		}
+	}
+	if !found {
+		return def, true
+	}
+	return grant, true
+}
+
+// readsGrants reports whether expr can be satisfied by a stored grant: a
+// relation, a same-type permission, or a related resource's permission that
+// reads any stored scope.
+func (c *Client) readsGrants(typeName string, expr schema.Expr) bool {
+	switch expr.Op() {
+	case schema.OpRel, schema.OpPerm:
+		return true
+	case schema.OpIs:
+		return false
+	case schema.OpVia:
+		target, ok := c.registry.Permission(schema.PermissionRef{Type: expr.TargetType(), Permission: expr.Permission()})
+		return !ok || len(target.Scopes) > 0
+	default:
+		return slices.ContainsFunc(expr.Operands(), func(operand schema.Expr) bool { return c.readsGrants(typeName, operand) })
+	}
 }

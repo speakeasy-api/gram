@@ -589,16 +589,16 @@ WHERE a.organization_id = @organization_id
   AND a.owner_reassignment_required_at IS NULL
   AND a.deleted IS FALSE;
 
--- name: IsAgentOwner :one
-SELECT EXISTS (
-  SELECT 1
-  FROM agents a
-  WHERE a.id = @agent_id
-    AND a.organization_id = @organization_id
-    AND a.owner_user_id = @owner_user_id
-    AND a.owner_reassignment_required_at IS NULL
-    AND a.deleted IS FALSE
-);
+-- name: GetAgentOwnership :one
+-- The ownership state of the agent that ran a chat session, as the chat's
+-- ownership rule reads it. No row when the agent is not in the organization.
+SELECT
+  a.owner_user_id,
+  a.deleted,
+  (a.owner_reassignment_required_at IS NOT NULL)::boolean AS owner_reassignment_required
+FROM agents a
+WHERE a.id = @agent_id
+  AND a.organization_id = @organization_id;
 
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside

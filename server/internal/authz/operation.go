@@ -426,6 +426,79 @@ func (c ChatRef) Write() Operation {
 	return newOperation("chat", "write_grant", c.id, nil)
 }
 
+// ChatOwner is what decides who owns a chat session: its author, its
+// external user and, for a session an agent ran, the agent's owner.
+type ChatOwner struct {
+	// UserID is the session's author, or nil when the session has none. An
+	// empty author is kept apart from none: it names nobody, yet the
+	// session is not agent-only.
+	UserID *string
+	// ExternalUserID is the external user the session belongs to, or nil.
+	ExternalUserID *string
+	// Agent is the agent that ran the session, or nil when none did or it
+	// is not in the chat's organization.
+	Agent *AgentOwner
+}
+
+// AgentOwner is the ownership state of the agent that ran a chat session.
+type AgentOwner struct {
+	ID                        string
+	OwnerUserID               string
+	Deleted                   bool
+	OwnerReassignmentRequired bool
+}
+
+// OwnedChatRef names one chat session together with its owner, so the
+// ownership rule declared on the chat type decides without a grant.
+type OwnedChatRef struct {
+	id    string
+	owner ChatOwner
+}
+
+// WithOwner names the chat's owner. The caller loads it with the chat.
+func (c ChatRef) WithOwner(owner ChatOwner) OwnedChatRef {
+	return OwnedChatRef{id: c.id, owner: owner}
+}
+
+// Read asks to read the chat's transcript: its author and, for an agent-only
+// session, the owner of a live agent read it; anyone else needs a grant.
+func (c OwnedChatRef) Read() Operation {
+	return newOperation("chat", "read", c.id, nil).WithFacts(c.owner.facts())
+}
+
+// Write asks to change or delete the chat: its author does; anyone else,
+// the agent's owner included, needs a grant.
+func (c OwnedChatRef) Write() Operation {
+	return newOperation("chat", "write", c.id, nil).WithFacts(c.owner.facts())
+}
+
+func (o ChatOwner) facts() map[string]Fact {
+	facts := map[string]Fact{
+		"internal_user_id": optionalString(o.UserID),
+		"external_user_id": optionalString(o.ExternalUserID),
+		"agent":            AbsentFact(),
+	}
+	if o.Agent != nil {
+		latch := AbsentFact()
+		if o.Agent.OwnerReassignmentRequired {
+			latch = PresentFact()
+		}
+		facts["agent"] = RelatedFact(RelatedResource{ID: o.Agent.ID, Dimensions: nil, Facts: map[string]Fact{
+			"owner":                          StringFact(o.Agent.OwnerUserID),
+			"deleted":                        BoolFact(o.Agent.Deleted),
+			"owner_reassignment_required_at": latch,
+		}})
+	}
+	return facts
+}
+
+func optionalString(value *string) Fact {
+	if value == nil {
+		return AbsentFact()
+	}
+	return StringFact(*value)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -448,6 +521,8 @@ func typedOperations() []Operation {
 		environment.Read(), environment.Write(),
 		Inference("project").Execute(),
 		Chat("chat").Read(), Chat("chat").Write(),
+		Chat("chat").WithOwner(ChatOwner{UserID: nil, ExternalUserID: nil, Agent: nil}).Read(),
+		Chat("chat").WithOwner(ChatOwner{UserID: nil, ExternalUserID: nil, Agent: nil}).Write(),
 		project.ReadChats(),
 	}
 }

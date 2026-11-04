@@ -43,7 +43,7 @@ The RFC lets the engine and scope tables go only after production shadow compari
 - ~~Hierarchical resource handles, `authz.Project(org, p).MCPServer(id)`.~~ Dropped (#8540 closed): the flat constructors already take the project as a required argument and are easier to find from `authz.` autocomplete.
 - Scope-keyed grants and the one-line `s.ScopePermission`: #8541.
 - Derive the old engine's scope tables from the registry: #8542 (the static half of item 12).
-- Chat ownership as the first attribute declaration: item 10, stacked on the union-permissions change that replaces `s.Alternatives`. If the rule cannot land as a declaration plus a short handler call, the unused attribute grammar is deleted instead.
+- Chat ownership as the first attribute declaration: item 10, the chat ownership PR, stacked on the union-permissions change. The grammar stays. When AG1 lands, its agent type merges into `agentOwnershipType` rather than declaring `agent` twice.
 - Read the organization and project from the request context instead of passing them to every check (`authz.MCPServer(serverID)` rather than `authz.MCPServer(projectID, serverID)`), with an explicit `InProject(...)` form for the cases where the target project is not the request's, and failing closed when the context carries no project. Tiago chose to do this after the RBAC stack merges, as one sweep over the call sites.
 
 ## Keeping this current

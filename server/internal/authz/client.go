@@ -182,11 +182,11 @@ func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 	case MigrationModeNew:
 		return c.requireNew(ctx, ops)
 	case MigrationModeShadow:
-		err := c.requireOld(ctx, ops)
+		err := c.requireOldWithAttributes(ctx, ops)
 		c.shadow.compare(ctx, "require", rt, ops, requireAnswer(err), func() shadowAnswer { return c.answerNew(ctx, ops, false) })
 		return err
 	default:
-		return c.requireOld(ctx, ops)
+		return c.requireOldWithAttributes(ctx, ops)
 	}
 }
 
@@ -244,11 +244,11 @@ func (c *Client) Evaluate(ctx context.Context, ops ...Operation) (bool, error) {
 	case MigrationModeNew:
 		return c.evaluateNew(ctx, ops)
 	case MigrationModeShadow:
-		allowed, err := c.evaluateOld(ctx, ops)
+		allowed, err := c.evaluateOldWithAttributes(ctx, ops)
 		c.shadow.compare(ctx, "evaluate", rt, ops, shadowAnswer{allowed: []bool{allowed}, err: err}, func() shadowAnswer { return c.answerNew(ctx, ops, false) })
 		return allowed, err
 	default:
-		return c.evaluateOld(ctx, ops)
+		return c.evaluateOldWithAttributes(ctx, ops)
 	}
 }
 
@@ -298,11 +298,11 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 	case MigrationModeNew:
 		return c.matchManyNew(ctx, ops)
 	case MigrationModeShadow:
-		matched, err := c.matchManyOld(ctx, ops)
+		matched, err := c.matchManyOldWithAttributes(ctx, ops)
 		c.shadow.compare(ctx, "match_many", rt, ops, shadowAnswer{allowed: matched, err: err}, func() shadowAnswer { return c.answerNew(ctx, ops, true) })
 		return matched, err
 	default:
-		return c.matchManyOld(ctx, ops)
+		return c.matchManyOldWithAttributes(ctx, ops)
 	}
 }
 
@@ -357,6 +357,112 @@ func (c *Client) matchManyNew(ctx context.Context, ops []Operation) ([]bool, err
 		c.logBatch(ctx, outcome, reason, set, checks.requested, nil, matches, allowed)
 	}
 	return matched, nil
+}
+
+// requireOldWithAttributes answers like requireOld after letting attribute
+// rules decide what they can; see allowedByAttributesOld.
+func (c *Client) requireOldWithAttributes(ctx context.Context, ops []Operation) error {
+	remaining, err := c.remainingAfterAttributesOld(ctx, ops)
+	if err != nil {
+		return err
+	}
+	if len(remaining) == 0 && len(ops) > 0 {
+		return nil
+	}
+	return c.requireOld(ctx, remaining)
+}
+
+// evaluateOldWithAttributes answers like evaluateOld after letting attribute
+// rules decide what they can; see allowedByAttributesOld.
+func (c *Client) evaluateOldWithAttributes(ctx context.Context, ops []Operation) (bool, error) {
+	remaining, err := c.remainingAfterAttributesOld(ctx, ops)
+	if err != nil {
+		return false, err
+	}
+	if len(remaining) == 0 && len(ops) > 0 {
+		return true, nil
+	}
+	return c.evaluateOld(ctx, remaining)
+}
+
+// matchManyOldWithAttributes answers like matchManyOld, except that an
+// operation its attribute rules allow matches whatever the engine says.
+func (c *Client) matchManyOldWithAttributes(ctx context.Context, ops []Operation) ([]bool, error) {
+	byAttributes, err := c.allowedByAttributesOld(ctx, ops)
+	if err != nil {
+		return nil, err
+	}
+	matched, err := c.matchManyOld(ctx, ops)
+	if err != nil {
+		return nil, err
+	}
+	for i, ok := range byAttributes {
+		matched[i] = matched[i] || ok
+	}
+	return matched, nil
+}
+
+func (c *Client) remainingAfterAttributesOld(ctx context.Context, ops []Operation) ([]Operation, error) {
+	byAttributes, err := c.allowedByAttributesOld(ctx, ops)
+	if err != nil {
+		return nil, err
+	}
+	remaining := make([]Operation, 0, len(ops))
+	for i, op := range ops {
+		if !byAttributes[i] {
+			remaining = append(remaining, op)
+		}
+	}
+	return remaining, nil
+}
+
+// allowedByAttributesOld lets the attribute branches of a permission decide
+// while the engine is in charge, as the handler-side ownership checks they
+// replace did. The engine has no notion of attributes, so an operation whose
+// permission reads them is evaluated with no grants at all: when the
+// request's actor passes on attributes alone, such as a chat's author, that
+// operation is allowed without asking the engine. Every other operation is
+// left to the engine, which decides the permission's grant half (see
+// grantPart). An unenforced request skips this, as the engine allows it
+// anyway.
+func (c *Client) allowedByAttributesOld(ctx context.Context, ops []Operation) ([]bool, error) {
+	allowed := make([]bool, len(ops))
+	if !slices.ContainsFunc(ops, c.readsAttributes) {
+		return allowed, nil
+	}
+	enforce, err := c.engine.ShouldEnforce(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !enforce {
+		return allowed, nil
+	}
+	actor := requestActor(ctx)
+	for i, op := range ops {
+		if !c.readsAttributes(op) {
+			continue
+		}
+		req := op.request()
+		req.Actor = actor
+		decision, err := c.evaluator.Evaluate(nil, req)
+		if err != nil {
+			return nil, c.engine.mapError(ctx, err)
+		}
+		allowed[i] = decision.Allowed
+	}
+	return allowed, nil
+}
+
+func (c *Client) readsAttributes(op Operation) bool {
+	if op.alternatives {
+		return false
+	}
+	def, ok := c.registry.Permission(op.permission)
+	if !ok || def.AnswersScope != "" || len(def.Facts) == 0 {
+		return false
+	}
+	grant, ok := c.grantPart(op.permission)
+	return ok && grant.AnswersScope != ""
 }
 
 // requireOld answers a call with the engine, as the caller did before it

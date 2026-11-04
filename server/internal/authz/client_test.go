@@ -336,7 +336,11 @@ func TestLegacyFormMatchesTypedOperations(t *testing.T) {
 		for i, check := range form.checks {
 			back, err := operationForCheck(client.registry, check)
 			require.NoError(t, err)
-			require.Equal(t, parts[i].permission, back.permission, "%s option %d maps back to another permission", op, i)
+			// An attribute-reading permission is checked by the engine as
+			// its grant part.
+			want, ok := client.grantPart(parts[i].permission)
+			require.True(t, ok, op.String())
+			require.Equal(t, s.PermissionRef{Type: want.Type, Permission: want.Name}, back.permission, "%s option %d maps back to another permission", op, i)
 			require.Equal(t, parts[i].instance.resourceID, back.instance.resourceID, op.String())
 			require.Equal(t, parts[i].instance.strict, back.instance.strict, op.String())
 		}
