@@ -402,11 +402,12 @@ func NewChallengeManager(
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
 	manager := &ChallengeManager{
-		logger:  logger,
-		db:      db,
-		enc:     enc,
-		policy:  policy,
-		tunnels: tunnels,
+		logger:        logger,
+		db:            db,
+		enc:           enc,
+		policy:        policy,
+		tunnels:       tunnels,
+		authorization: nil,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
 			logger.With(attr.SlogCacheNamespace("remote_login")),
 			cacheImpl,

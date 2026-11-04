@@ -1,13 +1,14 @@
 package remotesessions_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,13 +30,17 @@ func TestAuthorizationModesAgree(t *testing.T) {
 			projectID := authCtx.ProjectID.String()
 			listProject := func(t *testing.T, grants ...authz.Grant) error {
 				t.Helper()
-				_, err := ti.service.ListRemoteSessionClients(withExactAccessGrants(t, ctx, ti.conn, grants...), &clientsgen.ListRemoteSessionClientsPayload{})
-				return err
+				if _, err := ti.service.ListRemoteSessionClients(withExactAccessGrants(t, ctx, ti.conn, grants...), &clientsgen.ListRemoteSessionClientsPayload{}); err != nil {
+					return fmt.Errorf("list project clients: %w", err)
+				}
+				return nil
 			}
 			listOrganization := func(t *testing.T, grants ...authz.Grant) error {
 				t.Helper()
-				_, err := ti.service.ListClients(withExactAccessGrants(t, ctx, ti.conn, grants...), &orgclientsgen.ListClientsPayload{IssuerID: uuid.NewString()})
-				return err
+				if _, err := ti.service.ListClients(withExactAccessGrants(t, ctx, ti.conn, grants...), &orgclientsgen.ListClientsPayload{IssuerID: uuid.NewString()}); err != nil {
+					return fmt.Errorf("list organization clients: %w", err)
+				}
+				return nil
 			}
 
 			require.NoError(t, listProject(t, authz.NewGrant(authz.ScopeProjectRead, projectID)))
