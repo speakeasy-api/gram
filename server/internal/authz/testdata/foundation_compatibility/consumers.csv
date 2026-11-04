@@ -291,8 +291,6 @@ internal/environments/impl.go,*Service.ListEnvironments,check,Check,ScopeProject
 internal/environments/impl.go,*Service.UpdateEnvironment,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
 internal/environments/impl.go,*Service.requireProjectEnvironmentRead,check,Check,ScopeEnvironmentRead,Require,1,E1 AIS-852
 internal/environments/impl.go,*Service.requireProjectEnvironmentWrite,check,Check,ScopeEnvironmentWrite,Require,1,E1 AIS-852
-internal/externalcredentials/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
-internal/externalkeys/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
 internal/externalmcp/impl.go,*Service.GetServerDetails,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/externalmcp/impl.go,*Service.GetSetupDocs,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
 internal/externalmcp/impl.go,*Service.ListCatalog,check,Check,ScopeProjectRead,Require,1,P3 AIS-847
@@ -302,8 +300,6 @@ internal/hooks/server_names_impl.go,*Service.Delete,check,Check,ScopeProjectWrit
 internal/hooks/server_names_impl.go,*Service.List,check,Check,ScopeProjectRead,Require,1,O8 AIS-845
 internal/hooks/server_names_impl.go,*Service.Upsert,check,Check,ScopeProjectWrite,Require,1,O8 AIS-845
 internal/hooks/status.go,*Service.GetStatus,check,Check,ScopeProjectRead,Require,1,O8 AIS-845
-internal/internalsessionissuers/impl.go,*Service.authorize,check,Check,scope,Require,1,O4 AIS-844
-internal/jsonwebkeysets/impl.go,*Service.requireOrgAccess,check,Check,scope,Require,1,O4 AIS-844
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,check,MCPCheck,ScopeMCPConnect,GrantsAuthorize,1,AG2 AIS-857
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,evaluator,GrantsAuthorize,,,1,AG2 AIS-857
 internal/keys/agent_key_choices.go,recordAgentKeyAuthClientChoices,projection,IsAgentKeyAuthClientType,,,1,X2 AIS-874

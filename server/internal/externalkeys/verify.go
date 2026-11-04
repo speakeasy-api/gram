@@ -59,7 +59,7 @@ const verifyDetailMaxLen = 300
 // It performs a real signing operation, billed to the key's owner and recorded
 // in their Cloud Audit Log under gcpkms.ProbePayload.
 func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKmsKeyPayload) (*gen.VerifyKmsKeyResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}

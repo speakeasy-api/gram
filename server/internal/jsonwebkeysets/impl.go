@@ -46,7 +46,7 @@ type Service struct {
 	logger          *slog.Logger
 	db              *pgxpool.Pool
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authzClient     *authz.Client
 	audit           *audit.Logger
 	gcpIdentity     *gcpauth.Identity
 	kmsClients      gcpkms.SigningClientFactory
@@ -66,6 +66,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	gcpIdentity *gcpauth.Identity,
 	kmsClients gcpkms.SigningClientFactory,
@@ -79,7 +80,7 @@ func NewService(
 		logger:          logger,
 		db:              db,
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authzClient:     authzClient,
 		audit:           auditLogger,
 		gcpIdentity:     gcpIdentity,
 		kmsClients:      kmsClients,
@@ -96,7 +97,7 @@ func NewService(
 // behind the same entitlement as the external keys and credentials beneath
 // them — gating only the lower layers would leave the sets reachable by an
 // organization that was never sold the feature.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, operation func(authz.OrganizationRef) authz.Operation) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -104,7 +105,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, operation(authz.Organization(authCtx.ActiveOrganizationID))); err != nil {
 		return nil, logger, err
 	}
 
@@ -134,7 +135,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +221,7 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 }
 
 func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +312,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 }
 
 func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload) (*gensvc.ListJSONWebKeySetsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +328,7 @@ func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload)
 }
 
 func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +362,7 @@ func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*g
 // client_count here is exactly the condition that returns a conflict there. A missing set reports zero rather
 // than 404, matching DeleteSet's own idempotent treatment of an absent id.
 func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.GetSetDeletePreflightPayload) (*gensvc.JSONWebKeySetDeletePreflight, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +391,7 @@ func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.Get
 // transaction, emitting one audit event per withdrawn key before the set's own
 // deletion event. A missing id is a no-op so deletes stay idempotent.
 func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayload) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Administer)
 	if err != nil {
 		return err
 	}
@@ -490,7 +491,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 }
 
 func (s *Service) ListKeys(ctx context.Context, payload *gensvc.ListKeysPayload) (*gensvc.ListJSONWebKeysResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrganizationRef.Read)
 	if err != nil {
 		return nil, err
 	}
