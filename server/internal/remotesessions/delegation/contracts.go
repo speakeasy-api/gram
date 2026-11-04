@@ -75,7 +75,6 @@ const (
 	RefreshSetup           RefreshFailure = "setup"
 	RefreshInvalidIdentity RefreshFailure = "invalid_identity"
 	RefreshRetryable       RefreshFailure = "retryable"
-	RefreshRateLimited     RefreshFailure = "rate_limited"
 )
 
 // RefreshError carries a classified outcome only, never upstream payloads.

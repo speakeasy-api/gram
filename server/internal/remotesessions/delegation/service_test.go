@@ -999,7 +999,6 @@ func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
 		holdClaim bool
 	}{
 		{name: "retryable", kind: RefreshRetryable, want: ErrConfiguration},
-		{name: "rate limited", kind: RefreshRateLimited, want: ErrConfiguration},
 		{name: "ambiguous", kind: RefreshAmbiguous, want: ErrTemporary, holdClaim: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1030,11 +1029,11 @@ func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
 	}
 }
 
-func TestDelegationConfigurationFailureRecoversAfterRateLimitedRetry(t *testing.T) {
+func TestDelegationConfigurationFailureRecoversAfterRetryableFailure(t *testing.T) {
 	t.Parallel()
 	s, _, p, b, allow := failedConfigurationFixture(t)
 	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
-		return nil, &RefreshError{Kind: RefreshRateLimited}
+		return nil, &RefreshError{Kind: RefreshRetryable}
 	}
 	delegationMoveClock(s, configurationRetryDelay)
 	_, err := s.Resolve(t.Context(), b, allow)
@@ -1049,11 +1048,11 @@ func TestDelegationConfigurationFailureRecoversAfterRateLimitedRetry(t *testing.
 	require.Equal(t, "new-id", a.Value())
 }
 
-func TestDelegationConfigurationFailureInvalidGrantAfterRateLimitedRetry(t *testing.T) {
+func TestDelegationConfigurationFailureInvalidGrantAfterRetryableFailure(t *testing.T) {
 	t.Parallel()
 	s, store, _, b, allow := failedConfigurationFixture(t)
 	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
-		return nil, &RefreshError{Kind: RefreshRateLimited}
+		return nil, &RefreshError{Kind: RefreshRetryable}
 	}
 	delegationMoveClock(s, configurationRetryDelay)
 	_, err := s.Resolve(t.Context(), b, allow)
@@ -1071,19 +1070,28 @@ func TestDelegationConfigurationFailureInvalidGrantAfterRateLimitedRetry(t *test
 	require.Equal(t, "reauthentication_required", c.status)
 }
 
-func TestDelegationRateLimitWithoutRetainedFailureHoldsClaim(t *testing.T) {
+func TestDelegationRetryableFailureWithoutRetainedFailureReleasesClaim(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, allow := newDelegationUnitFixture(t)
 	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
 	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
-		return nil, &RefreshError{Kind: RefreshRateLimited}
+		return nil, &RefreshError{Kind: RefreshRetryable}
 	}
 	_, err := s.Resolve(t.Context(), b, allow)
 	require.ErrorIs(t, err, ErrTemporary)
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, c.claim)
+	require.Equal(t, uuid.Nil, c.claim)
 	require.Equal(t, "temporary_failure", c.status)
+	require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+	}
+	delegationMoveClock(s, time.Minute)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
 }
 
 func TestDelegationConfigurationFailureAfterTokenExpiryNeedsSignIn(t *testing.T) {

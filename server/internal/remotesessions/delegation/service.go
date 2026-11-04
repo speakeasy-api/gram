@@ -785,10 +785,6 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	outcome := ErrTemporary
 	retained := configurationFailureRetained(c)
 	kind := failure.Kind
-	// A 429 is usually a WAF, and if one hid a rotation the replay's invalid_grant costs the same sign-in a held claim would.
-	if kind == RefreshRateLimited && retained {
-		kind = RefreshRetryable
-	}
 	// A token refused this long may be dead. A client rejection or a local setup fault says nothing about it.
 	if kind == RefreshConfiguration && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant

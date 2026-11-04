@@ -22,7 +22,6 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 		body   string
 	}{
 		{"gateway timeout", http.StatusGatewayTimeout, "gateway timeout"},
-		{"rate limit", http.StatusTooManyRequests, "rate limited"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

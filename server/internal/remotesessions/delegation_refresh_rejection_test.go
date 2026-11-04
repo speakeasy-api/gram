@@ -271,6 +271,24 @@ func TestDelegationRetainedTokenSurvivesRateLimitedRetry(t *testing.T) {
 	require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
 }
 
+func TestDelegationRateLimitOnHealthyTokenReleasesClaim(t *testing.T) {
+	t.Parallel()
+	s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
+	endpoint.answer(http.StatusTooManyRequests, `slow down`)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationTemporary)
+	row, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.False(t, row.RefreshClaimID.Valid, "a rate limit must not hold the claim")
+	require.Equal(t, "temporary_failure", row.ObservationStatus.String)
+	require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
+
+	moveDelegationClock(s)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationTemporary)
+	require.Equal(t, []string{"secret-refresh", "secret-refresh"}, endpoint.received(), "the retry resends the kept token")
+}
+
 func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
