@@ -541,6 +541,33 @@ func TestListChats_ChatRead_SeesAllChats(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 }
 
+// Cron chats captured before cron titles existed stored the raw OpenClaw
+// envelope. They list under the job name, unless someone renamed them by hand.
+func TestListChats_ShowsStoredCronEnvelopesUnderTheJobName(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	envelope := "[cron:4a39cac2-54ab-4ef2-8c81-147832084a86 nightly-digest] Summarize the day"
+	derived := seedChat(t, ctx, ti, "", "ext-cron", envelope)
+	renamed := seedChat(t, ctx, ti, "", "ext-cron", "placeholder")
+	require.NoError(t, repo.New(ti.conn).RenameChat(ctx, repo.RenameChatParams{
+		ID:               renamed,
+		ProjectID:        ti.projectID,
+		Title:            conv.ToPGText(envelope),
+		TitleManuallySet: true,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	titles := make(map[string]string, len(result.Chats))
+	for _, c := range result.Chats {
+		titles[c.ID] = c.Title
+	}
+	require.Equal(t, "Cron: nightly-digest", titles[derived.String()])
+	require.Equal(t, envelope, titles[renamed.String()])
+}
+
 // TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats is the regression guard
 // for the blind spot in the see-all path: org:admin alone does NOT grant chat
 // session see-all visibility — only chat:read does. An admin without chat:read

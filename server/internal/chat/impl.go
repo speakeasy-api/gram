@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -463,7 +464,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
-			Title:                row.Title.String,
+			Title:                chattitle.Display(row.Title.String, row.TitleManuallySet),
 			NumMessages:          int(row.NumMessages),
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -787,7 +788,7 @@ func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.Auth
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		ChatSessionURN:   urn.NewChatSession(chat.ID),
-		ChatTitle:        chat.Title.String,
+		ChatTitle:        chattitle.Display(chat.Title.String, chat.TitleManuallySet),
 		OwnerUserID:      chat.UserID.String,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record chat access audit log").LogError(ctx, s.logger)
@@ -874,8 +875,8 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		link := &gen.ChatSessionLink{
 			ParentChatID:   nil,
 			ChildChatID:    nil,
-			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
-			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
+			ParentTitle:    displayTitlePtr(row.ParentTitle, row.ParentTitleManuallySet),
+			ChildTitle:     displayTitlePtr(row.ChildTitle, row.ChildTitleManuallySet),
 			ParentCaptured: row.ParentCaptured,
 			ChildCaptured:  row.ChildCaptured,
 			Kind:           row.Kind,
@@ -1608,7 +1609,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		SlackChannelName:     conv.PtrEmpty(channel.SlackChannelName),
 		Participants:         participants[chat.ID.String()],
 		ID:                   chat.ID.String(),
-		Title:                chat.Title.String,
+		Title:                chattitle.Display(chat.Title.String, chat.TitleManuallySet),
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
@@ -2429,7 +2430,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	// available on the next list()/fetch().
 	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
-		title = chat.Title.String
+		title = chattitle.Display(chat.Title.String, chat.TitleManuallySet)
 	}
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
