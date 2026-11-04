@@ -9,7 +9,7 @@ import type { ScopeWorkflow } from "@gram/client/models/components/scopeworkflow
 
 export type ScopeCatalogue = ReadonlyMap<string, ScopeDefinition>;
 
-export const EMPTY_SCOPE_CATALOGUE: ScopeCatalogue = new Map();
+const EMPTY_SCOPE_CATALOGUE: ScopeCatalogue = new Map();
 
 export function scopeCatalogue(
   scopes: readonly ScopeDefinition[] | undefined,

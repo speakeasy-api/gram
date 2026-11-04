@@ -1,8 +1,8 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 /** Response headers the server adds to a 403 the authz engine produced. */
-export const REQUIRED_SCOPE_HEADER = "Gram-Required-Scope";
-export const REQUIRED_RESOURCE_KIND_HEADER = "Gram-Required-Resource-Kind";
+const REQUIRED_SCOPE_HEADER = "Gram-Required-Scope";
+const REQUIRED_RESOURCE_KIND_HEADER = "Gram-Required-Resource-Kind";
 
 export interface Denial {
   /** The scope the request lacked, such as "log:read". */
@@ -39,7 +39,7 @@ const RESOURCE_KIND_LABELS: Record<string, string> = {
   workload: "this workload",
 };
 
-export function resourceKindLabel(kind: string): string {
+function resourceKindLabel(kind: string): string {
   return RESOURCE_KIND_LABELS[kind] ?? "this resource";
 }
 

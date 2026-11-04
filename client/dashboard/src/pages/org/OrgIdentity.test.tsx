@@ -70,6 +70,13 @@ vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: mocks.enabled ? "enabled" : "disabled" }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    workflows: [],
+    isLoading: false,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => mocks.admin,

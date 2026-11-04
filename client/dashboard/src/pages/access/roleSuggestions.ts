@@ -89,7 +89,7 @@ export function rolesCoveringScope(
 }
 
 /** A role that satisfies the request but grants other permissions too. */
-export interface BroaderRole {
+interface BroaderRole {
   role: Role;
   /** Permissions beyond the requested scope and what it includes. */
   extraScopes: string[];

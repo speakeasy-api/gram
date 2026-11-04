@@ -53,6 +53,13 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    workflows: [],
+    isLoading: false,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,

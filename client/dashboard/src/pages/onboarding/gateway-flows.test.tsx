@@ -60,6 +60,13 @@ vi.mock("@/components/page-layout", () => {
     }),
   };
 });
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    workflows: [],
+    isLoading: false,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => {
   const hasScope = (scope: string, resourceId?: string) =>
     resourceId
