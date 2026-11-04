@@ -347,8 +347,8 @@ type openClawGatewayCall struct {
 	// preServerName is the server name on the pre-call row. A relay that
 	// resolves the server from the tool name sends it, an older one sends none.
 	preServerName string
-	// preURLOnly leaves the URL off the post-call row, as for a call blocked
-	// before it ran, whose result names no server.
+	// preURLOnly leaves the URL and the server name off the post-call row, as
+	// for a call blocked before it ran, whose result names no server.
 	preURLOnly bool
 }
 
@@ -368,9 +368,9 @@ func insertOpenClawGatewayCall(t *testing.T, ctx context.Context, ti *testInstan
 		mcpServerURL:   call.url,
 		conversationID: call.conversationID,
 	})
-	postURL := call.url
+	postURL, postServerName := call.url, call.serverName
 	if call.preURLOnly {
-		postURL = ""
+		postURL, postServerName = "", ""
 	}
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      ti.projectID,
@@ -379,7 +379,7 @@ func insertOpenClawGatewayCall(t *testing.T, ctx context.Context, ti *testInstan
 		traceID:        traceID,
 		userEmail:      "alice@example.com",
 		hookSource:     "openclaw",
-		toolSource:     call.serverName,
+		toolSource:     postServerName,
 		toolName:       call.toolName,
 		result:         `"ok"`,
 		mcpMatch:       postURL,

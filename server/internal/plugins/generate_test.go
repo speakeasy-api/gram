@@ -2626,7 +2626,9 @@ setTimeout(() => process.exit(0), 500)
 		_, inCtx := frame["ctx"].(map[string]any)["mcpServers"]
 		require.False(t, inCtx, "mcpServers rides the frame, not ctx")
 	}
-	_, ok := byHook["session_start"]["mcpServers"]
+	sessionStart, ok := byHook["session_start"]
+	require.True(t, ok, "session_start frame missing")
+	_, ok = sessionStart["mcpServers"]
 	require.False(t, ok, "only tool frames carry the MCP servers")
 
 	for _, frame := range frames {
