@@ -499,6 +499,32 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 	}
 }
 
+// Without a linked upstream to fall back on, the gate's answer is the chaining
+// outcome's own text.
+func TestServePublic_IssuerGate_ChainingExchangeRejectionOffersReconnect(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "chain-rejected-" + uuid.NewString()[:8]
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://chain-rejected.example.test/mcp", slug, "private", issuerID)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
+	subject := urn.NewUserSubject(mockidp.MockUserID)
+	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/mcp/" + slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, subject, jti)
+	rejected := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}
+	ti.service.SetIdentityChainer(&consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: identitychaining.RefreshRefused, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return rejected }, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil})
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)
+	require.Equal(t, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.", requireOopsCode(t, err, oops.CodeForbidden))
+}
+
 func requireProjectAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {
 	t.Helper()
 

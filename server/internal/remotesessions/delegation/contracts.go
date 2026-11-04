@@ -72,6 +72,7 @@ const (
 	RefreshInvalidGrant    RefreshFailure = "invalid_grant"
 	RefreshConfiguration   RefreshFailure = "configuration"
 	RefreshClientRejected  RefreshFailure = "client_rejected"
+	RefreshSetup           RefreshFailure = "setup"
 	RefreshInvalidIdentity RefreshFailure = "invalid_identity"
 	RefreshRetryable       RefreshFailure = "retryable"
 	RefreshRateLimited     RefreshFailure = "rate_limited"

@@ -195,6 +195,14 @@ func configurationFailureBlocks(c delegationCredential, now time.Time) bool {
 	return c.status == "configuration_failure" && (c.retryAfter.IsZero() || c.retryAfter.After(now))
 }
 
+// An erased row holds nothing an administrator could fix, and a sign-in replaces it.
+func configurationFailureError(c delegationCredential) error {
+	if c.retryAfter.IsZero() {
+		return ErrReauthentication
+	}
+	return ErrConfiguration
+}
+
 func usableRefresh(c delegationCredential, now time.Time) bool {
 	return (c.status == "durable_credential_present" || c.status == "temporary_failure" || configurationFailureRetained(c)) && c.refresh != "" && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
 }
@@ -480,7 +488,7 @@ func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (d
 		return none, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, s.now()) {
-		return none, ErrConfiguration
+		return none, configurationFailureError(c)
 	}
 	return c, nil
 }
@@ -522,7 +530,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, now) {
-		return Assertion{}, ErrConfiguration
+		return Assertion{}, configurationFailureError(c)
 	}
 	if c.claim != uuid.Nil {
 		return Assertion{}, claimError(c, now)
@@ -781,7 +789,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if kind == RefreshRateLimited && retained {
 		kind = RefreshRetryable
 	}
-	// A token refused this long may be dead. A client rejection says nothing about the token.
+	// A token refused this long may be dead. A client rejection or a local setup fault says nothing about it.
 	if kind == RefreshConfiguration && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
@@ -797,7 +805,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 			next.nonce = ""
 		}
 		outcome = ErrReauthentication
-	case RefreshConfiguration, RefreshClientRejected:
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
 		// Nothing here says the refresh token is invalid.
 		next.assertion = ""
 		next.assertionExpiry = time.Time{}
@@ -811,7 +819,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	case RefreshInvalidIdentity:
 		next = clearDelegationSecrets(next)
 		next.status = "configuration_failure"
-		outcome = ErrConfiguration
+		outcome = ErrReauthentication
 	case RefreshRetryable:
 		next.retryAfter = s.now().Add(time.Minute)
 		if retained {

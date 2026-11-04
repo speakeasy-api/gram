@@ -228,6 +228,9 @@ func (c *Chainer) redeem(ctx context.Context, logger *slog.Logger, resourceAS to
 // classifyEndpointError maps a token endpoint failure to an outcome.
 // invalid_grant stays ambiguous: it does not prove expiry or missing trust.
 func classifyEndpointError(stage Stage, err error) Outcome {
+	if errors.Is(err, remotesessions.ErrTokenEndpointConfiguration) {
+		return newOutcome(stage, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
 	failure, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
 	if !ok {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)

@@ -185,12 +185,11 @@ func unavailableForNow(reason remotesessions.EMAProviderUnavailableReason) bool 
 // Speakeasy source's authority already checks the grant's sign-in.
 //
 // A retained delegation that predates the current trusted registration reads
-// as needing reauthentication. The runtime reports it as configuration, but
-// the human's next sign-in retains a delegation under the current
-// registration, so a reconnect is exactly what repairs it. Every other
-// configuration failure, such as a renewal the provider refused for the
-// configured client or a retained secret that no longer decrypts, stays
-// configuration: signing in again cannot repair it. A sign-in decrypts the
+// as needing reauthentication: the human's next sign-in retains a delegation
+// under the current registration, so a reconnect is exactly what repairs it.
+// A renewal the provider refused for the configured client or a retained
+// secret that no longer decrypts stays configuration: signing in again cannot
+// repair it. A sign-in decrypts the
 // retained subject before replacing anything and refuses when it cannot.
 func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) Outcome {
 	src := g.source(p)

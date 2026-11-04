@@ -47,6 +47,8 @@ func TestDelegationAdapterTranslatesDefinitiveAuthorizationFailure(t *testing.T)
 		{FederatedRefreshAmbiguous, delegation.RefreshAmbiguous},
 		{FederatedRefreshInvalidGrant, delegation.RefreshInvalidGrant},
 		{FederatedRefreshConfiguration, delegation.RefreshConfiguration},
+		{FederatedRefreshClientRejected, delegation.RefreshClientRejected},
+		{FederatedRefreshSetup, delegation.RefreshSetup},
 		{FederatedRefreshInvalidIdentity, delegation.RefreshInvalidIdentity},
 		{FederatedRefreshRetryable, delegation.RefreshRetryable},
 	} {

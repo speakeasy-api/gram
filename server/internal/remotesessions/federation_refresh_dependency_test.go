@@ -126,12 +126,12 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				_, err = s.Resolve(t.Context(), b, allow)
 				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			} else {
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, after.RefreshTokenEncrypted.String)
 				require.Empty(t, after.IdentityAssertionEncrypted.String)
 				require.Empty(t, after.UpstreamSubjectEncrypted.String)
 				_, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			}
 			require.Equal(t, 1, posts)
 		})

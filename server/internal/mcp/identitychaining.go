@@ -254,7 +254,15 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
+	if exchangeRejectedSignIn(outcome) {
+		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
+	}
 	return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Contact your administrator.")
+}
+
+// exchangeRejectedSignIn reports the provider turning down the saved sign-in, which a new one may repair.
+func exchangeRejectedSignIn(outcome identitychaining.Outcome) bool {
+	return outcome.Stage == identitychaining.StageExchange && outcome.Reason == identitychaining.ReasonInvalidGrant
 }
 
 // metaMemberChainer returns the runtime chaining hook for member,
@@ -287,9 +295,12 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Sign in to this gateway again.", member.slug)}}
+			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}
 		case outcome.Retryable:
 			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}
+		}
+		if exchangeRejectedSignIn(outcome) {
+			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
 		}
 		return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
 	}

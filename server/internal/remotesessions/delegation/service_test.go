@@ -566,7 +566,11 @@ func TestDelegationServiceRefreshRechecksAuthorityAndConfiguration(t *testing.T)
 				return result, nil
 			}
 			a, err := s.Resolve(t.Context(), b, allow)
-			require.ErrorIs(t, err, ErrConfiguration)
+			if name == "identity changed" {
+				require.ErrorIs(t, err, ErrReauthentication, "the row is erased and a sign-in replaces it")
+			} else {
+				require.ErrorIs(t, err, ErrConfiguration)
+			}
 			require.Empty(t, a.Value())
 			c, err := store.load(t.Context(), b)
 			require.NoError(t, err)
@@ -852,16 +856,18 @@ func TestDelegationConfigurationFailureThenInvalidIdentityStaysErased(t *testing
 	}
 	delegationMoveClock(s, configurationRetryDelay)
 	_, err := s.Resolve(t.Context(), b, allow)
-	require.ErrorIs(t, err, ErrConfiguration)
+	require.ErrorIs(t, err, ErrReauthentication)
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
 	require.Empty(t, c.refresh)
 	require.Empty(t, c.subject)
-	require.Equal(t, "configuration_failure", c.status)
+	require.Equal(t, "configuration_failure", c.status, "stored downstream tokens must stay closed")
 	require.True(t, c.retryAfter.IsZero())
 	delegationMoveClock(s, 24*time.Hour)
 	_, err = s.Resolve(t.Context(), b, allow)
-	require.ErrorIs(t, err, ErrConfiguration)
+	require.ErrorIs(t, err, ErrReauthentication, "no administrator can restore an erased row")
+	require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrReauthentication)
+	require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
 	require.Equal(t, 1, posts)
 }
 
@@ -1844,9 +1850,17 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 	})
 	t.Run("configuration failure under the current registration", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) {
+			c.status = "configuration_failure"
+			c.retryAfter = time.Unix(1700000000, 0).Add(time.Hour)
+		})
 		err := s.CheckResolvable(t.Context(), b, allow)
 		require.ErrorIs(t, err, ErrConfiguration)
-		require.NotErrorIs(t, err, ErrStaleRegistration, "a sign-in under the same registration cannot repair it")
+		require.NotErrorIs(t, err, ErrStaleRegistration)
+	})
+	t.Run("erased after a configuration failure", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "a sign-in replaces an erased row")
 	})
 }

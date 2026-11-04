@@ -177,11 +177,54 @@ func TestDelegationSubjectPinOnFailedRows(t *testing.T) {
 		}
 		delegationMoveClock(s, configurationRetryDelay)
 		_, err := s.Resolve(t.Context(), b, allow)
-		require.ErrorIs(t, err, ErrConfiguration)
+		require.ErrorIs(t, err, ErrReauthentication)
 		c, err := store.load(t.Context(), b)
 		require.NoError(t, err)
 		require.Empty(t, c.subject)
 		require.False(t, configurationFailureRetained(c))
 		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, otherLogin(p, s), true))
 	})
+}
+
+// The offline prompt comes after a minimal sign-in, which already replaced the kept token or held claim.
+func TestDelegationDeclinedOfflineAfterSignInDoesNotStrand(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		kind RefreshFailure
+	}{
+		{name: "kept token", kind: RefreshConfiguration},
+		{name: "held claim", kind: RefreshAmbiguous},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := failedConfigurationFixture(t)
+			if tc.kind == RefreshAmbiguous {
+				s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+					return nil, &RefreshError{Kind: tc.kind}
+				}
+				delegationMoveClock(s, configurationRetryDelay)
+				_, err := s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrTemporary)
+			}
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "new-id", "", time.Hour), false))
+			status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+			require.NoError(t, err)
+			require.False(t, status.UsableRefresh, "the offline prompt is offered")
+
+			require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, "refused", c.status)
+			require.Equal(t, uuid.Nil, c.claim)
+			require.Empty(t, c.refresh)
+
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.NoError(t, err)
+			require.Equal(t, "new-id", a.Value())
+			delegationMoveClock(s, 2*time.Hour)
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrReauthentication, "once the assertion ends, the answer is another sign-in")
+		})
+	}
 }

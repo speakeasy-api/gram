@@ -52,7 +52,7 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
-			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}
+			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
 		if result == nil {
@@ -89,6 +89,8 @@ func delegationRefreshError(err error) error {
 		kind = delegation.RefreshConfiguration
 	case FederatedRefreshClientRejected:
 		kind = delegation.RefreshClientRejected
+	case FederatedRefreshSetup:
+		kind = delegation.RefreshSetup
 	case FederatedRefreshRateLimited:
 		kind = delegation.RefreshRateLimited
 	case FederatedRefreshInvalidIdentity:

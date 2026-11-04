@@ -24,6 +24,7 @@ type FederatedRefreshFailure string
 const (
 	FederatedRefreshInvalidGrant    FederatedRefreshFailure = "invalid_grant"
 	FederatedRefreshConfiguration   FederatedRefreshFailure = "configuration"
+	FederatedRefreshSetup           FederatedRefreshFailure = "setup"
 	FederatedRefreshClientRejected  FederatedRefreshFailure = "client_rejected"
 	FederatedRefreshAmbiguous       FederatedRefreshFailure = "ambiguous"
 	FederatedRefreshRateLimited     FederatedRefreshFailure = "rate_limited"
@@ -68,7 +69,7 @@ func (r FederatedRefreshResult) LogValue() slog.Value              { return slog
 // Ambiguous failures must not blindly replay a potentially spent refresh token.
 func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *FederatedProvider, refreshToken, expectedSubject, expectedNonce string) (*FederatedRefreshResult, error) {
 	if p == nil || refreshToken == "" || expectedSubject == "" {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, &FederatedRefreshError{Kind: FederatedRefreshSetup}
 	}
 	if err := m.preflightFederatedSigner(p); err != nil {
 		return nil, federatedRefreshSetupError(err)
@@ -76,11 +77,11 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, federatedRefreshSetupError(err)
 	}
 	doer, auth, err := m.federatedTokenClient(p)
 	if err != nil {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+		return nil, federatedRefreshSetupError(err)
 	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
 	req, err := NewTokenEndpointRequest(ctx, p.metadata.TokenEndpoint, form, auth)
@@ -263,8 +264,9 @@ func (e *FederatedRefreshError) Is(target error) bool {
 	return ok && other != nil && e.Kind == other.Kind
 }
 
+// Nothing was sent, so the provider has said nothing about the token.
 func federatedRefreshSetupError(err error) error {
-	kind := FederatedRefreshConfiguration
+	kind := FederatedRefreshSetup
 	if errors.Is(err, ErrFederatedUnavailable) {
 		kind = FederatedRefreshRetryable
 	}

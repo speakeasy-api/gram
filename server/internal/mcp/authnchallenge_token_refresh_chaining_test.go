@@ -341,6 +341,14 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 			code: oops.CodeForbidden, message: adminMessage,
 		},
 		{
+			name: "erased after an invalid identity",
+			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
+				t.Helper()
+				setState(t, ctx, f, remotesessions_repo.SetTrustedDelegationStateFixtureParams{ObservationStatus: conv.ToPGText("configuration_failure")})
+			},
+			code: oops.CodeUnauthorized, message: reconnectDescription,
+		},
+		{
 			name: "renewal in flight",
 			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
 				t.Helper()

@@ -96,7 +96,7 @@ func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 				_, err = s.Resolve(t.Context(), b, allow)
 				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			} else {
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, row.RefreshTokenEncrypted.String)
 				require.Empty(t, row.UpstreamSubjectEncrypted.String)
 				require.Empty(t, row.NonceEncrypted.String)
