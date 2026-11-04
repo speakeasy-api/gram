@@ -399,7 +399,8 @@ type ListFacetsGatewayErrorResponseBody struct {
 // AuditLogResponseBody is used to define fields on response body types.
 type AuditLogResponseBody struct {
 	// Internal staff-only audit activity; persisted but never published to the
-	// outbox.
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
 	IsInternal       *bool   `form:"is_internal,omitempty" json:"is_internal,omitempty" xml:"is_internal,omitempty"`
 	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
@@ -1322,9 +1323,6 @@ func ValidateListFacetsGatewayErrorResponseBody(body *ListFacetsGatewayErrorResp
 // ValidateAuditLogResponseBody runs the validations defined on
 // AuditLogResponseBody
 func ValidateAuditLogResponseBody(body *AuditLogResponseBody) (err error) {
-	if body.IsInternal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("is_internal", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

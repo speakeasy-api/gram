@@ -90388,7 +90388,7 @@ components:
           type: string
         is_internal:
           type: boolean
-          description: Internal staff-only audit activity; persisted but never published to the outbox.
+          description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
         metadata:
           type: object
           additionalProperties: true
@@ -90405,7 +90405,6 @@ components:
         subject_type:
           type: string
       required:
-        - is_internal
         - id
         - actor_id
         - actor_type

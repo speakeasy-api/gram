@@ -134,7 +134,7 @@ func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
 func TestOrganizationActivityInternalClassification(t *testing.T) {
 	t.Parallel()
 	reads := testActivityReads()
-	reads.result.Logs = []*gen.AuditLog{{ID: "ordinary", IsInternal: false}, {ID: "internal", IsInternal: true}}
+	reads.result.Logs = []*gen.AuditLog{{ID: "ordinary", IsInternal: new(false)}, {ID: "internal", IsInternal: new(true)}}
 	status, body, data := callStaffReadTool(t, reads, "list_organization_activity", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, `"isError":true`)

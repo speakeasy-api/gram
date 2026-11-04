@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const maxOrganizationActivityPage = 50
@@ -67,7 +68,7 @@ func registerActivityTools(server *mcp.Server, organizations OrganizationReader,
 				return nil, ListOrganizationActivityOutput{}, errActivityUnavailable
 			}
 			output.Activity = append(output.Activity, OrganizationActivity{
-				IsInternal: log.IsInternal, ID: log.ID, Action: log.Action, ActorType: log.ActorType,
+				IsInternal: conv.PtrValOr(log.IsInternal, false), ID: log.ID, Action: log.Action, ActorType: log.ActorType,
 				ActorDisplayName: log.ActorDisplayName, SubjectType: log.SubjectType,
 				ActingSurface: log.ActingSurface, CreatedAt: log.CreatedAt,
 			})

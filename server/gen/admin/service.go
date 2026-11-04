@@ -1957,8 +1957,9 @@ type AssignOrganizationOnboardingPlaybookPayload struct {
 
 type AuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
-	// outbox.
-	IsInternal       bool
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool
 	ID               string
 	ProjectID        *string
 	ProjectSlug      *string

@@ -186,7 +186,7 @@ func registerAuditLogTools(server *mcp.Server, organizations OrganizationReader,
 				return nil, empty, errAuditLogsUnavailable
 			}
 			output.Entries = append(output.Entries, AuditLogEntry{
-				IsInternal: log.IsInternal, ID: log.ID, ProjectID: log.ProjectID, ProjectSlug: log.ProjectSlug,
+				IsInternal: conv.PtrValOr(log.IsInternal, false), ID: log.ID, ProjectID: log.ProjectID, ProjectSlug: log.ProjectSlug,
 				ActorID: log.ActorID, ActorType: log.ActorType, ActorDisplayName: log.ActorDisplayName, ActorSlug: log.ActorSlug,
 				Action: log.Action, ActingSurface: log.ActingSurface, ActingClientID: log.ActingClientID, Category: log.Category,
 				SubjectID: log.SubjectID, SubjectType: log.SubjectType, SubjectDisplayName: log.SubjectDisplayName, SubjectSlug: log.SubjectSlug,

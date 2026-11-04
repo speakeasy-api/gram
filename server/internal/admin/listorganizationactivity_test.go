@@ -127,7 +127,8 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 			system = log
 		}
 		require.NotEqual(t, "other:create", log.Action)
-		require.Equal(t, log.Action == "catalog-promotion:archive", log.IsInternal)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, log.Action == "catalog-promotion:archive", *log.IsInternal)
 	}
 	require.NotNil(t, full)
 	require.Equal(t, project.ID.String(), *full.ProjectID)
@@ -641,7 +642,8 @@ func TestInternalClassificationResponse(t *testing.T) {
 	for _, internal := range []bool{false, true} {
 		log, err := adminActivityLog(auditrepo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
 		require.NoError(t, err)
-		require.Equal(t, internal, log.IsInternal)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, internal, *log.IsInternal)
 		recorder := httptest.NewRecorder()
 		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{log}, NextCursor: nil}
 		require.NoError(t, adminHTTP.EncodeListOrganizationActivityResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))

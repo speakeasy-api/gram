@@ -313,7 +313,7 @@ func toAuditLog(row repo.ListAuditLogsRow, category audit.Category) (*gen.AuditL
 		ActorSlug:          conv.FromPGText[string](row.ActorSlug),
 		Action:             row.Action,
 		SubjectID:          row.SubjectID,
-		IsInternal:         row.IsInternal,
+		IsInternal:         new(row.IsInternal),
 		SubjectType:        row.SubjectType,
 		SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName),
 		SubjectSlug:        conv.FromPGText[string](row.SubjectSlug),

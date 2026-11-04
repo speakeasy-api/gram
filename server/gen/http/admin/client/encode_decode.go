@@ -25271,7 +25271,7 @@ func unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer(v *AdminMcpServerR
 // *admin.AuditLog from a value of type *AuditLogResponseBody.
 func unmarshalAuditLogResponseBodyToAdminAuditLog(v *AuditLogResponseBody) *admin.AuditLog {
 	res := &admin.AuditLog{
-		IsInternal:         *v.IsInternal,
+		IsInternal:         v.IsInternal,
 		ID:                 *v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,

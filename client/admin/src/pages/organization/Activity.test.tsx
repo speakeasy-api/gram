@@ -67,14 +67,17 @@ describe("Activity", () => {
     expect(screen.getAllByText("Internal")).toHaveLength(1);
   });
 
-  it("does not label ordinary activity as internal", async () => {
-    mocks.listOrganizationActivity.mockResolvedValue({
-      logs: [anActivityLog({ isInternal: false })],
-    });
-    await renderWithApp(<Activity org={ORG} />);
-    await screen.findByRole("list");
-    expect(screen.queryByText("Internal")).toBeNull();
-  });
+  it.each([false, undefined])(
+    "does not label activity with isInternal=%s as internal",
+    async (isInternal) => {
+      mocks.listOrganizationActivity.mockResolvedValue({
+        logs: [anActivityLog({ isInternal })],
+      });
+      await renderWithApp(<Activity org={ORG} />);
+      await screen.findByRole("list");
+      expect(screen.queryByText("Internal")).toBeNull();
+    },
+  );
   it("renders every event field and the display, slug, and ID fallbacks", async () => {
     const createdAt = new Date("2026-01-15T12:30:00Z");
     mocks.listOrganizationActivity.mockResolvedValue({

@@ -48,9 +48,9 @@ export type AuditLog = {
   createdAt: Date;
   id: string;
   /**
-   * Internal staff-only audit activity; persisted but never published to the outbox.
+   * Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
    */
-  isInternal: boolean;
+  isInternal?: boolean | undefined;
   metadata?: { [k: string]: any } | undefined;
   projectId?: string | undefined;
   projectSlug?: string | undefined;
@@ -84,7 +84,7 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    is_internal: z.boolean(),
+    is_internal: z.optional(z.boolean()),
     metadata: z.optional(z.record(z.string(), z.any())),
     project_id: z.optional(z.string()),
     project_slug: z.optional(z.string()),
