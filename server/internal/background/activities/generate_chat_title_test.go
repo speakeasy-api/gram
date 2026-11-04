@@ -51,8 +51,8 @@ func TestTitleIsUpForGrabsLeavesCronJobTitles(t *testing.T) {
 
 	messages := []repo.ChatMessage{{
 		Role:    "user",
-		Content: "[cron:4a39cac2-54ab-4ef2-8c81-147832084a86 skill-collection-review-main] Review the skill collection.",
+		Content: "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skill collection.",
 	}}
 
-	require.False(t, titleIsUpForGrabs("Cron: skill-collection-review-main", messages))
+	require.False(t, titleIsUpForGrabs("Cron: weekly-skill-review", messages))
 }
