@@ -943,7 +943,7 @@ func scopeMayAllowConnect(scope string) bool {
 
 func scopeMayBlockConnect(scope string) bool {
 	switch authz.Scope(scope) {
-	case authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite:
+	case authz.ScopeMCPBlockedConnect:
 		return true
 	default:
 		return false

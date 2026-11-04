@@ -16,8 +16,11 @@ func TestStoredPoliciesKeepReadWriteConnect(t *testing.T) {
 
 	for version := DelegatedPolicyVersion1; version <= DelegatedPolicyVersion6; version++ {
 		for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
-			raw := []byte(`{"requested":[{"scope":"` + string(scope) + `","selector":{"resource_id":"*","resource_kind":"mcp"}}],"effective":[{"scope":"mcp:connect","selector":{"resource_id":"*","resource_kind":"mcp"}},{"scope":"mcp:read","selector":{"resource_id":"*","resource_kind":"mcp"}}` +
-				map[authz.Scope]string{authz.ScopeMCPRead: "", authz.ScopeMCPWrite: `,{"scope":"mcp:write","selector":{"resource_id":"*","resource_kind":"mcp"}}`}[scope] + `]}`)
+			effective := `{"scope":"mcp:connect","selector":{"resource_id":"*","resource_kind":"mcp"}},{"scope":"mcp:read","selector":{"resource_id":"*","resource_kind":"mcp"}}`
+			if scope == authz.ScopeMCPWrite {
+				effective += `,{"scope":"mcp:write","selector":{"resource_id":"*","resource_kind":"mcp"}}`
+			}
+			raw := []byte(`{"requested":[{"scope":"` + string(scope) + `","selector":{"resource_id":"*","resource_kind":"mcp"}}],"effective":[` + effective + `]}`)
 			policy, err := DecodeDelegatedPolicy(version, raw)
 			require.NoError(t, err, "version %d, %s", version, scope)
 

@@ -96,6 +96,14 @@ func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	summary = summarizeMCPConnect([]*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, ProjectID: &project}}}})
 	require.Equal(t, 1, summary.BlockedProjectRules)
 	require.Equal(t, 1, summary.BlockedServerRules)
+
+	// View and manage blocks never withdraw connect.
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{
+		{Scope: string(authz.ScopeMCPBlockedRead), Selectors: nil},
+		{Scope: string(authz.ScopeMCPBlockedWrite), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server}}},
+	})
+	require.False(t, summary.BlockedServers)
+	require.Zero(t, summary.BlockedServerRules)
 }
 
 func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {
