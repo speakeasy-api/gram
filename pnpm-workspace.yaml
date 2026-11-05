@@ -29,6 +29,10 @@ catalog:
 
 autoInstallPeers: false
 
+# Without this, dashboard/admin vitest shares a @vitest/mocker built on the
+# functions workspace's @types/node 22 vite instead of its own 24 one.
+dedupePeerDependents: false
+
 # Preserve legacy Polar's Stripe dependencies alongside direct checkout's 7.0.0/10.1.0.
 packageExtensions:
   "@polar-sh/checkout@0.4.3":
