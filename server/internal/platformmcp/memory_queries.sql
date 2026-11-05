@@ -105,7 +105,7 @@ FROM (
             LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
             WHERE m.id = ANY(s.memo_ids)
               AND m.deleted IS FALSE
-              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+              AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
           )
           OR cardinality(s.child_digest_ids) > (
             SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
