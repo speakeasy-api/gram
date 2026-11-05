@@ -468,17 +468,12 @@ func DecodeGetClaudeObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*
 		var payload *agent.GetClaudeObservabilityPluginPayload
 		var (
 			apikeyToken *string
-			email       *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		emailRaw := r.Header.Get("Gram-User-Email")
-		if emailRaw != "" {
-			email = &emailRaw
-		}
-		payload = NewGetClaudeObservabilityPluginPayload(apikeyToken, email)
+		payload = NewGetClaudeObservabilityPluginPayload(apikeyToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

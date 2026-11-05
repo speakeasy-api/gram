@@ -25,14 +25,15 @@ func (s *stubClaudePlugins) ClaudeWebObservabilityPlugin(_ context.Context, _, o
 	return []byte("zip"), nil
 }
 
-func TestGetClaudeObservabilityPlugin_RendersForVouchedMember(t *testing.T) {
+func TestGetClaudeObservabilityPlugin_RendersForKeyOwner(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	stub := &stubClaudePlugins{}
 	ti.service.WithClaudeObservabilityPlugins(stub)
+	ctx = withPerUserKeyAuth(t, ctx, mockidp.MockUserEmail)
 
-	res, body, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{Email: new(mockidp.MockUserEmail)})
+	res, body, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{})
 	require.NoError(t, err)
 	data, err := io.ReadAll(body)
 	require.NoError(t, err)
@@ -41,31 +42,23 @@ func TestGetClaudeObservabilityPlugin_RendersForVouchedMember(t *testing.T) {
 	require.Equal(t, "application/zip", res.ContentType)
 	require.Equal(t, mockidp.MockOrgSlug, stub.orgSlug, "the archive is named for the org's real slug")
 	require.Equal(t, `attachment; filename="`+mockidp.MockOrgSlug+`-observability-claude.zip"`, res.ContentDisposition)
-	require.Equal(t, mockidp.MockUserID, stub.userID, "the key is minted for the vouched member")
+	require.Equal(t, mockidp.MockUserID, stub.userID, "the key is minted for the key's owner")
 	require.Equal(t, ti.projectID, stub.projectID)
 }
 
-func TestGetClaudeObservabilityPlugin_PerUserKeyRendersForKeyOwner(t *testing.T) {
+// The org install key is shared by every device in the org, so it cannot
+// prove which member is asking; accepting it would let any holder mint a key
+// attributed to any member and revoke theirs.
+func TestGetClaudeObservabilityPlugin_RefusesOrgInstallKey(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	stub := &stubClaudePlugins{}
 	ti.service.WithClaudeObservabilityPlugins(stub)
-	ctx = withPerUserKeyAuth(t, ctx, mockidp.MockUserEmail)
 
-	_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{Email: new("someone-else@example.com")})
-	require.NoError(t, err)
-	require.Equal(t, mockidp.MockUserID, stub.userID, "a per-user key ignores the vouched email")
-}
-
-func TestGetClaudeObservabilityPlugin_OrgKeyRequiresVouchedEmail(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestAgentService(t)
-	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
-	ti.service.WithClaudeObservabilityPlugins(&stubClaudePlugins{})
-
-	_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{Email: nil})
-	requireCode(t, err, oops.CodeBadRequest)
+	_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{})
+	requireCode(t, err, oops.CodeForbidden)
+	require.Empty(t, stub.userID, "no key is minted for the org install key")
 }
 
 func TestGetClaudeObservabilityPlugin_RefusesNonMember(t *testing.T) {
@@ -74,8 +67,9 @@ func TestGetClaudeObservabilityPlugin_RefusesNonMember(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	stub := &stubClaudePlugins{}
 	ti.service.WithClaudeObservabilityPlugins(stub)
+	ctx = withPerUserKeyAuth(t, ctx, "stranger@example.com")
 
-	_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{Email: new("stranger@example.com")})
+	_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{})
 	requireCode(t, err, oops.CodeForbidden)
 	require.Empty(t, stub.userID, "no key is minted for a non-member")
 }
@@ -88,7 +82,7 @@ func TestGetClaudeObservabilityPlugin_RefusesAgentIdentity(t *testing.T) {
 	ti.service.WithClaudeObservabilityPlugins(stub)
 	agentCtx, _ := withAgentKeyAuth(t, ctx, ti, "CI agent")
 
-	_, _, err := ti.service.GetClaudeObservabilityPlugin(agentCtx, &gen.GetClaudeObservabilityPluginPayload{Email: new(mockidp.MockUserEmail)})
+	_, _, err := ti.service.GetClaudeObservabilityPlugin(agentCtx, &gen.GetClaudeObservabilityPluginPayload{})
 	requireCode(t, err, oops.CodeForbidden)
 	require.Empty(t, stub.userID, "no key is minted for an agent identity")
 }
@@ -116,8 +110,9 @@ func TestGetClaudeObservabilityPlugin_NotFoundWithoutObservabilityPlugin(t *test
 			setup(t, ctx, ti)
 			stub := &stubClaudePlugins{}
 			ti.service.WithClaudeObservabilityPlugins(stub)
+			ctx = withPerUserKeyAuth(t, ctx, mockidp.MockUserEmail)
 
-			_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{Email: new(mockidp.MockUserEmail)})
+			_, _, err := ti.service.GetClaudeObservabilityPlugin(ctx, &gen.GetClaudeObservabilityPluginPayload{})
 			requireCode(t, err, oops.CodeNotFound)
 			require.Empty(t, stub.userID)
 		})

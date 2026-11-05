@@ -144,21 +144,17 @@ var _ = Service("agent", func() {
 	})
 
 	Method("getClaudeObservabilityPlugin", func() {
-		Description("Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.")
+		Description("Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.")
 
-		// The org install key is accepted with a vouched email, as on
-		// getMyConnections: the minted key can only ingest hook events, which
-		// the org-wide observability key already lets any device send under a
-		// self-reported email.
+		// agent_user admits the org install key too (agent implies agent_user);
+		// the handler refuses it, since minting and revoking a member's key
+		// must be bound to that member's own credential.
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
-				Example("dev@acme.corp")
-			})
 		})
 
 		Result(func() {
@@ -170,7 +166,6 @@ var _ = Service("agent", func() {
 		HTTP(func() {
 			GET("/rpc/agent.getClaudeObservabilityPlugin")
 			security.ByKeyHeader()
-			Header("email:Gram-User-Email")
 			Response(StatusOK, func() {
 				ContentType("application/zip")
 				Header("content_type:Content-Type")

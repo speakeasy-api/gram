@@ -97,22 +97,15 @@ func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agent
 
 // BuildGetClaudeObservabilityPluginPayload builds the payload for the agent
 // getClaudeObservabilityPlugin endpoint from CLI flags.
-func BuildGetClaudeObservabilityPluginPayload(agentGetClaudeObservabilityPluginApikeyToken string, agentGetClaudeObservabilityPluginEmail string) (*agent.GetClaudeObservabilityPluginPayload, error) {
+func BuildGetClaudeObservabilityPluginPayload(agentGetClaudeObservabilityPluginApikeyToken string) (*agent.GetClaudeObservabilityPluginPayload, error) {
 	var apikeyToken *string
 	{
 		if agentGetClaudeObservabilityPluginApikeyToken != "" {
 			apikeyToken = &agentGetClaudeObservabilityPluginApikeyToken
 		}
 	}
-	var email *string
-	{
-		if agentGetClaudeObservabilityPluginEmail != "" {
-			email = &agentGetClaudeObservabilityPluginEmail
-		}
-	}
 	v := &agent.GetClaudeObservabilityPluginPayload{}
 	v.ApikeyToken = apikeyToken
-	v.Email = email
 
 	return v, nil
 }

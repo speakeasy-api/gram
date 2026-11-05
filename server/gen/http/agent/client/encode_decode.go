@@ -542,10 +542,6 @@ func EncodeGetClaudeObservabilityPluginRequest(encoder func(*http.Request) goaht
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.Email != nil {
-			head := *p.Email
-			req.Header.Set("Gram-User-Email", head)
-		}
 		return nil
 	}
 }

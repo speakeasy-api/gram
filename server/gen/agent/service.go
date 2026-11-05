@@ -41,9 +41,10 @@ type Service interface {
 	// enrolled user to upload to claude.ai (Customize > Plugins), so sessions in
 	// Claude's cloud environment are recorded. The plugin carries a hooks-only key
 	// attributed to the enrolled user; each download replaces that user's previous
-	// key. Accepts a per-user key, or an org install key with the user's email
-	// vouched in the Gram-User-Email header, the same way getPlugins resolves the
-	// polling user.
+	// key. Requires a per-user key, whose owner is the enrolled user. The org
+	// install key is refused: it is shared by every device in the organization, so
+	// it cannot prove which member is asking, and accepting it would let any
+	// holder mint a key attributed to any member and revoke theirs.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
@@ -548,10 +549,6 @@ type DeviceAgentConfiguration struct {
 // getClaudeObservabilityPlugin method.
 type GetClaudeObservabilityPluginPayload struct {
 	ApikeyToken *string
-	// Email address of the enrolled user, sent in the Gram-User-Email header.
-	// Required when authenticating with an org-scoped agent install key; ignored
-	// for a per-user key, whose owner is the enrolled user.
-	Email *string
 }
 
 // GetClaudeObservabilityPluginResult is the result type of the agent service

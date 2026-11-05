@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -31,10 +34,20 @@ func (s *Service) WithClaudeObservabilityPlugins(renderer ClaudeObservabilityPlu
 // installs locally, packaged for claude.ai: Claude's cloud environment runs no
 // device agent to report the user, so the plugin's own key identifies them.
 func (s *Service) GetClaudeObservabilityPlugin(ctx context.Context, payload *gen.GetClaudeObservabilityPluginPayload) (*gen.GetClaudeObservabilityPluginResult, io.ReadCloser, error) {
-	// resolveMember refuses agent identities, requires a vouched email for
-	// the org install key, and charges the member's getMyConnections budget,
-	// so repeated downloads cannot mint and revoke keys without limit.
-	member, err := s.resolveMember(ctx, payload.Email, "the Claude observability plugin")
+	// Only a per-user key: the org install key is shared by every device in
+	// the organization, so a vouched email from it proves nothing, and this
+	// call mints a key attributed to the member and revokes their previous
+	// one. resolveMember refuses agent identities and charges the member's
+	// getMyConnections budget, so repeated downloads cannot churn keys
+	// without limit.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
+		return nil, nil, oops.E(oops.CodeForbidden, nil, "the Claude observability plugin requires a per-user key; the org install key cannot download it")
+	}
+	member, err := s.resolveMember(ctx, nil, "the Claude observability plugin")
 	if err != nil {
 		return nil, nil, err
 	}

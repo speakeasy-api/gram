@@ -6135,10 +6135,9 @@ func NewGetMyConnectionsPayload(apikeyToken *string, email *string) *agent.GetMy
 
 // NewGetClaudeObservabilityPluginPayload builds a agent service
 // getClaudeObservabilityPlugin endpoint payload.
-func NewGetClaudeObservabilityPluginPayload(apikeyToken *string, email *string) *agent.GetClaudeObservabilityPluginPayload {
+func NewGetClaudeObservabilityPluginPayload(apikeyToken *string) *agent.GetClaudeObservabilityPluginPayload {
 	v := &agent.GetClaudeObservabilityPluginPayload{}
 	v.ApikeyToken = apikeyToken
-	v.Email = email
 
 	return v
 }
