@@ -58,6 +58,82 @@ vi.mock("./KeySetField", () => ({
 
 afterEach(cleanup);
 
+describe("sending the MCP client's name to the authorization server", () => {
+  const label = "Send the MCP client's name to the authorization server";
+
+  it("is off by default and saved only when changed", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    const checkbox = screen.getByRole("checkbox", { name: label });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: true,
+        }),
+      },
+    });
+  });
+
+  it("can be turned off again", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, forwardClientName: true }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: false,
+        }),
+      },
+    });
+  });
+
+  it("is omitted when saving another field", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), {
+      target: { value: "new-audience" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const form =
+      testState.mutate.mock.calls[0]?.[0].request.updateRemoteSessionClientForm;
+    expect(form).not.toHaveProperty("forwardClientName");
+  });
+
+  it("is locked for people who cannot edit", () => {
+    testState.admin = false;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    expect(
+      screen.getByRole("checkbox", { name: label }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("is hidden for service accounts, which have no user sign-in", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{
+          ...client,
+          credentialOwner: "self",
+          jsonWebKeySetId: undefined,
+        }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(screen.queryByRole("checkbox", { name: label })).toBeNull();
+  });
+});
+
 describe("client audience updates", () => {
   it.each([
     ["cleared", "", ""],
@@ -111,6 +187,7 @@ const client = {
   tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
   jsonWebKeySetId: "set-1",
   legacyCallbackUrl: false,
+  forwardClientName: false,
   audience: "aud",
 } as RemoteSessionClient;
 

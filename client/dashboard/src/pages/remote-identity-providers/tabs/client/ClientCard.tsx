@@ -4,6 +4,7 @@ import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
@@ -95,6 +96,12 @@ export function ClientCard({
   const [confirmClientIdChange, setConfirmClientIdChange] = useState(false);
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
   const [audience, setAudience] = useState(client.audience ?? "");
+  // Undefined until changed, so a refetch can't leave a stale value to save.
+  const [forwardClientNameDraft, setForwardClientNameDraft] = useState<
+    boolean | undefined
+  >(undefined);
+  const forwardClientNameChecked =
+    forwardClientNameDraft ?? client.forwardClientName;
   const [clientSecret, setClientSecret] = useState("");
   // Undefined until a platform admin flips the switch, so the switch tracks
   // the saved value (including a Migrate from the warning above) and a save
@@ -185,6 +192,7 @@ export function ClientCard({
     onSuccess: async (saved) => {
       await invalidateClient();
       setAudience(saved.audience ?? "");
+      setForwardClientNameDraft(undefined);
       setClientIdDraft(saved.clientId);
       setConfirmClientIdChange(false);
       setClientSecret("");
@@ -234,6 +242,8 @@ export function ClientCard({
 
   const savedAudience = client.audience ?? "";
   const audienceChanged = audience !== savedAudience;
+  const forwardClientNameChanged =
+    forwardClientNameChecked !== client.forwardClientName;
 
   const dirty =
     canEdit &&
@@ -241,6 +251,7 @@ export function ClientCard({
       authMethod !== persistedAuthMethod ||
       scopeChanged ||
       audienceChanged ||
+      forwardClientNameChanged ||
       clientSecret !== "" ||
       (privateKeyJwtSelected &&
         authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
@@ -268,6 +279,9 @@ export function ClientCard({
     }
     if (audienceChanged) {
       input.audience = audience.trim();
+    }
+    if (forwardClientNameChanged) {
+      input.forwardClientName = forwardClientNameChecked;
     }
     const secretUpdate = clientSecretUpdateValue(authMethod, clientSecret);
     if (secretUpdate !== undefined) {
@@ -431,6 +445,31 @@ export function ClientCard({
                 disabled={!canEdit}
               />
             </div>
+            {!serviceAccount && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="client-forward-name"
+                    checked={forwardClientNameChecked}
+                    onCheckedChange={(checked) =>
+                      setForwardClientNameDraft(checked === true)
+                    }
+                    disabled={!canEdit}
+                  />
+                  <Label htmlFor="client-forward-name">
+                    Send the MCP client&apos;s name to the authorization server
+                  </Label>
+                </div>
+                <Text small muted>
+                  Lets the authorization server label each connection with its
+                  MCP client, such as Claude or Cursor. Only sent for public
+                  servers that don't require sign-in. Clients choose their own
+                  names, so treat this as a label. Some authorization servers
+                  reject unknown parameters, so test by connecting from an MCP
+                  client to one of those public servers.
+                </Text>
+              </div>
+            )}
             {privateKeyJwtSelected ? (
               <Text small muted>
                 Any existing client secret is retained but not used with
