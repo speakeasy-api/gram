@@ -56,11 +56,9 @@ func newToolsCallConnections(attribution *ConnectionAttribution, recorder *mcpco
 	if attribution == nil {
 		return nil
 	}
-	connections := &toolsCallConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", configuredCredential: false, provider: ""}
-	// A tunnel's static headers route to its gateway; they are not a credential.
+	connections := &toolsCallConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", configuredCredential: HasConfiguredCredential(headers), provider: ""}
 	if !connections.tunneled {
 		connections.provider = upstreamURL
-		connections.configuredCredential = HasConfiguredCredential(headers)
 	}
 	return connections
 }
@@ -105,13 +103,13 @@ func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, fa
 	if proxy.IsShutdownInterrupt(failure.Err) {
 		return
 	}
-	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredential{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
+	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
 		c.record(ctx, code)
 	}
 }
 
-// UpstreamCredential is what the failed call sent upstream.
-type UpstreamCredential struct {
+// UpstreamCredentialSent is what the failed call sent upstream.
+type UpstreamCredentialSent struct {
 	// Attached reports that Speakeasy sent a credential.
 	Attached bool
 
@@ -132,7 +130,7 @@ func HasConfiguredCredential(headers []proxy.ConfiguredHeader) bool {
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.
 // tunnelError is the tunnel gateway's own error status, when it answered instead of the server.
-func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool, tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
+func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunneled bool, tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
 	if status == 0 {
 		for _, cause := range causes {
@@ -154,6 +152,9 @@ func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled
 		}
 	}
 	switch {
+	case status == 0 && slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) }):
+		// A slow server looks the same through a tunnel as it does directly.
+		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case tunneled && status == 0:
 		// Our own tunnel gateway did not answer, so the tunnel's owner can't fix it.
 		return mcpconnectionattempts.CodeInternalError, true

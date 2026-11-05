@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -25,8 +24,5 @@ func consentRefreshAttribution(r *http.Request, endpoint *ResolvedMcpEndpoint, s
 }
 
 func (g *metaGateContext) connectionScope(ctx context.Context) mcpconnectionattempts.Scope {
-	if g.projectID == uuid.Nil {
-		return mcpconnectionattempts.OrganizationGatewayScope(g.organizationID, g.metaServerID, requestApp(ctx))
-	}
-	return mcpconnectionattempts.GatewayScope(g.organizationID, g.projectID, g.metaServerID, requestApp(ctx))
+	return gatewayScope(g.organizationID, g.projectID, g.metaServerID, requestApp(ctx))
 }
