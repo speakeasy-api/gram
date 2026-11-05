@@ -464,9 +464,13 @@ export function ClientCard({
                 </div>
                 <Text small muted>
                   Shows the authorization server the name the MCP client gives
-                  itself, such as Claude or Cursor. Only for public servers that
-                  don&apos;t require sign-in. Test a connection after turning it
-                  on, since some servers reject it.
+                  itself, such as Claude or Cursor, in the{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    speakeasy_client_name
+                  </code>{" "}
+                  parameter. Only for public servers that don&apos;t require
+                  sign-in. Test a connection after turning it on, since some
+                  servers reject it.
                 </Text>
               </div>
             )}
