@@ -8,7 +8,8 @@ import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetTool
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetToolUsageTargetsResult } from "@gram/client/models/components/gettoolusagetargetsresult.js";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
+import { useUser } from "@/contexts/Auth";
 import { telemetryReadRetry } from "@/components/observe/telemetryReadRetry";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -215,12 +216,12 @@ function agentServersEmptyText({
   anyServer: boolean;
 }): string {
   if (!canReadPolicy && !canViewToolLogs)
-    return "You need permission to manage this agent, or the log:read permission on this project, to see its MCP servers.";
+    return "Only this agent's owner, a member who can manage it, or a member with the View tool logs permission on this project can see its MCP servers.";
   if (canReadPolicy && !anyServer)
     return "This agent cannot connect to any MCP server.";
   // It may connect to any server, so only its calls can name them.
   if (!canViewToolLogs)
-    return "This agent may connect to any MCP server. You need the log:read permission on this project to see the ones it called.";
+    return "This agent may connect to any MCP server. Only its owner or a member with the View tool logs permission on this project can see the ones it called.";
   return "This agent called no MCP servers in this period.";
 }
 
@@ -246,7 +247,10 @@ function AgentServersPanel({
   agent: ManagedAgent;
   targets: UseQueryResult<GetToolUsageTargetsResult>;
 }): JSX.Element {
-  const canViewToolLogs = useCanViewToolLogs();
+  const viewer = useUser();
+  // The agent's calls are the owner's to read; anyone else needs log:read.
+  const canViewToolLogs =
+    useToolLogsAccess().projectWide || agent.ownerUserId === viewer.id;
   const { id: projectId } = useIdentityProject();
   const canReadPolicy = agent.permissions.write;
   const grants = useAgentPolicyGrants(agent);
