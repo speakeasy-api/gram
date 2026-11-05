@@ -3,10 +3,12 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -139,19 +141,78 @@ func TestToolsCallConnections_TunneledBadGateway(t *testing.T) {
 	}
 }
 
+// Through the real proxy: a server that never answers reads the same behind a tunnel as directly.
+func TestToolsCallConnections_TunneledTimeout(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	connections := recordingConnections(rec, "token")
+	connections.tunneled = true
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	t.Cleanup(func() {
+		close(release)
+		server.Close()
+	})
+
+	p := newKillswitchTestProxy(t, server.URL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+	p.NonStreamingTimeout = 50 * time.Millisecond
+	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	require.Error(t, p.Post(httptest.NewRecorder(), req))
+
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnreachable)
+}
+
+// A secret an auth client adds goes through the tunnel; its routing headers are not credentials.
+func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
+	t.Parallel()
+
+	identity := proxy.ServerIdentity{RemoteMCPServerID: "", TunneledMCPServerID: uuid.NewString(), McpServerID: uuid.NewString(), MetaMCPServerID: ""}
+	attribution := &ConnectionAttribution{
+		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+		Details:          nil,
+		UpstreamFailures: true,
+		SelfCredential:   false,
+		Request:          nil,
+	}
+	routing := tunnelrouting.Headers(identity.TunneledMCPServerID, "forward-token", "affinity")
+	reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
+
+	rec := mcpconnectionattemptstest.New(t)
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
+	rec.RequireNothing()
+
+	refused := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(tunnelrouting.ErrorHeader, wire.TunnelErrorForwardRejected)
+		w.WriteHeader(http.StatusForbidden)
+	}
+	secret := proxy.ConfiguredHeader{IsRequired: true, IsSecret: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}
+	rec = mcpconnectionattemptstest.New(t)
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Empty(t, row.ProviderHost)
+
+	rec = mcpconnectionattemptstest.New(t)
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+}
+
 func TestUpstreamFailureHappened(t *testing.T) {
 	t.Parallel()
 
-	attached := UpstreamCredential{Attached: true, Self: false, Configured: false}
-	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: true, Self: true, Configured: false}, false, "")
+	attached := UpstreamCredentialSent{Attached: true, Self: false, Configured: false}
+	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: true, Self: true, Configured: false}, false, "")
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeSharedCredentialRejected, code)
 
-	code, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: true}, false, "")
+	code, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: false, Self: false, Configured: true}, false, "")
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeStaticKeyRejected, code)
 
-	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: false}, false, "")
+	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, false, "")
 	require.False(t, ok, "a 401 with no credential is the sign-in challenge")
 
 	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
@@ -172,6 +233,8 @@ func TestUpstreamFailureHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
 	code, _ = UpstreamFailureHappened(0, attached, false, "")
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
+	code, _ = UpstreamFailureHappened(0, attached, true, "", fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut))
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a slow server behind a tunnel is not ours")
 
 	_, ok = UpstreamFailureHappened(http.StatusNotFound, attached, false, "")
 	require.False(t, ok)
