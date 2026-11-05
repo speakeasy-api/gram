@@ -34,8 +34,14 @@ const (
 	networkIngressNextEnable              = "enable_ingress_in_dashboard"
 	networkIngressNextWait                = "wait_for_ingress"
 	networkIngressNextRepair              = "repair_ingress_in_dashboard"
+	networkIngressNextApproveGateway      = "approve_gateway_in_tailscale"
 	networkIngressNextUnsupportedProvider = "contact_support_for_unsupported_provider"
 )
+
+// networkIngressServiceNotApproved mirrors
+// k8s.NetworkIngressErrorProviderServiceNotApproved without pulling the
+// Kubernetes client into this package.
+const networkIngressServiceNotApproved = "provider_service_not_approved"
 
 // networkIngressErrorCodePattern admits only the short reconcile codes the
 // ingress lifecycle stores (for example provider_error). Anything else is
@@ -156,6 +162,10 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 		return networkIngressNextAddCredentials
 	case !ingress.Enabled:
 		return networkIngressNextEnable
+	// The tailnet has not approved Speakeasy's gateway to host the service.
+	// Only a tailnet admin can fix that, in Tailscale, not in the dashboard.
+	case ingress.LastError == networkIngressServiceNotApproved:
+		return networkIngressNextApproveGateway
 	case ingress.Status == "error" || ingress.Status == "degraded":
 		return networkIngressNextRepair
 	case ingress.Status != "online" || ingress.DNSName == "":
@@ -167,7 +177,8 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 
 const getNetworkIngressDescription = "Read the organization's private network (Tailscale) ingress: whether private networking is switched on for the organization, whether an ingress is configured and enabled, its latest observed status and private DNS name, and the single next_action that stands between the organization and private MCP access. " +
 	"ready_for_private_access is required before any MCP can use dual or private_only network access; it is not proof that a tailnet client can connect. " +
-	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, or repair_ingress_in_dashboard; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
+	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, repair_ingress_in_dashboard, or approve_gateway_in_tailscale; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
+	"approve_gateway_in_tailscale means the organization's tailnet has not approved Speakeasy's gateway to host the private service: a tailnet admin must approve the speakeasy-gw hosts on the service in the Tailscale admin console, or add the service to autoApprovers in the tailnet policy. setup_url shows the exact steps; the ingress becomes ready on its own once approved. " +
 	"An unsupported provider is never ready: contact_support_for_unsupported_provider means contact Speakeasy support, not attempt dashboard setup or repair. " +
 	"Creating, enabling, repairing, or supplying credentials for the ingress happens only in the dashboard at setup_url, because it requires Tailscale OAuth client credentials. Never returns credentials or provider resources."
 
