@@ -1,13 +1,16 @@
 package oktaresourceconnections_test
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
@@ -560,7 +563,7 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 			got, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
 			require.NoError(t, err)
 			require.Equal(t, want, got.UserSessionIssuerID)
-			rows, err := si.q.ListEligibleServers(ctx, si.orgID)
+			rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: false})
 			require.NoError(t, err)
 			found := false
 			for _, row := range rows {
@@ -572,4 +575,74 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 			require.True(t, found, "login issuer validity must not hide the upstream server")
 		})
 	}
+}
+
+// Where typed auth clients choose upstream authentication, a server's
+// authorization server is the one it offers, whatever was derived for it, and a
+// server offering nothing has none. Elsewhere the derived one stands.
+func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, si := newTestService(t)
+	projectID := createProject(t, ctx, si, si.orgID, "typed-offers-"+uuid.NewString()[:8])
+	derived := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	offered := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	identityProvider := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	fixtures := authclientbackfill.New(si.conn)
+	offer := func(serverID, issuerID uuid.UUID, clientType string) uuid.UUID {
+		client, err := remotesessionsrepo.New(si.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(si.orgID), RemoteSessionIssuerID: issuerID,
+			ClientID: "offered-" + uuid.NewString()[:8], ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		})
+		require.NoError(t, err)
+		authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: si.orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
+		require.NoError(t, err)
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: si.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+		return client.ID
+	}
+
+	personal := createServer(t, ctx, si, projectID, derived, "personal")
+	personalClient := offer(personal, offered, authz.AuthClientTypeRemoteSession)
+	chained := createServer(t, ctx, si, projectID, derived, "chained")
+	offer(chained, offered, authz.AuthClientTypeRemoteSession)
+	offer(chained, identityProvider, authz.AuthClientTypeEMA)
+	nothing := createServer(t, ctx, si, projectID, derived, "nothing")
+
+	issuerOf := func(serverID uuid.UUID, enforced bool) (uuid.UUID, bool) {
+		rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: enforced})
+		require.NoError(t, err)
+		listed := uuid.Nil
+		for _, row := range rows {
+			if row.ID == serverID {
+				listed = row.IssuerID
+			}
+		}
+		one, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID, TypedAuthEnforced: enforced})
+		if errors.Is(err, pgx.ErrNoRows) {
+			require.Equal(t, uuid.Nil, listed, "the list and the single read agree")
+			return uuid.Nil, false
+		}
+		require.NoError(t, err)
+		require.Equal(t, one.IssuerID, listed, "the list and the single read agree")
+		return one.IssuerID, true
+	}
+
+	for _, serverID := range []uuid.UUID{personal, chained, nothing} {
+		issuer, eligible := issuerOf(serverID, false)
+		require.True(t, eligible)
+		require.Equal(t, derived, issuer, "the derived authorization server stands without enforcement")
+	}
+	issuer, eligible := issuerOf(personal, true)
+	require.True(t, eligible)
+	require.Equal(t, offered, issuer)
+	issuer, eligible = issuerOf(chained, true)
+	require.True(t, eligible)
+	require.Equal(t, identityProvider, issuer, "an identity-provider client's authorization server comes first")
+	_, eligible = issuerOf(nothing, true)
+	require.False(t, eligible, "a server that offers nothing has no authorization server under enforcement")
+
+	row, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: personal, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.True(t, row.TypedAuthEnforced)
+	require.Equal(t, []uuid.UUID{personalClient}, row.OfferedClientIds)
 }

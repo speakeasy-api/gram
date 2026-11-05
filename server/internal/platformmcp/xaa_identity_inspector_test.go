@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/stretchr/testify/require"
 
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
@@ -219,6 +220,7 @@ func (g *failedResourceGovernor) ResolveResource(context.Context, identitychaini
 	g.calls++
 	return protectedresource.EndpointResource{}, g.err
 }
+
 func (*failedResourceGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error) {
 	panic("failed discovery must not be probed a second time")
 }
@@ -361,4 +363,28 @@ func TestXAAIdentityChainingBindingConnectionScopesWire(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(schema), `"connection_scopes"`)
 	require.Contains(t, string(schema), `"scopes_out_of_date"`)
+}
+
+// A tunneled server routes by the authorization server readiness resolved for
+// it, which under enforcement comes from what it offers, so a server with no
+// derived authorization server is still routable.
+func TestXAAIdentityInspectorRoutesATunneledServerByTheResolvedIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_tunneled")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+	fixtures := authclientbackfill.New(conn)
+	sourceID, serverID := uuid.New(), uuid.New()
+	require.NoError(t, fixtures.SeedTunneledSourceFixture(ctx, authclientbackfill.SeedTunneledSourceFixtureParams{ID: sourceID, ProjectID: f.projectID, Name: "tunnel-" + sourceID.String()[:8], KeyHash: "key-" + sourceID.String(), ResourceIdentifier: pgtype.Text{}}))
+	require.NoError(t, fixtures.SeedTunneledMCPServerFixture(ctx, authclientbackfill.SeedTunneledMCPServerFixtureParams{ID: serverID, ProjectID: f.projectID, Slug: conv.ToPGText("tunneled-" + serverID.String()[:8]), TunneledMcpServerID: conv.ToNullUUID(sourceID)}))
+	require.NoError(t, fixtures.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{UserSessionIssuerID: conv.ToNullUUID(f.userIssuer), ID: serverID}))
+
+	governor := &recordingGovernor{issuer: f.issuerA, serves: true}
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, serverID, f.issuerA, "https://tunneled.example.test/mcp")
+	require.NoError(t, err)
+	require.True(t, chaining.Served)
+	require.Len(t, governor.recorded(), 1)
+	require.Equal(t, uuid.NullUUID{UUID: f.issuerA, Valid: true}, governor.recorded()[0].RemoteSessionIssuerID)
 }

@@ -108,6 +108,38 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 	require.Equal(t, []string{"fallback"}, scopes)
 }
 
+// Where typed auth clients choose upstream authentication, the candidates are
+// the clients the server offers: a sign-in's binding neither qualifies a client
+// the server does not offer nor is needed for one it does.
+func TestResolveClientFollowsTypedOffersUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	issuer, project, login := uuid.New(), uuid.New(), uuid.New()
+	offered := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "offered"}
+	bound := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "bound", UserSessionIssuerIds: []uuid.UUID{login}}
+	second := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "second"}
+	clients := []repo.ListIssuerClientsRow{offered, bound, second}
+	for _, tc := range []struct {
+		name     string
+		enforced bool
+		offered  []uuid.UUID
+		clientID string
+		state    string
+	}{
+		{name: "the binding decides without enforcement", offered: []uuid.UUID{offered.ID}, clientID: "bound", state: ClientBindingSingle},
+		{name: "enforced uses the offered client with no binding", enforced: true, offered: []uuid.UUID{offered.ID}, clientID: "offered", state: ClientBindingSingle},
+		{name: "enforced ignores a bound client the server does not offer", enforced: true, state: ClientBindingMissing},
+		{name: "enforced with two offered clients is ambiguous", enforced: true, offered: []uuid.UUID{offered.ID, second.ID}, state: ClientBindingAmbiguous},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}, TypedAuthEnforced: tc.enforced, OfferedClientIds: tc.offered}
+			id, _, state := resolveClient(server, "https://mcp.example", "", clients, nil, allClients(remotesessions.ResourceScopes{}))
+			require.Equal(t, tc.clientID, id)
+			require.Equal(t, tc.state, state)
+		})
+	}
+}
+
 func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 	t.Parallel()
 	issuer, project, clientID := uuid.New(), uuid.New(), uuid.New()
