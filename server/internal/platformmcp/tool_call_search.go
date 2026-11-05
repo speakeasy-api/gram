@@ -218,10 +218,11 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
-	// log:read is the authorization boundary for listing individual calls,
-	// exactly as it is for list_recent_tool_calls and the dashboard Tool Logs.
-	// It is checked before the budget so a refused call spends nothing.
-	if _, err := s.reader.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: search.projectID}); err != nil {
+	// Decided before the budget so a refused call spends nothing. A member
+	// without log:read is not refused: as in the dashboard Tool Logs they search
+	// their own sessions and their agents', and every filter only narrows that.
+	_, ownScope, err := s.reader.ResolveProjectLogScope(ctx, principal, FindMCPInput{ProjectID: search.projectID})
+	if err != nil {
 		return SearchToolCallsOutput{}, fmt.Errorf("authorize tool call search: %w", err)
 	}
 	// Metered on the sensitive allowance: a page carries masked identities and
@@ -293,7 +294,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		statuses = []string{search.outcome}
 	}
 	rows, err := s.search.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
-		OwnScope:           nil,
+		OwnScope:           ownScope,
 		GramProjectID:      search.projectID,
 		TimeStart:          search.window.start.UnixNano(),
 		TimeEnd:            search.window.end.UnixNano(),

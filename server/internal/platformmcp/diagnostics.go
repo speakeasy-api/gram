@@ -74,6 +74,10 @@ type CanonicalIdentityGate interface {
 type DiagnosticsProjectReader interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
 	ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
+	// ResolveProjectLogScope is ResolveProjectLogRead for the tools that list
+	// individual calls: a member without log:read gets their own scope instead
+	// of a refusal. A nil scope means the whole project.
+	ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error)
 	GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 

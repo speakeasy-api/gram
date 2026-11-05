@@ -6588,6 +6588,24 @@ func (q *Queries) SetCapturedAgentChatSummaryFixture(ctx context.Context, arg Se
 	return err
 }
 
+const setChatAgentFixture = `-- name: SetChatAgentFixture :exec
+UPDATE chats
+SET agent_id = $1
+WHERE id = $2
+`
+
+type SetChatAgentFixtureParams struct {
+	AgentID uuid.NullUUID
+	ID      uuid.UUID
+}
+
+// Test-only fixture: attributes a chat to an agent principal, as capture under
+// an agent credential does, so owner-visibility tests can seed agent sessions.
+func (q *Queries) SetChatAgentFixture(ctx context.Context, arg SetChatAgentFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatAgentFixture, arg.AgentID, arg.ID)
+	return err
+}
+
 const setDelegationProjectFixture = `-- name: SetDelegationProjectFixture :exec
 UPDATE trusted_issuer_sessions SET project_id = $1 WHERE id = $2
 `

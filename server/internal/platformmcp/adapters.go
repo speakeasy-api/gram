@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
@@ -24,7 +25,10 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	telemetrysvc "github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // JWTAuthenticator validates Platform MCP access tokens. A token is accepted
@@ -381,6 +385,7 @@ type PostgresReader struct {
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
+	identityGate              CanonicalIdentityGate
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
@@ -429,6 +434,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		xaaReadiness:              nil,
 		issuerGate:                nil,
 		authz:                     nil,
+		identityGate:              nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
@@ -461,6 +467,15 @@ func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *P
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithCanonicalIdentityGate folds a member's own-scope email through the same
+// rollout switch the telemetry APIs use, so their hook rows match either way.
+func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
+	if r != nil {
+		r.identityGate = gate
 	}
 	return r
 }
@@ -1040,6 +1055,50 @@ func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Princ
 // individual tool calls. project:read alone does not satisfy it.
 func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
 	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+}
+
+// ResolveProjectLogScope resolves one exact project and decides how much of its
+// tool calls the caller may list: everything with log:read, otherwise a member's
+// own sessions and owned agents, the rule the management API's Tool Logs apply.
+func (r *PostgresReader) ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r == nil || r.reader == nil || r.authz == nil || r.db == nil {
+		return ResolvedProject{}, nil, ErrUnavailable
+	}
+	// Only the OAuth-authenticated member surface reads as a person; the
+	// assistant runtime keeps the plain check whatever its context carries.
+	if principal.surface() != SurfacePlatformMCP {
+		project, err := r.ResolveProjectLogRead(ctx, principal, input)
+		return project, nil, err
+	}
+	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+	if err != nil {
+		return ResolvedProject{}, nil, err
+	}
+	resolver := telemetrysvc.LogReadScopeResolver{Authz: r.authz, Agents: chatrepo.New(r.db), Logger: r.logger}
+	scope, err := resolver.Resolve(ctx, project.ID.String(), func() string { return r.canonicalIdentityOrg(ctx, principal.OrganizationID) })
+	if err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, nil, ErrForbidden
+		}
+		return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope: %w", err)
+	}
+	if scope != nil && scope.UserEmail == "" {
+		// The Platform MCP auth context carries no email, and hook rows are
+		// keyed by it, so the member's own hook sessions need it looked up.
+		user, err := usersrepo.New(r.db).GetUser(ctx, principal.UserID)
+		if err != nil {
+			return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope member: %w", err)
+		}
+		scope.UserEmail = user.Email
+	}
+	return project, scope, nil
+}
+
+func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if r == nil || r.identityGate == nil {
+		return ""
+	}
+	return r.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
 func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {

@@ -859,6 +859,13 @@ INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, t
 VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
 RETURNING id;
 
+-- name: SetChatAgentFixture :exec
+-- Test-only fixture: attributes a chat to an agent principal, as capture under
+-- an agent credential does, so owner-visibility tests can seed agent sessions.
+UPDATE chats
+SET agent_id = @agent_id
+WHERE id = @id;
+
 -- name: SetCapturedAgentChatSummaryFixture :exec
 -- Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
 UPDATE chats

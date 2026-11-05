@@ -1952,7 +1952,8 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 }
 
 const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(c.external_user_id, '')::text AS external_user_id, c.agent_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
@@ -1968,16 +1969,22 @@ type GetPlatformChatSearchChatParams struct {
 type GetPlatformChatSearchChatRow struct {
 	ID               uuid.UUID
 	OwnerUserID      string
+	ExternalUserID   string
+	AgentID          uuid.NullUUID
 	Title            string
 	TitleManuallySet bool
 }
 
+// external_user_id and agent_id decide whether a member without chat:read may
+// read the chat: their own session, or an agent-only session of an agent they own.
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
 	var i GetPlatformChatSearchChatRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerUserID,
+		&i.ExternalUserID,
+		&i.AgentID,
 		&i.Title,
 		&i.TitleManuallySet,
 	)
@@ -8920,32 +8927,37 @@ WHERE m.project_id = $1::uuid
   AND c.deleted IS FALSE AND p.deleted IS FALSE
   AND m.created_at >= $3 AND m.created_at < $4
   AND (cardinality($5::uuid[]) = 0 OR m.chat_id = ANY($5::uuid[]))
-  AND ($6::text = '' OR c.user_id = $6)
-  AND ($7::text = '' OR m.source = $7)
-  AND ($8::text = ''
-       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
-       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
-       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
-       OR c.title ILIKE $8 ESCAPE '\'
+  -- Own-scope visibility for a member without chat:read, the predicate the chat
+  -- ListChats query applies: their sessions plus agent-only sessions of agents
+  -- they own. Every other filter only narrows it further.
+  AND ($6::text = '' OR c.user_id = $6
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($7::uuid[])))
+  AND ($8::text = '' OR c.user_id = $8)
+  AND ($9::text = '' OR m.source = $9)
+  AND ($10::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $10 ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $10 ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $10 ESCAPE '\')
+       OR c.title ILIKE $10 ESCAPE '\'
        -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
        -- so a search for the shown title matches it too.
        OR (NOT c.title_manually_set
-           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $8 ESCAPE '\'))
-  AND ($9::text = ''
-       OR ($10::text = '' AND m.user_id = $9)
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $10 ESCAPE '\'))
+  AND ($11::text = ''
+       OR ($12::text = '' AND m.user_id = $11)
        OR EXISTS (
          SELECT 1 FROM chat_message_participants cp
          WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
-           AND (cp.user_id = $9 OR cp.provider_user_id = $9)
-           AND ($10 = '' OR cp.provider = $10)))
-  AND (NOT $11::boolean
-       OR ($12::boolean AND (m.created_at, m.id) > ($13::timestamptz, $14::uuid))
-       OR (NOT $12 AND (m.created_at, m.id) < ($13, $14)))
-ORDER BY CASE WHEN $12 THEN m.created_at END ASC,
-         CASE WHEN $12 THEN m.id END ASC,
-         CASE WHEN NOT $12 THEN m.created_at END DESC,
-         CASE WHEN NOT $12 THEN m.id END DESC
-LIMIT $15::integer
+           AND (cp.user_id = $11 OR cp.provider_user_id = $11)
+           AND ($12 = '' OR cp.provider = $12)))
+  AND (NOT $13::boolean
+       OR ($14::boolean AND (m.created_at, m.id) > ($15::timestamptz, $16::uuid))
+       OR (NOT $14 AND (m.created_at, m.id) < ($15, $16)))
+ORDER BY CASE WHEN $14 THEN m.created_at END ASC,
+         CASE WHEN $14 THEN m.id END ASC,
+         CASE WHEN NOT $14 THEN m.created_at END DESC,
+         CASE WHEN NOT $14 THEN m.id END DESC
+LIMIT $17::integer
 `
 
 type SearchPlatformChatMessagesParams struct {
@@ -8954,6 +8966,8 @@ type SearchPlatformChatMessagesParams struct {
 	FromTime            pgtype.Timestamptz
 	ToTime              pgtype.Timestamptz
 	ChatIds             []uuid.UUID
+	OwnUserID           string
+	OwnedAgentIds       []uuid.UUID
 	OwnerUserID         string
 	Source              string
 	Pattern             string
@@ -8994,6 +9008,8 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		arg.FromTime,
 		arg.ToTime,
 		arg.ChatIds,
+		arg.OwnUserID,
+		arg.OwnedAgentIds,
 		arg.OwnerUserID,
 		arg.Source,
 		arg.Pattern,
