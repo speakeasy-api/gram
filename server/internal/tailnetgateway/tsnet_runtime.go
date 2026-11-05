@@ -52,6 +52,17 @@ const (
 
 	// needsLoginProbeTimeout bounds the status read after a failed Up.
 	needsLoginProbeTimeout = 5 * time.Second
+
+	// approvalWait is how long Start waits for the tailnet to approve the
+	// node as a host of its service. On a real tailnet an auto-approval
+	// arrived about 3s after the node was Running, so without this wait the
+	// first heartbeat would report a host that is merely about to be
+	// approved as awaiting approval. A host still unapproved after the wait
+	// is reported as such by Status.
+	approvalWait = 10 * time.Second
+
+	// approvalPollInterval is how often Start checks for approval.
+	approvalPollInterval = 250 * time.Millisecond
 )
 
 // TsnetRuntime starts real tailnet nodes with tsnet. Build it with
@@ -167,6 +178,8 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		return nil, fmt.Errorf("tsnet local client: %w", err)
 	}
 
+	waitForApproval(ctx, lc, tailcfg.ServiceName(spec.ServiceName))
+
 	return &tsnetNode{
 		srv:                srv,
 		ln:                 ln,
@@ -181,6 +194,31 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		mu:                 sync.Mutex{},
 		serveErr:           nil,
 	}, nil
+}
+
+// waitForApproval gives the tailnet a moment to approve the node as a host
+// of service, returning as soon as it does, when approvalWait elapses, or
+// when ctx is done. It never fails: Status reports a host that is still
+// unapproved.
+func waitForApproval(ctx context.Context, lc *local.Client, service tailcfg.ServiceName) {
+	waitCtx, cancel := context.WithTimeout(ctx, approvalWait)
+	defer cancel()
+
+	ticker := time.NewTicker(approvalPollInterval)
+	defer ticker.Stop()
+	for {
+		if st, err := lc.StatusWithoutPeers(waitCtx); err == nil {
+			if approved, err := hostsService(st.Self, service); err == nil && approved {
+				return
+			}
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // backendNeedsLogin reports whether a node that failed to come up is stuck
@@ -292,7 +330,11 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	}
 
 	running := st.BackendState == ipn.Running.String()
-	approved := hostsService(st.Self, n.service)
+	approved, err := hostsService(st.Self, n.service)
+	if err != nil {
+		// Fail closed, but report why rather than as a plain approval wait.
+		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, err
+	}
 	state := NodeState{
 		Online: running && approved, BackendState: st.BackendState,
 		NeedsLogin:       st.BackendState == ipn.NeedsLogin.String(),
@@ -312,22 +354,22 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 // auto-approves the host or an admin approves it, and it withdraws them when
 // approval is revoked. A Running node that advertises a missing, misnamed, or
 // unapproved service gets no error and no traffic, so this is the only signal.
-func hostsService(self *ipnstate.PeerStatus, service tailcfg.ServiceName) bool {
+func hostsService(self *ipnstate.PeerStatus, service tailcfg.ServiceName) (bool, error) {
 	if self == nil {
-		return false
+		return false, nil
 	}
 
 	mappings, err := tailcfg.UnmarshalNodeCapJSON[tailcfg.ServiceIPMappings](self.CapMap, nodecap.ServiceHost)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("read service-host capability: %w", err)
 	}
 	for _, mapping := range mappings {
 		if addrs, ok := mapping[service]; ok && len(addrs) > 0 {
-			return true
+			return true, nil
 		}
 	}
 
-	return false
+	return false, nil
 }
 
 func (n *tsnetNode) WhoIs(ctx context.Context, peer netip.Addr) (*apitype.WhoIsResponse, error) {
