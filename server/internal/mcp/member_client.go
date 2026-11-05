@@ -433,9 +433,6 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		if errors.Is(err, errTunnelNoRoute) || errors.Is(exchangeErr, errTunnelNoRoute) {
 			code = mcpconnectionattempts.CodeTunnelUnavailable
 		}
-		if classified, ok := tunnelrouting.FailureHappened("", errors.Join(err, exchangeErr)); ok {
-			code = classified
-		}
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q can't be reached right now", member.slug), false), code}
 	case exchangeErr != nil:
 		// A transport failure may clear on a retry, unless it timed out, which
@@ -457,7 +454,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	case retryableStatus:
 		code, _ := remotemcp.UpstreamFailureHappened(status, dial.upstreamCredential(), dial.tunneled, rt.tunnelError(), errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(message, true), code}
-	case isRPC && rpcErr.Message == sdkTransportRejected && status == 0:
+	case isRPC && rpcErr.Message == sdkTransportRejected && rt.status() == 0:
 		// The SDK could not send the call, so the member never saw it.
 		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(message, false), code}

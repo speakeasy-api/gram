@@ -3,14 +3,19 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
-	"net/http"
 )
 
 // agentAdmissionRejection tells a refused agent from an admission check that could not run.
 func agentAdmissionRejection(err error) string {
+	if errors.Is(err, runtimepolicy.ErrPrincipalNotAdmitted) {
+		return "agent_not_admitted"
+	}
 	if errors.Is(err, errCredentialRejected) {
 		return "agent_credential_invalid"
 	}
@@ -96,12 +101,12 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeSignInRevoked, true
 	case "agent_credential_invalid", "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
+	case "agent_not_admitted":
+		return mcpconnectionattempts.CodeSubjectNotAdmitted, true
 	case "agent_admission_misconfigured":
 		return mcpconnectionattempts.CodeCredentialMisconfigured, true
 	case "agent_admission_denied":
 		return mcpconnectionattempts.CodeNoServerAccess, true
-	case "agent_admission_unavailable":
-		return mcpconnectionattempts.CodeInternalError, true
 	case string(upstreamRefreshReconnect):
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):

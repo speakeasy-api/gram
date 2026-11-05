@@ -255,6 +255,7 @@ var (
 	CodeTunnelUnavailable          = define("tunnel_unavailable", OutcomeFailed, WhoAdmin, "The private connection is down.", "Check that its tunnel is running.")
 	CodeKillswitchCheckUnavailable = define("killswitch_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check whether tool use is allowed.", "Try again in a few minutes.")
 	CodeMemberToolsMissing         = defineResult("member_tools_missing", resultPartial, OutcomeFailed, WhoAdmin, "Some of this gateway's servers did not list their tools.", "Check those servers' status on the gateway.")
+	CodeCallerCredentialMissing    = define("caller_credential_missing", OutcomeFailed, WhoPerson, "This server needs your own credentials, and your app did not send them.", "Add your credentials in your app's settings for this server.")
 
 	// Refresh.
 	CodeRefreshedUnverified              = defineResult("refreshed_unverified", ResultRefreshed, OutcomeConnected, WhoAdmin, "The sign-in was renewed, but the service could not be checked.", "If tool calls fail, check the service's connection.")

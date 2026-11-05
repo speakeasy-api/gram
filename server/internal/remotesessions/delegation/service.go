@@ -171,7 +171,7 @@ func (s *Service) encrypt(value string) (string, error) {
 	return encrypted, nil
 }
 
-// errCredentialDecryption preserves local fault attribution without exposing encrypted values.
+// errCredentialDecryption marks a Speakeasy key or ciphertext fault without exposing encrypted values.
 var errCredentialDecryption = errors.New("stored credential could not be decrypted")
 
 func (s *Service) decrypt(value string) (string, error) {
@@ -558,13 +558,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, now) {
-		failure := configurationFailureError(c)
-		code := mcpconnectionattempts.CodeRenewalMisconfigured
-		if errors.Is(failure, ErrReauthentication) {
-			code = mcpconnectionattempts.CodeReauthenticationRequired
-		}
-		s.recordRenewal(ctx, b, code)
-		return Assertion{}, failure
+		return Assertion{}, configurationFailureError(c)
 	}
 	if c.claim != uuid.Nil {
 		return Assertion{}, claimError(c, now)
@@ -609,7 +603,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+		s.recordLocalFault(ctx, b, err)
 		return Assertion{}, ErrTemporary
 	}
 	if c.claim != claim {
@@ -618,12 +612,21 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// Load full discovery and credentials only after obtaining durable ownership.
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Assertion{}, ErrTemporary
+		}
 		if definitiveDelegationFailure(err) {
 			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
 		code := mcpconnectionattempts.CodeInternalError
 		if errors.Is(err, ErrProviderUnavailable) {
+			// A retained failure keeps its own pacing, and a backoff on it would answer as misconfigured.
+			if !configurationFailureRetained(c) {
+				persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshSetupRetryable, SigningFailure: false, RetryAfter: 0})
+			}
 			code = mcpconnectionattempts.CodeRenewalRetryable
 		}
 		s.recordRenewal(ctx, b, code)
@@ -639,13 +642,16 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
-		// These are retained local secrets: only a fresh sign-in replaces them.
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
+		code := mcpconnectionattempts.CodeReauthenticationRequired
+		if errors.Is(err, errCredentialDecryption) {
+			code = mcpconnectionattempts.CodeInternalError
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+		s.recordLocalFault(ctx, b, err)
 		return Assertion{}, ErrTemporary
 	}
 	if !marked {
@@ -945,6 +951,13 @@ func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnecti
 	human := urn.NewUserSubject(b.HumanID)
 	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
 		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+// recordLocalFault blames Speakeasy for a local failure, unless the caller disconnected.
+func (s *Service) recordLocalFault(ctx context.Context, b Binding, err error) {
+	if !errors.Is(err, context.Canceled) {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+	}
 }
 
 func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {

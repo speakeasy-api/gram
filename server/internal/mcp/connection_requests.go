@@ -46,13 +46,21 @@ func (s *Service) gatewayReportedClient(ctx context.Context, gate *metaGateConte
 	return s.reportedClient(ctx, gate.request, uuid.Nil, metaClientInfoScope(gate.metaServerID))
 }
 
+// recordRequestOutcome writes one request's refusal or failure, unless there is none or the caller left.
+func (s *Service) recordRequestOutcome(ctx context.Context, scope mcpconnectionattempts.Scope, code mcpconnectionattempts.Code, r *http.Request, opts ...mcpconnectionattempts.Option) {
+	if code == (mcpconnectionattempts.Code{}) || errors.Is(ctx.Err(), context.Canceled) {
+		return
+	}
+	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, append(opts, mcpconnectionattempts.FromRequest(r))...)
+}
+
 // recordGateRejection attributes invalid bearers only when their signature proves a subject.
 func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
-	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(ctx.Err(), context.Canceled) {
+	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) {
 		return
 	}
 	code := gateHappened(valErr)
-	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope)}
 	subject, verifyErr := s.userSessionSigner.VerifiedSubject(token)
 	switch {
 	case verifyErr == nil:
@@ -60,7 +68,7 @@ func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endp
 	case code == mcpconnectionattempts.CodeInvalidBearerToken:
 		return
 	}
-	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, opts...)
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), code, r, opts...)
 }
 
 // gateHappened keeps an outage on our side from reading as a person's bad token.
@@ -136,12 +144,13 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 	})
 }
 
-// recordMemberFailure records one gateway member's failed tool call.
+// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
 func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code) {
-	if what == (mcpconnectionattempts.Code{}) || errors.Is(ctx.Err(), context.Canceled) {
-		return
+	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
+		what = gate.memberNoCredentialHappened(member)
 	}
-	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request), s.gatewayReportedClient(ctx, gate))
+	// Kept beside a provider_refresh row: only this row carries member_id.
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate))
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
@@ -192,11 +201,11 @@ func (f memberConnectionError) Unwrap() error { return f.error }
 // recordHostedToolsCallRefusal records a refused hosted tools/call. Any other error writes nothing.
 func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcpInputs, err error) {
 	code, ok := toolsCallRefusal(err)
-	if !ok || payload.mcpServerID == nil || errors.Is(ctx.Err(), context.Canceled) {
+	if !ok || payload.mcpServerID == nil {
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
-	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx), mcpconnectionattempts.FromRequest(payload.request), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
+	s.recordRequestOutcome(ctx, scope, code, payload.request, callerSubject(ctx), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
 }
 
 func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {

@@ -247,7 +247,7 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			_, err = f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
 			failure, ok := errors.AsType[memberConnectionError](err)
 			require.True(t, ok, "agent outage must reach request recorder: %v", err)
-			require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, failure.code)
+			require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 			_, unavailable := errors.AsType[memberUnavailableError](err)
 			require.True(t, unavailable)
 

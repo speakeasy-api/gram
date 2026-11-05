@@ -253,7 +253,7 @@ func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *Reso
 		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
 		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
 	}
-	return s.connectionRecoveryError(ctx, authentication)
+	return s.connectionRecoveryError(ctx, authentication, nil)
 }
 
 type callerRecordingPermitter struct {
