@@ -2340,7 +2340,8 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 
 	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
-	if tunneled && endpointErr.tunnelError != "" {
+	// A gateway that refused the forward token answered 403, which callers keep seeing as an exchange failure.
+	if tunneled && endpointErr.tunnelError != "" && endpointErr.statusCode == http.StatusBadGateway {
 		return oops.E(oops.CodeGatewayError, err, "%s: the MCP tunnel could not reach the identity provider", message).LogError(ctx, logger, attrs...)
 	}
 	code := ""

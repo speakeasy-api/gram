@@ -185,11 +185,19 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
 	rec.RequireNothing()
 
+	refused := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(tunnelrouting.ErrorHeader, wire.TunnelErrorForwardRejected)
+		w.WriteHeader(http.StatusForbidden)
+	}
 	secret := proxy.ConfiguredHeader{IsRequired: true, IsSecret: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}
 	rec = mcpconnectionattemptstest.New(t)
 	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Empty(t, row.ProviderHost)
+
+	rec = mcpconnectionattemptstest.New(t)
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 }
 
 func TestUpstreamFailureHappened(t *testing.T) {
