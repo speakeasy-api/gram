@@ -276,6 +276,23 @@ describe("PrivateNetworkSection", () => {
     expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
   });
 
+  it("offers a group-restricted policy behind a collapsed section", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(screen.getByText(/"src": \["autogroup:member"\]/)).toBeTruthy();
+    expect(screen.queryByText(/group:speakeasy-users/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Limit access to a group" }),
+    );
+    expect(screen.getByText(/"src": \["group:speakeasy-users"\]/)).toBeTruthy();
+    expect(
+      screen.getByText(/"group:speakeasy-users": \["alice@example\.com"\]/),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/"dst": \["svc:speakeasy"\]/)).toHaveLength(2);
+  });
+
   it("lets admins customize the private hostname and sends it on connect", () => {
     render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
