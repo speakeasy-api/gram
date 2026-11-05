@@ -166,6 +166,14 @@ describe("GrantOnBehalfOf", () => {
     ).toBe("/identities/user:user-bob");
     // Only Bob's sign-in lapsed.
     expect(screen.getAllByText("(connection expired)")).toHaveLength(1);
+    // The comma follows the name directly, with no space before it.
+    expect(
+      screen.getByRole("link", { name: "Ada Lovelace" }).parentElement
+        ?.textContent,
+    ).toBe("Ada Lovelace,");
+    expect(
+      screen.getByRole("link", { name: "Bob Byte" }).parentElement?.textContent,
+    ).toBe("Bob Byte (connection expired)");
   });
 
   it("shows nothing for a shared credential", () => {

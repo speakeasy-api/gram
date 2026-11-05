@@ -44,11 +44,15 @@ export function GrantOnBehalfOf({
           className="inline-flex min-w-0 items-center gap-1.5"
         >
           <PersonFace person={{ id: person.userId, name: person.name }} />
-          <IdentityLink identifier={{ userId: person.userId }}>
-            {person.name}
-          </IdentityLink>
-          {person.expired && <span>(connection expired)</span>}
-          {index < people.length - 1 && <span aria-hidden="true">,</span>}
+          {/* Name, marker and comma flow as one run of text: as flex
+              items, the gap would put a space before the comma. */}
+          <span className="min-w-0">
+            <IdentityLink identifier={{ userId: person.userId }}>
+              {person.name}
+            </IdentityLink>
+            {person.expired && <span> (connection expired)</span>}
+            {index < people.length - 1 && ","}
+          </span>
         </span>
       ))}
     </span>
