@@ -124,7 +124,7 @@ describe("sending the MCP client's name to the authorization server", () => {
         client={{
           ...client,
           credentialOwner: "self",
-          jsonWebKeySetId: undefined,
+          tokenEndpointAuthMethod: AuthMethod.ClientSecretBasic,
         }}
         issuer={issuer}
         issuerId="issuer-1"

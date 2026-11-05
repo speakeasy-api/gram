@@ -29,7 +29,7 @@ import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/reac
 import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import {
   ClientAssertionAudienceField,
@@ -102,6 +102,8 @@ export function ClientCard({
   >(undefined);
   const forwardClientNameChecked =
     forwardClientNameDraft ?? client.forwardClientName;
+  // The duplicate dialog renders a second card, so the id must be unique.
+  const forwardClientNameId = useId();
   const [clientSecret, setClientSecret] = useState("");
   // Undefined until a platform admin flips the switch, so the switch tracks
   // the saved value (including a Migrate from the warning above) and a save
@@ -449,14 +451,14 @@ export function ClientCard({
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-3">
                   <Checkbox
-                    id="client-forward-name"
+                    id={forwardClientNameId}
                     checked={forwardClientNameChecked}
                     onCheckedChange={(checked) =>
                       setForwardClientNameDraft(checked === true)
                     }
                     disabled={!canEdit}
                   />
-                  <Label htmlFor="client-forward-name">
+                  <Label htmlFor={forwardClientNameId}>
                     Send the MCP client&apos;s name to the authorization server
                   </Label>
                 </div>
