@@ -3972,7 +3972,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, dispatchGatewayIDs(rows))
+	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, traceGatewayIDs(rows))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, logger)
 	}
@@ -4551,15 +4551,21 @@ type gatewayCandidate struct {
 	ownedAgent bool
 }
 
-// dispatchGatewayIDs is the gateway each dispatch to a member went through;
-// a call on the gateway itself is the gateway and needs no label.
-func dispatchGatewayIDs(rows []repo.ToolUsageTraceSummary) []string {
+// traceGatewayIDs is the gateway each trace names: the gateway a call on a
+// gateway reached, which links to its page, or the gateway a dispatch to a
+// member went through.
+func traceGatewayIDs(rows []repo.ToolUsageTraceSummary) []string {
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
-		if row.MetaMCPServerID == "" || row.TargetType == repo.ToolUsageTargetTypeMetaMCP {
+		if row.TargetType == repo.ToolUsageTargetTypeMetaMCP {
+			if row.TargetID != "" {
+				ids = append(ids, row.TargetID)
+			}
 			continue
 		}
-		ids = append(ids, row.MetaMCPServerID)
+		if row.MetaMCPServerID != "" {
+			ids = append(ids, row.MetaMCPServerID)
+		}
 	}
 	return ids
 }
@@ -4795,6 +4801,12 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 				viaGatewayName = conv.PtrEmpty(unknownGatewayName)
 			}
 		}
+		// A call on a gateway carries where that gateway's page is, since
+		// agent and organization gateways have no stored gateway page.
+		var targetGateway GatewayLabel
+		if row.TargetType == repo.ToolUsageTargetTypeMetaMCP {
+			targetGateway = gatewayLabels[row.TargetID]
+		}
 		credential := credentials[row.TraceID]
 		trace := &telem_gen.ToolUsageTraceSummary{
 			ID:      row.ID,
@@ -4803,38 +4815,41 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
 				Value: row.LogGroupValue,
 			},
-			StartTimeUnixNano:           strconv.FormatInt(row.StartTimeUnixNano, 10),
-			LogCount:                    row.LogCount,
-			GramUrn:                     row.GramURN,
-			ToolName:                    row.ToolName,
-			TargetType:                  telem_gen.ToolUsageTargetType(row.TargetType),
-			TargetKind:                  telem_gen.ToolUsageTargetKind(row.TargetKind),
-			TargetID:                    row.TargetID,
-			TargetLabel:                 row.TargetLabel,
-			McpServerID:                 conv.PtrEmpty(row.MCPServerID),
-			UserKey:                     row.UserKey,
-			UserLabel:                   row.UserLabel,
-			UserKind:                    telem_gen.ToolUsageUserKind(row.UserKind),
-			AuthorizerUserID:            conv.PtrEmpty(row.AuthorizerUserID),
-			AuthorizerLabel:             conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
-			AuthClientType:              conv.PtrEmpty(credential.AuthClientType),
-			AuthClientID:                conv.PtrEmpty(credential.AuthClientID),
-			ConnectionOwnerUserID:       conv.PtrEmpty(credential.ConnectionOwnerUserID),
-			ConnectionOwnerLabel:        conv.PtrEmpty(ownerNames[credential.ConnectionOwnerUserID]),
-			HookSource:                  row.HookSource,
-			EventSource:                 row.EventSource,
-			HTTPStatusCode:              row.HTTPStatusCode,
-			HookStatus:                  row.HookStatus,
-			BlockReason:                 row.BlockReason,
-			AccountType:                 row.AccountType,
-			ViaMetaMcpServerID:          viaGatewayID,
-			ViaMetaMcpServerName:        viaGatewayName,
-			ViaMetaMcpServerKind:        conv.PtrEmpty(viaGateway.Kind),
-			ViaMetaMcpServerProjectSlug: conv.PtrEmpty(viaGateway.ProjectSlug),
-			ViaMetaMcpServerAgentID:     conv.PtrEmpty(viaGateway.AgentID),
-			ClientKey:                   row.ClientKey,
-			ClientLabel:                 row.ClientLabel,
-			ClientVersion:               row.ClientVersion,
+			StartTimeUnixNano:              strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:                       row.LogCount,
+			GramUrn:                        row.GramURN,
+			ToolName:                       row.ToolName,
+			TargetType:                     telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:                     telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:                       row.TargetID,
+			TargetLabel:                    row.TargetLabel,
+			McpServerID:                    conv.PtrEmpty(row.MCPServerID),
+			UserKey:                        row.UserKey,
+			UserLabel:                      row.UserLabel,
+			UserKind:                       telem_gen.ToolUsageUserKind(row.UserKind),
+			AuthorizerUserID:               conv.PtrEmpty(row.AuthorizerUserID),
+			AuthorizerLabel:                conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
+			AuthClientType:                 conv.PtrEmpty(credential.AuthClientType),
+			AuthClientID:                   conv.PtrEmpty(credential.AuthClientID),
+			ConnectionOwnerUserID:          conv.PtrEmpty(credential.ConnectionOwnerUserID),
+			ConnectionOwnerLabel:           conv.PtrEmpty(ownerNames[credential.ConnectionOwnerUserID]),
+			HookSource:                     row.HookSource,
+			EventSource:                    row.EventSource,
+			HTTPStatusCode:                 row.HTTPStatusCode,
+			HookStatus:                     row.HookStatus,
+			BlockReason:                    row.BlockReason,
+			AccountType:                    row.AccountType,
+			ViaMetaMcpServerID:             viaGatewayID,
+			ViaMetaMcpServerName:           viaGatewayName,
+			ViaMetaMcpServerKind:           conv.PtrEmpty(viaGateway.Kind),
+			ViaMetaMcpServerProjectSlug:    conv.PtrEmpty(viaGateway.ProjectSlug),
+			ViaMetaMcpServerAgentID:        conv.PtrEmpty(viaGateway.AgentID),
+			TargetMetaMcpServerKind:        conv.PtrEmpty(targetGateway.Kind),
+			TargetMetaMcpServerProjectSlug: conv.PtrEmpty(targetGateway.ProjectSlug),
+			TargetMetaMcpServerAgentID:     conv.PtrEmpty(targetGateway.AgentID),
+			ClientKey:                      row.ClientKey,
+			ClientLabel:                    row.ClientLabel,
+			ClientVersion:                  row.ClientVersion,
 		}
 		traces = append(traces, trace)
 	}

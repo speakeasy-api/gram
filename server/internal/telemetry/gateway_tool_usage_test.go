@@ -588,26 +588,34 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 		targetType string
 		targetID   string
 		label      string
+		// page says where the gateway's page is: its kind, then the
+		// project slug or agent id the page is found by.
+		page [3]string
 	}{
 		{
 			call:       openClawGatewayCall{conversationID: "conv-agent-ok", toolName: "speakeasy__list_servers", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: false},
 			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+			page: [3]string{"agent", "", agent.ID.String()},
 		},
 		{
 			call:       openClawGatewayCall{conversationID: "conv-agent-blocked", toolName: "speakeasy__delete_server", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: true},
 			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+			page: [3]string{"agent", "", agent.ID.String()},
 		},
 		{
 			call:       openClawGatewayCall{conversationID: "conv-org", toolName: "org__search", serverName: "org", url: orgGatewayURL, preServerName: "", preURLOnly: false},
 			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.GatewayID(ti.orgID).String(), label: organization.Name,
+			page: [3]string{"organization", "", ""},
 		},
 		{
 			call:       openClawGatewayCall{conversationID: "conv-project", toolName: "proj__search", serverName: "proj", url: orgGatewayURL + "/projects/" + project.Slug, preServerName: "", preURLOnly: false},
 			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.ProjectGatewayID(ti.orgID, project.ID).String(), label: project.Name,
+			page: [3]string{"organization", project.Slug, ""},
 		},
 		{
 			call:       openClawGatewayCall{conversationID: "conv-third-party", toolName: "speakeasy__lookup", serverName: "speakeasy", url: "https://mcp.third-party.example/speakeasy", preServerName: "speakeasy", preURLOnly: false},
 			targetType: repo.ToolUsageTargetTypeShadowMCP, targetID: "speakeasy", label: "speakeasy",
+			page: [3]string{"", "", ""},
 		},
 	}
 	for i, tc := range calls {
@@ -630,6 +638,7 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 		require.Equal(t, tc.targetID, summary.TargetID, "summary path: %s", tc.call.toolName)
 		require.Equal(t, tc.label, summary.TargetLabel, "summary path: %s", tc.call.toolName)
 		require.Nil(t, summary.ViaMetaMcpServerID, "a call on a gateway is not routed through one")
+		require.Equal(t, tc.page, targetGatewayPage(summary), "summary path: %s", tc.call.toolName)
 
 		query := tc.call.conversationID
 		raw, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})
@@ -638,6 +647,7 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 		require.Equal(t, gen.ToolUsageTargetType(tc.targetType), raw.Traces[0].TargetType, "raw path: %s", tc.call.toolName)
 		require.Equal(t, tc.targetID, raw.Traces[0].TargetID, "raw path: %s", tc.call.toolName)
 		require.Equal(t, tc.label, raw.Traces[0].TargetLabel, "raw path: %s", tc.call.toolName)
+		require.Equal(t, tc.page, targetGatewayPage(raw.Traces[0]), "raw path: %s", tc.call.toolName)
 	}
 
 	filtered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, MetaMcpServerIds: []string{agentGatewayID}})
@@ -648,6 +658,16 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 // A deleted project's gateway URL still names its gateway while no other
 // project has the slug. Once a live project reuses the slug the URL names the
 // live project's gateway, and a slug two deleted projects shared names none.
+// targetGatewayPage is where a trace says the gateway it reached has its
+// page: kind, project slug and agent id, empty when unset.
+func targetGatewayPage(trace *gen.ToolUsageTraceSummary) [3]string {
+	return [3]string{
+		conv.PtrValOr(trace.TargetMetaMcpServerKind, ""),
+		conv.PtrValOr(trace.TargetMetaMcpServerProjectSlug, ""),
+		conv.PtrValOr(trace.TargetMetaMcpServerAgentID, ""),
+	}
+}
+
 func TestListToolUsageTraces_ClassifiesDeletedProjectGatewayCallsByURL(t *testing.T) {
 	t.Parallel()
 

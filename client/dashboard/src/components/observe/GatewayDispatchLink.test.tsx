@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { GatewayDispatchLink } from "./GatewayDispatchLink";
+import { GatewayDispatchLink, GatewayTargetLink } from "./GatewayDispatchLink";
 
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "viewed" }),
@@ -107,5 +107,57 @@ describe("GatewayDispatchLink", () => {
         name: `Dispatched through gateway "${trace.viaMetaMcpServerName}"`,
       }),
     ).toBeTruthy();
+  });
+});
+
+function renderTargetLink(
+  trace: Parameters<typeof GatewayTargetLink>[0]["trace"],
+) {
+  render(
+    <MemoryRouter>
+      <GatewayTargetLink trace={trace}>Gateway name</GatewayTargetLink>
+    </MemoryRouter>,
+  );
+}
+
+describe("GatewayTargetLink", () => {
+  it("opens a stored gateway the call reached in its own project", () => {
+    renderTargetLink({
+      targetId: "gateway-1",
+      targetMetaMcpServerKind: "project",
+      targetMetaMcpServerProjectSlug: "sales",
+    });
+    expect(
+      screen.getByRole("link", { name: "Gateway name" }).getAttribute("href"),
+    ).toBe("/org/projects/sales/mcp/gateway/gateway-1/overview");
+  });
+
+  it("opens the organization gateway the call reached", () => {
+    renderTargetLink({
+      targetId: "org-gateway",
+      targetMetaMcpServerKind: "organization",
+    });
+    expect(
+      screen.getByRole("link", { name: "Gateway name" }).getAttribute("href"),
+    ).toBe("/org/projects/viewed/mcp/organization-gateway");
+  });
+
+  it("opens an agent gateway the call reached on the agent's permissions", () => {
+    renderTargetLink({
+      targetId: "agent-gateway",
+      targetMetaMcpServerKind: "agent",
+      targetMetaMcpServerAgentId: "agent-1",
+    });
+    expect(
+      screen.getByRole("link", { name: "Gateway name" }).getAttribute("href"),
+    ).toBe(
+      `/org/projects/viewed/identities/${encodeIdentityUrn("agent:agent-1")}/permissions`,
+    );
+  });
+
+  it("keeps a gateway the API could not place as plain text", () => {
+    renderTargetLink({ targetId: "unknown" });
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("Gateway name")).toBeTruthy();
   });
 });
