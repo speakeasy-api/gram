@@ -299,7 +299,8 @@ func (g *Gateway) Poll(ctx context.Context) {
 		if attempt, ok := g.attempts[id]; ok && g.now().Before(attempt.nextAt) {
 			continue
 		}
-		if len(g.hosts)+len(g.starting)+len(toStart) >= g.cfg.MaxHosts {
+		// toStart entries are already counted in g.starting.
+		if len(g.hosts)+len(g.starting) >= g.cfg.MaxHosts {
 			g.logger.WarnContext(ctx, "tailnet gateway host cap reached", attr.SlogNetworkIngressID(id.String()))
 			continue
 		}
@@ -308,9 +309,13 @@ func (g *Gateway) Poll(ctx context.Context) {
 	}
 	g.mu.Unlock()
 
+	// Stop concurrently so several drains cost one drain timeout, and finish
+	// before starting so a renamed ingress releases its old service first.
+	var stops sync.WaitGroup
 	for _, h := range toStop {
-		g.stopHost(ctx, h, NodeStatusStopped)
+		stops.Go(func() { g.stopHost(ctx, h, NodeStatusStopped) })
 	}
+	stops.Wait()
 	for _, want := range toStart {
 		g.starts.Add(1)
 		go func(want desiredIngress) {
@@ -329,8 +334,22 @@ func (g *Gateway) heartbeatAll(ctx context.Context) {
 	}
 	g.mu.Unlock()
 	for _, h := range hosts {
-		g.heartbeat(ctx, h)
+		if g.heartbeat(ctx, h) {
+			g.stopNeedsLogin(ctx, h)
+		}
 	}
+}
+
+// stopNeedsLogin stops a host whose identity control refused, so it stops
+// writing state while the reconciler resets the slot.
+func (g *Gateway) stopNeedsLogin(ctx context.Context, h *host) {
+	g.mu.Lock()
+	if g.hosts[h.ingress.id] == h {
+		delete(g.hosts, h.ingress.id)
+	}
+	g.mu.Unlock()
+	g.stopHost(ctx, h, NodeStatusNeedsLogin)
+	g.wakeReconciler(ctx, h.ingress)
 }
 
 // startHost brings one node up and registers it as a host. It runs outside
@@ -369,6 +388,12 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 		logger.ErrorContext(ctx, "check tailnet node registration", attr.SlogError(err))
 		return
 	}
+	if registered && slotRow.Status == string(NodeStatusNeedsLogin) {
+		// The identity was refused; starting again would only block until
+		// the start timeout. Keep the beat fresh so the reconciler repairs it.
+		g.writeHeartbeat(ctx, want, NodeStatusNeedsLogin, "", "", "awaiting re-registration")
+		return
+	}
 	authKey := ""
 	if !registered {
 		if !slotRow.AuthKeyEncrypted.Valid || slotRow.AuthKeyEncrypted.String == "" {
@@ -391,6 +416,18 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 	// key and the next attempt starts clean.
 	failRegistration := func(message string) {
 		if !registered {
+			// Start can fail after the login has already been persisted, for
+			// example when ListenService errors. That identity is a real
+			// device on the tailnet, so keep it and reconnect with it next
+			// time rather than registering a second device.
+			nowRegistered, err := store.Registered(ctx)
+			if err != nil {
+				logger.ErrorContext(ctx, "recheck tailnet node registration", attr.SlogError(err))
+			}
+			if err != nil || nowRegistered {
+				g.recordStartFailure(ctx, want, message)
+				return
+			}
 			if err := store.Reset(ctx); err != nil {
 				logger.ErrorContext(ctx, "reset partial tailnet node state", attr.SlogError(err))
 			}
@@ -416,6 +453,10 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "start tailnet node", attr.SlogError(err))
+		if registered && errors.Is(err, ErrNodeNeedsLogin) {
+			g.markNeedsLogin(ctx, want, "", err.Error())
+			return
+		}
 		failRegistration(err.Error())
 		return
 	}
@@ -456,7 +497,18 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 	g.mu.Unlock()
 	g.metrics.HostStatusChanged(ctx, want.organizationSlug, g.cfg.Ordinal, "", NodeStatusStarting)
 	logger.InfoContext(ctx, "tailnet node started", attr.SlogHostName(state.FQDN))
-	g.heartbeat(ctx, h)
+	if g.heartbeat(ctx, h) {
+		g.stopNeedsLogin(ctx, h)
+	}
+}
+
+// markNeedsLogin records that the slot's identity was refused and wakes the
+// reconciler to replace it. nodeID, when known, lets the reconciler delete
+// the old device.
+func (g *Gateway) markNeedsLogin(ctx context.Context, want desiredIngress, nodeID, message string) {
+	g.metrics.Lifecycle(ctx, want.organizationSlug, OperationStart, ResultError)
+	g.writeHeartbeat(ctx, want, NodeStatusNeedsLogin, nodeID, "", message)
+	g.wakeReconciler(ctx, want)
 }
 
 func (g *Gateway) recordStartFailure(ctx context.Context, want desiredIngress, message string) {
@@ -476,8 +528,9 @@ func (g *Gateway) recordStartFailure(ctx context.Context, want desiredIngress, m
 }
 
 // heartbeat refreshes one host's row from its live node state and wakes the
-// reconciler when the node crosses the online boundary.
-func (g *Gateway) heartbeat(ctx context.Context, h *host) {
+// reconciler when the node crosses the online boundary. It reports whether
+// the node needs login, in which case the caller stops it.
+func (g *Gateway) heartbeat(ctx context.Context, h *host) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	state, err := h.node.Status(ctx)
@@ -489,6 +542,9 @@ func (g *Gateway) heartbeat(ctx context.Context, h *host) {
 		message = err.Error()
 	case state.Online:
 		next = NodeStatusOnline
+	case state.NeedsLogin:
+		next = NodeStatusNeedsLogin
+		message = state.BackendState
 	default:
 		message = state.BackendState
 	}
@@ -517,6 +573,7 @@ func (g *Gateway) heartbeat(ctx context.Context, h *host) {
 	if (previous == NodeStatusOnline) != (next == NodeStatusOnline) {
 		g.wakeReconciler(ctx, h.ingress)
 	}
+	return next == NodeStatusNeedsLogin
 }
 
 func (g *Gateway) writeHeartbeat(ctx context.Context, ingress desiredIngress, status NodeStatus, nodeID, dnsName, message string) {
