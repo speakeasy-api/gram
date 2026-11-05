@@ -21,9 +21,15 @@ type AuthorizeRequestBody struct {
 	CodeChallenge *string `form:"code_challenge,omitempty" json:"code_challenge,omitempty" xml:"code_challenge,omitempty"`
 	// PKCE challenge method. Only S256 is supported.
 	CodeChallengeMethod *string `form:"code_challenge_method,omitempty" json:"code_challenge_method,omitempty" xml:"code_challenge_method,omitempty"`
-	// Optional project slug to scope the minted key to. Defaults to the org's
-	// default (first) project when omitted.
+	// Optional project slug. For agent_user keys it is the project the key is
+	// scoped to; for producer keys it is only reported back to the CLI as its
+	// default project. Defaults to the org's default (first) project when omitted.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The kind of key redeem mints. agent_user (the default) is the device agent's
+	// per-user project-scoped key. producer is the organization-wide key the
+	// Speakeasy CLI uses, and requires org:admin, the same as creating one in the
+	// dashboard.
+	KeyScope *string `form:"key_scope,omitempty" json:"key_scope,omitempty" xml:"key_scope,omitempty"`
 }
 
 // RedeemRequestBody is the type of the "cliAuth" service "redeem" endpoint
@@ -49,8 +55,8 @@ type AuthorizeResponseBody struct {
 // RedeemResponseBody is the type of the "cliAuth" service "redeem" endpoint
 // HTTP response body.
 type RedeemResponseBody struct {
-	// The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly
-	// once.
+	// The raw gram_ API key, carrying the scope requested at authorize. Returned
+	// exactly once.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Email of the user the key was minted for.
 	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
@@ -726,6 +732,12 @@ func NewAuthorizePayload(body *AuthorizeRequestBody, sessionToken *string) *clia
 		CodeChallengeMethod: *body.CodeChallengeMethod,
 		ProjectSlug:         body.ProjectSlug,
 	}
+	if body.KeyScope != nil {
+		v.KeyScope = *body.KeyScope
+	}
+	if body.KeyScope == nil {
+		v.KeyScope = "agent_user"
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -763,6 +775,11 @@ func ValidateAuthorizeRequestBody(body *AuthorizeRequestBody) (err error) {
 	if body.CodeChallengeMethod != nil {
 		if !(*body.CodeChallengeMethod == "S256") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.code_challenge_method", *body.CodeChallengeMethod, []any{"S256"}))
+		}
+	}
+	if body.KeyScope != nil {
+		if !(*body.KeyScope == "agent_user" || *body.KeyScope == "producer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_scope", *body.KeyScope, []any{"agent_user", "producer"}))
 		}
 	}
 	return
