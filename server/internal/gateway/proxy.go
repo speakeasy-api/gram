@@ -1362,12 +1362,13 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		var body io.Reader = resp.Body
 
 		result := handleResponseFiltering(ctx, opts.Logger, opts.FilterConfig, opts.Expression, resp)
-		// The filter reads the whole body first, so a body the shutdown drain
-		// cut short surfaces here rather than in the copy below.
-		if result != nil && result.readErr != nil && shutdowndrain.Interrupted(ctx) {
+		// The filter reads the whole body and then runs, so a body the
+		// shutdown drain cut short, or a filter it stopped, surfaces here
+		// rather than in the copy below.
+		if result != nil && result.interruptErr != nil {
 			span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
 			captureResponseStatusCode(opts, http.StatusServiceUnavailable)
-			return shutdownInterrupt("read response body for filtering", result.readErr)
+			return shutdownInterrupt("filter response", result.interruptErr)
 		}
 		if result != nil {
 			opts.Writer.Header().Set("Content-Type", result.contentType)

@@ -260,6 +260,34 @@ func TestToolProxy_Do_ShutdownInterruptsFilteredHTTPToolMidBody(t *testing.T) {
 	require.Empty(t, recorder.Header().Get(constants.HeaderFilteredResponse), "an interrupted call writes no filtered response")
 }
 
+func TestHandleResponseFiltering_ShutdownInterruptStopsTheFilter(t *testing.T) {
+	t.Parallel()
+
+	drain := shutdowndrain.New()
+	ctx, release := drain.Interruptible(t.Context())
+	defer release()
+	drain.Start(0)
+	waitForSignal(t, ctx.Done(), "the interrupt")
+
+	// The body is already in memory, so the read succeeds and only the jq run
+	// sees the cancelled context.
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader([]byte(`{"rows":[1,2,3]}`))),
+	}
+	result := handleResponseFiltering(ctx, testenv.NewLogger(t), &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       nil,
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
+	}, &FilterRequest{Type: string(FilterTypeJQ), Filter: "[range(1000000)] | length"}, resp)
+
+	require.NotNil(t, result)
+	require.ErrorIs(t, result.interruptErr, context.Canceled, "a filter the drain stopped is an interrupt, not a filter mismatch")
+	require.NotEqual(t, http.StatusBadRequest, result.statusCode)
+}
+
 func TestToolProxy_ReadResource_ShutdownInterruptsFunctionAwaitingResponse(t *testing.T) {
 	t.Parallel()
 

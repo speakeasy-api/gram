@@ -26,9 +26,10 @@ type responseFilteringResult struct {
 	resp        io.Reader
 	statusCode  int
 	contentType string
-	// readErr is set when the upstream body could not be read, so the caller
-	// can tell a body cut short by the shutdown drain from a filter failure.
-	readErr error
+	// interruptErr is set when the shutdown drain interrupted the filter,
+	// while it read the upstream body or ran the filter, so the caller answers
+	// an interrupt instead of a filter failure.
+	interruptErr error
 }
 
 func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterConfig *ResponseFilter, responseFilterRequest *FilterRequest, resp *http.Response) *responseFilteringResult {
@@ -64,15 +65,21 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 	if err != nil {
 		// The caller answers a read abandoned for shutdown itself, so it is
 		// not logged as a filter failure here.
-		if !shutdowndrain.Interrupted(ctx) {
-			filterSpan.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
+		if shutdowndrain.Interrupted(ctx) {
+			return &responseFilteringResult{
+				resp:         buf,
+				statusCode:   http.StatusServiceUnavailable,
+				contentType:  "application/octet-stream",
+				interruptErr: fmt.Errorf("read response body: %w", err),
+			}
 		}
+		filterSpan.SetStatus(codes.Error, err.Error())
+		logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
 		return &responseFilteringResult{
-			resp:        buf,
-			statusCode:  http.StatusInternalServerError,
-			contentType: "application/octet-stream",
-			readErr:     err,
+			resp:         buf,
+			statusCode:   http.StatusInternalServerError,
+			contentType:  "application/octet-stream",
+			interruptErr: nil,
 		}
 	}
 
@@ -81,10 +88,10 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 		filterSpan.SetStatus(codes.Error, err.Error())
 		logger.ErrorContext(ctx, "failed to unmarshal response body", attr.SlogError(err))
 		return &responseFilteringResult{
-			resp:        buf,
-			statusCode:  http.StatusInternalServerError,
-			contentType: "application/octet-stream",
-			readErr:     nil,
+			resp:         buf,
+			statusCode:   http.StatusInternalServerError,
+			contentType:  "application/octet-stream",
+			interruptErr: nil,
 		}
 	}
 
@@ -101,6 +108,16 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 			if errors.As(err, &haltErr) && haltErr.Value() == nil {
 				break
 			}
+			// The filter runs under ctx, so the shutdown drain stops it with a
+			// cancellation error that is not the filter's fault.
+			if shutdowndrain.Interrupted(ctx) {
+				return &responseFilteringResult{
+					resp:         buf,
+					statusCode:   http.StatusServiceUnavailable,
+					contentType:  "application/octet-stream",
+					interruptErr: fmt.Errorf("run response filter: %w", err),
+				}
+			}
 			filterSpan.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to run response filter", attr.SlogError(err), attr.SlogFilterExpression(responseFilterRequest.Filter))
 
@@ -112,10 +129,10 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 				logger.ErrorContext(ctx, "failed to encode filter error response", attr.SlogError(encodeErr))
 			}
 			return &responseFilteringResult{
-				resp:        buf,
-				statusCode:  http.StatusBadRequest,
-				contentType: "application/json",
-				readErr:     nil,
+				resp:         buf,
+				statusCode:   http.StatusBadRequest,
+				contentType:  "application/json",
+				interruptErr: nil,
 			}
 		}
 		results = append(results, v)
@@ -134,9 +151,9 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 	}
 
 	return &responseFilteringResult{
-		resp:        buf,
-		statusCode:  statusCode,
-		contentType: contentType,
-		readErr:     nil,
+		resp:         buf,
+		statusCode:   statusCode,
+		contentType:  contentType,
+		interruptErr: nil,
 	}
 }
