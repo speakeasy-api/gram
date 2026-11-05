@@ -385,6 +385,17 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		if err != nil {
 			return none, true, err
 		}
+		if len(authentication.agentKeyClients) == 0 {
+			// The admission check above also covers header-only clients. Serve
+			// their resolved material rather than an empty registration list.
+			endpoint := authentication.endpoint
+			res, err := s.resolveUnchosenAuthClient(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, consentAuthServer{id: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID})
+			if err != nil {
+				return none, true, oops.E(oops.CodeUnexpected, err, "resolve agent key auth client").LogError(ctx, s.logger)
+			}
+			choice, err := s.serveAuthClient(ctx, w, authentication, res)
+			return choice, true, err
+		}
 		// Several clients route by the resource each credential was granted for.
 		return choice, len(authentication.agentKeyClients) <= 1, nil
 	}
@@ -778,10 +789,11 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	// resolver, and a profile has no upstream client choice to fall back to.
 	typed = typed || c.enforced || c.profile
 	var resolved map[uuid.UUID]authClientResolution
+	memberErrors := make(map[uuid.UUID]error)
 	var err error
 	switch {
 	case c.unchosen:
-		resolved, err = c.resolveUnchosenMembers(ctx, ids, projects)
+		resolved, memberErrors, err = c.resolveUnchosenMembers(ctx, ids, projects)
 		ids = ids[:0]
 	case typed:
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
@@ -824,10 +836,12 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	if err != nil {
 		logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
 	}
-	memberErrors := make(map[uuid.UUID]error)
 	var headerIDs []uuid.UUID
 	if typed && err == nil {
 		for id, res := range resolved {
+			if memberErrors[id] != nil {
+				continue
+			}
 			issuerID := c.selector.userSessionIssuerID
 			if c.onlyChosen {
 				var issuerErr error
@@ -902,12 +916,13 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 // recorded through this gateway. An agent key's own choice for a member decides
 // it: a choice that cannot be used is a gap, never another client. Every other
 // member is decided by what it offers.
-func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.UUID, projects map[uuid.UUID]uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
+func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.UUID, projects map[uuid.UUID]uuid.UUID) (map[uuid.UUID]authClientResolution, map[uuid.UUID]error, error) {
 	resolved := make(map[uuid.UUID]authClientResolution, len(ids))
+	memberErrors := make(map[uuid.UUID]error)
 	if c.selector.credentialID != uuid.Nil {
 		chosen, err := c.selector.resolveAuthClients(ctx, ids)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for id, res := range chosen {
 			switch {
@@ -925,11 +940,11 @@ func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.U
 		}
 		res, err := c.selector.service.resolveUnchosenAuthClient(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, consentAuthServer{id: id, projectID: projects[id]})
 		if err != nil {
-			return nil, err
+			memberErrors[id] = err
 		}
 		resolved[id] = res
 	}
-	return resolved, nil
+	return resolved, memberErrors, nil
 }
 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {

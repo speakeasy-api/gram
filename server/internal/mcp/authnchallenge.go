@@ -1401,7 +1401,10 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 // subject can reauthorize can follow that path. Every other caller keeps the
 // challenge with no error code, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
-// strand it.
+// strand it. This controls the MCP challenge only. Under auth-client
+// enforcement, an explicit refresh is still refused when its chosen upstream
+// grant is unusable, including an agent session on a compatibility registration.
+// Its connection owner must repair the grant; a new session cannot bypass it.
 func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
 	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {

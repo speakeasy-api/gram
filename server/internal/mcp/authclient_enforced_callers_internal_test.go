@@ -347,6 +347,13 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect(), "a live grant refreshes, though the sign-in links no client")
 	})
 
+	t.Run("an agent compatibility registration without a grant cannot refresh", func(t *testing.T) {
+		t.Parallel()
+		f, endpoint := setup(t, func(f *enforcedCallerFixture) uuid.NullUUID { return validUUID(f.chainable()) })
+		agent := urn.NewAgentSubject(uuid.New())
+		require.True(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, agent, endpoint.Slug).reconnect(), "an agent cannot chain or refresh past an unusable upstream grant")
+	})
+
 	t.Run("stale copies of a static credential refresh", func(t *testing.T) {
 		t.Parallel()
 		f, endpoint := setup(t, func(f *enforcedCallerFixture) uuid.NullUUID {

@@ -484,6 +484,8 @@ WITH selected AS (
      AND c.deleted IS FALSE
     WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
       AND link.deleted IS FALSE
+      -- Explicit no-auth proposals must not borrow a client's header coverage.
+      AND NOT @proposed_no_auth::boolean
       AND (
         -- A named client is the only candidate, whatever its type.
         (sqlc.narg('proposed_auth_client_id')::uuid IS NOT NULL
