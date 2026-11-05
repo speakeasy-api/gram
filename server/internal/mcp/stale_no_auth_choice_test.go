@@ -247,9 +247,12 @@ func TestStaleNoAuthChoiceConsentCannotFix(t *testing.T) {
 			_, err = authclientfixtures.New(g.ti.conn).SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: source.RemoteMcpServerID.UUID, Name: "X-Api-Key", IsSecret: true, Value: pgtype.Text{String: "sealed", Valid: true}})
 			require.NoError(t, err)
 		}},
-		"enforced with pending auth": {enforced: true, arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
+		"enforced and pending on a secret header": {enforced: true, arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
-			g.attachSignIn(t, ctx, false)
+			source, err := mcpserversrepo.New(g.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: g.serverID, ProjectID: g.project})
+			require.NoError(t, err)
+			_, err = authclientfixtures.New(g.ti.conn).SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: source.RemoteMcpServerID.UUID, Name: "X-Api-Key", IsSecret: true, Value: pgtype.Text{String: "sealed", Valid: true}})
+			require.NoError(t, err)
 		}},
 		"enforced with every client denied": {enforced: true, arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
@@ -548,11 +551,20 @@ func TestStaleNoAuthConnectRefusalBeatsAnEarlierLink(t *testing.T) {
 
 func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 	t.Parallel()
-	for _, enforced := range []bool{false, true} {
-		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
+	for name, tc := range map[string]struct {
+		enforced bool
+		// offered also records the sign-in as an auth client the server offers.
+		offered bool
+		status  int
+	}{
+		"association before enforcement":      {enforced: false, offered: false, status: http.StatusUnauthorized},
+		"auth client under enforcement":       {enforced: true, offered: true, status: http.StatusUnauthorized},
+		"association alone under enforcement": {enforced: true, offered: false, status: http.StatusOK},
+	} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, f := newSelectionFixture(t)
-			if enforced {
+			if tc.enforced {
 				_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}
@@ -562,7 +574,14 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 			server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
 			subject := createTestUser(t, ctx, f.ti, "stale-direct-"+uuid.NewString())
 			bearer := f.issue(t, ctx, slug, issuerID, subject)
-			f.associate(t, ctx, server.ID, createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "stale-direct", "", []uuid.UUID{issuerID}))
+			registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "stale-direct", "", []uuid.UUID{issuerID})
+			f.associate(t, ctx, server.ID, registration)
+			if tc.offered {
+				fixtures := authclientfixtures.New(f.ti.conn)
+				id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+				require.NoError(t, err)
+				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: id, Source: "admin"}))
+			}
 			router := goahttp.NewMuxer()
 			mcp.Attach(router, f.ti.service.Service, nil)
 			req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
@@ -571,10 +590,37 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer "+bearer)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
-			require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
+			if tc.status == http.StatusUnauthorized {
+				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+			}
 		})
 	}
+}
+
+// A server offering no auth client needs no upstream authentication under
+// enforcement, whatever association it still has: the session records no-auth
+// and reaches the upstream, from the issuance through the call.
+func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "leftover-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	f.associate(t, ctx, server.ID, createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "leftover", "", []uuid.UUID{issuerID}))
+	bearer := f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString()))
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, f.ti.service.Service, nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
 func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {

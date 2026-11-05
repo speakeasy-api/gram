@@ -16,8 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -240,6 +243,40 @@ func TestMcpServerAuthenticationStatusTellsPendingSetupFromNoAuth(t *testing.T) 
 	got, err = ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
 	require.NoError(t, err)
 	require.Equal(t, authclients.StatusNoAuthRequired, got.Status, "an administrator's detach is a decision, not a pending migration")
+}
+
+// With upstream auth enforced, only auth clients and source headers describe
+// what a server needs: an upstream OAuth association no auth client records is
+// not a credential waiting to be set up.
+func TestMcpServerAuthenticationStatusIgnoresUpstreamOAuthAssociationsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	registration := seedRegistration(t, ctx, ti.conn, ti.organizationID, ti.projectID, "subject")
+	_, err := authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: ti.projectID, OrganizationID: ti.organizationID, McpServerID: server.id, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+
+	got, err := ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusSetupIncomplete, got.Status, "before enforcement the association is a credential to set up")
+
+	_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: ti.organizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	got, err = ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status)
+	require.False(t, got.RequiresUpstreamAuth)
+
+	read, err := authclients.ReadServerAuthentication(ctx, ti.conn, ti.organizationID, server.id)
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusNoAuthRequired, read.Status)
+
+	require.NoError(t, testrepo.New(ti.conn).CreateRemoteMCPCredentialHeaderFixture(ctx, testrepo.CreateRemoteMCPCredentialHeaderFixtureParams{RemoteMcpServerID: server.remoteID, Value: conv.ToPGText("sealed")}))
+	got, err = ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusSetupIncomplete, got.Status, "a credential header no auth client carries is still incomplete setup")
 }
 
 func TestSetMcpServerUpstreamAuthRequirementIgnoresTheRequest(t *testing.T) {

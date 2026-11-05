@@ -2325,6 +2325,12 @@ ORDER BY tb.original_trigger_id;
 -- client only fills choices recorded without one. A recorded choice naming
 -- any auth client, explicit or mapped, is never replaced here: only an
 -- untyped no-auth choice is.
+--
+-- For an organization enforcing upstream auth, nothing is decided from upstream
+-- OAuth associations or issuer bindings. A server's clients are the
+-- registrations of the live, enabled remote_session and service_account auth
+-- clients it offers, whichever issuer binds them, and no-auth is chosen when it
+-- offers no enabled OAuth-backed auth client.
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
@@ -2333,6 +2339,16 @@ WITH session_issuer AS (
     LEFT JOIN projects AS p ON p.id = usi.project_id
     WHERE usi.id = @user_session_issuer_id
       AND usi.deleted IS FALSE
+),
+enforcement AS (
+    SELECT EXISTS (
+      SELECT 1
+      FROM organization_features AS feature
+      JOIN session_issuer AS si
+        ON si.organization_id = feature.organization_id
+      WHERE feature.feature_name = 'upstream_auth_enforced'
+        AND feature.deleted IS FALSE
+    ) AS enforced
 ),
 reachable AS (
     SELECT s.id, s.project_id
@@ -2380,6 +2396,26 @@ eligible AS (
       ON link.remote_session_client_id = a.remote_session_client_id
      AND link.user_session_issuer_id = @user_session_issuer_id
     WHERE a.deleted IS FALSE
+      AND NOT (SELECT enforced FROM enforcement)
+    UNION ALL
+    SELECT DISTINCT l.mcp_server_id,
+           ac.remote_session_client_id
+    FROM mcp_server_auth_clients AS l
+    JOIN reachable AS r
+      ON r.id = l.mcp_server_id
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = l.auth_client_id
+     AND ac.organization_id = l.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('remote_session', 'service_account')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+    WHERE l.deleted IS FALSE
+      AND l.organization_id = (SELECT organization_id FROM session_issuer)
+      AND (SELECT enforced FROM enforcement)
 ),
 decided AS (
     SELECT r.id AS mcp_server_id,
@@ -2419,12 +2455,25 @@ decided AS (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           NOT EXISTS (
+           CASE WHEN (SELECT enforced FROM enforcement) THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_auth_clients AS l
+             JOIN mcp_auth_clients AS ac
+               ON ac.id = l.auth_client_id
+              AND ac.organization_id = l.organization_id
+              AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+              AND ac.deleted IS FALSE
+              AND ac.enabled
+              AND ac.client_type NOT IN ('static_credential', 'pass_through')
+             WHERE l.mcp_server_id = r.id
+               AND l.organization_id = (SELECT organization_id FROM session_issuer)
+               AND l.deleted IS FALSE
+           ) ELSE NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
              WHERE a.mcp_server_id = r.id
                AND a.deleted IS FALSE
-           ) AS no_auth
+           ) END AS no_auth
     FROM reachable AS r
     LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
 ),

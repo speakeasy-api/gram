@@ -141,6 +141,8 @@ WHERE msac.auth_client_id = @auth_client_id
 RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name;
 
 -- name: GetOrganizationMCPServer :one
+-- For an organization enforcing upstream auth, an upstream OAuth association is
+-- not an unrecorded credential.
 SELECT
   ms.id,
   ms.project_id,
@@ -160,7 +162,13 @@ SELECT
         AND pend_link.organization_id = p.organization_id
     )
     AND (
-      EXISTS (
+      (NOT EXISTS (
+        SELECT 1
+        FROM organization_features AS enforced
+        WHERE enforced.organization_id = p.organization_id
+          AND enforced.feature_name = 'upstream_auth_enforced'
+          AND enforced.deleted IS FALSE
+      ) AND EXISTS (
         SELECT 1
         FROM mcp_server_remote_session_clients AS pend_assoc
         JOIN remote_session_clients AS pend_client
@@ -177,7 +185,7 @@ SELECT
           AND pend_assoc.project_id = ms.project_id
           AND pend_assoc.organization_id = p.organization_id
           AND pend_assoc.deleted IS FALSE
-      )
+      ))
       OR EXISTS (
         SELECT 1
         FROM remote_mcp_server_headers AS pend_header

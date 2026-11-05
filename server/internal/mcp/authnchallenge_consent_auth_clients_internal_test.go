@@ -168,6 +168,11 @@ func TestConsentAuthChoices(t *testing.T) {
 		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: f.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
 		auth = choices(t, f, user, nil, uuid.Nil)
 		require.Equal(t, consentAuthSetupIncomplete, auth.Status, "a stored requirement is ignored")
+
+		f.enforce()
+		auth = choices(t, f, user, nil, uuid.Nil)
+		require.Equal(t, consentAuthNoAuth, auth.Status, "under enforcement only auth clients and source headers are credentials to set up")
+		require.True(t, auth.Approvable())
 	})
 }
 

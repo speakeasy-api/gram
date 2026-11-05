@@ -456,6 +456,10 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- server's credential headers must be carried by it. A client or association
 -- an administrator created is authoritative and mirrors nothing, so those
 -- checks do not apply to it.
+-- For an organization enforcing upstream auth, auth client links alone say what
+-- a server offers. Its upstream OAuth associations are not read: an offered
+-- client's registration counts as attached, and an association neither gives
+-- the server an OAuth client nor leaves a credential unrecorded.
 WITH selected AS (
   SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
          FALSE AS ambiguous
@@ -497,6 +501,15 @@ WITH selected AS (
       )
   ) AS candidates
   WHERE @proposed::boolean AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
+),
+enforcement AS (
+  SELECT EXISTS (
+    SELECT 1
+    FROM organization_features AS feature
+    WHERE feature.organization_id = @organization_id::text
+      AND feature.feature_name = 'upstream_auth_enforced'
+      AND feature.deleted IS FALSE
+  ) AS enforced
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,
@@ -517,7 +530,8 @@ SELECT sel.mcp_server_id,
          AND rsi.deleted IS FALSE
        )::boolean AS registration_live,
        (
-         NOT copy.mirrored
+         (SELECT enforced FROM enforcement)
+         OR NOT copy.mirrored
          OR EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
@@ -563,7 +577,7 @@ SELECT sel.mcp_server_id,
              AND pend_link.organization_id = sel.organization_id
          )
          AND (
-           EXISTS (
+           (NOT (SELECT enforced FROM enforcement) AND EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS pend_assoc
              JOIN remote_session_clients AS pend_client
@@ -580,7 +594,7 @@ SELECT sel.mcp_server_id,
                AND pend_assoc.project_id = m.project_id
                AND pend_assoc.organization_id = sel.organization_id
                AND pend_assoc.deleted IS FALSE
-           )
+           ))
            OR EXISTS (
              SELECT 1
              FROM remote_mcp_server_headers AS pend_header
@@ -630,13 +644,13 @@ SELECT sel.mcp_server_id,
              AND link.organization_id = sel.organization_id
              AND link.deleted IS FALSE
          )
-         OR EXISTS (
+         OR (NOT (SELECT enforced FROM enforcement) AND EXISTS (
            SELECT 1
            FROM mcp_server_remote_session_clients AS a
            WHERE a.mcp_server_id = sel.mcp_server_id
              AND a.organization_id = sel.organization_id
              AND a.deleted IS FALSE
-         )
+         ))
        )::boolean AS server_has_oauth_clients,
        (copy.mirrored AND EXISTS (
          SELECT 1
@@ -747,7 +761,8 @@ ORDER BY h.name, h.id;
 -- choose among, with whether the server needs upstream authentication and
 -- whether it has upstream credentials no auth client records yet. A server
 -- with no enabled client still has a row, with no client, so the screen can
--- tell no-auth from incomplete setup.
+-- tell no-auth from incomplete setup. For an organization enforcing upstream
+-- auth, an upstream OAuth association is not an unrecorded credential.
 SELECT m.id AS mcp_server_id,
        EXISTS (
          -- The server needs upstream authentication when it offers a live,
@@ -777,7 +792,13 @@ SELECT m.id AS mcp_server_id,
              AND pend_link.organization_id = p.organization_id
          )
          AND (
-           EXISTS (
+           (NOT EXISTS (
+             SELECT 1
+             FROM organization_features AS enforced
+             WHERE enforced.organization_id = p.organization_id
+               AND enforced.feature_name = 'upstream_auth_enforced'
+               AND enforced.deleted IS FALSE
+           ) AND EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS pend_assoc
              JOIN remote_session_clients AS pend_client
@@ -794,7 +815,7 @@ SELECT m.id AS mcp_server_id,
                AND pend_assoc.project_id = m.project_id
                AND pend_assoc.organization_id = p.organization_id
                AND pend_assoc.deleted IS FALSE
-           )
+           ))
            OR EXISTS (
              SELECT 1
              FROM remote_mcp_server_headers AS pend_header

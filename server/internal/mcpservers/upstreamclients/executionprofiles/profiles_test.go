@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -317,4 +319,27 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	require.Equal(t, int64(2), v2.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient, second: secondClient}, f.choices(v2.VersionID))
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient}, f.choices(v1.VersionID), "an earlier version never changes")
+}
+
+// Under enforcement a server's upstream OAuth clients are the registrations of
+// the auth clients it offers, whatever is associated with it.
+func TestBindDecidesFromAuthClientsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	leftover := f.server(unstored)
+	registration := f.registration(leftover)
+	typedOnly := f.server(unstored)
+	authClient := f.authClient(typedOnly, typeServiceAccount, registration)
+
+	before := f.bind(ContextUserless)
+	require.ElementsMatch(t, []Gap{
+		{MCPServerID: leftover, Reason: GapSetupIncomplete},
+		{MCPServerID: typedOnly, Reason: GapSelectionRequired},
+	}, before.Gaps)
+
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(t.Context(), productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	after := f.bind(ContextUserless)
+	require.Empty(t, after.Gaps)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{leftover: uuid.Nil, typedOnly: authClient}, f.choices(after.VersionID))
 }

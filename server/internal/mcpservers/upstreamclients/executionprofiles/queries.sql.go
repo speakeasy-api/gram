@@ -324,7 +324,13 @@ SELECT s.id AS mcp_server_id,
              AND pend_link.organization_id = $1
          )
          AND (
-           EXISTS (
+           (NOT EXISTS (
+             SELECT 1
+             FROM organization_features AS enforced
+             WHERE enforced.organization_id = $1
+               AND enforced.feature_name = 'upstream_auth_enforced'
+               AND enforced.deleted IS FALSE
+           ) AND EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS pend_assoc
              JOIN remote_session_clients AS pend_client
@@ -341,7 +347,7 @@ SELECT s.id AS mcp_server_id,
                AND pend_assoc.project_id = s.project_id
                AND pend_assoc.organization_id = $1
                AND pend_assoc.deleted IS FALSE
-           )
+           ))
            OR EXISTS (
              SELECT 1
              FROM remote_mcp_server_headers AS pend_header
@@ -382,7 +388,35 @@ SELECT s.id AS mcp_server_id,
           AND c.deleted IS FALSE
          WHERE a.mcp_server_id = s.id
            AND a.deleted IS FALSE
-         ORDER BY a.remote_session_client_id
+           AND NOT EXISTS (
+             SELECT 1
+             FROM organization_features AS enforced
+             WHERE enforced.organization_id = $1
+               AND enforced.feature_name = 'upstream_auth_enforced'
+               AND enforced.deleted IS FALSE
+           )
+         UNION
+         SELECT ac.remote_session_client_id
+         FROM mcp_server_auth_clients AS l
+         JOIN mcp_auth_clients AS ac
+           ON ac.id = l.auth_client_id
+          AND ac.organization_id = $1
+          AND ac.deleted IS FALSE
+          AND ac.enabled
+          AND ac.client_type IN ('remote_session', 'service_account', 'ema')
+         JOIN remote_session_clients AS c
+           ON c.id = ac.remote_session_client_id
+          AND c.deleted IS FALSE
+         WHERE l.mcp_server_id = s.id
+           AND l.deleted IS FALSE
+           AND EXISTS (
+             SELECT 1
+             FROM organization_features AS enforced
+             WHERE enforced.organization_id = $1
+               AND enforced.feature_name = 'upstream_auth_enforced'
+               AND enforced.deleted IS FALSE
+           )
+         ORDER BY remote_session_client_id
        )::uuid[] AS registration_ids,
        ARRAY(
          SELECT ac.id
@@ -458,7 +492,10 @@ type ListProfileServersRow struct {
 // new choice is decided from. Hosted and unproxied servers keep serving from
 // their own configuration, so they need no choice. A server's upstream OAuth
 // client is the one it is associated with today; its typed auth clients are
-// the live, enabled clients linked to it.
+// the live, enabled clients linked to it. For an organization enforcing
+// upstream auth, associations are not read: a server's upstream OAuth clients
+// are the registrations of the OAuth-backed auth clients it offers, and an
+// association is not an unrecorded credential.
 func (q *Queries) ListProfileServers(ctx context.Context, arg ListProfileServersParams) ([]ListProfileServersRow, error) {
 	rows, err := q.db.Query(ctx, listProfileServers,
 		arg.OrganizationID,

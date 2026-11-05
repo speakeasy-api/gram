@@ -16,6 +16,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -670,6 +672,111 @@ func TestRecordUpstreamClientSelectionsCapturesTheAuthClient(t *testing.T) {
 		require.Equal(t, 1, report.SelectionsMapped)
 		require.Empty(t, report.SelectionGaps)
 		require.True(t, f.namedAuthClient(credential, server).AuthClientID.Valid, "the backfill maps it onto the reconciled client")
+	})
+}
+
+// enforce turns on upstream auth enforcement for the fixture's organization.
+func (f *fixture) enforce() {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(f.t, err)
+}
+
+func TestRecordUpstreamClientSelectionsFromTypedStateAlone(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an association the server offers no auth client for decides nothing", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+
+		legacy := f.session(issuer)
+		f.record(issuer, legacy)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: inherited}, f.selections(legacy), "the upstream client choice follows the association")
+
+		f.enforce()
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		named := f.namedAuthClient(credential, server)
+		require.True(t, named.NoAuth)
+		require.False(t, named.AuthClientID.Valid)
+	})
+
+	t.Run("an offered auth client is chosen without an association or an issuer binding", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client()
+		server := f.server(issuer)
+		authClient := f.authClient("remote_session", registration, server)
+
+		legacy := f.session(issuer)
+		f.record(issuer, legacy)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(legacy), "the upstream client choice sees no associated client")
+
+		f.enforce()
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("several offered auth clients are left to a pick among them", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		first, second, inherited := f.client(), f.client(), f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.authClient("remote_session", first, server)
+		picked := f.authClient("remote_session", second, server)
+
+		f.enforce()
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		require.Empty(t, f.selections(credential), "nothing is guessed")
+
+		f.recordPicked(issuer, credential, map[uuid.UUID]uuid.UUID{server: inherited})
+		require.Empty(t, f.selections(credential), "a pick the server offers no auth client for is not recorded")
+
+		f.recordPicked(issuer, credential, map[uuid.UUID]uuid.UUID{server: second})
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: picked, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("a server whose only OAuth client is disabled needs none", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		authClient := f.authClient("remote_session", registration, server)
+		require.NoError(t, authclientbackfill.New(f.pool).SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: authClient}))
+
+		f.enforce()
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: uuid.Nil}, f.selections(credential))
+		require.True(t, f.namedAuthClient(credential, server).NoAuth)
+	})
+
+	t.Run("a no-auth choice still names the server's headers beside an association", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		inherited := f.client(issuer)
+		server := f.server(issuer, inherited)
+		f.staticAuthorization(server)
+		headers := f.authClient("static_credential", uuid.Nil, server)
+
+		f.enforce()
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		named := f.namedAuthClient(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+		require.False(t, named.NoAuth, "the association's client is not recorded in its place")
 	})
 }
 
