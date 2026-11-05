@@ -372,3 +372,24 @@ func TestToolCatalogRefreshKey_SeparatesCallersWithoutAUserID(t *testing.T) {
 
 	require.NotEqual(t, toolCatalogRefreshKey(first, catalogTestServerID), toolCatalogRefreshKey(second, catalogTestServerID))
 }
+
+func TestToolsCallCatalog_PaddedToolNameMatchesAToolNameBlock(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "session_catalog"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: catalogTestOrgID,
+		UserID:               "user_catalog",
+		SessionID:            &sessionID,
+		AccountType:          "enterprise",
+	})
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": catalogTestServerID}),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": catalogTestServerID, "tool": "delete_repository"}),
+	)
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{"delete_repository": ""}}
+	interceptor := newAuthzInterceptor(t, store, newCatalogSync(store, nil))
+
+	require.Error(t, interceptor.InterceptToolsCallRequest(ctx, newCatalogCall(t, " delete_repository ")))
+}

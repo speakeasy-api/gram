@@ -98,7 +98,7 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 	}
 
 	err = i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-		Tool:        call.Params.Name,
+		Tool:        strings.TrimSpace(call.Params.Name),
 		Disposition: disposition,
 		ProjectID:   i.projectID,
 	}))
