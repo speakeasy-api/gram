@@ -252,3 +252,86 @@ func TestUnmaskRiskResult_OwnerPath_APIKeyCallerKeepsGrantCheck(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, res)
 }
+
+// The assistant runtime keeps the plain grant check even when its owning user
+// owns the session: the owner path is for a member acting in person.
+func TestUnmaskRiskResult_OwnerPath_AssistantRuntimeKeepsGrantCheck(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	_, rowID := seedContentFinding(t, ctx, ti, authCtx.UserID)
+
+	runtimeCtx := contextvalues.SetAssistantPrincipal(authztest.WithExactGrants(t, ctx), contextvalues.AssistantPrincipal{
+		AssistantID: uuid.New(),
+		ThreadID:    uuid.New(),
+	})
+
+	res, err := ti.service.UnmaskRiskResult(runtimeCtx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.Error(t, err)
+	require.Nil(t, res)
+}
+
+// A finding with no chat id has no owner to answer for it: the content row
+// lost its anchor and the MCP row was never attributed. Both stay closed to a
+// member who owns an agent session and has no grant.
+func TestUnmaskRiskResult_OwnerPath_UnattributedFindingForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	// Prove the member answers for their own agent session first.
+	chatID, ownedRow := seedAgentFinding(t, ctx, ti, seedOwnedAgent(t, ctx, ti, authCtx.UserID, "My Agent"))
+	selfCtx := authztest.WithExactGrants(t, ctx)
+	requireUnmasked(t, selfCtx, ti, ownedRow, chatID)
+
+	contentRow := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: uuid.NewString(),
+		startPos:      0,
+		endPos:        int32(len(ownerPathSecret)),
+		matchLen:      uint32(len(ownerPathSecret)),
+		matchRedacted: "AKIA**************LE",
+		surface:       "content",
+	})
+	mcpRow := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		matchLen:         uint32(len("raw MCP credential")),
+		matchRedacted:    "<redacted len=18>",
+		mediationSurface: "hosted_mcp",
+	})
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      time.Now().UTC(),
+		Findings:       []risk.MCPFindingEvidence{{ID: mcpRow, Match: "raw MCP credential"}},
+	}))
+
+	for _, rowID := range []uuid.UUID{contentRow, mcpRow} {
+		_, err := ti.service.UnmaskRiskResult(selfCtx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+}
+
+// Owning the session does not open it to a support session: impersonation is
+// refused before the owner rule, as it is for the transcript itself.
+func TestUnmaskRiskResult_OwnerPath_SupportSessionForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	_, rowID := seedContentFinding(t, ctx, ti, authCtx.UserID)
+
+	support := *authCtx
+	support.IsAdmin = true
+	support.SupportOrganizationID = authCtx.ActiveOrganizationID
+	supportCtx := authztest.WithExactGrants(t, contextvalues.WithValidatedSupportSession(ctx, &support))
+	require.True(t, contextvalues.IsSupportSession(supportCtx))
+
+	_, err := ti.service.UnmaskRiskResult(supportCtx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
