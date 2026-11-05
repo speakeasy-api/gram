@@ -13,6 +13,15 @@ import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), listMembers: vi.fn() }));
+vi.mock("@/components/identity-link", () => ({
+  IdentityLink: ({
+    identifier,
+    children,
+  }: {
+    identifier: { userId: string };
+    children: React.ReactNode;
+  }) => <a href={`/identities/user:${identifier.userId}`}>{children}</a>,
+}));
 vi.mock("@/lib/useAllAuthClients", () => ({
   useAllAuthClients: () => ({
     data: [
@@ -20,12 +29,28 @@ vi.mock("@/lib/useAllAuthClients", () => ({
         id: "client_calendar",
         name: "Content calendar",
         clientType: "service_account",
+        servers: [
+          {
+            id: "server_calendar",
+            slug: "calendar",
+            name: "Calendar server",
+            projectId: "project_example",
+          },
+        ],
       },
       {
         id: "client_notes",
         name: "Meeting notes",
         clientType: "remote_session",
         remoteSessionClientId: "upstream_notes",
+        servers: [
+          {
+            id: "server_notes",
+            slug: "notes",
+            name: "Notes server",
+            projectId: "project_example",
+          },
+        ],
       },
     ],
   }),
@@ -37,7 +62,9 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "owner_example" } }),
   useOrganization: () => ({
     id: "org_example",
-    projects: [{ id: "project_example", name: "Example project" }],
+    projects: [
+      { id: "project_example", name: "Example project", slug: "example" },
+    ],
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -294,13 +321,28 @@ describe("Agent profile permissions", () => {
     expect(
       screen.getByText("Every upstream credential in the organization"),
     ).toBeTruthy();
-    expect(screen.getByText("Content calendar · Service account")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Calendar server" })
+        .getAttribute("href"),
+    ).toBe("/org/projects/example/mcp/calendar/settings#authentication");
     expect(
       screen.getByText("Personal connections of the person the agent acts for"),
     ).toBeTruthy();
     expect(
-      await screen.findByText("Ada Lovelace's Meeting notes connection"),
-    ).toBeTruthy();
+      (await screen.findByRole("link", { name: "Ada Lovelace" })).getAttribute(
+        "href",
+      ),
+    ).toBe("/identities/user:user_ada");
+    // Broadest first, down to one named credential.
+    expect(
+      screen.getAllByRole("listitem").map((item) => item.textContent),
+    ).toEqual([
+      "Every upstream credential in the organization",
+      "Personal connections of the person the agent acts for",
+      "Ada Lovelace's Meeting notes connection · on Notes server",
+      "Content calendar · Service account · on Calendar server",
+    ]);
     expect(screen.queryByText("All resources")).toBeNull();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {

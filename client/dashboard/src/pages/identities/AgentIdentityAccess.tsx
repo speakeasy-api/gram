@@ -22,10 +22,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import {
-  authGrantLabel,
+  authGrantParts,
+  authGrantRank,
+  authGrantText,
   REPRESENTED_USER,
   type AuthGrantNames,
+  type AuthGrantPart,
+  type AuthGrantServer,
 } from "./auth-grant-label";
+import { IdentityLink } from "@/components/identity-link";
+import { serverLabel } from "@/lib/auth-clients";
+import { mcpServerRouteParam } from "@/lib/sources";
+import type { AuthClient } from "@gram/client/models/components/authclient.js";
+import { Link } from "react-router";
 
 /**
  * Every narrowing beyond the resource itself, including constraints the
@@ -69,6 +78,79 @@ const LOCKED_SCOPE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
+ * A scope's grants in reading order. `mcp:auth` grants go broadest first, down
+ * to one named credential, then by label; other scopes keep the policy's order.
+ */
+function orderGrants(
+  scope: string,
+  grants: AgentPolicyGrant[],
+  names: AuthGrantNames,
+): AgentPolicyGrant[] {
+  if (scope !== "mcp:auth") return grants;
+  const label = (grant: AgentPolicyGrant) =>
+    authGrantText(authGrantParts(grant.selector, names));
+  return [...grants].sort(
+    (a, b) =>
+      authGrantRank(a.selector) - authGrantRank(b.selector) ||
+      label(a).localeCompare(label(b)),
+  );
+}
+
+function authGrantServer(
+  server: AuthClient["servers"][number],
+): AuthGrantServer {
+  return {
+    id: server.id,
+    slug: server.slug,
+    name: serverLabel(server),
+    projectId: server.projectId,
+  };
+}
+
+/**
+ * A grant's credential label, with each person linked to their identity page
+ * and each server to its authentication settings, where the credential lives.
+ */
+function AuthGrantLabel({ parts }: { parts: AuthGrantPart[] }): JSX.Element {
+  const organization = useOrganization();
+  const { orgSlug } = useSlugs();
+  const projectSlug = (projectId: string) =>
+    organization.projects?.find((project) => project.id === projectId)?.slug;
+  return (
+    <Text small>
+      {parts.map((part, index) => {
+        if (part.kind === "text") return part.text;
+        if (part.kind === "person") {
+          return (
+            <IdentityLink key={index} identifier={{ userId: part.userId }}>
+              {part.name}
+            </IdentityLink>
+          );
+        }
+        return part.servers.map((server, serverIndex) => {
+          const slug = projectSlug(server.projectId);
+          const separator = serverIndex > 0 ? ", " : "";
+          if (!slug) {
+            return `${separator}${server.name}`;
+          }
+          return (
+            <span key={`${index}-${server.id}`}>
+              {separator}
+              <Link
+                to={`/${orgSlug}/projects/${slug}/mcp/${mcpServerRouteParam(server)}/settings#authentication`}
+                className="underline-offset-2 hover:underline"
+              >
+                {server.name}
+              </Link>
+            </span>
+          );
+        });
+      })}
+    </Text>
+  );
+}
+
+/**
  * Names for the auth clients, upstream OAuth clients and people that the
  * agent's `mcp:auth` grants point at. Both lists need org:read and load only
  * when a grant needs them; without them the labels fall back to short ids.
@@ -96,16 +178,32 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
     throwOnError: false,
   });
   const clientById = new Map(
-    (clients.data ?? []).map((client) => [client.id, client]),
+    (clients.data ?? []).map((client) => [
+      client.id,
+      {
+        name: client.name,
+        clientType: client.clientType,
+        servers: client.servers.map(authGrantServer),
+      },
+    ]),
   );
-  const serverByUpstream = new Map<string, string>();
+  // An upstream OAuth client is named after the first auth client using it,
+  // and reaches every server those auth clients serve.
+  const upstreamById = new Map<
+    string,
+    { name: string; servers: AuthGrantServer[] }
+  >();
   for (const client of clients.data ?? []) {
-    if (
-      client.remoteSessionClientId &&
-      !serverByUpstream.has(client.remoteSessionClientId)
-    ) {
-      serverByUpstream.set(client.remoteSessionClientId, client.name);
+    if (!client.remoteSessionClientId) continue;
+    const seen = upstreamById.get(client.remoteSessionClientId) ?? {
+      name: client.name,
+      servers: [],
+    };
+    for (const server of client.servers) {
+      if (seen.servers.some(({ id }) => id === server.id)) continue;
+      seen.servers.push(authGrantServer(server));
     }
+    upstreamById.set(client.remoteSessionClientId, seen);
   }
   const memberById = new Map(
     (members.data?.members ?? []).map((member) => [
@@ -115,7 +213,7 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
   );
   return {
     client: (id) => clientById.get(id),
-    upstreamClient: (id) => serverByUpstream.get(id),
+    upstreamClient: (id) => upstreamById.get(id),
     member: (id) => memberById.get(id),
   };
 }
@@ -198,8 +296,8 @@ export function AgentIdentityPermissions({
                   {description}
                 </Text>
               )}
-              <ul className="flex flex-col gap-1 pt-1">
-                {grants.map((grant) => {
+              <ul className="marker:text-muted-foreground list-disc space-y-1 pt-1 pl-5">
+                {orderGrants(scope, grants, authNames).map((grant) => {
                   const { selector } = grant;
                   const narrowing = agentSelectorNarrowing(
                     selector,
@@ -208,30 +306,31 @@ export function AgentIdentityPermissions({
                       : undefined,
                   );
                   return (
-                    <li
-                      key={grant.id}
-                      className="flex flex-wrap items-center gap-x-2 gap-y-1"
-                    >
-                      {selector.resourceKind === "mcp_auth_client" ? (
-                        <Text small>{authGrantLabel(selector, authNames)}</Text>
-                      ) : selector.resourceId === ANY_RESOURCE ? (
-                        <Text small>{wildcardGrantLabel(selector)}</Text>
-                      ) : (
-                        <ResourceLink
-                          challenge={{
-                            resourceKind: selector.resourceKind,
-                            resourceId: selector.resourceId,
-                            projectId: selector.projectId,
-                          }}
-                          orgSlug={orgSlug ?? ""}
-                          {...maps}
-                        />
-                      )}
-                      {narrowing && (
-                        <Text small muted className="break-words">
-                          {narrowing}
-                        </Text>
-                      )}
+                    <li key={grant.id} className="pl-1">
+                      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
+                        {selector.resourceKind === "mcp_auth_client" ? (
+                          <AuthGrantLabel
+                            parts={authGrantParts(selector, authNames)}
+                          />
+                        ) : selector.resourceId === ANY_RESOURCE ? (
+                          <Text small>{wildcardGrantLabel(selector)}</Text>
+                        ) : (
+                          <ResourceLink
+                            challenge={{
+                              resourceKind: selector.resourceKind,
+                              resourceId: selector.resourceId,
+                              projectId: selector.projectId,
+                            }}
+                            orgSlug={orgSlug ?? ""}
+                            {...maps}
+                          />
+                        )}
+                        {narrowing && (
+                          <Text small muted className="break-words">
+                            {narrowing}
+                          </Text>
+                        )}
+                      </span>
                     </li>
                   );
                 })}
