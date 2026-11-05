@@ -360,34 +360,38 @@ WHERE a.organization_id = $1
   )
   AND (
     $5::text IS NULL
-    OR a.action = $5::text
+    OR a.actor_type = $5::text
+  )
+  AND (
+    $6::text IS NULL
+    OR a.action = $6::text
   )
   AND (
     (
-      $6::text IS NULL
-      AND ($7::boolean OR a.subject_type <> 'assistant')
+      $7::text IS NULL
+      AND ($8::boolean OR a.subject_type <> 'assistant')
     )
-    OR a.subject_type = $6::text
+    OR a.subject_type = $7::text
   )
   AND (
-    $8::text IS NULL
-    OR a.subject_id = $8::text
+    $9::text IS NULL
+    OR a.subject_id = $9::text
   )
   AND (
-    coalesce(cardinality($9::text[]), 0) = 0
-    OR a.subject_id = ANY($9::text[])
+    coalesce(cardinality($10::text[]), 0) = 0
+    OR a.subject_id = ANY($10::text[])
   )
   AND (
-    $10::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $10::text
-  )
-  AND (
-    $11::timestamptz IS NULL
-    OR a.created_at >= $11::timestamptz
+    $11::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $11::text
   )
   AND (
     $12::timestamptz IS NULL
-    OR a.created_at < $12::timestamptz
+    OR a.created_at >= $12::timestamptz
+  )
+  AND (
+    $13::timestamptz IS NULL
+    OR a.created_at < $13::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -398,6 +402,7 @@ type ListSecurityAuditLogsParams struct {
 	ProjectID              uuid.NullUUID
 	CursorSeq              pgtype.Int8
 	ActorID                pgtype.Text
+	ActorType              pgtype.Text
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
@@ -442,6 +447,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		arg.ProjectID,
 		arg.CursorSeq,
 		arg.ActorID,
+		arg.ActorType,
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
