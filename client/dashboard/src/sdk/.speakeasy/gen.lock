@@ -1932,6 +1932,7 @@ trackedFiles:
   src/models/components/sessionquarantine.ts: {}
   src/models/components/sessionquarantinereleaserequestbody.ts: {}
   src/models/components/sessionsummary.ts: {}
+  src/models/components/sessiontotals.ts: {}
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setauthclientaudiencerequestbody.ts: {}
@@ -10938,7 +10939,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "limit": 50, "sort_by": "total_cost", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"sessions": []}
+          application/json: {"scoped": true, "sessions": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
