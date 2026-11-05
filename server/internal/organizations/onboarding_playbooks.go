@@ -379,7 +379,7 @@ func CreateOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, input Onboa
 
 // UpdateOnboardingPlaybook replaces a playbook's name, description, default
 // mark and steps.
-func UpdateOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, name, description string, isDefault bool, stepSlugs []string) (*admingen.AdminOnboardingPlaybook, error) {
+func UpdateOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, id uuid.UUID, organizationID *string, name, description string, isDefault bool, stepSlugs []string) (*admingen.AdminOnboardingPlaybook, error) {
 	if err := validateOnboardingText(name, description); err != nil {
 		return nil, err
 	}
@@ -398,6 +398,10 @@ func UpdateOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, id uuid.UUI
 	current, err := loadPlaybook(ctx, queries, id)
 	if err != nil {
 		return nil, err
+	}
+	// Check ownership under the same transaction lock as the update, before any writes.
+	if organizationID != nil && (current.OrganizationID == nil || *current.OrganizationID != *organizationID) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "playbook does not belong to this organization")
 	}
 	if isDefault && current.OrganizationID != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a custom playbook cannot be a use case's default")

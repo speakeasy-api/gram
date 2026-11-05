@@ -4,7 +4,7 @@ export function isRedirectingToLogin(): boolean {
   return redirectingToLogin;
 }
 
-function statusCode(error: unknown): number | undefined {
+export function statusCode(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
   if ("statusCode" in error && typeof error.statusCode === "number") {
     return error.statusCode;
