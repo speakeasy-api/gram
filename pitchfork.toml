@@ -23,6 +23,7 @@ daemons = [
   "assistant-runtime",
   "assistant-relay",
   "tunnel-gateway",
+  "tailnet-gateway",
   "code-runtime",
 ]
 
@@ -137,8 +138,9 @@ run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
 # Opt-in: hosts private network ingresses on a real customer tailnet, so it is
-# not part of the default groups. Start it with `pitchfork start tailnet-gateway`
+# not in the default group. Start it with `pitchfork start tailnet-gateway`
 # after setting the GRAM_TAILNET_GATEWAY_* listener settings in mise.local.toml.
+# It is in the application group so pausing the stack stops it with Postgres.
 [daemons.tailnet-gateway]
 run = "mise run start:tailnet-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
