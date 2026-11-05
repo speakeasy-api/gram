@@ -259,6 +259,8 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 			}
 		}
 		if !found {
+			// Absence from this cached view does not prove consent excluded a real
+			// tool: misspelled, removed, or unknown member tools are absent too.
 			attempt.fail(http.StatusForbidden, remotemcp.ToolNotApprovedMessage)
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
@@ -296,11 +298,12 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
 	// member-scoped result (as in serveToolsetResolved). Members keep their
 	// toolset's hosting publicness.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, hosting.Public, inputs)
+	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil {
 		return nil, err
 	}
 	if !satisfied {
+		s.recordMemberFailure(ctx, gate, member, failureCode)
 		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
 		attempt.fail(http.StatusUnauthorized, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
@@ -333,6 +336,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
+		if code, ok := toolsCallRefusal(err); ok {
+			s.recordMemberFailure(ctx, gate, member, code)
+		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults — unexpected errors and server
@@ -536,7 +542,7 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
-		request:               nil,
+		request:               gate.request,
 		projectID:             projectID,
 		organizationID:        toolset.OrganizationID,
 		toolset:               toolset.Slug,

@@ -254,17 +254,17 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	}
 	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		return nil, metaMemberClientCredentialError(member, err)
+		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
 	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
 	if err != nil {
-		return nil, agentMemberCredentialError(member)
+		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {
-		return nil, agentMemberCredentialError(member)
+		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
 	}
 	return resolved, nil
 }

@@ -151,6 +151,14 @@ type ResolvedMcpEndpoint struct {
 	UserSessionIssuerID uuid.UUID
 }
 
+// clientInfoProjectID is the project this endpoint's client-info records are keyed under.
+func (e *ResolvedMcpEndpoint) clientInfoProjectID() uuid.UUID {
+	if e.MetaMcpServerID.Valid {
+		return uuid.Nil
+	}
+	return e.ProjectID
+}
+
 func mcpServerClientInfoScope(mcpServer *mcpservers_repo.McpServer) string {
 	if mcpServer.TunneledMcpServerID.Valid {
 		return tunnelClientInfoScopePrefix + mcpServer.ID.String()

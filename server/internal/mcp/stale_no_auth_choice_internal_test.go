@@ -237,7 +237,7 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	f := newAuthClientFixture(t, pool)
 	f.service.staleChoiceConsent = expirable.NewLRU[string, bool](10, nil, time.Minute)
 	pool.Close()
-	const want = `Server "db"'s connection could not be checked. Try again in a few minutes.`
+	const want = `This server's connection could not be checked. Try again in a few minutes.`
 	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	gate := &metaGateContext{
 		organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: uuid.New(),
@@ -274,7 +274,7 @@ func TestUnreadableChoiceSaysItCouldNotBeChecked(t *testing.T) {
 	t.Parallel()
 	member := metaMember{slug: "db"}
 	(&Service{}).applyMemberAuthClient(t.Context(), &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
-	require.Equal(t, `Server "db"'s connection could not be checked. Try again in a few minutes.`, memberErrorMessage(member.upstreamUnavailable))
+	require.Equal(t, `This server's connection could not be checked. Try again in a few minutes.`, memberErrorMessage(member.upstreamUnavailable))
 }
 
 func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {

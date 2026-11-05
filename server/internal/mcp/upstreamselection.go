@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -347,7 +348,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case err != nil:
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
@@ -377,7 +378,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		}
 		// A key's choice is served only through the typed resolver, never by
 		// the issuer's credentials.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	}
 	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
@@ -400,7 +401,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 			return choice, true, err
 		}
 	}
-	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable)
+	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 	return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 }
 
@@ -491,7 +492,7 @@ func (s *Service) directAgentKeyError(ctx context.Context, authentication *issue
 	case err == nil:
 		return nil
 	case errors.As(err, &refused):
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeNoServerAccess)
 		return oops.E(oops.CodeForbidden, err, "this agent may not use this server's connection")
 	default:
 		return oops.E(oops.CodeUnexpected, err, "authorize agent key").LogError(ctx, s.logger)
@@ -836,7 +837,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage(member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -865,31 +866,30 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
-func connectionNotCheckedMessage(slug string) string {
-	return fmt.Sprintf("Server %q's connection could not be checked. Try again in a few minutes.", slug)
-}
+const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
+// Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
 func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
 	authentication := gate.authentication
 	choices := gate.memberChoices
 	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
 		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
 	if !person {
-		return fmt.Sprintf("Server %q's sign-in setup changed. Ask whoever set this up to update this connection.", member.slug), false
+		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", false
 	}
 	if !authentication.refreshableUserSession {
-		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", member.slug), false
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", false
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return connectionNotCheckedMessage(member.slug), false
+		return connectionNotCheckedMessage, false
 	case fixable:
-		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", member.slug), true
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
 	}
-	return fmt.Sprintf("Server %q needs your administrator to finish setup or give you access.", member.slug), false
+	return "This server needs your administrator to finish setup or give you access.", false
 }
 
 // consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.

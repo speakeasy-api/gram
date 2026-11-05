@@ -1542,6 +1542,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
+			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1665,11 +1666,12 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Check security schemes before dispatching any RPC — including initialize.
 	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
 	// their OAuth flow, so we can't defer this to individual RPC handlers.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, cfg.isPublic, mcpInputs)
+	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
 	if err != nil {
 		return err
 	}
 	if !satisfied {
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 		if oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",
@@ -1701,6 +1703,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	return nil
+}
+
+// hostedConnectionScope files a hosted request under its fronting server, else its toolset.
+func hostedConnectionScope(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing) mcpconnectionattempts.Scope {
+	if cfg.mcpServerID != nil {
+		return mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+	}
+	return mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
 }
 
 // admitHostedRequest applies today's access decision for a hosted server and
@@ -1766,7 +1776,11 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 			}
 			ctx = prepared
 			if err := s.authz.Require(ctx, connect); err != nil {
-				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
+				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
+				if mcpaccess.IsServerPermissionDenied(denied) {
+					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+				}
+				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}
 		}
 
@@ -1838,6 +1852,11 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 // publicness the request is served under (wrapper visibility when a wrapper
 // fronts it), not necessarily the toolset's own flag.
 func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic bool, payload *mcpInputs) (bool, error) {
+	satisfied, _, err := s.checkToolsetSecurityOutcome(ctx, toolset, isPublic, payload)
+	return satisfied, err
+}
+
+func (s *Service) checkToolsetSecurityOutcome(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic bool, payload *mcpInputs) (bool, mcpconnectionattempts.Code, error) {
 	projectID := mv.ProjectID(payload.projectID)
 	// Security-scheme detection must see the full, unfiltered toolset, so this
 	// always uses the project-default variation group (nil) regardless of any
@@ -1845,7 +1864,25 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	// requirements, so this does not weaken the auth gate.
 	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache, nil, s.platformExtras...)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").LogError(ctx, s.logger)
+		return false, mcpconnectionattempts.CodeInternalError, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").LogError(ctx, s.logger)
+	}
+
+	var oauthToken string
+	for _, t := range payload.oauthTokenInputs {
+		if t.Token != "" {
+			oauthToken = t.Token
+			break
+		}
+	}
+	oauthRequired := isPublic && toolset.ExternalOauthServerID.Valid
+	// Gateway calls and member probes answer with no challenge and take no caller headers.
+	direct := payload.request != nil && payload.metaMcpServerID == ""
+	unsatisfied := func(code mcpconnectionattempts.Code) (bool, mcpconnectionattempts.Code, error) {
+		// This 401's challenge is how sign-in starts, so it is no failure yet.
+		if direct && oauthRequired && oauthToken == "" {
+			return false, mcpconnectionattempts.Code{}, nil
+		}
+		return false, code, nil
 	}
 
 	schemes := describeToolSecurity(described.SecurityVariables)
@@ -1854,21 +1891,15 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		// external OAuth at the server level. If so, require the
 		// user to have provided a token — otherwise the 401 + WWW-Authenticate
 		// must be sent so MCP clients can initiate the OAuth flow.
-		oauthRequired := isPublic && toolset.ExternalOauthServerID.Valid
-		if oauthRequired {
-			for _, t := range payload.oauthTokenInputs {
-				if t.Token != "" {
-					return true, nil
-				}
-			}
-			return false, nil
+		if oauthRequired && oauthToken == "" {
+			return unsatisfied(mcpconnectionattempts.CodeInvalidRemoteSession)
 		}
-		return true, nil
+		return true, mcpconnectionattempts.Code{}, nil
 	}
 
 	systemEnv, err := s.env.LoadSystemEnv(ctx, payload.projectID, toolset.ID, "", "")
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, s.logger)
+		return false, mcpconnectionattempts.CodeInternalError, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, s.logger)
 	}
 
 	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
@@ -1893,13 +1924,6 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	}
 
 	// Map any OAuth tokens to ACCESS_TOKEN env vars on OAuth schemes.
-	var oauthToken string
-	for _, t := range payload.oauthTokenInputs {
-		if t.Token != "" {
-			oauthToken = t.Token
-			break
-		}
-	}
 	if oauthToken != "" {
 		for _, sv := range described.SecurityVariables {
 			if sv.Type == nil {
@@ -1915,7 +1939,42 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		}
 	}
 
-	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
+	if anySchemeSatisfied(schemes, mergedEnv, oauthToken) {
+		return true, mcpconnectionattempts.Code{}, nil
+	}
+	// If OAuth is an alternative, the caller can supply a connection. Missing
+	// static credentials or client-credentials secrets require administrator setup.
+	for _, scheme := range schemes {
+		if scheme.Kind == securitySchemeOAuth2AuthCode || scheme.Kind == securitySchemeOpenIDConnect {
+			return unsatisfied(mcpconnectionattempts.CodeInvalidRemoteSession)
+		}
+	}
+	if direct && s.callerCanSupplySecurity(ctx, payload.projectID, toolset.ID, schemes, mergedEnv) {
+		return unsatisfied(mcpconnectionattempts.CodeCallerCredentialMissing)
+	}
+	return unsatisfied(mcpconnectionattempts.CodeCredentialMisconfigured)
+}
+
+// callerCanSupplySecurity retests the schemes with every provided_by=user variable set.
+func (s *Service) callerCanSupplySecurity(ctx context.Context, projectID, toolsetID uuid.UUID, schemes []securityRequirement, env *toolconfig.CaseInsensitiveEnv) bool {
+	metadata, err := s.mcpMetadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to load metadata for security outcome", attr.SlogError(err))
+		}
+		return false
+	}
+	configs, err := s.mcpMetadataRepo.ListEnvironmentConfigs(ctx, metadata.ID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load environment configs for security outcome", attr.SlogError(err))
+		return false
+	}
+	for _, config := range configs {
+		if config.ProvidedBy == "user" {
+			env.Set(config.VariableName, "provided")
+		}
+	}
+	return anySchemeSatisfied(schemes, env, "")
 }
 
 // loadToolset loads the toolset for an mcp_slug. The lookup dispatches
@@ -2118,7 +2177,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		s.recordHostedToolsCallRefusal(ctx, payload, err)
+		return body, err
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case mcpversions.MethodPromptsGet:

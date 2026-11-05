@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -134,6 +137,21 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.Equal(t, authClientNoAccess, res.outcome, "ownership filters grants and never grants, even against a wildcard")
 		require.Equal(t, authClientReasonNotPermitted, res.reason)
 		require.Equal(t, map[string]int64{"deny/not_granted": 1}, authClientShadowOutcomes(t, reader))
+	})
+
+	t.Run("a refused direct caller writes one row", func(t *testing.T) {
+		t.Parallel()
+		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_2"}, attached: true, err: nil}
+		f, selector, _, agent := setup(t, lookup)
+		rec := mcpconnectionattemptstest.New(t)
+		f.service.connections = rec.Recorder
+		f.service.siteURL = &url.URL{Scheme: "https", Host: "app.example.com"}
+		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
+		_, handled, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
+		require.Error(t, err)
+		require.True(t, handled)
+		rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Len(t, rec.Rows(), 1)
 	})
 
 	t.Run("a removed grant refuses the owner's attached connection", func(t *testing.T) {
@@ -427,8 +445,9 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 // fakeUpstreamTokens serves the chosen client's token from whichever
 // connection its binding names when tokens are read.
 type fakeUpstreamTokens struct {
-	issuerID uuid.UUID
-	bound    uuid.UUID
+	clientErr error
+	issuerID  uuid.UUID
+	bound     uuid.UUID
 	// subjects records whose connection each read asked for.
 	subjects []urn.SessionSubject
 }
@@ -444,6 +463,9 @@ func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Context, re
 
 func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.subjects = append(f.subjects, subject)
+	if f.clientErr != nil {
+		return nil, f.clientErr
+	}
 	return f.tokens(), nil
 }
 
