@@ -634,6 +634,74 @@ func TestStoreKeepsConversationsWithSharedOpeningApart(t *testing.T) {
 	require.Equal(t, "turn 2A", messages[2].Content)
 }
 
+func TestStoreArchivesBranchAfterRewindPastEveryAnchor(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	prefix := []Message{textMessage("user", "turn 1"), textMessage("assistant", "reply 1")}
+	frameFor := func(requestID string, branch ...Message) Frame {
+		frame := exampleFrame()
+		frame.RequestID = requestID
+		frame.Messages = append(append([]Message(nil), prefix...), branch...)
+		return frame
+	}
+
+	chatID, _, start := archiveFrame(t, store, config, frameFor("request-0"))
+	require.Equal(t, 0, start)
+
+	// Three attempts at the next turn, each abandoned after three messages.
+	// Together they leave more rows after the fork point than alignment keeps
+	// anchors for, the shape a Claude Code transcript takes after repeated
+	// rewinds.
+	for _, attempt := range []string{"a", "b", "c"} {
+		branch := []Message{
+			textMessage("user", "turn 2 attempt "+attempt),
+			textMessage("assistant", "reply 2 attempt "+attempt),
+			textMessage("user", "turn 3 attempt "+attempt),
+		}
+		again, _, start := archiveFrame(t, store, config, frameFor("request-"+attempt, branch...))
+		require.Equal(t, chatID, again)
+		require.Equal(t, len(prefix), start, "each attempt forks from the shared prefix")
+	}
+
+	kept := textMessage("user", "turn 2 kept")
+	again, _, start := archiveFrame(t, store, config, frameFor("request-kept", kept))
+	require.Equal(t, chatID, again)
+	require.Equal(t, len(prefix), start, "the kept branch forks from the shared prefix, not from the abandoned rows")
+
+	reply := textMessage("assistant", "reply 2 kept")
+	_, _, start = archiveFrame(t, store, config, frameFor("request-kept-2", kept, reply))
+	require.Equal(t, len(prefix)+1, start, "the kept branch keeps aligning as it grows")
+
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, len(prefix)+9+2)
+	require.Equal(t, "turn 2 kept", messages[len(messages)-2].Content)
+	require.Equal(t, "reply 2 kept", messages[len(messages)-1].Content)
+}
+
+func TestStoreArchivesFrameRewoundToItsStart(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	first := exampleFrame()
+	first.Messages = []Message{textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2")}
+	chatID, _, _ := archiveFrame(t, store, config, first)
+
+	// The user rewound to the very first prompt and typed a new one. Nothing in
+	// the frame was ever stored and it is shorter than the stored history, so
+	// it is archived whole instead of being skipped by count.
+	rewound := exampleFrame()
+	rewound.RequestID = "request-rewound"
+	rewound.Messages = []Message{textMessage("user", "other turn 1")}
+	again, _, start := archiveFrame(t, store, config, rewound)
+	require.Equal(t, chatID, again)
+	require.Equal(t, 0, start)
+
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 4)
+	require.Equal(t, "other turn 1", messages[3].Content)
+}
+
 func TestStoreContinuesBySessionWhenPresent(t *testing.T) {
 	t.Parallel()
 	store, _, config := newTestStore(t)

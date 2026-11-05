@@ -122,6 +122,19 @@ func alignTranscript(stored []messageIdentity, frame []Message) (start int, prev
 	return 0, nil, false
 }
 
+// longestStoredPrefix picks, among a frame's prefix chains, the longest one the
+// conversation already holds: where a rewound frame forks from stored history.
+// start is the index of the first message after it and prev its chain. ok is
+// false when no prefix of the frame is stored.
+func longestStoredPrefix(chains [][]byte, stored map[string]struct{}) (start int, prev []byte, ok bool) {
+	for k, chain := range slices.Backward(chains) {
+		if _, found := stored[messageIdentityID(chain)]; found {
+			return k + 1, chain, true
+		}
+	}
+	return 0, nil, false
+}
+
 // prefixIdentities returns the stored identity each prefix of messages would
 // carry when archived from the start of a conversation: index k holds the
 // chain of messages[:k+1]. A chat whose newest stored message has identity k

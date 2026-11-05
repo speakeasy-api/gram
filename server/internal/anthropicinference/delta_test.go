@@ -111,6 +111,35 @@ func TestAlignTranscriptReportsUnrelatedFrames(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestLongestStoredPrefixFindsTheForkPoint(t *testing.T) {
+	t.Parallel()
+	frame := []Message{textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2 kept")}
+	chains := prefixIdentities(frame)
+	stored := map[string]struct{}{messageIdentityID(chains[0]): {}, messageIdentityID(chains[1]): {}}
+
+	start, prev, ok := longestStoredPrefix(chains, stored)
+	require.True(t, ok)
+	require.Equal(t, 2, start)
+	require.Equal(t, chains[1], prev)
+
+	// A gap never matters: only the longest stored prefix decides.
+	delete(stored, messageIdentityID(chains[0]))
+	start, prev, ok = longestStoredPrefix(chains, stored)
+	require.True(t, ok)
+	require.Equal(t, 2, start)
+	require.Equal(t, chains[1], prev)
+
+	start, prev, ok = longestStoredPrefix(chains, map[string]struct{}{})
+	require.False(t, ok)
+	require.Equal(t, 0, start)
+	require.Nil(t, prev)
+
+	stored[messageIdentityID(chains[2])] = struct{}{}
+	start, _, ok = longestStoredPrefix(chains, stored)
+	require.True(t, ok)
+	require.Equal(t, len(frame), start, "a fully stored frame has nothing new")
+}
+
 func TestContentHashIgnoresEncodingWhitespace(t *testing.T) {
 	t.Parallel()
 	compact := Message{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE"}]`)}
