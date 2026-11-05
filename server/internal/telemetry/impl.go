@@ -4455,10 +4455,14 @@ func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owne
 	}
 	candidates = append(candidates, organizationGatewayCandidate(owners.organizationID, organization))
 	suffixes = append(suffixes, organizationPath)
+	// A deleted project's slug can be taken again. Its URL names its gateway
+	// only while no other project, live or deleted, has the same slug.
+	slugs := make(map[string]int, len(projects))
 	for _, project := range projects {
-		// A deleted project's slug can be taken again, so its URL no longer
-		// names its gateway.
-		if project.Deleted {
+		slugs[project.Slug]++
+	}
+	for _, project := range projects {
+		if project.Deleted && slugs[project.Slug] > 1 {
 			continue
 		}
 		candidates = append(candidates, projectGatewayCandidate(owners.organizationID, project))

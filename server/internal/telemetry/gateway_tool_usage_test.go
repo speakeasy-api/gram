@@ -645,6 +645,78 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 	require.Len(t, filtered.Traces, 2, "the agent gateway filter covers both agent gateway calls")
 }
 
+// A deleted project's gateway URL still names its gateway while no other
+// project has the slug. Once a live project reuses the slug the URL names the
+// live project's gateway, and a slug two deleted projects shared names none.
+func TestListToolUsageTraces_ClassifiesDeletedProjectGatewayCallsByURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC()
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+	projects := projectsrepo.New(ti.conn)
+	createProject := func(name, slug string, deleted bool) projectsrepo.Project {
+		project, err := projects.CreateProject(ctx, projectsrepo.CreateProjectParams{Name: name, Slug: slug, OrganizationID: ti.orgID})
+		require.NoError(t, err)
+		if deleted {
+			_, err = projects.DeleteProject(ctx, project.ID)
+			require.NoError(t, err)
+		}
+		return project
+	}
+
+	unclaimedSlug := "retired-" + uuid.NewString()[:8]
+	retired := createProject("Retired project", unclaimedSlug, true)
+	reusedSlug := "reused-" + uuid.NewString()[:8]
+	createProject("Old project", reusedSlug, true)
+	current := createProject("Current project", reusedSlug, false)
+	sharedSlug := "shared-" + uuid.NewString()[:8]
+	createProject("First deleted project", sharedSlug, true)
+	createProject("Second deleted project", sharedSlug, true)
+
+	projectGatewayURL := "https://app.example.com/mcp/gateway/" + organization.Slug + "/projects/"
+	calls := []struct {
+		call       openClawGatewayCall
+		targetType string
+		targetID   string
+		label      string
+	}{
+		{
+			call:       openClawGatewayCall{conversationID: "conv-retired", toolName: "retired__search", serverName: "retired", url: projectGatewayURL + unclaimedSlug, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.ProjectGatewayID(ti.orgID, retired.ID).String(), label: retired.Name,
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-reused", toolName: "reused__search", serverName: "reused", url: projectGatewayURL + reusedSlug, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.ProjectGatewayID(ti.orgID, current.ID).String(), label: current.Name,
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-shared", toolName: "shared__search", serverName: "shared", url: projectGatewayURL + sharedSlug, preServerName: "shared", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeShadowMCP, targetID: "shared", label: "shared",
+		},
+	}
+	for i, tc := range calls {
+		insertOpenClawGatewayCall(t, ctx, ti, now.Add(-time.Duration(len(calls)-i)*time.Minute), tc.call)
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	all := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 20}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == len(calls)
+	})
+	byTool := map[string]*gen.ToolUsageTraceSummary{}
+	for _, trace := range all.Traces {
+		byTool[trace.ToolName] = trace
+	}
+	for _, tc := range calls {
+		summary := byTool[tc.call.toolName]
+		require.NotNil(t, summary, "%s is missing: %v", tc.call.toolName, byTool)
+		require.Equal(t, gen.ToolUsageTargetType(tc.targetType), summary.TargetType, tc.call.toolName)
+		require.Equal(t, tc.targetID, summary.TargetID, tc.call.toolName)
+		require.Equal(t, tc.label, summary.TargetLabel, tc.call.toolName)
+	}
+}
+
 // A call that reached a gateway by URL is labelled the way LoadGatewayLabels
 // labels it: a gateway in a project, or serving an agent, the viewer may not
 // read is "Gateway in another project", on the summary path and the raw path.
