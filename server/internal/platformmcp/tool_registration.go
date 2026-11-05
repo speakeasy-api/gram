@@ -92,13 +92,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		nextAction := nextActionStartSetup
-		if isBrowserCatalogProviderKey(result.ProviderKey) {
-			nextAction = nextActionContinueDashboardSetup
-		}
-		if len(result.SecretFieldsPending) > 0 {
-			nextAction = nextActionSecureDashboardSetup
-		}
+		nextAction := result.NextAction
 		dashboardSetupURL := ""
 		if isBrowserCatalogProviderKey(result.ProviderKey) {
 			dashboardSetupURL, err = registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{
