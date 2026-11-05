@@ -99,19 +99,23 @@ export type ServerSignIn = Pick<RemoteSessionClient, "id" | "credentialOwner">;
  * clients. Under upstream auth enforcement these decide which registration a
  * call signs in through, so they are the answer even when the server shares
  * its user session issuer with others: the issuer binds one registration,
- * which can belong to another server. Undefined while setup is incomplete,
- * when the auth clients do not record the upstream yet and the issuer's
- * registrations stay the only signal.
+ * which can belong to another server. Undefined while the auth clients do
+ * not record the upstream yet, when the issuer's registrations stay the only
+ * signal: setup is incomplete, or a personal client names no registration.
  */
 export function serverSignIns(
   auth: Pick<McpServerAuthentication, "status" | "clients">,
 ): ServerSignIn[] | undefined {
   if (auth.status === "setup_incomplete") return undefined;
-  return auth.clients.flatMap((client) =>
-    client.enabled && client.personal && client.remoteSessionClientId
-      ? [{ id: client.remoteSessionClientId, credentialOwner: "subject" }]
-      : [],
+  const personal = auth.clients.filter(
+    (client) => client.enabled && client.personal,
   );
+  if (personal.some((client) => !client.remoteSessionClientId))
+    return undefined;
+  return personal.map((client) => ({
+    id: client.remoteSessionClientId!,
+    credentialOwner: "subject",
+  }));
 }
 
 /** Whether a row can be chosen: the key will reach it without anyone signing in. */
@@ -197,8 +201,9 @@ export async function attachOwnerConnections(
   );
   /**
    * The sign-ins the servers on one issuer ask for, from their own auth
-   * clients. Undefined without enforcement, or while any of them has setup
-   * incomplete, when the issuer's registrations are still the answer.
+   * clients. Undefined without enforcement, or while any of them has not
+   * resolved its sign-ins (`serverSignIns`), when the issuer's registrations
+   * are still the answer.
    */
   const typedSignIns = (
     issuer: InventoryServer,

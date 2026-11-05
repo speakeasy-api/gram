@@ -288,6 +288,31 @@ describe("attachOwnerConnections", () => {
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
     });
 
+    it("asks for the issuer's sign-ins when enforced but its personal sign-in names no registration", async () => {
+      const { fake, attachBinding } = api({
+        auth: () =>
+          Promise.resolve(
+            authentication([{ ...own, remoteSessionClientId: undefined }]),
+          ),
+        clients: [client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+      });
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(fake.remoteSessionClients.list).toHaveBeenCalled();
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
+    });
+
     it("asks for the issuer's sign-ins when it is not, as the issuer routes the call", async () => {
       const { fake, attachBinding } = shared();
       await expect(
@@ -469,10 +494,25 @@ describe("serverSignIns", () => {
           base,
           { ...base, remoteSessionClientId: "client_disabled", enabled: false },
           { ...base, remoteSessionClientId: "client_shared", personal: false },
-          { ...base, remoteSessionClientId: undefined },
+          { ...base, remoteSessionClientId: undefined, personal: false },
         ],
       }),
     ).toEqual([{ id: "client_own", credentialOwner: "subject" }]);
+  });
+
+  it("has no answer while a personal auth client names no registration", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [{ ...base, remoteSessionClientId: undefined }],
+      }),
+    ).toBeUndefined();
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [base, { ...base, remoteSessionClientId: undefined }],
+      }),
+    ).toBeUndefined();
   });
 
   it("has no answer while setup is incomplete", () => {

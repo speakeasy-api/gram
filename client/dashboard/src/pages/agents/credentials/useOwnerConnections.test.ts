@@ -189,6 +189,20 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
+  it("falls back to the issuer when its personal sign-in names no registration", () => {
+    mocks.enforcement = "enforced";
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [{ ...ownSignIn, remoteSessionClientId: undefined }],
+      },
+    });
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+    });
+  });
+
   it("keeps the server checking until enforcement is known", () => {
     mocks.enforcement = "loading";
     const { result } = renderHook(() => useOwnerConnections([server], true));

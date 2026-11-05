@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => ({
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
   checkAuthGrant: vi.fn(),
-  authEnforced: false as boolean | undefined,
+  // Undefined while loading; "error" when the state could not be read.
+  authEnforced: false as boolean | undefined | "error",
   mcpServers: vi.fn(),
   // Holds the token endpoints in their loading state.
   tokenEndpointsPending: false,
@@ -76,7 +77,9 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
     data:
       mocks.authEnforced === undefined
         ? undefined
-        : { upstreamAuthEnforced: mocks.authEnforced },
+        : mocks.authEnforced === "error"
+          ? {}
+          : { upstreamAuthEnforced: mocks.authEnforced },
   }),
 }));
 
@@ -757,6 +760,19 @@ describe("Provisioning a new agent", () => {
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("creates nothing while the organization's upstream auth enforcement loads", async () => {
+    mocks.authEnforced = undefined;
+    fireEvent.click(await reachCredentialStep());
+
+    expect(
+      await screen.findByText(
+        "Checking how this organization's servers sign in. Try again in a moment.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    expect(mocks.attach).not.toHaveBeenCalled();
   });
 
   it("leaves the sign-in grant out where the organization does not require it", async () => {
@@ -2281,6 +2297,23 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("holds an edit's save until the organization's upstream auth enforcement loads", async () => {
+    mocks.authEnforced = undefined;
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    const save = await authenticationSave();
+    expect(
+      await screen.findByText(
+        "Checking how this organization's servers sign in…",
+      ),
+    ).toBeTruthy();
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(save);
+    expect(mocks.attach).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
   it("gives no sign-in grant to an edited agent that reaches no server", async () => {
     mocks.authEnforced = true;
     mocks.checkAuthGrant.mockResolvedValue({
@@ -3721,6 +3754,51 @@ describe("Servers that sign in as a person", () => {
       expect.anything(),
     );
     expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("attaches only the server's own sign-in when the enforcement state cannot be read", async () => {
+    mocks.authEnforced = "error";
+    // The organization-wide issuer also lists another server's sign-in,
+    // which the creator happens to have connected.
+    mocks.sessionClients.mockResolvedValue([
+      { id: "client_linear", credentialOwner: "subject" },
+      { id: "client_other", credentialOwner: "subject" },
+    ]);
+    mocks.sessions.mockResolvedValue([
+      mine,
+      { ...mine, id: "session_other", remoteSessionClientId: "client_other" },
+    ]);
+    mocks.serverAuth.mockResolvedValue({
+      status: "configured",
+      clients: [
+        {
+          id: "auth_linear",
+          clientType: "remote_session",
+          enabled: true,
+          personal: true,
+          remoteSessionClientId: "client_linear",
+        },
+      ],
+    });
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).toHaveBeenCalledTimes(1);
+    expect(mocks.attach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachBindingRequestBody: expect.objectContaining({
+          remoteSessionId: "session_mine",
+        }),
+      }),
+      undefined,
+      expect.anything(),
+    );
   });
 
   it("keeps Continue locked when a server's auth cannot be read", async () => {
