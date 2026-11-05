@@ -35,12 +35,18 @@ const (
 	// stops hosting it until the reconciler deletes the old device, resets
 	// the slot and mints a fresh key.
 	NodeStatusNeedsLogin NodeStatus = "needs_login"
+
+	// NodeStatusAwaitingApproval means the node is connected but the tailnet
+	// has not approved it to host the service, so clients cannot reach it.
+	// The customer fixes it in their policy or admin console; the pod keeps
+	// the node up and picks up approval on its next heartbeat.
+	NodeStatusAwaitingApproval NodeStatus = "awaiting_approval"
 )
 
 // ParseNodeStatus validates a stored status value.
 func ParseNodeStatus(value string) (NodeStatus, error) {
 	switch NodeStatus(value) {
-	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped, NodeStatusNeedsLogin:
+	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped, NodeStatusNeedsLogin, NodeStatusAwaitingApproval:
 		return NodeStatus(value), nil
 	default:
 		return "", fmt.Errorf("invalid network ingress node status %q", value)
