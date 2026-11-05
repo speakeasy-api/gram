@@ -9,7 +9,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useUser } from "@/contexts/Auth";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -229,7 +229,9 @@ function AgentCredentialUsePanel({
 }): JSX.Element {
   const client = useGramContext();
   const viewer = useUser();
-  const canViewToolLogs = useCanViewToolLogs();
+  // The agent's traces are the owner's to read; anyone else needs log:read.
+  const canViewToolLogs =
+    useToolLogsAccess().projectWide || agent.ownerUserId === viewer.id;
   const { from, to } = useIdentityWindow();
   const { slug: gramProject } = useIdentityProject();
 
@@ -279,8 +281,8 @@ function AgentCredentialUsePanel({
   if (!canViewToolLogs) {
     body = (
       <IdentityPanelEmpty>
-        You need the log:read permission on this project to see whose
-        credentials this agent uses.
+        Only this agent&apos;s owner, or a member with the View tool logs
+        permission on this project, can see whose credentials it uses.
       </IdentityPanelEmpty>
     );
   } else if (rows.length === 0) {

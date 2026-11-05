@@ -1,5 +1,4 @@
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -165,11 +164,9 @@ export function GatewayActivitySection({
     }
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
-  const canViewToolLogs = useCanViewToolLogs();
-  const logsHref =
-    canViewToolLogs && gatewayScopedSearch
-      ? routes.logs.href() + gatewayScopedSearch
-      : undefined;
+  const logsHref = gatewayScopedSearch
+    ? routes.logs.href() + gatewayScopedSearch
+    : undefined;
   const insightsHref = gatewayScopedSearch
     ? routes.insights.href() + gatewayScopedSearch
     : undefined;
