@@ -384,6 +384,21 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			return redirectWithError(authErrInit, fmt.Errorf("consume support login intent: %w", err))
 		}
 	}
+	// Best effort, unlike the signup intent: missing attribution only costs a
+	// campaign breakdown, so it never fails the login.
+	var attribution *identity.SignupAttribution
+	if state := decodeStateParam(payload); state != nil && state.Nonce != "" {
+		var stored identity.SignupAttribution
+		err := s.nonceStore.GetAndDelete(ctx, signupAttributionKey(state.Nonce), &stored)
+		switch {
+		case err == nil:
+			attribution = &stored
+		case errors.Is(err, redisCache.ErrCacheMiss):
+		default:
+			logger.WarnContext(ctx, "signup attribution is unavailable", attr.SlogError(err))
+		}
+	}
+
 	if supportExpected != (supportLogin != nil) {
 		return redirectWithError(authErrInit, errors.New("support login intent does not match login nonce"))
 	}
@@ -426,6 +441,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	login, err := s.identity.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{
 		SkipMembershipSync: supportOrgID != "",
+		Attribution:        attribution,
 	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -537,7 +553,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
-			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org, createdViaSignup, nil)
+			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org, createdViaSignup, nil, attribution)
 
 			return &gen.CallbackResult{
 				Location:      s.signupDestination(ctx, payload, org, partnerSignup),
@@ -893,6 +909,23 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	if orgName != "" || partnerCode != "" {
 		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName, PartnerCode: partnerCode}, nonceTTL); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error storing signup intent").LogError(ctx, s.logger)
+		}
+	}
+	// Sign-up attribution rides the same nonce, under its own key so an
+	// ordinary login carrying stray UTMs never looks like a sign-up intent.
+	// The host is the one the sign-up page was served from.
+	if attribution := identity.NewSignupAttribution(
+		conv.PtrValOr(payload.UtmSource, ""),
+		conv.PtrValOr(payload.UtmMedium, ""),
+		conv.PtrValOr(payload.UtmCampaign, ""),
+		conv.PtrValOr(payload.UtmTerm, ""),
+		conv.PtrValOr(payload.UtmContent, ""),
+		conv.PtrValOr(payload.AnalyticsSessionID, ""),
+		s.platformHostURL(ctx, s.cfg.GramServerURL),
+	); attribution != nil && supportGrant == nil {
+		if err := s.nonceStore.Set(ctx, signupAttributionKey(nonce), *attribution, nonceTTL); err != nil {
+			// Attribution is never worth failing a login over.
+			s.logger.WarnContext(ctx, "failed to store signup attribution", attr.SlogError(err))
 		}
 	}
 	if supportGrant != nil {
@@ -1723,15 +1756,15 @@ func (s *Service) redirectSignupError(ctx context.Context, payload *gen.Callback
 //
 // createdVia is one of the createdVia constants. extra carries flow-specific
 // properties, such as the MCP client behind a Platform MCP signup, onto both
-// the onboarding event and the growth activity.
-func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName string, org orgRepo.OrganizationMetadatum, createdVia string, extra map[string]string) {
-	properties := map[string]any{
-		"action":            "new_org_created",
-		createdViaProperty:  createdVia,
-		"company_name":      orgName,
-		"organization_id":   org.ID,
-		"organization_slug": org.Slug,
-	}
+// the onboarding event and the growth activity. attribution, when the flow
+// started on the sign-up page, adds its UTMs, session and host to the event.
+func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName string, org orgRepo.OrganizationMetadatum, createdVia string, extra map[string]string, attribution *identity.SignupAttribution) {
+	properties := attribution.Properties()
+	properties["action"] = "new_org_created"
+	properties[createdViaProperty] = createdVia
+	properties["company_name"] = orgName
+	properties["organization_id"] = org.ID
+	properties["organization_slug"] = org.Slug
 	activityExtra := map[string]string{createdViaProperty: createdVia}
 	for key, value := range extra {
 		properties[key] = value
@@ -1930,6 +1963,12 @@ type signupIntent struct {
 // deploy where in-flight nonces are the old shape and fail to decode.
 func signupIntentKey(nonce string) string {
 	return "auth:signup_intent:" + nonce
+}
+
+// signupAttributionKey namespaces the sign-up attribution (see
+// identity.SignupAttribution) stashed against a login nonce.
+func signupAttributionKey(nonce string) string {
+	return "auth:signup_attribution:" + nonce
 }
 
 type supportIntent struct {

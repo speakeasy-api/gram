@@ -341,7 +341,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			}
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
-		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
+		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
