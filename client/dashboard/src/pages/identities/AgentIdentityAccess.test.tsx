@@ -292,11 +292,6 @@ describe("Agent profile permissions", () => {
   it("says which upstream credentials each mcp:auth grant covers", async () => {
     mocks.list.mockResolvedValue([
       {
-        id: "auth_everything",
-        scope: "mcp:auth",
-        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
-      },
-      {
         id: "auth_shared",
         scope: "mcp:auth",
         selector: {
@@ -343,9 +338,6 @@ describe("Agent profile permissions", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Any upstream credential in the organization"),
-    ).toBeTruthy();
-    expect(
       screen
         .getByRole("link", { name: "Calendar server" })
         .getAttribute("href"),
@@ -372,13 +364,59 @@ describe("Agent profile permissions", () => {
     expect(
       screen.getAllByRole("listitem").map((item) => item.textContent),
     ).toEqual([
-      "Any upstream credential in the organization",
       "Personal connections of the person the agent acts for",
       "Ada Lovelace's Meeting notes connection · on Notes server",
       "User d265f01b…'s connection through upstream client 01a10332…",
       "Content calendar · Service account · on Calendar server",
     ]);
     expect(screen.queryByText("All resources")).toBeNull();
+  });
+  it("shows only the grant on any upstream credential, which covers the narrower ones", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "auth_shared",
+        scope: "mcp:auth",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "client_calendar",
+        },
+      },
+      {
+        id: "auth_everything",
+        scope: "mcp:auth",
+        effect: "allow",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      },
+      {
+        id: "auth_own",
+        scope: "mcp:auth",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          connectionOwner: "$represented_user",
+        },
+      },
+      {
+        id: "auth_denied",
+        scope: "mcp:auth",
+        effect: "deny",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "client_calendar",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("mcp:auth")).toBeTruthy();
+    // A deny is not covered by the wildcard, so it stays.
+    expect(
+      screen.getAllByRole("listitem").map((item) => item.textContent),
+    ).toEqual([
+      "Any upstream credential in the organization",
+      "Content calendar · Service account · on Calendar server",
+    ]);
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

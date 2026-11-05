@@ -83,6 +83,8 @@ const LOCKED_SCOPE_DESCRIPTIONS: Record<string, string> = {
 /**
  * A scope's grants in reading order. `mcp:auth` grants go broadest first, down
  * to one named credential, then by label; other scopes keep the policy's order.
+ * A grant on any upstream credential covers every narrower one, so it is
+ * shown alone.
  */
 function orderGrants(
   scope: string,
@@ -90,6 +92,14 @@ function orderGrants(
   names: AuthGrantNames,
 ): AgentPolicyGrant[] {
   if (scope !== "mcp:auth") return grants;
+  const wildcard = grants.find(
+    (grant) =>
+      grant.effect === "allow" &&
+      isAgentPolicySelectorUnrestricted(grant.selector),
+  );
+  if (wildcard) {
+    return [wildcard, ...grants.filter((grant) => grant.effect !== "allow")];
+  }
   const label = (grant: AgentPolicyGrant) =>
     authGrantText(authGrantParts(grant.selector, names));
   return [...grants].sort(
