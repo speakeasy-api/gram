@@ -45,7 +45,7 @@ WITH sources AS (
   LEFT JOIN chats c ON c.id = m.chat_id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE m.deleted IS FALSE
-    AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+    AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     AND m.organization_id = ANY(@organization_ids::text[])
     AND m.created_at >= @since::timestamptz
     AND m.created_at < @until::timestamptz
@@ -89,7 +89,7 @@ WHERE d.level = 'day'
       LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
       WHERE m.id = ANY(d.memo_ids)
         AND m.deleted IS FALSE
-        AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+        AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     )
   )
 RETURNING d.id;
@@ -154,7 +154,7 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= @period_start::timestamptz
   AND m.created_at < @period_end::timestamptz
 ORDER BY m.created_at DESC
@@ -226,7 +226,7 @@ WHERE d.project_id = @project_id
           LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
           WHERE m.id = ANY(s.memo_ids)
             AND m.deleted IS FALSE
-            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
         )
         OR cardinality(s.child_digest_ids) > (
           SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
@@ -269,7 +269,7 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= @since::timestamptz
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests d
@@ -321,7 +321,7 @@ WHERE d.id = @id
           LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
           WHERE m.id = ANY(s.memo_ids)
             AND m.deleted IS FALSE
-            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
         )
         OR cardinality(s.child_digest_ids) > (
           SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
@@ -370,7 +370,7 @@ WHERE d.id = ANY(@ids::uuid[])
           LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
           WHERE m.id = ANY(s.memo_ids)
             AND m.deleted IS FALSE
-            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
         )
         OR cardinality(s.child_digest_ids) > (
           SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
@@ -405,5 +405,5 @@ WHERE m.id = ANY(@ids::uuid[])
   AND m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at;
