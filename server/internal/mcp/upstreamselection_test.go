@@ -19,6 +19,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -485,13 +486,13 @@ func TestUpstreamClientSelection_RecordingLocksServersInWriterOrder(t *testing.T
 	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
 	require.NoError(t, err)
 
-	writer, err := f.ti.conn.Begin(ctx)
+	writer, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary holds the SQLc-taken server locks
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = writer.Rollback(context.WithoutCancel(ctx)) })
-	var writerPID uint32
-	require.NoError(t, writer.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&writerPID))
-	_, err = writer.Exec(ctx, "SELECT id FROM mcp_servers WHERE id = $1 FOR UPDATE", servers[0])
+	writerPID, err := testrepo.New(writer).BackendPIDFixture(ctx)
 	require.NoError(t, err)
+	writerLocks := authclientbackfill.New(writer)
+	require.NoError(t, writerLocks.LockEMAPreparationServer(ctx, authclientbackfill.LockEMAPreparationServerParams{ServerID: servers[0], OrganizationID: f.orgID}))
 
 	recorded := make(chan error, 1)
 	go func() {
@@ -507,13 +508,15 @@ func TestUpstreamClientSelection_RecordingLocksServersInWriterOrder(t *testing.T
 		recorded <- err
 	}()
 	require.Eventually(t, func() bool {
-		var blocked int
-		err := f.ti.conn.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))", writerPID).Scan(&blocked)
-		return err == nil && blocked > 0
+		blocked, err := testrepo.New(f.ti.conn).IsQueryBlockedByFixture(ctx, testrepo.IsQueryBlockedByFixtureParams{
+			QueryPattern: "%name: RecordUpstreamClientSelections %",
+			HolderPid:    writerPID,
+		})
+		return err == nil && blocked
 	}, 10*time.Second, 10*time.Millisecond, "recording never waited on the lowest server")
 
 	for _, id := range servers[1:] {
-		_, err = writer.Exec(ctx, "SELECT id FROM mcp_servers WHERE id = $1 FOR UPDATE NOWAIT", id)
+		_, err = writerLocks.ProbeServerLockFixture(ctx, id)
 		require.NoError(t, err, "recording holds a higher server while it waits on the lowest")
 	}
 	require.NoError(t, writer.Commit(ctx))
