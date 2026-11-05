@@ -293,12 +293,19 @@ func TestConnectionOutage_TunnelTransportMissingIsRecorded(t *testing.T) {
 		posts.Add(1)
 	})
 	bindIssuerToTunnel(t, env)
+	attribution := remotesessions.RefreshAttribution{}
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, attribution, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Positive(t, remotesessions.RetryAfter(err))
+	require.Zero(t, posts.Load())
+	// Response-facing pacing describes the unavailable path; history identifies our missing dependency.
+	_, cached := env.mgr.ResolveAccessTokens(ctx, attribution, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, cached, remotesessions.ErrRemoteSessionUnavailable)
+	require.Positive(t, remotesessions.RetryAfter(cached))
+	require.False(t, remotesessions.RefreshFailureRecorded(cached))
 	require.Zero(t, posts.Load())
 }
 
