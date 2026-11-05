@@ -18,7 +18,9 @@ const state = vi.hoisted(() => ({
     | {
         enabled?: boolean;
         refetchInterval?: (query: {
-          state: { data?: { ingress?: { status?: string } } };
+          state: {
+            data?: { ingress?: { status?: string; lastError?: string } };
+          };
         }) => number | false;
       }
     | undefined,
@@ -469,6 +471,57 @@ describe("PrivateNetworkSection", () => {
     expect(state.deleteMutate).toHaveBeenCalledWith({
       security: { sessionHeaderGramSession: "" },
     });
+  });
+
+  it("tells admins how to approve the gateway when the tailnet has not", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_service_not_approved",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText(/hasn.t approved Speakeasy to host/)).toBeTruthy();
+    expect(screen.getByText("svc:private-mcp")).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:private-mcp": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open Tailscale services" })
+        .getAttribute("href"),
+    ).toBe("https://login.tailscale.com/admin/services");
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: {
+          data: {
+            ingress: {
+              status: "error",
+              lastError: "provider_service_not_approved",
+            },
+          },
+        },
+      }),
+    ).toBe(10_000);
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: { data: { ingress: { status: "online" } } },
+      }),
+    ).toBe(false);
   });
 
   it("keeps cached cleanup controls visible when polling fails", () => {
