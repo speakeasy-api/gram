@@ -179,12 +179,22 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 			// known by trying, so it is the person's choice to make.
 			return none, unresolved, false, nil
 		case clientType == authz.AuthClientTypeRemoteSession:
-			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			req := remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
-			})
+			}
+			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
 			if err != nil {
 				return none, unresolved, false, fmt.Errorf("check member connection: %w", err)
+			}
+			// An agent key with no usable attachment is served by its validated
+			// authorizer's own connection.
+			if reconnect && res.authorizerOwner != "" {
+				req.Subject = urn.NewUserSubject(res.authorizerOwner)
+				reconnect, err = s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
+				if err != nil {
+					return none, unresolved, false, fmt.Errorf("check authorizer connection: %w", err)
+				}
 			}
 			if reconnect {
 				return none, unresolved, false, nil

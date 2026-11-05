@@ -13,14 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -163,6 +167,55 @@ func TestEnforcedSessionCompatibilityPathNeedsNoSignInLink(t *testing.T) {
 		require.False(t, authentication.chosenNoAuth, "it is never dialed anonymously")
 	})
 
+	t.Run("a synced identity-provider client serves without an association", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		// Copied by the sync and offered through a synced link, with no association
+		// for the registration: the shape a healthy identity-provider server has.
+		ema := f.client(authClientTypeEMA, validUUID(f.registration), true)
+		require.NoError(t, f.q.SeedAuthClientEMAFixture(t.Context(), authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://api.example.com", AuthClientID: ema}))
+		selector := f.choose(validUUID(ema))
+		selector.userSessionIssuerID = f.signIn
+
+		authentication := f.authentication(subject)
+		choice, err := f.service.enforceAuthClient(t.Context(), httptest.NewRecorder(), authentication, selector)
+		require.NoError(t, err)
+		require.Equal(t, validUUID(f.registration), choice.clientID)
+		require.Equal(t, choice.clientID, authentication.chosenClient, "identity chaining is asked for the client's own registration")
+	})
+
+	t.Run("an identity-provider client detached from the server is a gap", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		ema := f.client(authClientTypeEMA, validUUID(f.registration), false)
+		require.NoError(t, f.q.SeedAuthClientEMAFixture(t.Context(), authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://api.example.com", AuthClientID: ema}))
+		selector := f.choose(validUUID(ema))
+		selector.userSessionIssuerID = f.signIn
+
+		authentication := f.authentication(subject)
+		w := httptest.NewRecorder()
+		_, err := f.service.enforceAuthClient(t.Context(), w, authentication, selector)
+		require.Error(t, err)
+		require.NotEmpty(t, w.Header().Get("WWW-Authenticate"))
+		require.False(t, authentication.chosenClient.Valid)
+		require.False(t, authentication.chosenNoAuth)
+	})
+
+	t.Run("a headers-only client on a tunneled server is never dialed anonymously", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		f.tunneled()
+		selector := f.choose(validUUID(f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})))
+		selector.userSessionIssuerID = f.signIn
+
+		authentication := f.authentication(subject)
+		w := httptest.NewRecorder()
+		_, err := f.service.enforceAuthClient(t.Context(), w, authentication, selector)
+		require.Error(t, err)
+		require.NotEmpty(t, w.Header().Get("WWW-Authenticate"), "a tunnel is sent no headers, so the caller is told to reconnect")
+		require.False(t, authentication.chosenNoAuth)
+	})
+
 	t.Run("stale copies of a static credential beside an association", func(t *testing.T) {
 		t.Parallel()
 		f := newEnforcedCallerFixture(t, pool)
@@ -283,7 +336,7 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 		require.True(t, decided)
 		require.True(t, reconnect, "no stored grant")
 		require.Equal(t, validUUID(f.registration), chain.clientID, "identity chaining is asked before the refresh is refused")
-		require.True(t, f.service.refreshNeedsUpstreamReconnect(t.Context().reconnect(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug), "without identity chaining the reconnect stands")
+		require.True(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect(), "without identity chaining the reconnect stands")
 
 		f.connect(subject, "upstream-token")
 		reconnect, chain, decided, err = f.service.refreshNeedsAuthClientReconnect(t.Context(), endpoint, subject, endpoint.Slug)
@@ -291,7 +344,7 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 		require.True(t, decided)
 		require.False(t, reconnect)
 		require.False(t, chain.clientID.Valid)
-		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context().reconnect(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug), "a live grant refreshes, though the sign-in links no client")
+		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect(), "a live grant refreshes, though the sign-in links no client")
 	})
 
 	t.Run("stale copies of a static credential refresh", func(t *testing.T) {
@@ -301,7 +354,7 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 			f.attach()
 			return validUUID(client)
 		})
-		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context().reconnect(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug), "it holds no upstream session")
+		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect(), "it holds no upstream session")
 	})
 
 	t.Run("a static credential refreshes", func(t *testing.T) {
@@ -322,13 +375,13 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 			require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: client}))
 			return validUUID(client)
 		})
-		require.True(t, f.service.refreshNeedsUpstreamReconnect(t.Context().reconnect(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug))
+		require.True(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect())
 	})
 
 	t.Run("a no-auth choice refreshes", func(t *testing.T) {
 		t.Parallel()
 		f, endpoint := setup(t, func(*enforcedCallerFixture) uuid.NullUUID { return uuid.NullUUID{} })
-		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context().reconnect(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug))
+		require.False(t, f.service.refreshNeedsUpstreamReconnect(t.Context(), testenv.NewLogger(t), endpoint, subject, endpoint.Slug).reconnect())
 	})
 
 	t.Run("a hosted server records no choice to decide by", func(t *testing.T) {
@@ -400,6 +453,31 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 		tokens, err := f.service.resolveAccessTokens(assistant(t, f), authentication, false)
 		require.NoError(t, err)
 		require.Equal(t, "upstream-token", tokens[f.issuerID].Token, "the sign-in links no client, and the registration still serves")
+	})
+
+	t.Run("a server whose only client is disabled needs none", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: client}))
+		authentication, choice, selected, _, err := serve(t, f)
+		require.NoError(t, err)
+		require.True(t, selected)
+		require.True(t, choice.noAuth())
+		require.True(t, authentication.chosenNoAuth)
+		require.NotNil(t, authentication.authClient, "the resolver decided it")
+		require.Equal(t, authClientNoAuth, authentication.authClient.outcome)
+	})
+
+	t.Run("a server's own credential header keeps a no-auth decision a setup gap", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		f.sourceHeader("X-Upstream-Key", true, text("stored"), pgtype.Text{})
+		authentication, _, selected, header, err := serve(t, f)
+		require.Error(t, err)
+		require.True(t, selected)
+		require.NotEmpty(t, header.Get("WWW-Authenticate"))
+		require.False(t, authentication.chosenNoAuth)
 	})
 
 	t.Run("a personal client with no connection is refused", func(t *testing.T) {
@@ -522,6 +600,27 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		require.Contains(t, tokens, f.issuerID)
 	})
 
+	t.Run("a disabled client's registration is left out, and the enabled one still serves", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		f.adminClient(authClientTypeServiceAccount, validUUID(f.registration))
+		disabledRegistration := uuid.New()
+		require.NoError(t, f.q.SeedRemoteSessionClientFixture(t.Context(), authclientbackfill.SeedRemoteSessionClientFixtureParams{ID: disabledRegistration, ProjectID: validUUID(f.projectID), OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "cid-" + disabledRegistration.String()[:8], CredentialOwner: "subject", TokenEndpointAuthMethod: pgtype.Text{}}))
+		disabled := f.adminClient(authClientTypeRemoteSession, validUUID(disabledRegistration))
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: disabled}))
+		target := agentServerTarget{organizationID: f.orgID, agentID: uuid.New(), serverID: f.serverID, projectID: f.projectID, slug: "server"}
+
+		clients, err := f.service.agentServerClients(t.Context(), target, f.signIn)
+		require.NoError(t, err)
+		require.Len(t, clients, 1)
+		require.Equal(t, f.registration, clients[0].ID)
+
+		authentication := f.authentication(urn.NewAgentSubject(target.agentID))
+		choice, err := f.service.authorizeDirectAgentKey(t.Context(), authentication, target.agentID)
+		require.NoError(t, err, "a disabled client does not refuse the whole request")
+		require.Equal(t, validUUID(f.registration), choice.clientID)
+	})
+
 	t.Run("a registration the sign-in links but no auth client offers does not", func(t *testing.T) {
 		t.Parallel()
 		f := newEnforcedCallerFixture(t, pool)
@@ -532,5 +631,180 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		clients, err := f.service.agentServerClients(t.Context(), target, f.signIn)
 		require.NoError(t, err)
 		require.Empty(t, clients)
+	})
+}
+
+// An assistant-runtime token is not an acting user, so the mandatory check
+// binds no represented user to it. It may use a shared client its owner's
+// grants reach, and no grant lets it use a person's own connection: that needs
+// an agent identity, whose turn credential names the person it acts for.
+func TestEnforcedAssistantIsDecidedByTheMandatoryCheck(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_enforced_assistant_permit")
+	require.NoError(t, err)
+	subject := urn.NewUserSubject("user_1")
+
+	allAuth := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
+	})
+	namingTheOwner := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
+		authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: subject.ID,
+	})
+	assistant := func(t *testing.T, f *enforcedCallerFixture, grants ...authz.Grant) context.Context {
+		t.Helper()
+		enforcedShadowService(t, f.authClientFixture)
+		return contextvalues.SetAssistantPrincipal(sessionContext(t, f.orgID, grants...), contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
+	}
+
+	t.Run("a shared client its owner's grants reach serves", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		f.copyHeader(client, "X-Api-Key", true, false, text("configured"), pgtype.Text{})
+		ctx := assistant(t, f, allAuth)
+
+		authentication := f.authentication(subject)
+		_, selected, err := f.service.directUpstreamChoice(ctx, httptest.NewRecorder(), authentication)
+		require.NoError(t, err)
+		require.True(t, selected)
+		require.NotNil(t, authentication.authClient)
+		require.Equal(t, client, authentication.authClient.clientID)
+	})
+
+	t.Run("a shared client its owner's grants do not reach is refused", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		f.copyHeader(client, "X-Api-Key", true, false, text("configured"), pgtype.Text{})
+		ctx := assistant(t, f, authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource))
+
+		authentication := f.authentication(subject)
+		w := httptest.NewRecorder()
+		_, selected, err := f.service.directUpstreamChoice(ctx, w, authentication)
+		require.Error(t, err)
+		require.True(t, selected)
+		require.NotEmpty(t, w.Header().Get("WWW-Authenticate"))
+		require.False(t, authentication.chosenNoAuth, "a refused client is never replaced by an anonymous call")
+	})
+
+	for name, grant := range map[string]authz.Grant{
+		"the default personal grant":    personalAuthGrant(),
+		"a grant naming the connection": namingTheOwner,
+	} {
+		t.Run("a person's own connection is refused under "+name, func(t *testing.T) {
+			t.Parallel()
+			f := newEnforcedCallerFixture(t, pool)
+			f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+			f.connect(subject, "upstream-token")
+			ctx := assistant(t, f, grant)
+
+			authentication := f.authentication(subject)
+			w := httptest.NewRecorder()
+			_, selected, err := f.service.directUpstreamChoice(ctx, w, authentication)
+			require.Error(t, err)
+			require.True(t, selected)
+			require.False(t, authentication.chosenClient.Valid, "the connection's token is never read")
+			require.False(t, authentication.chosenNoAuth)
+		})
+	}
+}
+
+// An agent key on a stored gateway keeps its own choice for a member, and a
+// member it has no choice for is decided by what the member offers, served by
+// the key's authorizer when it holds no attachment.
+func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_enforced_agent_key_gateway")
+	require.NoError(t, err)
+
+	setup := func(t *testing.T, f *enforcedCallerFixture) (context.Context, *memberChoices, []metaMember) {
+		t.Helper()
+		agentID := uuid.New()
+		ctx := admittedAgentContext(t, f.orgID, agentID)
+		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: f.signIn}
+		authentication := &issuerGateAuthentication{endpoint: endpoint, subject: urn.NewAgentSubject(agentID)}
+		choices, err := f.service.newMemberChoices(ctx, authentication)
+		require.NoError(t, err)
+		require.NotNil(t, choices)
+		require.True(t, choices.unchosen)
+		return ctx, choices, []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+	}
+	choose := func(t *testing.T, f *enforcedCallerFixture, choices *memberChoices, client uuid.UUID) {
+		t.Helper()
+		recorded, err := upstreamclientsrepo.New(pool).RecordAuthClientChoice(t.Context(), upstreamclientsrepo.RecordAuthClientChoiceParams{
+			CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: choices.selector.credentialID, Source: upstreamclients.SelectionSourceAdmin,
+			OrganizationID: f.orgID, AuthClientID: validUUID(client), McpServerID: f.serverID,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, recorded)
+	}
+	static := func(t *testing.T, f *enforcedCallerFixture) uuid.UUID {
+		t.Helper()
+		client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		f.copyHeader(client, "X-Api-Key", true, false, text("configured"), pgtype.Text{})
+		return client
+	}
+
+	t.Run("its choice between two clients is served", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		chosen := static(t, f)
+		static(t, f)
+		ctx, choices, members := setup(t, f)
+		choose(t, f, choices, chosen)
+
+		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		require.NoError(t, members[0].upstreamUnavailable)
+		require.Equal(t, chosen, members[0].authClient.clientID)
+	})
+
+	t.Run("a disabled choice is refused, never replaced by the sole other client", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		chosen := static(t, f)
+		static(t, f)
+		ctx, choices, members := setup(t, f)
+		choose(t, f, choices, chosen)
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: chosen}))
+
+		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		require.Error(t, members[0].upstreamUnavailable)
+		require.False(t, members[0].upstreamNoAuth)
+	})
+
+	t.Run("a client the key may not use is refused and reads no credential", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		f.connect(urn.NewUserSubject("user_owner"), "authorizer-token")
+		f.service.authClientPermitter = denyPermitter{}
+		ctx, choices, members := setup(t, f)
+
+		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		require.Error(t, members[0].upstreamUnavailable)
+		_, err := choices.tokens(ctx, members[0])
+		require.Error(t, err)
+	})
+
+	t.Run("without a choice or an attachment its authorizer's connection serves", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		// The authorizer's connection serves only while they are a live member.
+		fixtures := testrepo.New(pool)
+		require.NoError(t, fixtures.InsertUserFixture(t.Context(), testrepo.InsertUserFixtureParams{ID: "user_owner", Email: "owner-" + uuid.NewString() + "@example.com", DisplayName: "Owner"}))
+		require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(t.Context(), testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: f.orgID, UserID: pgtype.Text{String: "user_owner", Valid: true}}))
+		f.connect(urn.NewUserSubject("user_owner"), "authorizer-token")
+		ctx, choices, members := setup(t, f)
+
+		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		require.NoError(t, members[0].upstreamUnavailable)
+		require.Equal(t, "user_owner", members[0].authClient.authorizerOwner)
+		tokens, err := choices.tokens(ctx, members[0])
+		require.NoError(t, err)
+		require.Equal(t, "authorizer-token", tokens[f.issuerID].Token)
 	})
 }

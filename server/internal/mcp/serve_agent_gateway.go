@@ -309,8 +309,8 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 
 // agentServerClients lists the OAuth registrations that serve the target
 // server for an agent key with no choice for it. Once the organization
-// enforces, they are the registrations of the server's own personal and
-// service-account auth clients, whether or not the sign-in links them.
+// enforces, they are the registrations of the server's own enabled personal
+// and service-account auth clients, whether or not the sign-in links them.
 // Before that, they are the clients issuer binds that belong to the server;
 // an issuer can also bind clients of sibling servers, which never serve this
 // one.
@@ -327,7 +327,7 @@ func (s *Service) agentServerClients(ctx context.Context, target agentServerTarg
 		var registrations []uuid.UUID
 		for _, client := range offered {
 			oauthBacked := client.ClientType == authClientTypeRemoteSession || client.ClientType == authClientTypeServiceAccount
-			if oauthBacked && client.RemoteSessionClientID.Valid && !slices.Contains(registrations, client.RemoteSessionClientID.UUID) {
+			if client.Enabled && oauthBacked && client.RemoteSessionClientID.Valid && !slices.Contains(registrations, client.RemoteSessionClientID.UUID) {
 				registrations = append(registrations, client.RemoteSessionClientID.UUID)
 			}
 		}

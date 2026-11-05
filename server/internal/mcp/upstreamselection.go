@@ -648,7 +648,21 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		}
 		authenticated, ok := principalcredential.FromContext(ctx)
 		if !ok {
-			return s.unchosenMemberChoices(endpoint, connectionSubject(ctx, authentication.subject)), nil
+			choices := s.unchosenMemberChoices(endpoint, connectionSubject(ctx, authentication.subject))
+			// An agent key's own choices decide the members they name.
+			if keyMode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && keyMode == contextvalues.APIKeyAuthorizationModePrincipal {
+				authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+				if !hasAuth || authCtx == nil {
+					return nil, errSessionAuthContextMismatch
+				}
+				keyID, err := uuid.Parse(authCtx.APIKeyID)
+				if err != nil {
+					return nil, fmt.Errorf("parse agent key id: %w", err)
+				}
+				choices.selector.credentialKind = upstreamclients.CredentialKindAPIKey
+				choices.selector.credentialID = keyID
+			}
+			return choices, nil
 		}
 		// A principal credential is served only through its profile; one that
 		// binds none reaches no proxied member.
@@ -673,8 +687,9 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 }
 
 // unchosenMemberChoices serves an enforcing organization's gateway to a
-// caller that holds no credential choice, such as an assistant-runtime token
-// or Platform MCP: each proxied member is decided by what it offers subject.
+// caller with no choice recorded through it, such as an assistant-runtime
+// token, an agent key on a stored gateway or Platform MCP: each proxied member
+// is decided by what it offers subject.
 func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) *memberChoices {
 	return &memberChoices{
 		selector:     &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialKind: "", credentialID: uuid.Nil},
@@ -766,13 +781,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	switch {
 	case c.unchosen:
-		resolved = make(map[uuid.UUID]authClientResolution, len(ids))
-		for _, id := range ids {
-			resolved[id], err = c.selector.service.resolveUnchosenAuthClient(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, consentAuthServer{id: id, projectID: projects[id]})
-			if err != nil {
-				break
-			}
-		}
+		resolved, err = c.resolveUnchosenMembers(ctx, ids, projects)
 		ids = ids[:0]
 	case typed:
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
@@ -887,6 +896,40 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		// the member, which authorizes its registration without a sign-in link.
 		member.typedAuthClient = c.enforced && member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
 	}
+}
+
+// resolveUnchosenMembers decides each member for a caller with no choice
+// recorded through this gateway. An agent key's own choice for a member decides
+// it: a choice that cannot be used is a gap, never another client. Every other
+// member is decided by what it offers.
+func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.UUID, projects map[uuid.UUID]uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
+	resolved := make(map[uuid.UUID]authClientResolution, len(ids))
+	if c.selector.credentialID != uuid.Nil {
+		chosen, err := c.selector.resolveAuthClients(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, res := range chosen {
+			switch {
+			case res.outcome == authClientLegacy && res.clientID == uuid.Nil:
+				res = withoutLegacyFallback(res)
+			case res.outcome == authClientLegacy:
+				res.outcome = authClientGap
+			}
+			resolved[id] = res
+		}
+	}
+	for _, id := range ids {
+		if _, ok := resolved[id]; ok {
+			continue
+		}
+		res, err := c.selector.service.resolveUnchosenAuthClient(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, consentAuthServer{id: id, projectID: projects[id]})
+		if err != nil {
+			return nil, err
+		}
+		resolved[id] = res
+	}
+	return resolved, nil
 }
 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {

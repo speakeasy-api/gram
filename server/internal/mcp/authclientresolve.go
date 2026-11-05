@@ -363,7 +363,9 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 		res.outcome = authClientLegacy
 		res.reason = authClientReasonEMA
 		if row.RegistrationID.Valid && row.RegistrationLive {
-			// Identity chaining serves through the client's registration.
+			// Identity chaining serves through the client's registration. The
+			// client's own link to the server, checked above, offers it: a synced
+			// identity-provider client has no association to the server.
 			res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 		}
 	default:
@@ -465,6 +467,28 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: ""}, res, nil)
 }
 
+// resolveNoAuthChoice decides a no-auth choice for a server as a recorded one
+// is decided, so the server's own credential headers still make it a setup
+// gap. A client the proposal names, which can only be a disabled one here, is
+// not part of the choice.
+func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string, serverID uuid.UUID) (authClientResolution, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		Proposed: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+	})
+	if err != nil {
+		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve no-auth choice: %w", err)
+	}
+	if len(rows) != 1 {
+		return gapResolution(authClientReasonMissingChoice), nil
+	}
+	row := rows[0]
+	row.Ambiguous = false
+	row.NoAuth = true
+	row.AuthClientID = none
+	return decideAuthClient(row), nil
+}
+
 func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
 	res, err := s.checkAuthClientPermission(ctx, permit, res, observe)
 	if err != nil {
@@ -542,9 +566,11 @@ func (s *Service) resolveEnforcedAuthClient(ctx context.Context, selector *upstr
 // organization enforces, without reading the upstream client choice. One that
 // names no auth client is decided by withoutLegacyFallback. A named client is
 // served from the registration the resolver checked against the server, or,
-// for a headers-only client, by the server's own headers; an
-// identity-provider client whose registration is gone has neither and is a
-// gap.
+// for a headers-only client, by the server's own headers. An identity-provider
+// client whose registration is gone has neither and is a gap, and
+// so is a headers-only client on a tunneled server that needs upstream
+// authentication: a tunnel is sent no headers, so the call would go out
+// anonymous.
 func enforcedCompatibility(res authClientResolution) authClientResolution {
 	switch {
 	case res.outcome != authClientLegacy:
@@ -553,14 +579,16 @@ func enforcedCompatibility(res authClientResolution) authClientResolution {
 	case !res.choice.clientID.Valid && !isHeadersOnlyType(res.clientType):
 		res.outcome = authClientGap
 		res.reason = authClientReasonRegistration
+	case !res.choice.clientID.Valid && res.tunneled && !res.noAuthAllowed:
+		res.outcome = authClientGap
 	}
 	return res
 }
 
-// resolveUnchosenAuthClient decides a server's client for a caller that holds
-// no credential choice and has nowhere to record one: an assistant-runtime
-// token, a credential on a gateway it did not sign in to, Platform MCP. It
-// decides as a gateway member added after a credential was issued is decided:
+// resolveUnchosenAuthClient decides a server's client for a caller with no
+// choice for it and nowhere to record one: an assistant-runtime token, an agent
+// key on a stored gateway, Platform MCP. It decides as a gateway member added
+// after a credential was issued is decided:
 // no upstream authentication when the server needs none, or the one client
 // subject may use that is ready without any action. Anything else is a gap,
 // since nobody is there to choose.
@@ -572,9 +600,7 @@ func (s *Service) resolveUnchosenAuthClient(ctx context.Context, organizationID 
 	case !decided:
 		res = gapResolution(authClientReasonMissingChoice)
 	case !authClientID.Valid:
-		// The resolver confirms the server needs none, as it does for a
-		// recorded no-auth choice.
-		res, err = s.resolveAuthClientForConsent(ctx, organizationID, server.id, server.projectID, authClientID, subject)
+		res, err = s.resolveNoAuthChoice(ctx, organizationID, server.id)
 		if err != nil {
 			return gapResolution(authClientReasonMissingChoice), err
 		}
