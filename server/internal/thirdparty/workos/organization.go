@@ -168,6 +168,14 @@ func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID
 	if err != nil {
 		return "", fmt.Errorf("create organization membership: %w", err)
 	}
+	// Creating an existing membership can succeed without applying the role.
+	member := convertMember(membership)
+	if roleSlug != "" && !slices.Contains(member.RoleSlugs, roleSlug) {
+		member.RoleSlugs = append(member.RoleSlugs, roleSlug)
+		if _, err := wc.UpdateMemberRoles(ctx, membership.ID, member.RoleSlugs); err != nil {
+			return "", fmt.Errorf("apply requested membership role: %w", err)
+		}
+	}
 	return membership.ID, nil
 }
 

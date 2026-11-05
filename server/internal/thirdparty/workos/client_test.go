@@ -80,6 +80,22 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/user_management/organization_memberships":
 		f.handleListMembers(w, r)
 
+	case r.Method == http.MethodPost && path == "/user_management/organization_memberships":
+		var opts usermanagement.CreateOrganizationMembershipOpts
+		if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+			http.Error(w, "invalid membership", http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for _, membership := range f.memberships {
+			if membership.UserID == opts.UserID && membership.OrganizationID == opts.OrganizationID {
+				writeJSON(w, membership)
+				return
+			}
+		}
+		http.Error(w, "membership fixture not found", http.StatusNotFound)
+
 	// SDK: PUT /user_management/organization_memberships/{id}
 	case r.Method == http.MethodPut && strings.HasPrefix(path, "/user_management/organization_memberships/"):
 		membershipID := strings.TrimPrefix(path, "/user_management/organization_memberships/")
@@ -906,6 +922,27 @@ func TestRoleClient_ListMembers_FallsBackToSingleRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, members, 1)
 	require.Equal(t, []string{"editor"}, members[0].RoleSlugs)
+}
+
+func TestRoleClient_CreateOrganizationMembership_AppliesRoleToExistingMembership(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{{
+		ID:             "mem_1",
+		UserID:         "user_1",
+		OrganizationID: "org_1",
+		Role:           common.RoleResponse{Slug: "member"},
+		Roles:          []common.RoleResponse{{Slug: "member"}, {Slug: "builder"}},
+		Status:         usermanagement.Active,
+	}}
+	client, _ := newTestClient(t, fake)
+
+	id, err := client.CreateOrganizationMembership(t.Context(), "user_1", "org_1", "admin")
+	require.NoError(t, err)
+	require.Equal(t, "mem_1", id)
+	member, err := client.GetOrgMembership(t.Context(), "user_1", "org_1")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"member", "builder", "admin"}, member.RoleSlugs)
 }
 
 func TestRoleClient_UpdateMemberRoles(t *testing.T) {
