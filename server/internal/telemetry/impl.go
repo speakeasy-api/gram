@@ -3491,6 +3491,13 @@ func toolUsageStatusStrings(statuses []telem_gen.ToolUsageStatus) []string {
 // builds the ClickHouse query parameters shared by the tool usage summary aggregate
 // and its per-panel endpoints. All returned errors are already oops-wrapped.
 func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters) (repo.GetToolUsageSummaryParams, error) {
+	return s.resolveToolUsageParamsWithOwners(ctx, f, nil)
+}
+
+// resolveToolUsageParamsWithOwners is resolveToolUsageParams reading the
+// organization's gateway owners through owners, so a request that also labels
+// gateways reads them once. Nil owners reads them afresh.
+func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUsageFilters, owners *gatewayOwners) (repo.GetToolUsageSummaryParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return repo.GetToolUsageSummaryParams{}, oops.C(oops.CodeUnauthorized)
@@ -3542,7 +3549,10 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, s.authz, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if owners == nil {
+		owners = newGatewayOwners(s.db, authCtx.ActiveOrganizationID)
+	}
+	metaMCPMatchers, err := loadMetaMCPMatchers(ctx, s.db, s.authz, owners, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
@@ -3973,7 +3983,14 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
-	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// One read of the organization's gateway owners serves the matchers and
+	// the gateway option labels.
+	owners := newGatewayOwners(s.db, authCtx.ActiveOrganizationID)
+	params, err := s.resolveToolUsageParamsWithOwners(ctx, toolUsageFilters{
 		From:               payload.From,
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
@@ -3989,12 +4006,11 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		Statuses:           toolUsageStatusStrings(payload.Statuses),
 		Query:              payload.Query,
 		Filters:            payload.Filters,
-	})
+	}, owners)
 	if err != nil {
 		return nil, err
 	}
 
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
@@ -4003,7 +4019,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	for _, row := range options.Gateways {
 		gatewayIDs = append(gatewayIDs, row.MetaMCPServerID)
 	}
-	gatewayLabels, err := LoadGatewayLabels(ctx, s.db, s.authz, authCtx.ActiveOrganizationID, gatewayIDs)
+	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, gatewayIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
 	}
