@@ -284,7 +284,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		return SearchToolCallsOutput{}, err
 	}
 
-	matchers, err := s.toolCallSearchMatchers(ctx, search.projectID)
+	matchers, err := s.toolCallSearchMatchers(ctx, principal.OrganizationID, search.projectID)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
@@ -687,7 +687,7 @@ type toolUsageMatchers struct {
 	meta    []telemetryrepo.MetaMCPMatcher
 }
 
-func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, projectID string) (toolUsageMatchers, error) {
+func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, organizationID string, projectID string) (toolUsageMatchers, error) {
 	// Without Postgres the rows still list, but hook-observed calls cannot be
 	// folded onto the configured servers and are reported as the calling app
 	// named them.
@@ -702,7 +702,7 @@ func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, project
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search matchers: %w", err)
 	}
-	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, parsedProject)
+	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, s.authz, organizationID, parsedProject)
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search gateway matchers: %w", err)
 	}
