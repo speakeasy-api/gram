@@ -705,7 +705,8 @@ func (m *ChallengeManager) resolveClientTokens(
 				return nil, rerr
 			}
 			if reconnect {
-				return nil, noTokenError(RefreshFailureRecorded(err))
+				// The re-link is about a different client, so its gate row is not a duplicate.
+				return nil, ErrNoValidToken
 			}
 			return nil, err
 		case errors.Is(err, errRefreshStoreFault) && skipUnusable:
