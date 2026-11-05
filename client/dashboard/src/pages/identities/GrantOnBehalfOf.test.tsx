@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ServerConnection } from "@/pages/agents/credentials/ownerConnections";
 import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
-import { onBehalfOfPerson } from "./onBehalfOf";
+import { onBehalfOfPeople } from "./onBehalfOf";
 
 const mocks = vi.hoisted(() => ({
   connection: undefined as ServerConnection | undefined,
@@ -33,14 +33,17 @@ vi.mock("@/components/identity-link", () => ({
 }));
 afterEach(cleanup);
 
+/** A sign-in whose access token ran out, and nothing renews it. */
+const LAPSED = { accessExpiresAt: new Date("2020-01-01T00:00:00Z") };
+
 function session(fields: Partial<RemoteSession>): RemoteSession {
   return { subjectUrn: "user:user-ada", ...fields } as RemoteSession;
 }
 
-describe("onBehalfOfPerson", () => {
+describe("onBehalfOfPeople", () => {
   it("names the owner of a person's own connection", () => {
     expect(
-      onBehalfOfPerson({
+      onBehalfOfPeople({
         status: "ready",
         sessions: [
           session({
@@ -49,16 +52,47 @@ describe("onBehalfOfPerson", () => {
           }),
         ],
       }),
-    ).toEqual({ userId: "user-ada", name: "Ada Lovelace", expired: false });
+    ).toEqual([{ userId: "user-ada", name: "Ada Lovelace", expired: false }]);
   });
 
-  it("falls back to the email, and marks an expired connection", () => {
+  it("falls back to the email, and marks a lapsed sign-in", () => {
     expect(
-      onBehalfOfPerson({
+      onBehalfOfPeople({
         status: "ended",
-        sessions: [session({ subjectEmail: "ada@example.com" })],
+        sessions: [session({ subjectEmail: "ada@example.com", ...LAPSED })],
       }),
-    ).toEqual({ userId: "user-ada", name: "ada@example.com", expired: true });
+    ).toEqual([{ userId: "user-ada", name: "ada@example.com", expired: true }]);
+  });
+
+  it("names one person once across their sign-ins", () => {
+    expect(
+      onBehalfOfPeople({
+        status: "ended",
+        sessions: [
+          session({ subjectDisplayName: "Ada Lovelace" }),
+          session({ subjectDisplayName: "Ada Lovelace", ...LAPSED }),
+        ],
+      }),
+    ).toEqual([{ userId: "user-ada", name: "Ada Lovelace", expired: true }]);
+  });
+
+  it("names every owner, and marks only the one whose sign-in lapsed", () => {
+    expect(
+      onBehalfOfPeople({
+        status: "ended",
+        sessions: [
+          session({ subjectDisplayName: "Ada Lovelace" }),
+          session({
+            subjectUrn: "user:user-bob",
+            subjectDisplayName: "Bob Byte",
+            ...LAPSED,
+          }),
+        ],
+      }),
+    ).toEqual([
+      { userId: "user-ada", name: "Ada Lovelace", expired: false },
+      { userId: "user-bob", name: "Bob Byte", expired: true },
+    ]);
   });
 
   it.each([
@@ -83,7 +117,7 @@ describe("onBehalfOfPerson", () => {
       },
     },
   ])("acts for no one with $case", ({ connection }) => {
-    expect(onBehalfOfPerson(connection)).toBeUndefined();
+    expect(onBehalfOfPeople(connection)).toEqual([]);
   });
 });
 
@@ -106,11 +140,32 @@ describe("GrantOnBehalfOf", () => {
   it("marks a connection that is assigned but has expired", () => {
     mocks.connection = {
       status: "ended",
-      sessions: [session({ subjectDisplayName: "Ada Lovelace" })],
+      sessions: [session({ subjectDisplayName: "Ada Lovelace", ...LAPSED })],
     };
     render(<GrantOnBehalfOf agentId="agent-1" resourceId="toolset-1" />);
     expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeTruthy();
     expect(screen.getByText("(connection expired)")).toBeTruthy();
+  });
+
+  it("names each person when the sign-ins belong to different people", () => {
+    mocks.connection = {
+      status: "ended",
+      sessions: [
+        session({ subjectDisplayName: "Ada Lovelace" }),
+        session({
+          subjectUrn: "user:user-bob",
+          subjectDisplayName: "Bob Byte",
+          ...LAPSED,
+        }),
+      ],
+    };
+    render(<GrantOnBehalfOf agentId="agent-1" resourceId="toolset-1" />);
+    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Bob Byte" }).getAttribute("href"),
+    ).toBe("/identities/user:user-bob");
+    // Only Bob's sign-in lapsed.
+    expect(screen.getAllByText("(connection expired)")).toHaveLength(1);
   });
 
   it("shows nothing for a shared credential", () => {
