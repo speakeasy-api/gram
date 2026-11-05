@@ -2235,6 +2235,23 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # Only transformed modules, including _metadata.json; never test results.
+      # Restore after installation, which can replace node_modules.
+      - name: Vitest cache key
+        id: vitest-cache-key
+        env:
+          CONFIG_HASH: ${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig*.json', 'client/*/package.json', 'client/*/tsconfig*.json', 'client/*/vitest.config.*', 'client/*/vite.config.*', 'client/dashboard/dev-slot-plugin.ts') }}
+        run: echo "prefix=vitest-modules-blacksmith-v1-${RUNNER_OS}-${RUNNER_ARCH}-$(node --version)-${CONFIG_HASH}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Vitest module cache
+        id: vitest-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
+          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+
       - name: Test
         run: aube run test
         working-directory: client/dashboard
@@ -2250,6 +2267,14 @@ jobs:
           # e2e/registry-editor.config.ts). Do not apt-install or download one.
           /usr/bin/google-chrome --version
           aube run test:registry-editor
+
+      - name: Save Vitest module cache
+        if: success() && steps.vitest-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
 
       - name: Prune aube store
         if: success()
