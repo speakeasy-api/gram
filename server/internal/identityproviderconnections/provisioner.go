@@ -335,6 +335,7 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 	}
 
 	client, err := remotesessionsrepo.New(dbtx).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
@@ -469,6 +470,7 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	client, err := remotesessionsrepo.New(dbtx).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,

@@ -129,6 +129,7 @@ func TestDuplicateClient_CopiesConfigurationAndSecret(t *testing.T) {
 	require.Equal(t, source.ClientIDIssuedAt, stored.ClientIDIssuedAt)
 	require.Equal(t, source.CallbackBaseUrl, stored.CallbackBaseUrl)
 	require.Equal(t, source.LegacyCallbackUrl, stored.LegacyCallbackUrl)
+	require.Equal(t, source.ForwardClientName, stored.ForwardClientName)
 	require.Equal(t, source.ResourceIdentifier, stored.ResourceIdentifier)
 	require.Equal(t, source.ResourceName, stored.ResourceName)
 	require.Equal(t, source.ResourceDocumentation, stored.ResourceDocumentation)

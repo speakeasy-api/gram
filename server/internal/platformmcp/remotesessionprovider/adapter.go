@@ -172,6 +172,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 	}
 	subject := urn.NewUserSubject(request.UserID)
 	authorizationURL, err := a.sessions.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ClientName:          "",
 		ConnectionPopup:     false,
 		ID:                  request.HandoffID.String(),
 		ProjectID:           request.ProjectID,

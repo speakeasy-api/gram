@@ -396,6 +396,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       clientProjectID,
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:           issuerID,
@@ -565,6 +566,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	}
 
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
+		ForwardClientName:     false,
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
@@ -710,6 +712,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if err := requireForwardClientNameOwner(CredentialOwner(existing.RemoteSessionClient.CredentialOwner), payload.ForwardClientName); err != nil {
+		return nil, err
+	}
+
 	newClientID, err := correctedClientID(existing.RemoteSessionClient, payload.ClientID)
 	if err != nil {
 		return nil, err
@@ -728,6 +734,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
+		ForwardClientName:               conv.PtrToPGBool(payload.ForwardClientName),
 		ID:                              clientID,
 		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
 	})

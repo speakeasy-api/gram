@@ -747,6 +747,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_audience_format,
     scope,
     audience,
+    forward_client_name,
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
@@ -766,6 +767,7 @@ VALUES (
     @token_endpoint_auth_audience_format,
     sqlc.narg('scope')::text[],
     @audience,
+    @forward_client_name,
     @legacy_callback_url,
     sqlc.narg('json_web_key_set_id'),
     sqlc.narg('identity_provider_connection_id'),
@@ -1258,6 +1260,7 @@ SET
         ELSE COALESCE(sqlc.narg('audience'), audience)
     END,
     legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), legacy_callback_url),
+    forward_client_name = COALESCE(sqlc.narg('forward_client_name'), forward_client_name),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -1388,6 +1391,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_method,
     scope,
     audience,
+    forward_client_name,
     callback_base_url
 )
 VALUES (
@@ -1401,6 +1405,7 @@ VALUES (
     'none',
     sqlc.narg('scope')::text[],
     @audience,
+    @forward_client_name,
     sqlc.narg('callback_base_url')
 )
 RETURNING *;
@@ -2052,6 +2057,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
@@ -3303,6 +3309,7 @@ SET
         ELSE COALESCE(sqlc.narg('audience'), c.audience)
     END,
     legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), c.legacy_callback_url),
+    forward_client_name = COALESCE(sqlc.narg('forward_client_name'), c.forward_client_name),
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i
 WHERE c.id = @id
@@ -5476,6 +5483,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
@@ -5545,6 +5553,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
