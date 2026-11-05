@@ -410,10 +410,10 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 	})
 }
 
-// Resynchronizing a gateway member's derived authorization server is not a
-// change an approval covers where typed auth clients choose its upstream
-// authentication, so the frozen approval keeps serving. Elsewhere the same
-// resync asks for the approval again.
+// Resynchronizing a no-auth gateway member's derived authorization server is
+// not a change an approval covers under enforcement, so the frozen approval
+// keeps serving. Without enforcement the same resync asks for the approval
+// again.
 func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -421,8 +421,8 @@ func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 		enforced bool
 		served   bool
 	}{
-		{name: "typed auth clients enforced", enforced: true, served: true},
-		{name: "upstream client choice", enforced: false, served: false},
+		{name: "no-auth member under enforcement", enforced: true, served: true},
+		{name: "no-auth member without enforcement", enforced: false, served: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

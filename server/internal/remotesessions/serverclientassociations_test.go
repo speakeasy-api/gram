@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -415,8 +417,17 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.NotEmpty(t, offered)
 	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, serverID)
 
+	auditCount := func(action audit.Action) int64 {
+		n, err := audittest.AuditLogCountByAction(ctx, ti.conn, action)
+		require.NoError(t, err)
+		return n
+	}
+	linksBefore, associationsBefore := auditCount(audit.ActionAuthClientDetachMcpServer), auditCount(audit.ActionRemoteSessionClientDetachMcpServer)
+
 	payload := &gen.DetachServerClientAssociationPayload{McpServerID: serverID.String(), RemoteSessionClientID: clientID.String()}
 	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, payload), "the binding must not refuse an enforced organization")
+	require.Equal(t, linksBefore+int64(len(offered)), auditCount(audit.ActionAuthClientDetachMcpServer), "the retired link is what the audit trail records")
+	require.Equal(t, associationsBefore, auditCount(audit.ActionRemoteSessionClientDetachMcpServer), "the association stays, so no detach of it is recorded")
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID),
 		"the association the binding implies is left for the upstream client choice")

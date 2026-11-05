@@ -203,9 +203,8 @@ func TestMetaGateMemberConnectURL(t *testing.T) {
 	require.Empty(t, metaGateContext{}.memberConnectURL(gatewayTestMember("github", "", issuer, uuid.New())))
 }
 
-// Where the typed auth client resolver judged a member, the registration its
-// choice names decides the connect page, never the member's derived
-// authorization server.
+// Where the typed auth client resolver judged a member, what it decided sets
+// the connect page, never the member's derived authorization server.
 func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 	t.Parallel()
 
@@ -220,8 +219,10 @@ func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 		want          string
 	}{
 		{name: "choice names a registration and no issuer was derived", derivedIssuer: uuid.Nil, resolution: &authClientResolution{outcome: authClientResolved}, registration: registration, want: link},
-		{name: "choice names no registration though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientNoAuth}, want: ""},
-		{name: "choice cannot serve though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientGap}, want: ""},
+		{name: "resolved no-auth choice though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientNoAuth}, want: ""},
+		{name: "no recorded choice on a server that needs authentication", derivedIssuer: uuid.Nil, resolution: &authClientResolution{outcome: authClientGap, reason: authClientReasonMissingChoice}, want: link},
+		{name: "gap on a server that needs no authentication though an issuer was derived", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientGap, noAuthAllowed: true}, want: ""},
+		{name: "stale no-auth choice only a new consent replaces", derivedIssuer: uuid.New(), resolution: &authClientResolution{outcome: authClientGap, noAuthChoice: true}, want: ""},
 		{name: "member the resolver did not judge keeps its derived issuer", derivedIssuer: uuid.New(), resolution: nil, want: link},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,7 +235,7 @@ func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 	}
 
 	derived := gatewayTestMember("github", "", uuid.New(), uuid.New())
-	derived.authClient = &authClientResolution{outcome: authClientGap}
+	derived.authClient = &authClientResolution{outcome: authClientGap, noAuthAllowed: true}
 	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: false}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
 }
 

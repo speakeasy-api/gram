@@ -198,12 +198,30 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 			if client.Source != authclientbackfill.SourceBackfill || client.RemoteSessionClientID.UUID != clientID {
 				continue
 			}
-			if _, err := aq.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{
+			detached, err := aq.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{
 				AuthClientID:   client.ID,
 				McpServerID:    serverID,
 				OrganizationID: authCtx.ActiveOrganizationID,
-			}); err != nil {
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				// A concurrent detach already retired this link.
+				continue
+			}
+			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
+			}
+			if err := s.auditLogger.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
+				OrganizationID:   authCtx.ActiveOrganizationID,
+				ProjectID:        detached.ProjectID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				ActorDisplayName: authCtx.Email,
+				ActorSlug:        nil,
+				AuthClientURN:    urn.NewAuthClient(client.ID),
+				AuthClientName:   client.Name,
+				McpServerURN:     urn.NewMcpServer(serverID),
+				McpServerName:    detached.McpServerName.String,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "log MCP server auth client detach").LogError(ctx, logger)
 			}
 			retired = true
 		}
@@ -229,20 +247,20 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
 		}
-	}
 
-	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:       authCtx.Email,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
-		ClientID:               externalClientID,
-		McpServerURN:           urn.NewMcpServer(server.ID),
-		McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log MCP server client detach").LogError(ctx, logger)
+		if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:       authCtx.Email,
+			ActorSlug:              nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(clientID),
+			ClientID:               externalClientID,
+			McpServerURN:           urn.NewMcpServer(server.ID),
+			McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log MCP server client detach").LogError(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

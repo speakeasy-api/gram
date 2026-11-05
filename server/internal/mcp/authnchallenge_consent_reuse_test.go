@@ -408,7 +408,9 @@ func TestSharedConsentReuseAcrossDerivedIssuerResync(t *testing.T) {
 			slug := "issuer-resync-" + uuid.NewString()[:8]
 			server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, newCatalogUpstream(t, 1).url, slug, "public", issuer.issuer.ID)
 			first := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-			first.submit(t, ctx, ti, "approve", first.inventory(t, ctx, ti), "off")
+			approved, err := url.Parse(first.submit(t, ctx, ti, "approve", first.inventory(t, ctx, ti), "off"))
+			require.NoError(t, err)
+			require.NotEmpty(t, approved.Query().Get("code"), "the approval must be granted for its reuse to mean anything")
 
 			derived, err := remotesessions_repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
 				ProjectID: conv.ToNullUUID(*authCtx.ProjectID), Slug: "resync-" + uuid.NewString()[:8], Issuer: "https://resync-as.example.com",
@@ -493,7 +495,9 @@ func TestSharedConsentReuseAcrossEnforcementTransitions(t *testing.T) {
 					require.Equal(t, int64(1), stamped)
 				case approve:
 					flow := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-					flow.submit(t, ctx, ti, "approve", flow.inventory(t, ctx, ti), "off")
+					approved, err := url.Parse(flow.submit(t, ctx, ti, "approve", flow.inventory(t, ctx, ti), "off"))
+					require.NoError(t, err)
+					require.NotEmpty(t, approved.Query().Get("code"), "the approval must be granted for its reuse to mean anything")
 				case reused, asksAgain:
 					flow := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
 					redirect, err := url.Parse(flow.submit(t, ctx, ti, "reuse", flow.inventory(t, ctx, ti), "off"))

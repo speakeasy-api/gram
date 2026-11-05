@@ -481,6 +481,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	typedChoices, err := s.consentAuthChoicesEnforced(ctx, gate.organizationID)
 	if err != nil {
+		s.logger.ErrorContext(ctx, "read upstream auth enforcement for an approved member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
 		return memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage(member.slug)}, status: 0, retryable: false, retryAfter: 0}
 	}
 	if approved.configurationChanged(member.configuration, typedChoices) {

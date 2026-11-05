@@ -67,7 +67,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			a.BackendHash = ""
 			g.catalog.Members["source"] = a
 		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
-		{name: "without typed auth clients the typed fingerprint decides nothing", change: func(_ *metaGateContext, m *metaMember) {
+		{name: "with enforcement off the typed fingerprint decides nothing", change: func(_ *metaGateContext, m *metaMember) {
 			m.configuration.typedHash = "private changed hash"
 		}},
 		{name: "upstream unavailable", change: func(_ *metaGateContext, m *metaMember) { m.upstreamUnavailable = upstreamError }},
