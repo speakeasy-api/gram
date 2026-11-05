@@ -2371,17 +2371,24 @@ func (s *Service) resolveContextWindow(ctx context.Context, requestedModel strin
 // streamCompletion relays the model's SSE events from src to w and reports
 // how the stream ended. A completion stream is never ended early by the
 // server: its client cannot resume a half-finished completion, so cutting it
-// at a maximum age would only truncate the answer.
+// at a maximum age would only truncate the answer. A stream the model
+// provider closes before its [completionStreamDone] event is reported as
+// upstream_closed, since the client received a truncated answer.
 func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, src io.Reader, getContextWindow func() int) (httpstream.EndReason, error) {
 	flusher, canFlush := w.(http.Flusher)
 	br := bufio.NewReader(src)
 
 	var event strings.Builder
 	injected := false
+	sawDone := false
 
 	flush := func() error {
 		text := event.String()
 		event.Reset()
+
+		if _, payload, ok := extractDataPayload(text); ok && payload == completionStreamDone {
+			sawDone = true
+		}
 
 		if !injected {
 			if rewritten, ok := maybeInjectContextWindow(text, getContextWindow); ok {
@@ -2409,7 +2416,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 				event.WriteString(line)
 				if isBlank {
 					if flushErr := flush(); flushErr != nil {
-						return httpstream.EndClientClosed, flushErr
+						return httpstream.CanceledReason(ctx), flushErr
 					}
 				}
 			}
@@ -2418,15 +2425,18 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 			if errors.Is(err, io.EOF) {
 				if event.Len() > 0 {
 					if flushErr := flush(); flushErr != nil {
-						return httpstream.EndClientClosed, flushErr
+						return httpstream.CanceledReason(ctx), flushErr
 					}
+				}
+				if !sawDone {
+					return httpstream.EndUpstreamClosed, nil
 				}
 				return httpstream.EndCompleted, nil
 			}
 			if ctx.Err() != nil {
-				// The client went away and took the upstream request with it;
-				// nothing on the server side failed.
-				return httpstream.EndClientClosed, oops.E(oops.CodeGatewayError, err, "stream read failed").LogWarn(ctx, s.logger)
+				// The request ended and took the upstream request with it;
+				// the model provider did not fail.
+				return httpstream.CanceledReason(ctx), oops.E(oops.CodeGatewayError, err, "stream read failed").LogWarn(ctx, s.logger)
 			}
 			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
 			return httpstream.EndUpstreamClosed, oops.E(oops.CodeGatewayError, err, "stream read failed").LogError(ctx, s.logger)
@@ -2434,9 +2444,13 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 	}
 }
 
+// completionStreamDone is the data payload of the event that ends an
+// OpenAI-compatible completion stream.
+const completionStreamDone = "[DONE]"
+
 func maybeInjectContextWindow(eventText string, getContextWindow func() int) (string, bool) {
 	dataLine, payload, ok := extractDataPayload(eventText)
-	if !ok || payload == "" || payload == "[DONE]" {
+	if !ok || payload == "" || payload == completionStreamDone {
 		return eventText, false
 	}
 

@@ -1,10 +1,14 @@
 # Long-lived HTTP responses
 
-The load balancer in front of the server enforces a total response deadline
-on streaming backends (3600s), not an idle timeout. A response that outlives
-it is cut with a broken HTTP/2 stream and no final event, whatever the backend
-was sending at the time. The server therefore ends every long-lived response
-itself, before the deadline, and records how each one ended.
+The load balancer in front of the server enforces a total response deadline on
+streaming backends (3600s), not an idle timeout. A response that outlives it
+is cut with a broken HTTP/2 stream and no final event, whatever the backend
+was sending at the time. The server therefore ends the long-lived responses it
+can safely end itself, before the deadline, and records how every long-lived
+response ended. Two cannot be ended early without failing them: a chat
+completion, and a remote MCP request still waiting on its response. The table
+below lists each surface, and the last section gives the bounds that apply to
+those two instead.
 
 The shared pieces live in `server/internal/httpstream`: the end reasons, the
 `gram.http.stream.duration` histogram, the `retry` field written before a
@@ -43,7 +47,10 @@ negative leaves streams open until they end on their own.
   `server_shutdown`, `upstream_closed`, `idle_timeout`, `max_age` or `error`.
 
 A stream the load balancer cut looks to the server like the client going
-away, so it is recorded as `client_closed`. The bucket boundaries straddle the
+away, so it is recorded as `client_closed`. `server_shutdown` covers both a
+stream the server drained and one still running when the shutdown deadline
+cancelled it. A completion the model provider closed before its final
+`[DONE]` event is recorded as `upstream_closed`. The bucket boundaries straddle the
 maximum age (3300) and the deadline (3600): `client_closed` samples in the
 3500 to 3700 buckets are streams the rotation missed.
 

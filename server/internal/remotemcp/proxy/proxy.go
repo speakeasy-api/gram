@@ -232,10 +232,11 @@ type Proxy struct {
 	StreamingTimeout time.Duration
 
 	// MaxStreamAge bounds how long a relayed stream stays open, measured from
-	// the proxy's receipt of the request. A stream that only carries
-	// server-initiated messages, or whose response was already relayed, is
-	// closed with an SSE retry field when it reaches this age, so the client
-	// reconnects before the load balancer's response deadline cuts it. A
+	// the proxy's receipt of the request, so it ends before the load
+	// balancer's response deadline cuts it. At this age a standalone GET
+	// stream closes with an SSE retry field for the client to reopen it, a
+	// subscriptions/listen stream closes after its completion result, and any
+	// other POST stream whose response was already relayed simply ends. A POST
 	// stream still waiting on its response is left open: closing it would
 	// cancel the request. Zero or negative leaves streams open until they end
 	// on their own.

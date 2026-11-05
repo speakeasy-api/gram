@@ -118,10 +118,10 @@ func streamTurnFrames(ctx context.Context, w http.ResponseWriter, frames <-chan 
 	for {
 		select {
 		case <-ctx.Done():
-			return httpstream.EndClientClosed
+			return httpstream.CanceledReason(ctx)
 		case <-heartbeat:
 			if _, err := w.Write(httpstream.Heartbeat); err != nil {
-				return httpstream.EndClientClosed
+				return httpstream.CanceledReason(ctx)
 			}
 			flush()
 		case <-maxAge:
@@ -135,7 +135,7 @@ func streamTurnFrames(ctx context.Context, w http.ResponseWriter, frames <-chan 
 				// The subscription closes on its own only when the client
 				// went away or the frame source failed.
 				if ctx.Err() != nil {
-					return httpstream.EndClientClosed
+					return httpstream.CanceledReason(ctx)
 				}
 				return httpstream.EndError
 			}
@@ -146,7 +146,7 @@ func streamTurnFrames(ctx context.Context, w http.ResponseWriter, frames <-chan 
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
 				// Client hung up. The turn is unaffected, and whatever it
 				// missed is replayable from its last cursor.
-				return httpstream.EndClientClosed
+				return httpstream.CanceledReason(ctx)
 			}
 			flush()
 			if frame.Kind == TurnFrameDone {

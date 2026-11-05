@@ -245,12 +245,18 @@ func (m *Metrics) RecordStreamEnd(ctx context.Context, identity ServerIdentity, 
 // RecordHTTPStreamEnd records a relayed SSE stream that ended on the histogram
 // shared by every long-lived response. started is when the proxy received
 // the request, so the recorded age is the one the load balancer's deadline
-// measures.
+// measures. A cancelled request is told apart here, from its context's
+// cause, as a client that went away or the server's shutdown deadline; the
+// proxy's own counter reports both as request_canceled.
 func (m *Metrics) RecordHTTPStreamEnd(ctx context.Context, r *http.Request, reason StreamEndReason, started time.Time, now time.Time) {
 	if m == nil {
 		return
 	}
-	m.httpStreams.RecordEnd(ctx, r, reason.httpEndReason(), started, now)
+	end := reason.httpEndReason()
+	if reason == StreamEndRequestCanceled {
+		end = httpstream.CanceledReason(r.Context())
+	}
+	m.httpStreams.RecordEnd(ctx, r, end, started, now)
 }
 
 // httpEndReason maps a proxy stream end onto the reasons shared by every

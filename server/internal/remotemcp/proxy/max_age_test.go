@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,10 +23,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// testMaxStreamAge is the maximum stream age these tests use. It is long
-// enough for the upstream stream to open first and short enough that a stream
-// the proxy fails to rotate trips drainTestTimeout instead.
-const testMaxStreamAge = 200 * time.Millisecond
+// testMaxStreamAge is the maximum stream age these tests use. The age runs
+// from the proxy's receipt of the request, before the upstream stream opens,
+// so it leaves a wide margin for that on a loaded CI runner, while staying
+// short enough that a stream the proxy fails to rotate trips drainTestTimeout
+// instead.
+const testMaxStreamAge = 500 * time.Millisecond
 
 func TestProxy_Get_MaxAgeClosesListenStreamWithRetry(t *testing.T) {
 	t.Parallel()
@@ -201,4 +204,56 @@ func TestProxy_Get_RecordsMaxAgeStreamEnd(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, hist.DataPoints, 1)
 	require.GreaterOrEqual(t, hist.DataPoints[0].Sum, testMaxStreamAge.Seconds(), "the shared histogram measures from request receipt")
+}
+
+func TestProxy_Get_RecordsShutdownDeadlineAsServerShutdown(t *testing.T) {
+	t.Parallel()
+
+	upstream := newHeldSSEUpstream(t)
+	reader := sdkmetric.NewManualReader()
+	p := newProxyForTest(t, upstream.server.URL)
+	p.Metrics = proxy.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
+
+	// The server cancels its still-running requests with this cause when the
+	// shutdown deadline passes.
+	ctx, cancel := context.WithCancelCause(t.Context())
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/id", http.NoBody)
+	req.Pattern = "GET /mcp/{mcpSlug}"
+	req.Header.Set("Accept", "text/event-stream")
+
+	rr := &firstWriteRecorder{ResponseRecorder: httptest.NewRecorder(), written: make(chan struct{}), once: sync.Once{}}
+	done := runAsync(func() error { return p.Get(rr, req) })
+	// Cancel only once the stream is being relayed: earlier, the request
+	// fails before any stream exists and nothing is recorded.
+	waitFor(t, rr.written, "the proxy to relay the stream")
+	cancel(httpstream.ErrServerShutdown)
+	require.Error(t, waitForHandler(t, done))
+
+	// The proxy's own counter keeps its contracted request_canceled label.
+	streams := collectMetric(t, reader, proxy.MeterStreams)
+	metricdatatest.AssertHasAttributes(t, streams,
+		attr.RemoteMCPProxyStreamEndReason(string(proxy.StreamEndRequestCanceled)),
+	)
+
+	shared := collectMetric(t, reader, httpstream.MeterStreamDuration)
+	metricdatatest.AssertHasAttributes(t, shared,
+		attr.HTTPStreamEndReason(string(httpstream.EndServerShutdown)),
+	)
+}
+
+// firstWriteRecorder closes written on its first write, so a test can act once
+// the proxy has started relaying a stream to its client.
+type firstWriteRecorder struct {
+	*httptest.ResponseRecorder
+	written chan struct{}
+	once    sync.Once
+}
+
+func (r *firstWriteRecorder) Write(p []byte) (int, error) {
+	n, err := r.ResponseRecorder.Write(p)
+	r.once.Do(func() { close(r.written) })
+	if err != nil {
+		return n, fmt.Errorf("record write: %w", err)
+	}
+	return n, nil
 }

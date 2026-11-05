@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -298,8 +299,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
 			}
-			if idx := strings.IndexByte(r.Pattern, '/'); idx >= 0 {
-				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern[idx:]))
+			if route := httpstream.Route(r); route != "" {
+				attrs = append(attrs, attr.SlogHTTPRoute(route))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))

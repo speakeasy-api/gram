@@ -10,6 +10,8 @@
 package httpstream
 
 import (
+	"context"
+	"errors"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
@@ -41,9 +43,17 @@ const (
 	RetryJitter = 2 * time.Second
 )
 
-// Heartbeat is the SSE comment written to keep a quiet stream alive. SSE
-// clients discard comment lines, so it reaches no application code.
-var Heartbeat = []byte(": keepalive\n\n")
+var (
+	// Heartbeat is the SSE comment written to keep a quiet stream alive. SSE
+	// clients discard comment lines, so it reaches no application code.
+	Heartbeat = []byte(": keepalive\n\n")
+
+	// ErrServerShutdown is the cause the server cancels its still-running
+	// requests with when its graceful shutdown deadline passes. A stream whose
+	// request context ended with this cause was ended by the server, not by
+	// its client.
+	ErrServerShutdown = errors.New("graceful shutdown timed out")
+)
 
 // EndReason names why a long-lived HTTP response ended. It is a metric
 // dimension, so the set stays closed and the values stable.
@@ -53,12 +63,14 @@ const (
 	// EndCompleted means the stream delivered its final event.
 	EndCompleted EndReason = "completed"
 
-	// EndClientClosed means the request's context ended before the stream
-	// did: the client went away, or the load balancer cut the response.
+	// EndClientClosed means the client went away before the stream ended, or
+	// the load balancer cut the response; the server cannot tell the two
+	// apart.
 	EndClientClosed EndReason = "client_closed"
 
 	// EndServerShutdown means the server ended the stream because it was
-	// shutting down.
+	// shutting down: it drained the stream, or the stream was still running
+	// when the shutdown deadline cancelled it.
 	EndServerShutdown EndReason = "server_shutdown"
 
 	// EndUpstreamClosed means the source the stream relayed ended it.
@@ -91,10 +103,22 @@ func RetryField(delay time.Duration) []byte {
 	return []byte("retry: " + strconv.FormatInt(delay.Milliseconds(), 10) + "\n\n")
 }
 
+// CanceledReason reports why a stream stopped when its request context ended
+// or a write to its client failed: EndServerShutdown when the server
+// cancelled the request with [ErrServerShutdown], and EndClientClosed
+// otherwise, which covers a client that went away and the load balancer
+// cutting the response.
+func CanceledReason(ctx context.Context) EndReason {
+	if errors.Is(context.Cause(ctx), ErrServerShutdown) {
+		return EndServerShutdown
+	}
+	return EndClientClosed
+}
+
 // Route returns the route pattern the request matched, without the method
-// prefix that http.ServeMux patterns carry, so it joins with the http.route
-// attribute on the server's request metrics. It is empty for a request that
-// matched no pattern.
+// prefix that http.ServeMux patterns carry. It is the http.route value on
+// the server's request metrics and logs, so the stream histogram joins with
+// them. It is empty for a request that matched no pattern.
 func Route(r *http.Request) string {
 	if idx := strings.IndexByte(r.Pattern, '/'); idx >= 0 {
 		return r.Pattern[idx:]

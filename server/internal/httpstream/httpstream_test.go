@@ -1,6 +1,8 @@
 package httpstream_test
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -91,4 +93,37 @@ func TestNilMetricsRecordEndIsANoOp(t *testing.T) {
 	var metrics *httpstream.Metrics
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x", http.NoBody)
 	require.NotPanics(t, func() { metrics.RecordEnd(t.Context(), req, httpstream.EndCompleted, time.Now(), time.Now()) })
+}
+
+func TestCanceledReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		cancel func(context.CancelCauseFunc)
+		want   httpstream.EndReason
+	}{
+		{name: "live context", cancel: func(context.CancelCauseFunc) {}, want: httpstream.EndClientClosed},
+		{name: "client went away", cancel: func(cancel context.CancelCauseFunc) { cancel(nil) }, want: httpstream.EndClientClosed},
+		{name: "shutdown deadline", cancel: func(cancel context.CancelCauseFunc) { cancel(httpstream.ErrServerShutdown) }, want: httpstream.EndServerShutdown},
+		{name: "wrapped shutdown cause", cancel: func(cancel context.CancelCauseFunc) {
+			cancel(fmt.Errorf("drain listener: %w", httpstream.ErrServerShutdown))
+		}, want: httpstream.EndServerShutdown},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parent, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			tc.cancel(cancel)
+
+			// Request contexts derive from the server's base context, so the
+			// cause has to survive derivation.
+			ctx, cancelChild := context.WithCancel(parent)
+			defer cancelChild()
+			require.Equal(t, tc.want, httpstream.CanceledReason(ctx))
+		})
+	}
 }

@@ -104,6 +104,19 @@ func TestStreamTurnFramesEndsWhenClientGoesAway(t *testing.T) {
 	require.Empty(t, rr.Body.String())
 }
 
+func TestStreamTurnFramesReportsServerShutdown(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancelCause(t.Context())
+	frames := make(chan TurnFrame)
+	rr := httptest.NewRecorder()
+
+	done := runStreamTurnFrames(ctx, rr, frames, nil, nil)
+	cancel(httpstream.ErrServerShutdown)
+
+	require.Equal(t, httpstream.EndServerShutdown, waitForReason(t, done))
+}
+
 func TestStreamTurnFramesReportsAClosedSubscriptionAsAnError(t *testing.T) {
 	t.Parallel()
 
