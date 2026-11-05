@@ -34,6 +34,10 @@ DO UPDATE SET updated_at = clock_timestamp();
 -- several servers, or also fronting a gateway, prove nothing and are left for
 -- explicit configuration. remote_session_client_ids limits the capture to those
 -- clients; NULL captures every client bound to the issuer.
+-- skip_servers_offering_other_registrations leaves out a server an administrator
+-- or a server-only identity commit gave an offer for another registration, since
+-- a binding on its issuer is not meant for it; a caller that has just configured
+-- the binding for this server clears it.
 --
 -- Tenancy: the ids arrive from callers that already hold the issuer, but are
 -- re-pinned to the caller's project and organization so a foreign id writes
@@ -64,6 +68,19 @@ WHERE s.project_id = @project_id::uuid
   AND s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
   AND (sqlc.narg('remote_session_client_ids')::uuid[] IS NULL
        OR c.id = ANY(sqlc.narg('remote_session_client_ids')::uuid[]))
+  AND (NOT @skip_servers_offering_other_registrations::boolean
+       OR NOT EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = s.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+           AND offered.remote_session_client_id <> c.id
+       ))
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
@@ -100,7 +117,10 @@ RETURNING mcp_server_id;
 -- a grant the issuer offers for the server's remote upstream routes it to
 -- another client (a grant minted through the issuer, or one for a client the
 -- issuer binds, whichever issuer minted it; a tunnel's claimed resource
--- proves nothing), or when an explicit detach was recorded for the pair.
+-- proves nothing), when an explicit detach was recorded for the pair, or when
+-- an administrator or a server-only identity commit gave the server an offer for
+-- another registration, so the gateway issuer's client is not what it was
+-- configured with.
 WITH fronted AS (
     SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
     FROM meta_mcp_servers AS gateway
@@ -204,6 +224,18 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
     FROM mcp_server_remote_session_clients AS recorded
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS offered
+      ON offered.id = offer.auth_client_id
+     AND offered.organization_id = offer.organization_id
+     AND offered.deleted IS FALSE
+    WHERE offer.mcp_server_id = s.id
+      AND offer.source = 'admin'
+      AND offer.deleted IS FALSE
+      AND offered.remote_session_client_id <> c.id
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id;

@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -603,4 +605,85 @@ func TestCaptureSoleConsumersWritesNothingWithoutEnforcement(t *testing.T) {
 	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
+}
+
+// A server configured apart from its issuer during enforcement keeps that offer
+// after a rollback. A capture must not put the issuer's client beside it: that
+// client would be offered there and its tokens could reach the server's upstream.
+func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		issuer func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID
+		// deleteFirst leaves the second server as the issuer's only consumer,
+		// which is the sole-consumer capture's case. Otherwise the server is
+		// fronted by the organization's only organization-level issuer, which is
+		// the gateway capture's.
+		deleteFirst bool
+	}{
+		{name: "gateway capture", deleteFirst: false, issuer: func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+			t.Helper()
+			return seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rollback-org-issuer")
+		}},
+		{name: "sole-consumer capture", deleteFirst: true, issuer: func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+			t.Helper()
+			return createUserSessionIssuer(t, ctx, ti.conn, "rollback-project-issuer")
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			orgID := activeOrganizationID(t, ctx)
+			projectID := projectIDFromContext(t, ctx)
+			enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+			shared := seedSharedIssuerOn(t, ctx, ti, "rollback", "", tc.issuer(t, ctx, ti))
+			providerID := createServerIdentityProvider(t, ctx, ti, "rollback-second-provider", "", false, []string{"none"})
+			result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(shared.second, providerID, "rollback-second-client"))
+			require.NoError(t, err)
+			secondClient, err := uuid.Parse(result.Client.ID)
+			require.NoError(t, err)
+			_, err = productfeaturesrepo.New(ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+				OrganizationID: orgID,
+				FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			if tc.deleteFirst {
+				_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
+				require.NoError(t, err)
+			}
+
+			require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
+
+			require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
+			requireOfferedOnServerOnly(t, ctx, ti, shared.second, secondClient, shared.userIssuerID)
+		})
+	}
+}
+
+// Under enforcement a client bound to the issuer of its one server is that
+// server's configuration, whatever else the server already offers.
+func TestAttachUserSessionIssuerOffersBesideTheServersOwnOfferUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := activeOrganizationID(t, ctx)
+	projectID := projectIDFromContext(t, ctx)
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+	shared := seedSharedIssuer(t, ctx, ti, "beside-offer", "")
+	ownProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-own-provider", "", false, []string{"none"})
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(shared.second, ownProvider, "beside-offer-own-client"))
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
+	require.NoError(t, err)
+	attachedProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-attached-provider", "", false, []string{"none"})
+	attachedClient := createServerIdentityClient(t, ctx, ti, "beside-offer-attached-client", attachedProvider, false)
+
+	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
+	require.NoError(t, err)
+
+	require.Equal(t, []uuid.UUID{attachedClient}, associatedClients(t, ctx, ti.conn, projectID, shared.second))
+	require.Contains(t, offeredAuthClients(t, ctx, ti.conn, shared.second), authclientbackfill.OAuthClientID(orgID, attachedClient, authclientbackfill.TypeRemoteSession))
 }

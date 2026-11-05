@@ -42,6 +42,11 @@ import (
 // and neither is one it finds itself alone with after that server is deleted.
 // A writer that configures the binding itself calls CaptureSoleConsumers.
 //
+// Without enforcement neither capture touches a server an administrator or a
+// server-only identity commit gave an offer for another registration, which is
+// how such a server stands after enforcement is rolled back. Associating the
+// issuer's client would offer it there and let its tokens reach that upstream.
+//
 // Each statement decides from the bindings as they are when it runs, and the
 // prune runs after the captures, so a reconcile that races a binding change
 // and captures a binding removed meanwhile prunes it again before it returns.
@@ -90,10 +95,11 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 	var captured []uuid.UUID
 	if !enforced {
 		sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-			OrganizationID:         organizationID,
-			ProjectID:              projectID,
-			UserSessionIssuerIds:   userIssuerIDs,
-			RemoteSessionClientIds: nil,
+			OrganizationID:                        organizationID,
+			ProjectID:                             projectID,
+			UserSessionIssuerIds:                  userIssuerIDs,
+			RemoteSessionClientIds:                nil,
+			SkipServersOfferingOtherRegistrations: true,
 		})
 		if err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)
@@ -145,10 +151,11 @@ func CaptureSoleConsumers(ctx context.Context, dbtx repo.DBTX, organizationID st
 			return fmt.Errorf("lock upstream association writer scope: %w", err)
 		}
 		sole, err := repo.New(tx).CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-			OrganizationID:         organizationID,
-			ProjectID:              projectID,
-			UserSessionIssuerIds:   userIssuerIDs,
-			RemoteSessionClientIds: clientIDs,
+			OrganizationID:                        organizationID,
+			ProjectID:                             projectID,
+			UserSessionIssuerIds:                  userIssuerIDs,
+			RemoteSessionClientIds:                clientIDs,
+			SkipServersOfferingOtherRegistrations: false,
 		})
 		if err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)
