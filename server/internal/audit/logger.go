@@ -18,7 +18,10 @@ type Logger struct {
 
 type LoggerOption func(*Logger)
 
-// WithoutOutbox records audit rows without publishing webhook events, for operator backfills.
+// WithoutOutbox records audit rows without publishing outbox events. Use it for
+// operator backfills independently of internal-event classification.
+// Skipping the outbox also drops the event from internal outbox consumers such
+// as growth signals.
 func WithoutOutbox() LoggerOption {
 	return func(l *Logger) { l.skipOutbox = true }
 }

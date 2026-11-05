@@ -112,13 +112,9 @@ export function StepAuthentication({
               value={server.id}
               className="px-4 data-[state=open]:bg-muted/30"
             >
-              <div
-                className={
-                  session && !mine
-                    ? "flex items-center gap-3 bg-muted/40"
-                    : "flex items-center gap-3"
-                }
-              >
+              {/* Someone else's connection is marked by the lock on its
+                  badge, not by tinting the row. */}
+              <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <AccordionTrigger className="items-center hover:no-underline">
                     <span className="min-w-0 flex-1">

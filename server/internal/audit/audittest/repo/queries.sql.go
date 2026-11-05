@@ -74,6 +74,33 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 	return count, err
 }
 
+const countPublishOutboxByOrg = `-- name: CountPublishOutboxByOrg :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = $1
+`
+
+func (q *Queries) CountPublishOutboxByOrg(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxByOrg, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPublishOutboxByOrgAndEvent = `-- name: CountPublishOutboxByOrgAndEvent :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = $1 AND attributes->>'event_type' = $2::text
+`
+
+type CountPublishOutboxByOrgAndEventParams struct {
+	OrganizationID string
+	EventType      string
+}
+
+func (q *Queries) CountPublishOutboxByOrgAndEvent(ctx context.Context, arg CountPublishOutboxByOrgAndEventParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxByOrgAndEvent, arg.OrganizationID, arg.EventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSecurityAuditLogsByAction = `-- name: CountSecurityAuditLogsByAction :one
 SELECT COUNT(*)
 FROM security_audit_logs
@@ -85,6 +112,17 @@ func (q *Queries) CountSecurityAuditLogsByAction(ctx context.Context, action str
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getAuditLogInternalBySubject = `-- name: GetAuditLogInternalBySubject :one
+SELECT is_internal FROM audit_logs WHERE subject_id = $1
+`
+
+func (q *Queries) GetAuditLogInternalBySubject(ctx context.Context, subjectID string) (bool, error) {
+	row := q.db.QueryRow(ctx, getAuditLogInternalBySubject, subjectID)
+	var is_internal bool
+	err := row.Scan(&is_internal)
+	return is_internal, err
 }
 
 const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
@@ -317,4 +355,15 @@ func (q *Queries) GetLatestSecurityAuditLogByAction(ctx context.Context, action 
 		&i.ActingClientID,
 	)
 	return i, err
+}
+
+const getSecurityAuditLogInternal = `-- name: GetSecurityAuditLogInternal :one
+SELECT is_internal FROM security_audit_logs WHERE id = $1
+`
+
+func (q *Queries) GetSecurityAuditLogInternal(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getSecurityAuditLogInternal, id)
+	var is_internal bool
+	err := row.Scan(&is_internal)
+	return is_internal, err
 }

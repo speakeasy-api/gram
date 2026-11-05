@@ -30,7 +30,7 @@ func registerToolCallSearchTools(reg *Registrar, diagnostics *DiagnosticsService
 
 	addTool(reg, &mcp.Tool{
 		Name:        "list_attribute_keys",
-		Title:       "List Attribute Keys",
+		Title:       "List Searchable Tool Call Fields",
 		Description: "List the attribute keys present on one project's telemetry over a window, split into the custom @-prefixed keys its integrations attached and the system keys the platform recorded. Call this before search_tool_calls to learn which attribute filters exist. Constraints: keys only, never values; system keys that carry tool content, an HTTP header, or a person's identity are withheld because a search refuses them, while an @-prefixed custom key is listed whatever it is named and allows every operator; each kind is capped at 200 keys, and when truncated is true the inventory is partial, so a key's absence does not mean the project never recorded it.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAttributeKeysInput) (*mcp.CallToolResult, ListAttributeKeysOutput, error) {
@@ -58,7 +58,7 @@ func registerUnavailableToolCallSearchTools(reg *Registrar) {
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, unavailableTool("tool_call_search"))
 	addTool(reg, &mcp.Tool{
 		Name:        "list_attribute_keys",
-		Title:       "List Attribute Keys",
+		Title:       "List Searchable Tool Call Fields",
 		Description: "List the attribute keys present on one project's telemetry. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("tool_call_search"))

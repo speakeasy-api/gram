@@ -723,6 +723,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                     ? "Marketplace needs publishing before this plugin is installable."
                     : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
+                // Distribution is a later choice, not part of making the
+                // server work, so it never counts as a step left.
+                optional: true,
                 href: routes.plugins.href(),
               },
             ]

@@ -147,13 +147,17 @@ type ProxyManager struct {
 	// platform surfaces emit it.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
 
-	toolDispositions ToolDispositionResolver
+	toolDispositions ToolCatalogStore
 
 	toolsCallUsageLimitsInterceptor       *ToolsCallUsageLimitsInterceptor
 	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
 	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
 	platformMCPSelectedUseRecorder        toolcallobserver.SuccessRecorder
+
+	// toolCatalogRefreshes bounds upstream listings triggered by tools/call for
+	// tools missing from the catalog.
+	toolCatalogRefreshes *toolCatalogRefreshes
 
 	// witnessStore backs listing-witnessed live enforcement of live
 	// annotation grants: the list interceptor records the rows each session
@@ -188,7 +192,7 @@ func NewProxyManager(
 	telemLogger *tm.Logger,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
-	toolDispositions ToolDispositionResolver,
+	toolDispositions ToolCatalogStore,
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
@@ -224,6 +228,7 @@ func NewProxyManager(
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
+		toolCatalogRefreshes:                  newToolCatalogRefreshes(),
 		witnessStore:                          witnessStore,
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
@@ -379,17 +384,31 @@ func (f *ProxyManager) BuildTarget(
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
+	// Only remote-backed servers hold a tool catalog; the catalog API rejects
+	// every other backend.
+	var catalog *toolCatalogSync
+	if visibility == mcpservers.VisibilityPrivate && identity.RemoteMCPServerID != "" {
+		catalog = &toolCatalogSync{
+			store:          f.toolDispositions,
+			refreshes:      f.toolCatalogRefreshes,
+			organizationID: organizationID,
+			mcpServerID:    identity.McpServerID,
+			projectID:      projectID,
+			listUpstream:   nil,
+		}
+	}
+
 	if visibility == mcpservers.VisibilityPrivate {
-		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
-		)
+		authzInterceptor := NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		authzInterceptor.catalog = catalog
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors, authzInterceptor)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
-		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
-		)
+		filterInterceptor := NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		filterInterceptor.catalog = catalog
+		toolsListRespInterceptors = append(toolsListRespInterceptors, ToolsListReservedMetaInterceptor{}, filterInterceptor)
 	}
 
 	// Session-selection enforcement runs after the RBAC interceptors above so
@@ -454,7 +473,7 @@ func (f *ProxyManager) BuildTarget(
 			f.TunnelMetrics.Observe(identity.TunneledMCPServerID, identity.McpServerID, method, client, outcome, elapsed)
 		}
 	}
-	return &proxy.Proxy{
+	built := &proxy.Proxy{
 		RequestObserver:             observer,
 		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
@@ -507,6 +526,10 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+	if catalog != nil {
+		catalog.listUpstream = built.ListUpstreamTools
+	}
+	return built
 }
 
 // Dispositions supplies the proxy's shared metadata resolver to gateway discovery.

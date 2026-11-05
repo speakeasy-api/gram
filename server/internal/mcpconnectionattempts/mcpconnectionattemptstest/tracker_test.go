@@ -12,6 +12,65 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Even a consumed attempt is left open: the disconnect likely caused the outage, so it reads as abandoned.
+func TestTracker_ExplicitRefusalAfterDisconnectIsSilent(t *testing.T) {
+	t.Parallel()
+	for _, consumed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "open", true: "consumed"}[consumed], func(t *testing.T) {
+			t.Parallel()
+			rec := New(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepProviderToken)
+			tracked.Attach(mcpconnectionattempts.Begin(trackerScope()))
+			if consumed {
+				tracked.Consumed()
+			}
+			cancel()
+			tracked.Refuse(ctx, mcpconnectionattempts.CodeProviderUnreachable)
+			tracked.Finish(ctx)
+			rec.RequireNothing()
+		})
+	}
+}
+
+func TestTracker_CommittedSuccessSurvivesDisconnect(t *testing.T) {
+	t.Parallel()
+	rec := New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepProviderSignIn)
+	cancel()
+	tracked.Succeed(ctx, mcpconnectionattempts.ResultSignedIn)
+	tracked.Finish(ctx)
+	rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
+}
+
+func TestTracker_PanicBeforeVerdictIsInternal(t *testing.T) {
+	t.Parallel()
+	rec := New(t)
+	require.Panics(t, func() {
+		tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundConsent)
+		defer tracked.Finish(t.Context())
+		panic("handler failed")
+	})
+	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+}
+
+func TestTracker_KnownDenialSurvivesDisconnect(t *testing.T) {
+	t.Parallel()
+	for _, code := range []mcpconnectionattempts.Code{mcpconnectionattempts.CodeCanceled, mcpconnectionattempts.CodePKCEMismatch, mcpconnectionattempts.CodeNoServerAccess} {
+		t.Run(code.String(), func(t *testing.T) {
+			t.Parallel()
+			rec := New(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundConsent)
+			cancel()
+			tracked.Refuse(ctx, code)
+			tracked.Finish(ctx)
+			rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, code)
+		})
+	}
+}
+
 func trackerScope() mcpconnectionattempts.Scope {
 	return mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)
 }
@@ -195,4 +254,15 @@ func TestTracker_DeadlineWithNoVerdictIsStillVisible(t *testing.T) {
 	rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundAuthorize).Finish(ctx)
 
 	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
+}
+
+func TestTracker_CanceledTunnelFailureIsSilent(t *testing.T) {
+	t.Parallel()
+	rec := New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepProviderToken)
+	cancel()
+	tracked.Refuse(ctx, mcpconnectionattempts.CodeTunnelUnavailable)
+	tracked.Finish(ctx)
+	rec.RequireNothing()
 }

@@ -41,6 +41,7 @@ func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -88,6 +89,7 @@ func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -135,6 +137,7 @@ func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event Lo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

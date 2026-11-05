@@ -2775,3 +2775,107 @@ func TestIngest_OpenClawToolDenyCarriesBlockURL(t *testing.T) {
 	require.Equal(t, *authCtx.ProjectID, block.ProjectID)
 	require.Equal(t, "exec", block.ToolName.String)
 }
+
+// openClawToolPayload is an OpenClaw tool event as a relay sends it when it
+// cannot decode the tool name into data.mcp: OpenClaw names MCP tools
+// <server>__<tool>.
+func openClawToolPayload(eventType, toolName string, output, errPayload any) *gen.IngestPayload {
+	payload := canonicalIngestPayload("openclaw", eventType, "openclaw-mcp-session")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:     new("call-openclaw-1"),
+			Name:   &toolName,
+			Input:  map[string]any{"query": "status"},
+			Output: output,
+			Error:  errPayload,
+		},
+	}
+	return payload
+}
+
+func TestCanonicalTelemetryToolSource(t *testing.T) {
+	t.Parallel()
+
+	mcpResult := map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "done"}},
+		"details": map[string]any{"mcpServer": "speakeasy", "mcpTool": "execute_tool", "status": "error"},
+	}
+	withMCP := func(payload *gen.IngestPayload, mcp *gen.HookMCPData) *gen.IngestPayload {
+		payload.Data.Mcp = mcp
+		return payload
+	}
+	fromClaude := openClawToolPayload("tool.completed", "exec", mcpResult, nil)
+	fromClaude.Source.Adapter = "claude"
+	tests := []struct {
+		name    string
+		payload *gen.IngestPayload
+		want    string
+	}{
+		{
+			name:    "it reads the OpenClaw MCP marker from a completed result",
+			payload: openClawToolPayload("tool.completed", "speakeasy__execute_tool", mcpResult, nil),
+			want:    "speakeasy",
+		},
+		{
+			name:    "it reads the OpenClaw MCP marker from JSON-encoded failure text",
+			payload: openClawToolPayload("tool.failed", "github__search", nil, `{"details":{"mcpServer":"github","mcpTool":"search"}}`),
+			want:    "github",
+		},
+		{
+			name:    "it leaves the OpenClaw pre-call row unattributed",
+			payload: openClawToolPayload("tool.requested", "speakeasy__execute_tool", nil, nil),
+			want:    "",
+		},
+		{
+			name:    "it leaves an OpenClaw native tool unattributed",
+			payload: openClawToolPayload("tool.completed", "exec", map[string]any{"details": map[string]any{"exitCode": 0}}, nil),
+			want:    "",
+		},
+		{
+			name:    "it never splits an MCP-looking tool name without the marker",
+			payload: openClawToolPayload("tool.completed", "speakeasy__execute_tool", map[string]any{"details": map[string]any{"status": "ok"}}, nil),
+			want:    "",
+		},
+		{
+			name:    "it ignores the marker from other adapters",
+			payload: fromClaude,
+			want:    "",
+		},
+		{
+			name:    "it prefers the relay-reported server identity",
+			payload: withMCP(openClawToolPayload("tool.completed", "speakeasy__execute_tool", mcpResult, nil), &gen.HookMCPData{ServerIdentity: new("relay-identity"), ServerName: new("relay-name")}),
+			want:    "relay-identity",
+		},
+		{
+			name:    "it falls back to the relay-reported server name",
+			payload: withMCP(openClawToolPayload("tool.completed", "speakeasy__execute_tool", mcpResult, nil), &gen.HookMCPData{ServerName: new("relay-name")}),
+			want:    "relay-name",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, canonicalTelemetryToolSource(tc.payload))
+		})
+	}
+}
+
+// A relay that does not populate data.mcp for OpenClaw MCP calls still gets
+// the post-call row attributed to the server, under the tool's own name.
+func TestCanonicalTelemetryRows_AttributesOpenClawMCPResultToServer(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	authCtx := &contextvalues.AuthContext{ProjectID: &projectID, ActiveOrganizationID: "org-openclaw"}
+	payload := openClawToolPayload("tool.completed", "speakeasy__execute_tool", map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "done"}},
+		"details": map[string]any{"mcpServer": "speakeasy", "mcpTool": "execute_tool"},
+	}, nil)
+
+	var s Service
+	rows := s.canonicalTelemetryRows(t.Context(), payload, authCtx, &SessionMetadata{}, "openclaw", time.Now(), "")
+	require.Len(t, rows, 1)
+	require.Equal(t, "speakeasy", rows[0].attrs[attr.ToolCallSourceKey])
+	require.Equal(t, "speakeasy__execute_tool", rows[0].toolName)
+	require.Equal(t, "speakeasy__execute_tool", rows[0].attrs[attr.ToolNameKey])
+}
