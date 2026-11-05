@@ -2,6 +2,8 @@ package access
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -1083,6 +1085,112 @@ func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testin
 	})
 	require.NoError(t, err)
 	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// A rule naming a deleted agent must not block saving the rest of the
+// audience. The page sends every rule it shows back on save, so a stale rule
+// is dropped (which removes its grant) rather than rejected, whether or not
+// the payload carries it.
+func TestService_SetResourceAudience_DropsRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	for _, resend := range []bool{true, false} {
+		t.Run(fmt.Sprintf("resend=%t", resend), func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+			agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				OwnerUserID:    authCtx.UserID,
+				Name:           "Retired assistant",
+			})
+			require.NoError(t, err)
+			agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+			staleBlock := &gen.SetResourceAudienceEntry{PrincipalUrn: agentURN, Level: "blocked", Tools: nil, Dispositions: []string{"destructive"}}
+
+			_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind:    "mcp",
+				ResourceID:      serverID,
+				Entries:         []*gen.SetResourceAudienceEntry{staleBlock},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.NoError(t, err)
+
+			_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ID:             agent.ID,
+			})
+			require.NoError(t, err)
+
+			userURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+			entries := []*gen.SetResourceAudienceEntry{
+				{PrincipalUrn: userURN, Level: "use", Tools: nil, Dispositions: nil},
+			}
+			if resend {
+				entries = append(entries, staleBlock)
+			}
+			result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind:    "mcp",
+				ResourceID:      serverID,
+				Entries:         entries,
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.NoError(t, err)
+
+			for _, entry := range result.Entries {
+				require.NotEqual(t, agentURN, entry.PrincipalUrn, "deleted agent's rule should be removed")
+			}
+			require.True(t, slices.ContainsFunc(result.Entries, func(entry *gen.ResourceAudienceEntry) bool {
+				return entry.PrincipalUrn == userURN && entry.Level == "use"
+			}))
+		})
+	}
+}
+
+// A deleted agent with no rule on this server still cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Gone assistant",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ID:             agent.ID,
 	})

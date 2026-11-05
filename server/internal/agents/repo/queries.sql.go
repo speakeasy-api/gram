@@ -251,6 +251,26 @@ func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPol
 	return i, err
 }
 
+const deleteAgentPrincipalGrants = `-- name: DeleteAgentPrincipalGrants :exec
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+`
+
+type DeleteAgentPrincipalGrantsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+// Removes every grant naming a deleted agent: its own policy and the server
+// rules that name it. A deleted agent can never act again, so these decide
+// nothing, and leaving them makes audience saves resend a principal that no
+// longer validates.
+func (q *Queries) DeleteAgentPrincipalGrants(ctx context.Context, arg DeleteAgentPrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, deleteAgentPrincipalGrants, arg.OrganizationID, arg.AgentID)
+	return err
+}
+
 const deleteConnectionBlock = `-- name: DeleteConnectionBlock :one
 DELETE FROM agent_connection_blocks
 WHERE organization_id = $1

@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -63,6 +64,58 @@ func TestSetAuthClientAudienceWritesUseAndBlocked(t *testing.T) {
 	cleared, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{ID: clientID.String(), ExpectedVersion: saved.Version, Entries: nil})
 	require.NoError(t, err)
 	require.Empty(t, ownRules(cleared))
+}
+
+// A rule naming a deleted agent must not block saving the rest of the
+// audience: the page sends it back, and it is dropped instead of rejected.
+func TestSetAuthClientAudienceDropsRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	public := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Public)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Shared")
+	associate(t, ctx, ti.conn, ti.organizationID, public, clientID)
+	member := callerPrincipal(t, ctx)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.organizationID,
+		OwnerUserID:    member.ID,
+		Name:           "Retired assistant",
+	})
+	require.NoError(t, err)
+	staleBlock := &gen.AuthClientAudienceRule{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: authclients.LevelBlocked}
+
+	current, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	saved, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+		ID:              clientID.String(),
+		ExpectedVersion: current.Version,
+		Entries:         []*gen.AuthClientAudienceRule{staleBlock},
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{OrganizationID: ti.organizationID, ID: agent.ID})
+	require.NoError(t, err)
+
+	saved, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+		ID:              clientID.String(),
+		ExpectedVersion: saved.Version,
+		Entries: []*gen.AuthClientAudienceRule{
+			{PrincipalUrn: urn.PrincipalWildcard, Level: authclients.LevelUse},
+			staleBlock,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{authz.AllUsersPrincipal().String() + "|" + authclients.LevelUse}, ownRules(saved))
+
+	// A deleted agent the client never held a rule for is still refused.
+	_, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+		ID:              clientID.String(),
+		ExpectedVersion: saved.Version,
+		Entries:         []*gen.AuthClientAudienceRule{staleBlock},
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 func TestSetAuthClientAudienceKeepsUntouchedProvisionedGrants(t *testing.T) {
