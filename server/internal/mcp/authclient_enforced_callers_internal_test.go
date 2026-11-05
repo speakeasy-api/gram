@@ -252,7 +252,7 @@ func TestEnforcedMemberCompatibilityPathNeedsNoSignInLink(t *testing.T) {
 		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: f.signIn}
 		choices := &memberChoices{selector: selector, enforced: true, subject: subject, byServer: map[uuid.UUID]*memberTokens{}}
 		choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return f.service.resolveChosenMemberTokens(ctx, endpoint, subject, true, member)
+			return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, subject, true, member)
 		}
 		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
 		choices.apply(t.Context(), testenv.NewLogger(t), members, true)

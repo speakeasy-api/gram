@@ -702,7 +702,7 @@ func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject u
 		readOnly:     false,
 		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return s.resolveChosenMemberTokens(ctx, endpoint, subject, true, member)
+			return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))), endpoint, subject, true, member)
 		},
 		mu:       sync.Mutex{},
 		byServer: map[uuid.UUID]*memberTokens{},
