@@ -12,7 +12,24 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), listMembers: vi.fn() }));
+vi.mock("@/lib/useAllAuthClients", () => ({
+  useAllAuthClients: () => ({
+    data: [
+      {
+        id: "client_calendar",
+        name: "Content calendar",
+        clientType: "service_account",
+      },
+      {
+        id: "client_notes",
+        name: "Meeting notes",
+        clientType: "remote_session",
+        remoteSessionClientId: "upstream_notes",
+      },
+    ],
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
 }));
@@ -24,7 +41,10 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
+  useSdkClient: () => ({
+    agents: { listPolicyGrants: mocks.list },
+    access: { listMembers: mocks.listMembers },
+  }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "example" }),
 }));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
@@ -71,6 +91,11 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.list.mockResolvedValue([]);
+  mocks.listMembers.mockResolvedValue({
+    members: [
+      { id: "user_ada", name: "Ada Lovelace", email: "ada@example.com" },
+    ],
+  });
 });
 describe("Agent profile permissions", () => {
   it("opens the shared permission editor without a separate inference card", async () => {
@@ -222,6 +247,61 @@ describe("Agent profile permissions", () => {
     expect(
       screen.queryByText(/Permissions changed while you were editing/),
     ).toBeNull();
+  });
+  it("says which upstream credentials each mcp:auth grant covers", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "auth_everything",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      },
+      {
+        id: "auth_shared",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "client_calendar",
+        },
+      },
+      {
+        id: "auth_own",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          clientType: "remote_session",
+          connectionOwner: "$represented_user",
+        },
+      },
+      {
+        id: "auth_attached",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          connectionOwner: "user_ada",
+          upstreamClient: "upstream_notes",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("mcp:auth")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sign in to MCP servers through these upstream credentials.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Every upstream credential in the organization"),
+    ).toBeTruthy();
+    expect(screen.getByText("Content calendar · Service account")).toBeTruthy();
+    expect(
+      screen.getByText("Personal connections of the person the agent acts for"),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText("Ada Lovelace's Meeting notes connection"),
+    ).toBeTruthy();
+    expect(screen.queryByText("All resources")).toBeNull();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import {
@@ -19,6 +21,11 @@ import type { AgentPolicySelector } from "@gram/client/models/components/agentpo
 import { useQuery } from "@tanstack/react-query";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
+import {
+  authGrantLabel,
+  REPRESENTED_USER,
+  type AuthGrantNames,
+} from "./auth-grant-label";
 
 /**
  * Every narrowing beyond the resource itself, including constraints the
@@ -51,6 +58,66 @@ function wildcardGrantLabel(selector: AgentPolicySelector): string {
     return agentPolicyUnrestrictedLabel(undefined);
   }
   return agentPolicyUnrestrictedLabel(selector.resourceKind);
+}
+
+/**
+ * Descriptions for scopes the permission editor does not offer, so a stored
+ * grant on one still says what it allows.
+ */
+const LOCKED_SCOPE_DESCRIPTIONS: Record<string, string> = {
+  "mcp:auth": "Sign in to MCP servers through these upstream credentials.",
+};
+
+/**
+ * Names for the auth clients, upstream OAuth clients and people that the
+ * agent's `mcp:auth` grants point at. Both lists need org:read and load only
+ * when a grant needs them; without them the labels fall back to short ids.
+ */
+function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
+  const sdk = useSdkClient();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const authGrants = grants.filter(
+    ({ selector }) => selector.resourceKind === "mcp_auth_client",
+  );
+  const needsMembers = authGrants.some(
+    ({ selector }) =>
+      isAgentPolicyConstraint(selector.connectionOwner) &&
+      selector.connectionOwner !== REPRESENTED_USER,
+  );
+  const clients = useAllAuthClients({
+    enabled: authGrants.length > 0 && hasScope("org:read"),
+  });
+  const members = useQuery({
+    queryKey: ["agent-auth-grant-members", organization.id],
+    queryFn: ({ signal }) => sdk.access.listMembers({}, undefined, { signal }),
+    enabled: needsMembers && hasScope("org:read"),
+    retry: false,
+    throwOnError: false,
+  });
+  const clientById = new Map(
+    (clients.data ?? []).map((client) => [client.id, client]),
+  );
+  const serverByUpstream = new Map<string, string>();
+  for (const client of clients.data ?? []) {
+    if (
+      client.remoteSessionClientId &&
+      !serverByUpstream.has(client.remoteSessionClientId)
+    ) {
+      serverByUpstream.set(client.remoteSessionClientId, client.name);
+    }
+  }
+  const memberById = new Map(
+    (members.data?.members ?? []).map((member) => [
+      member.id,
+      member.name || member.email,
+    ]),
+  );
+  return {
+    client: (id) => clientById.get(id),
+    upstreamClient: (id) => serverByUpstream.get(id),
+    member: (id) => memberById.get(id),
+  };
 }
 
 export function AgentIdentityPermissions({
@@ -87,6 +154,7 @@ export function AgentIdentityPermissions({
         selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
     ),
   );
+  const authNames = useAuthGrantNames(rows);
   let content: JSX.Element;
   if (!canRead) {
     content = (
@@ -116,9 +184,9 @@ export function AgentIdentityPermissions({
           // `Text` with no children is a loading skeleton, so a scope the
           // mirror does not describe (e.g. `mcp:blocked_*`) must skip the
           // line rather than pass `undefined`.
-          const description = AGENT_POLICY_SCOPES.find(
-            (definition) => definition.slug === scope,
-          )?.description;
+          const description =
+            AGENT_POLICY_SCOPES.find((definition) => definition.slug === scope)
+              ?.description ?? LOCKED_SCOPE_DESCRIPTIONS[scope];
           return (
             <div
               key={scope}
@@ -144,7 +212,9 @@ export function AgentIdentityPermissions({
                       key={grant.id}
                       className="flex flex-wrap items-center gap-x-2 gap-y-1"
                     >
-                      {selector.resourceId === ANY_RESOURCE ? (
+                      {selector.resourceKind === "mcp_auth_client" ? (
+                        <Text small>{authGrantLabel(selector, authNames)}</Text>
+                      ) : selector.resourceId === ANY_RESOURCE ? (
                         <Text small>{wildcardGrantLabel(selector)}</Text>
                       ) : (
                         <ResourceLink
