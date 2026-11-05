@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE description="Start the local tailnet gateway (needs a real tailnet and a provisioned ingress)"
-#MISE dir="{{ config_root }}"
+#MISE dir="{{ config_root }}/server"
 #MISE hide=true
 
 set -euo pipefail
@@ -21,4 +21,4 @@ exec env \
   GRAM_TAILNET_GATEWAY_ORDINAL="${ordinal}" \
   GRAM_TAILNET_GATEWAY_POD_NAME="${GRAM_TAILNET_GATEWAY_POD_NAME:-gram-tailnet-gateway-${ordinal}}" \
   GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS="${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-127.0.0.1:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}" \
-  go run ./server/cmd/gram tailnet-gateway
+  go run main.go tailnet-gateway "$@"
