@@ -138,20 +138,30 @@ func TestRecorder_StoresTheReportedClient(t *testing.T) {
 	conn := clickhouseConn(t)
 	keys := func(string, string) ([]byte, error) { return []byte("key"), nil }
 	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, WithDeviceKeys(keys))
-	attempt := Begin(testScope())
+	scope := testScope()
+	attempt := Begin(scope)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("User-Agent", "python-httpx/0.28.1")
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
 
-	recorder.Once(t.Context(), testScope(), StepMCPRequest, CodeProviderServerError, FromRequest(req), ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }))
+	recorder.Once(t.Context(), scope, StepMCPRequest, CodeProviderServerError, FromRequest(req), ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }))
 	recorder.End(t.Context(), attempt, StepMCPRequest, CodeProviderServerError, ReportedClient(func() (string, string) { return "claude-code", "2.4.0" }), FromRequest(req))
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	var family, version, device string
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT client_family, client_version, device_key FROM mcp_connection_events WHERE attempt_id = ?`, attempt.ID()).Scan(&family, &version, &device))
-	require.Equal(t, FamilyClaudeCode, family)
-	require.Equal(t, "2.4.0", version)
-	require.NotEmpty(t, device)
+	rows, err := conn.Query(t.Context(), `SELECT client_family, client_version, device_key FROM mcp_connection_events WHERE server_id = ?`, scope.serverID)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rows.Close()) }()
+	var count int
+	for rows.Next() {
+		var family, version, device string
+		require.NoError(t, rows.Scan(&family, &version, &device))
+		require.Equal(t, FamilyClaudeCode, family)
+		require.Equal(t, "2.4.0", version)
+		require.NotEmpty(t, device)
+		count++
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, 2, count, "both option orders are stored")
 }
 
 func TestReportedClient_ReadsFirstAndFallsBack(t *testing.T) {
@@ -164,6 +174,11 @@ func TestReportedClient_ReadsFirstAndFallsBack(t *testing.T) {
 	}{
 		{name: "name beats user agent", reported: "codex-mcp-client", reportedVersion: "0.50.0", userAgent: "python-httpx/0.28.1", family: FamilyCodexCLI, version: "0.50.0"},
 		{name: "named client takes no version from the user agent", reported: "claude-code", userAgent: "claude-code/2.1.0", family: FamilyClaudeCode},
+		{name: "name with a space", reported: "Claude Code", reportedVersion: "2.4.0", userAgent: "python-httpx/0.28.1", family: FamilyClaudeCode, version: "2.4.0"},
+		{name: "dashed web app name", reported: "claude-ai", reportedVersion: "0.1.0", userAgent: "python-httpx/0.28.1", family: FamilyClaudeAI, version: "0.1.0"},
+		{name: "dotted web app name", reported: "claude.ai", userAgent: "python-httpx/0.28.1", family: FamilyClaudeAI},
+		{name: "underscored name", reported: "codex_cli", reportedVersion: "1.0", userAgent: "x", family: FamilyCodexCLI, version: "1.0"},
+		{name: "version inside a spaced name", reported: "Claude Code/2.2.0", userAgent: "x", family: FamilyClaudeCode, version: "2.2.0"},
 		{name: "version inside the name", reported: "claude-code/2.2.0", userAgent: "x", family: FamilyClaudeCode, version: "2.2.0"},
 		{name: "junk version dropped", reported: "cursor", reportedVersion: "not a version", userAgent: "x", family: FamilyCursor},
 		{name: "long version dropped", reported: "cursor", reportedVersion: long, userAgent: "x", family: FamilyCursor},

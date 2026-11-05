@@ -72,7 +72,7 @@ func delegationConfigurationError(err error) error {
 	if errors.Is(err, ErrFederatedConfiguration) {
 		return ErrDelegationConfiguration
 	}
-	if errors.Is(err, ErrFederatedUnavailable) && !errors.Is(err, ErrFederatedSigning) {
+	if errors.Is(err, ErrFederatedUnavailable) && !errors.Is(err, ErrFederatedSigning) && !errors.Is(err, context.Canceled) {
 		return errors.Join(delegation.ErrProviderUnavailable, err)
 	}
 	return err

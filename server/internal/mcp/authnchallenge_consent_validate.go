@@ -99,7 +99,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, r, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -108,7 +108,7 @@ func (s *Service) validateRemoteSession(
 // keepalive through its claim lease and per-host limiter.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
-	r *http.Request,
+	attribution remotesessions.RefreshAttribution,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -130,7 +130,7 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)

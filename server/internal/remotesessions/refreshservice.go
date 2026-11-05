@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -448,7 +449,7 @@ func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) 
 			return false
 		}
 		// Preserve established missing-transport pacing; history classifies local setup separately.
-		return errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, errRefreshUnusableAnswer)
+		return errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, tunnelrouting.ErrTransportConfiguration) || errors.Is(err, errRefreshUnusableAnswer)
 	}
 }
 
@@ -616,7 +617,7 @@ func (s *RefreshService) refreshNowSafely(ctx context.Context, q *remotesessions
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			cause := fmt.Errorf("remote session refresh panicked: %v", recovered)
-			s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(cause))
+			s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(cause), attr.SlogErrorStack(string(debug.Stack())))
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
 			failureRecorded := s.recordRefresh(ctx, attribution, sess, client, trigger, remotesessionmetrics.RefreshOutcomeInternalError, cause)
 			err = &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: RefreshOutageNone, failureRecorded: failureRecorded, err: cause}
@@ -645,18 +646,16 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
 	attempted := sess
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted)
-	issuerURL := client.IssuerUrl
 	if postLockClient != nil {
-		issuerURL = postLockClient.IssuerUrl
 		client = *postLockClient
 	}
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
-		s.metrics.Record(ctx, issuerURL, trigger, outcome)
+		s.metrics.Record(ctx, client.IssuerUrl, trigger, outcome)
 		failureRecorded := s.recordRefresh(ctx, attribution, sess, client, trigger, outcome, err)
 		var tokenErr *TokenRefreshError
 		if postLockClient != nil && errors.As(err, &tokenErr) {
-			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
+			noteTokenEndpointMissing(ctx, s.issuerMetadata, client, tokenErr.statusCode, tokenErr.code != "")
 		}
 		var retryAfter time.Duration
 		failureKind := RefreshOutageNone
@@ -678,7 +677,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 				}
 			}
 		}
-		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, outageKind: failureKind, failureRecorded: failureRecorded, err: err}
+		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, retryAfter: retryAfter, outageKind: failureKind, failureRecorded: failureRecorded, err: err}
 	}
 	if result.Outcome == remotesessionmetrics.RefreshOutcomeRefreshed {
 		s.clearRefreshOutage(ctx, attempted)
@@ -695,8 +694,8 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 			result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok, restatement.previousSubject)
 		}
 	}
-	result.IssuerURL = issuerURL
-	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
+	result.IssuerURL = client.IssuerUrl
+	s.metrics.Record(ctx, client.IssuerUrl, trigger, result.Outcome)
 	s.recordRefresh(ctx, attribution, sess, client, trigger, result.Outcome, nil)
 	return result, nil
 }

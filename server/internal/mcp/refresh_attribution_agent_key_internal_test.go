@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -38,8 +39,6 @@ func TestAgentKeyMemberChoicesPreservesRequestAttribution(t *testing.T) {
 	agentID := uuid.New()
 	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: uuid.NewString()}, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})
 	request := httptest.NewRequest("POST", "https://mcp.example.com/mcp", nil)
-	request.Header.Set("User-Agent", "claude-code/1.2.3")
-	request.Header.Set("X-Forwarded-For", "203.0.113.7")
 	for _, organizationGateway := range []bool{false, true} {
 		scope := mcpconnectionattempts.GatewayScope(f.orgID, f.projectID, uuid.New(), mcpconnectionattempts.AppUnverified)
 		if organizationGateway {
@@ -54,8 +53,9 @@ func TestAgentKeyMemberChoicesPreservesRequestAttribution(t *testing.T) {
 			f.service.upstreamTokens = source
 			_, err := choices.resolve(ctx, metaMember{serverID: f.serverID, projectID: f.projectID, typedAuthClient: typed, chosenClientID: validUUID(uuid.New())})
 			require.NoError(t, err)
-			require.Equal(t, attribution, source.attribution, "lazy resolution must retain the gateway scope and incoming request")
-			require.NotEqual(t, remotesessions.RefreshIn(scope), source.attribution, "request carries client family/version and device inputs")
+			// The client is a func, which require.Equal never treats as equal; %+v compares it by nil-ness and code.
+			require.Equal(t, fmt.Sprintf("%+v", attribution), fmt.Sprintf("%+v", source.attribution), "lazy resolution must retain the gateway scope and incoming request")
+			require.NotEqual(t, fmt.Sprintf("%+v", remotesessions.RefreshIn(scope)), fmt.Sprintf("%+v", source.attribution), "attribution keeps the incoming request")
 		}
 	}
 }

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,6 +61,11 @@ func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID
 	}, nil
 }
 
+// agentCredentialRejected marks a stored agent credential that cannot be honoured, not a setup fault.
+func agentCredentialRejected() error {
+	return oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+}
+
 func loadAgentSessionCredential(
 	endpoint *ResolvedMcpEndpoint,
 	subject urn.SessionSubject,
@@ -76,20 +81,20 @@ func loadAgentSessionCredential(
 	if subject.String() != storedSubject.String() ||
 		!organizationID.Valid || organizationID.String != endpoint.OrganizationID ||
 		!authorizerUserID.Valid || authorizerUserID.String == "" || delegatedGrants == nil || !delegatedGrantsVersion.Valid {
-		return agentSessionCredential{}, oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 	if _, err := uuid.Parse(subject.ID); err != nil {
-		return agentSessionCredential{}, oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 
 	version := runtimepolicy.DelegatedPolicyVersion(delegatedGrantsVersion.Int32)
 	decoded, err := runtimepolicy.DecodeDelegatedPolicy(version, delegatedGrants)
 	if err != nil {
-		return agentSessionCredential{}, oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 	normalized, err := runtimepolicy.EncodeDelegatedPolicy(version, decoded)
 	if err != nil {
-		return agentSessionCredential{}, oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
@@ -100,7 +105,7 @@ func loadAgentSessionCredential(
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
 	if !bytes.Equal(normalized, expected) {
-		return agentSessionCredential{}, oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 
 	return agentSessionCredential{

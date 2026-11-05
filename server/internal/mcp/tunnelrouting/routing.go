@@ -174,7 +174,7 @@ func FailureHappened(tunnelError string, causes ...error) (mcpconnectionattempts
 		return none, false
 	case wire.TunnelErrorTunnelBusy:
 		return mcpconnectionattempts.CodeTunnelAtCapacity, true
-	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed, wire.TunnelErrorInvalidRoute, wire.TunnelErrorActiveCheckFailed:
+	case wire.TunnelErrorRouteStoreUnavailable, wire.TunnelErrorRouteLookupFailed, wire.TunnelErrorInvalidRoute, wire.TunnelErrorActiveCheckFailed, wire.TunnelErrorForwardRejected:
 		return mcpconnectionattempts.CodeInternalError, true
 	default:
 		return mcpconnectionattempts.CodeTunnelUnavailable, true

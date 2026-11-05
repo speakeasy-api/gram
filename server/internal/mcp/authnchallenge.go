@@ -1265,7 +1265,9 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// all-or-nothing ErrNoValidToken challenge below stays for direct
 	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
 	if endpoint.MetaMcpServerID.Valid {
-		authentication.skippedUpstreams = new(remotesessions.SkippedClients)
+		if authentication.skippedUpstreams == nil {
+			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
+		}
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
@@ -1586,14 +1588,20 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 	return mcpconnectionattempts.AttemptAt(id, a.CreatedAt, connectionScope(endpoint, app))
 }
 
+// gatewayScope files a gateway's rows; an organization gateway has no project.
+func gatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
+	if projectID == uuid.Nil {
+		return mcpconnectionattempts.OrganizationGatewayScope(organizationID, gatewayID, app)
+	}
+	return mcpconnectionattempts.GatewayScope(organizationID, projectID, gatewayID, app)
+}
+
 // connectionScope is what stays the same on every step of a connection attempt
 // to this endpoint.
 func connectionScope(endpoint *ResolvedMcpEndpoint, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
 	switch {
-	case endpoint.IsOrganizationGateway() && endpoint.ProjectID == uuid.Nil:
-		return mcpconnectionattempts.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.MetaMcpServerID.Valid:
-		return mcpconnectionattempts.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
+		return gatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.McpServerID.Valid:
 		return mcpconnectionattempts.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
 	default:

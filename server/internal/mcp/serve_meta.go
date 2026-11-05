@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -734,10 +733,8 @@ type metaGateAdmission struct {
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
 func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
-	refreshScope := mcpconnectionattempts.GatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx))
-	if mcpEndpoint.ProjectID == uuid.Nil {
-		refreshScope = mcpconnectionattempts.OrganizationGatewayScope(metaServer.OrganizationID, metaServer.ID, requestApp(ctx))
-	}
+	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx))
+	skipped := new(remotesessions.SkippedClients)
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
@@ -755,8 +752,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
-		authentication.skippedUpstreams = new(remotesessions.SkippedClients)
-		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
+		authentication.skippedUpstreams = skipped
+		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -776,6 +773,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
+		authentication.skippedUpstreams = skipped
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -793,8 +791,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
-			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
-			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
+			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {
@@ -823,13 +820,6 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 				connectRoot = root
 			}
 		}
-	}
-	skipped := new(remotesessions.SkippedClients)
-	if gateAuthentication != nil {
-		if gateAuthentication.skippedUpstreams != nil {
-			skipped = gateAuthentication.skippedUpstreams
-		}
-		gateAuthentication.skippedUpstreams = skipped
 	}
 	gate := &metaGateContext{
 		skippedUpstreams: skipped,

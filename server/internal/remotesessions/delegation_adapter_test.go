@@ -71,6 +71,8 @@ func TestDelegationProviderLoadProvenance(t *testing.T) {
 		{"database", errors.New("database unavailable"), false},
 		{"signing", ErrFederatedSigning, false},
 		{"signing unavailable", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), false},
+		{"client disconnect", fmt.Errorf("%w: %w", ErrFederatedUnavailable, context.Canceled), false},
+		{"provider timeout", fmt.Errorf("%w: %w", ErrFederatedUnavailable, context.DeadlineExceeded), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -92,11 +94,14 @@ func TestDelegationRefreshSignerOwnership(t *testing.T) {
 		{"missing signer", errors.Join(ErrFederatedUnavailable, ErrFederatedSigning), delegation.RefreshSetupRetryable, true},
 		{"signer fault", ErrFederatedSigning, delegation.RefreshSetup, true},
 		{"discovery", ErrFederatedUnavailable, delegation.RefreshSetupRetryable, false},
+		{"configuration", ErrFederatedConfiguration, delegation.RefreshSetup, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			setup := federatedRefreshSetupError(fmt.Errorf("private signer detail: %w", tc.cause))
+			require.NotContains(t, setup.Error(), "private signer detail")
 			var failure *delegation.RefreshError
-			require.ErrorAs(t, delegationRefreshError(federatedRefreshSetupError(tc.cause)), &failure)
+			require.ErrorAs(t, delegationRefreshError(setup), &failure)
 			require.Equal(t, tc.kind, failure.Kind)
 			require.Equal(t, tc.signing, failure.SigningFailure)
 		})
