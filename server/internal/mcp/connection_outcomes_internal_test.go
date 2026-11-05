@@ -112,7 +112,8 @@ func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Rec
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	rec := mcpconnectionattemptstest.New(t)
-	return &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}, rec, mr
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client), attemptEndings: newAttemptEndings()}
+	return service, rec, mr
 }
 
 func memberView(statuses map[uuid.UUID]gatewayServerStatus) *gatewayConsentView {
@@ -131,8 +132,10 @@ func TestRecordConsentPage_UnchangedReRenderWritesNoMemberRows(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 3)
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 3)
 }
 
@@ -145,6 +148,7 @@ func TestRecordConsentPage_ChangedMemberWritesOneRow(t *testing.T) {
 	render := func(status gatewayServerStatus) {
 		view := memberView(map[uuid.UUID]gatewayServerStatus{signedIn: status, unset: gatewayServerNotSetUp})
 		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+		service.attemptEndings.wg.Wait()
 	}
 
 	render(gatewayServerNotConnected)
@@ -169,7 +173,9 @@ func TestRecordConsentPage_NewAttemptRecordsMembersAgain(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 4)
 }
 
@@ -182,7 +188,9 @@ func TestRecordConsentPage_MemberStatusCacheFailureRecordsRows(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 4)
 }
 
@@ -569,6 +577,7 @@ func TestRecordConsentPage_AuthClientChangeWritesRow(t *testing.T) {
 		view := memberView(map[uuid.UUID]gatewayServerStatus{member: gatewayServerConnected})
 		view.members = []metaMember{{serverID: member, authClient: &authClientResolution{clientID: clientID}}}
 		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+		service.attemptEndings.wg.Wait()
 	}
 
 	first, second := uuid.New(), uuid.New()
@@ -579,4 +588,22 @@ func TestRecordConsentPage_AuthClientChangeWritesRow(t *testing.T) {
 	rows := rec.Rows()
 	require.Len(t, rows, 2, "the same status through a different auth client is a change")
 	require.Equal(t, second.String(), rows[1].AuthClientID)
+}
+
+func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
+	t.Parallel()
+
+	service, _, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	attempt := state.connectionAttempt(endpoint)
+	kept := memberStatus{id: uuid.NewString(), status: "allowed|connected", what: mcpconnectionattempts.ResultAllowed, opts: nil}
+	dropped := memberStatus{id: uuid.NewString(), status: "needs_sign_in|needs_sign_in", what: mcpconnectionattempts.CodeNeedsSignIn, opts: nil}
+	logger := testenv.NewLogger(t)
+
+	require.Len(t, service.changedMemberStatuses(t.Context(), logger, attempt, []memberStatus{kept, dropped}), 2)
+	service.forgetMemberStatuses(t.Context(), logger, attempt, []memberStatus{dropped})
+
+	again := service.changedMemberStatuses(t.Context(), logger, attempt, []memberStatus{kept, dropped})
+	require.Len(t, again, 1, "only the dropped member is offered again")
+	require.Equal(t, dropped.id, again[0].id)
 }

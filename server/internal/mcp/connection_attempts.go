@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -208,9 +209,7 @@ func (s *Service) recordConsentPage(
 				statuses = append(statuses, status)
 			}
 		}
-		for _, status := range s.changedMemberStatuses(ctx, logger, attempt, statuses) {
-			s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, append(status.opts, subject, fromRequest)...)
-		}
+		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
 	if problem != nil {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
@@ -263,11 +262,51 @@ type recordedMember struct {
 
 var errMemberStatusesUnchanged = errors.New("member statuses unchanged")
 
-// memberStatusTimeout keeps a slow cache from holding up the consent page.
-const memberStatusTimeout = 2 * time.Second
-
 func memberStatusesKey(attempt mcpconnectionattempts.Attempt) string {
 	return "connectionAttemptMembers:" + attempt.ID().String()
+}
+
+// recordMemberStatuses writes members whose status changed, off the response path when it can.
+func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus, opts ...mcpconnectionattempts.Option) {
+	record := func(ctx context.Context, statuses []memberStatus) []memberStatus {
+		var dropped []memberStatus
+		for _, status := range statuses {
+			if !s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, append(status.opts, opts...)...) {
+				dropped = append(dropped, status)
+			}
+		}
+		return dropped
+	}
+	if _, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache); !ok || s.attemptEndings == nil || attempt.IsZero() {
+		record(ctx, statuses)
+		return
+	}
+	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		dropped := record(ctx, s.changedMemberStatuses(ctx, logger, attempt, statuses))
+		s.forgetMemberStatuses(ctx, logger, attempt, dropped)
+	})
+}
+
+// forgetMemberStatuses clears rows the recorder dropped, so the next render records them again.
+func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, dropped []memberStatus) {
+	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	if !ok || len(dropped) == 0 {
+		return
+	}
+	var recorded []recordedMember
+	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
+		kept := recorded[:0]
+		for _, member := range recorded {
+			if !slices.ContainsFunc(dropped, func(status memberStatus) bool { return status.id == member.ID && status.status == member.Status }) {
+				kept = append(kept, member)
+			}
+		}
+		recorded = kept
+		return nil
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "forget dropped gateway member statuses", attr.SlogError(err))
+	}
 }
 
 // changedMemberStatuses keeps members whose status changed this attempt; a cache failure keeps all.
@@ -276,8 +315,6 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	if !ok || attempt.IsZero() || len(statuses) == 0 {
 		return statuses
 	}
-	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
-	defer cancel()
 	var changed []memberStatus
 	var recorded []recordedMember
 	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
