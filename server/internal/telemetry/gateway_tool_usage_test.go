@@ -648,7 +648,7 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 // A call that reached a gateway by URL is labelled the way LoadGatewayLabels
 // labels it: a gateway in a project, or serving an agent, the viewer may not
 // read is "Gateway in another project", on the summary path and the raw path.
-func TestListToolUsageTraces_HidesOpenClawGatewayCallsTheCallerCannotRead(t *testing.T) {
+func TestListToolUsageTraces_LabelsOpenClawGatewayCallsTheCallerCannotRead(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)

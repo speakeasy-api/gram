@@ -105,7 +105,8 @@ type DiagnosticsService struct {
 	budget          OperationBudget
 	identityGate    CanonicalIdentityGate
 	// authz decides which gateway names a caller's tool calls may carry; nil
-	// labels every derived gateway with the neutral name.
+	// gives project gateways and agents the caller does not own the neutral
+	// name, while the organization gateway and owned agents keep theirs.
 	authz *authz.Engine
 	now   func() time.Time
 }
