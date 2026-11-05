@@ -60,6 +60,9 @@ internal/access/impl.go,*Service.ListMembers,check,Check,ScopeProjectRead,,1,O2 
 internal/access/impl.go,*Service.ListRoles,check,Check,ScopeOrgRead,,1,O2 AIS-838
 internal/access/impl.go,*Service.ListRoles,check,Check,ScopeProjectRead,,1,O2 AIS-838
 internal/access/impl.go,*Service.ListScopes,check,Check,ScopeOrgRead,Require,1,O2 AIS-838
+internal/access/impl.go,*Service.ListScopes,projection,ScopeCatalog,,,1,X1 AIS-873
+internal/access/impl.go,*Service.ListScopes,projection,Tasks,,,1,X1 AIS-873
+internal/access/impl.go,*Service.RequestAccess,projection,ScopeEntryFor,,,1,X1 AIS-873
 internal/access/impl.go,*Service.ResolveChallenge,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
 internal/access/impl.go,*Service.UpdateMemberRoles,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
 internal/access/impl.go,*Service.UpdateRole,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
@@ -95,6 +98,16 @@ internal/access/role_manager.go,*RoleManager.roleViewFromLocalRole,loader,Grants
 internal/access/shadow_mcp_inventory.go,*Service.requireOrgAdmin,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
 internal/access/shadow_mcp_inventory.go,*Service.shadowMCPInventoryPolicyState,loader,ListGrantsForResource,,,3,O2 AIS-838
 internal/access/shadow_mcp_inventory.go,shadowMCPInventoryPolicyAudiencePrincipals,loader,ListGrantsForResource,,,1,O2 AIS-838
+internal/access/temporary_grants.go,*Service.CreateTemporaryGrant,projection,ValidateSelector,,,1,X1 AIS-873
+internal/access/temporary_grants.go,*Service.ListTemporaryGrants,check,Check,ScopeOrgAdmin,Evaluate,1,O2 AIS-838
+internal/access/temporary_grants.go,*Service.requireTemporaryGrantAdmin,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
+internal/access/temporary_grants.go,*Service.temporaryGrantRecipient,writer,ValidatePrincipal,,,1,O2 AIS-838
+internal/access/temporary_grants.go,*temporaryGrantExplainer.otherAccess,loader,LoadGrants,,,1,O2 AIS-838
+internal/access/temporary_grants.go,*temporaryGrantExplainer.otherAccess,loader,SelectorFromRow,,,1,O2 AIS-838
+internal/access/temporary_grants.go,otherAccessFor,evaluator,GrantsContainSelector,,,1,O2 AIS-838
+internal/access/temporary_grants.go,temporaryGrantHolderPrincipals,loader,ResolveAgentPrincipals,,,1,O2 AIS-838
+internal/access/temporary_grants.go,temporaryGrantHolderPrincipals,loader,ResolveUserPrincipals,,,1,O2 AIS-838
+internal/access/temporary_grants.go,temporaryGrantView,loader,SelectorFromRow,,,1,O2 AIS-838
 internal/admin/impl.go,*Service.CreateOrganization,writer,SeedPersonalAuthClientDefaultTx,,,1,X1 AIS-873
 internal/admin/impl.go,*Service.CreateOrganization,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
 internal/agent/aiscantargets.go,*Service.requireOrganizationAdmin,check,Check,ScopeOrgAdmin,Require,1,O8 AIS-845
@@ -196,12 +209,16 @@ internal/assistants/impl.go,*Service.UpdateAssistant,check,AssistantCheck,ScopeA
 internal/assistants/impl.go,*Service.UpgradeAssistantIdentity,check,Check,ScopeProjectWrite,Require,1,AS1 AIS-860
 internal/assistants/impl.go,*Service.requireAttachmentAccess,check,MCPCheck,ScopeMCPConnect,,1,AS1 AIS-860
 internal/assistants/impl.go,*Service.requireAttachmentAccess,check,MCPCheck,ScopeMCPWrite,,1,AS1 AIS-860
+internal/assistants/managed_organization_read.go,*ServiceCore.ensureManagedOrganizationRead,evaluator,GrantsContainSelectorFor,,,1,AS1 AIS-860
+internal/assistants/managed_organization_read.go,*ServiceCore.ensureManagedOrganizationRead,loader,SelectorFromRow,,,1,AS1 AIS-860
+internal/assistants/managed_organization_read.go,*ServiceCore.ensureManagedOrganizationRead,projection,ValidateSelector,,,1,X1 AIS-873
 internal/assistants/runtime_kit_workload.go,*ServiceCore.provisionKitWorkload,loader,LoadGrants,,,1,AS1 AIS-860
 internal/assistants/runtime_kit_workload.go,kitWorkloadInferenceAllowed,check,InferenceExecuteCheck,,GrantsAuthorize,1,I1 AIS-864
 internal/assistants/runtime_kit_workload.go,kitWorkloadInferenceAllowed,evaluator,GrantsAuthorize,,,1,I1 AIS-864
 internal/auditapi/impl.go,*Service.List,check,Check,ScopeOrgRead,Require,1,O7 AIS-841
 internal/auditapi/impl.go,*Service.ListFacets,check,Check,ScopeOrgRead,Require,1,O7 AIS-841
 internal/auth/assistanttokens/manager.go,*Manager.Authorize,engine,PrepareContext,,,1,A1 AIS-879
+internal/auth/assistanttokens/runtime_credential.go,*Manager.AuthorizeRuntime,engine,PrepareContext,,,1,A1 AIS-879
 internal/auth/auth.go,*Auth.authorize,engine,PrepareContext,,,1,A1 AIS-879
 internal/auth/auth.go,*Auth.requireResolvedProjectAccess,check,Check,ScopeProjectRead,Require,1,A1 AIS-879
 internal/auth/deviceagenttoken/deviceagenttoken.go,*Issuer.Admit,engine,PrepareContext,,,1,O8 AIS-845
@@ -214,6 +231,7 @@ internal/auth/principalcredential/principalcredential.go,*Issuer.checkAuthorizer
 internal/authclients/audience.go,*Service.SetAuthClientAudience,writer,ValidatePrincipal,,,1,M5 AIS-863
 internal/authclients/audience.go,SetPrincipalLevel,writer,ValidatePrincipal,,,1,M5 AIS-863
 internal/authclients/audience.go,clientGrants,loader,ListGrantsForResource,,,1,M5 AIS-863
+internal/authclients/audience.go,readAudience,writer,ValidatePrincipal,,,1,M5 AIS-863
 internal/authclients/audience.go,saveAudience,writer,PatchPrincipalGrants,,,2,M5 AIS-863
 internal/authclients/audience.go,takeOver,writer,MarkAuthPermissionTakenOverTx,,,1,M5 AIS-863
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,check,MCPCheck,ScopeMCPConnect,Require,1,M5 AIS-863
@@ -231,9 +249,12 @@ internal/chat/conversation_access.go,*Service.ReadableConversations,gate,CheckSe
 internal/chat/impl.go,*Service.GetAssistantSessionSummary,check,Check,ScopeProjectRead,Require,1,C3 AIS-872
 internal/chat/impl.go,*Service.GetWorkUnitsTrend,check,ChatReadCheck,,Evaluate,1,C3 AIS-872
 internal/chat/impl.go,*Service.GetWorkUnitsTrend,engine,ShouldEnforce,,,1,C3 AIS-872
+internal/chat/impl.go,*Service.answersForAgent,engine,ShouldEnforce,,,1,C1 AIS-869
 internal/chat/impl.go,*Service.chatVisibilityScope,check,ChatReadCheck,,Evaluate,1,C3 AIS-872
 internal/chat/impl.go,*Service.chatVisibilityScope,engine,ShouldEnforce,,,1,C3 AIS-872
+internal/chat/impl.go,*Service.editableAgentIDs,engine,ShouldEnforce,,,1,C1 AIS-869
 internal/chat/impl.go,*Service.loadAuthorizedChat,gate,CheckSensitiveContentAccess,,,1,C1 AIS-869
+internal/chat/impl.go,agentWriteCheck,check,Check,ScopeAgentWrite,,1,C1 AIS-869
 internal/chat/impl.go,chatAccess.check,check,ChatReadCheck,,,1,C1 AIS-869
 internal/chat/impl.go,chatAccess.check,check,ChatWriteCheck,,,1,C1 AIS-869
 internal/chat/turnstream_http.go,*Service.HandleTurnStream,check,Check,ScopeProjectRead,Require,1,C1 AIS-869
@@ -363,6 +384,7 @@ internal/mcp/impl.go,*Service.serveToolsetResolved,check,MCPCheck,ScopeMCPConnec
 internal/mcp/inference_workload.go,*Service.AuthorizeWorkloadInference,check,InferenceExecuteCheck,,Require,1,I1 AIS-864
 internal/mcp/mandatory_shadow.go,*mandatoryShadow.recordServer,engine,DecideServerAdmission,,,1,M5 AIS-863
 internal/mcp/mandatory_shadow.go,mandatoryAuthClientCheck,check,MCPAuthClientCheck,,,1,M5 AIS-863
+internal/mcp/principal_credential.go,*Service.authenticatePrincipalCredential,engine,PrepareContext,,,1,M3 AIS-861
 internal/mcp/rpc_tools_call.go,handleToolsCall,check,MCPToolCallCheck,,Require,1,M3 AIS-861
 internal/mcp/rpc_tools_list.go,filterToolsByMCPConnect,check,MCPToolCallCheck,,Require,1,M3 AIS-861
 internal/mcp/serve_meta_code_bridge.go,*metaCodeBackend.currentState,engine,RefreshContext,,,1,M3 AIS-861
@@ -377,6 +399,9 @@ internal/mcp/serve_platform.go,*Service.grantedPlatformToolScopes,engine,FindMat
 internal/mcp/serveendpoint.go,*Service.authorizeProxyBackendAccess,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
 internal/mcp/serveendpoint.go,*Service.prepareProxyBackendContext,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
 internal/mcp/serveendpoint.go,*Service.requireProxyBackendAccess,engine,PrepareContext,,,1,M3 AIS-861
+internal/mcp/typed_remote_login.go,*Service.ValidateRemoteLoginTypedAuthorization,check,MCPCheck,ScopeMCPConnect,DecideServerAdmission,1,M3 AIS-861
+internal/mcp/typed_remote_login.go,*Service.ValidateRemoteLoginTypedAuthorization,engine,DecideServerAdmission,,,1,M3 AIS-861
+internal/mcp/typed_remote_login.go,*Service.ValidateRemoteLoginTypedAuthorization,engine,PrepareMandatory,,,1,M3 AIS-861
 internal/mcp/workload_reconnect.go,*Service.serveWorkloadReconnect,check,Check,ScopeProjectRead,GrantsAuthorize,1,M3 AIS-861
 internal/mcp/workload_reconnect.go,*Service.serveWorkloadReconnect,evaluator,GrantsAuthorize,,,1,M3 AIS-861
 internal/mcp/workload_session.go,*Service.admitWorkloadSession,engine,PrepareContext,,,1,M3 AIS-861
@@ -431,6 +456,8 @@ internal/metamcp/impl.go,*Service.ListMetaMcpServers,check,Check,ScopeMCPRead,Re
 internal/metamcp/impl.go,*Service.RemoveMetaMcpMember,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
 internal/metamcp/impl.go,*Service.UpdateMetaMcpMember,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
 internal/metamcp/impl.go,*Service.UpdateMetaMcpServer,check,Check,ScopeMCPWrite,Require,1,M3 AIS-861
+internal/middleware/denial_headers.go,DenialHeaders,loader,RecordedDenial,,,1,O2 AIS-838
+internal/middleware/denial_headers.go,DenialHeaders,loader,WithDenialRecorder,,,1,O2 AIS-838
 internal/modelkeys/impl.go,*Service.DeleteKey,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
 internal/modelkeys/impl.go,*Service.ListKeys,check,Check,ScopeProjectRead,Require,1,P5 AIS-848
 internal/modelkeys/impl.go,*Service.SetKeyEnabled,check,Check,ScopeProjectWrite,Require,1,P5 AIS-848
@@ -552,6 +579,7 @@ internal/platformmcp/tool_organization_gateway.go,*OrganizationGatewayService.Ge
 internal/platformmcp/tool_xaa_readiness.go,*postgresXAAServerReader.Server,check,MCPCheck,ScopeMCPRead,Filter,1,X3 AIS-875
 internal/platformmcp/whoami.go,*WhoamiService.roles,loader,ResolveUserPrincipals,,,1,X3 AIS-875
 internal/platformmcp/widgets.go,*WidgetService.scope,check,Check,ScopeProjectRead,Require,1,X3 AIS-875
+internal/platformtools/threadcontext/resolve.go,Resolve,check,AssistantCheck,,Require,1,AS1 AIS-860
 internal/plugins/assignments/command.go,normalizePrincipal,writer,ValidatePrincipal,,,1,PL1 AIS-855
 internal/plugins/delivery_principals.go,ResolveDeliveryPrincipals,loader,ResolveUserPrincipals,,,1,S2 AIS-854
 internal/plugins/distribution_projection.go,*Service.distributionAuthContext,check,Check,ScopeSkillRead,RequireAnyUnblocked,2,S2 AIS-854
@@ -672,6 +700,7 @@ internal/remotesessions/proxyregister.go,*Service.handleProxyRegister,check,Chec
 internal/remotesessions/proxyregister.go,*Service.handleProxyRegister,check,Check,ScopeProjectWrite,RequireAny,1,G1 AIS-850
 internal/remotesessions/serverclientassociations.go,*Service.DetachServerClientAssociation,check,MCPCheck,ScopeMCPWrite,Require,1,G1 AIS-850
 internal/remotesessions/serverclientassociations.go,*Service.ListServerClientAssociations,check,MCPCheck,ScopeMCPRead,Require,1,G1 AIS-850
+internal/remotesessions/serverconnection.go,*Service.TestServerConnection,check,MCPCheck,ScopeMCPConnect,Require,1,G1 AIS-850
 internal/remotesessions/sessionhandlers.go,*Service.CountRemoteSessions,check,Check,ScopeProjectRead,Require,1,G1 AIS-850
 internal/remotesessions/sessionhandlers.go,*Service.ListRemoteSessions,check,Check,ScopeProjectRead,Require,1,G1 AIS-850
 internal/remotesessions/sessionhandlers.go,*Service.RevokeRemoteSession,check,Check,ScopeProjectWrite,Require,1,G1 AIS-850
@@ -689,6 +718,7 @@ internal/risk/exclusion.go,*Service.DeleteRiskExclusion,check,Check,ScopeOrgAdmi
 internal/risk/exclusion.go,*Service.ListRiskExclusions,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
 internal/risk/exclusion.go,*Service.UpdateRiskExclusion,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
 internal/risk/false_positive.go,*Service.ListDismissedRiskResults,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
+internal/risk/false_positive.go,*Service.ListDismissedRiskResults,gate,RedactSessionTitle,,,1,R1 AIS-868
 internal/risk/false_positive.go,*Service.MarkRiskResultsFalsePositive,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
 internal/risk/false_positive.go,*Service.UnmarkRiskResultsFalsePositive,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
 internal/risk/impl.go,*Service.CompileExpr,check,Check,ScopeOrgAdmin,Require,1,R1 AIS-868
@@ -794,6 +824,12 @@ internal/skills/links.go,*Service.requireLinkTargetWrite,check,MCPCheck,ScopeMCP
 internal/skills/links.go,*Service.requireProjectMCPWrite,check,Check,ScopeMCPWrite,Require,1,S1 AIS-853
 internal/skills/links.go,*Service.requireProjectWrite,check,Check,ScopeProjectWrite,Require,1,S1 AIS-853
 internal/skills/links.go,*Service.requireStoredLinkTargetWrite,check,MCPCheck,ScopeMCPWrite,Require,1,S1 AIS-853
+internal/slackapp/home_data.go,*HomeSource.Load,check,Check,ScopeOrgAdmin,GrantsAuthorize,1,M6 AIS-862
+internal/slackapp/home_data.go,*HomeSource.Load,evaluator,GrantsAuthorize,,,1,M6 AIS-862
+internal/slackapp/home_data.go,*HomeSource.Load,loader,LoadGrants,,,1,M6 AIS-862
+internal/slackapp/home_data.go,*HomeSource.Load,loader,ResolveUserPrincipals,,,1,M6 AIS-862
+internal/slackapp/home_data.go,servers,check,MCPCheck,ScopeMCPRead,GrantsAuthorize,1,M6 AIS-862
+internal/slackapp/home_data.go,servers,evaluator,GrantsAuthorize,,,1,M6 AIS-862
 internal/slackdirectoryconnections/impl.go,*Service.authorizePerson,check,Check,ScopeOrgAdmin,Require,1,O3 AIS-839
 internal/spendrules/impl.go,*Service.ArchiveSpendRule,check,Check,ScopeOrgAdmin,Require,1,O6 AIS-842
 internal/spendrules/impl.go,*Service.CreateSpendRule,check,Check,ScopeOrgAdmin,Require,1,O6 AIS-842
@@ -822,6 +858,8 @@ internal/telemetry/impl.go,*Service.ListAttributeKeys,check,Check,ScopeProjectRe
 internal/telemetry/impl.go,*Service.ListFilterOptions,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
 internal/telemetry/impl.go,*Service.prepareTelemetrySearch,check,Check,requiredScope,Require,1,L1 AIS-867
 internal/telemetry/impl.go,*Service.resolveToolUsageParams,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
+internal/telemetry/impl.go,readableGatewayOwners,check,Check,ScopeAgentRead,,1,L1 AIS-867
+internal/telemetry/impl.go,readableGatewayOwners,check,Check,ScopeProjectRead,,1,L1 AIS-867
 internal/telemetry/mcp_network_traffic.go,*Service.GetMcpNetworkTraffic,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
 internal/telemetry/mcp_network_traffic.go,*Service.GetMcpNetworkTraffic,check,MCPCheck,ScopeMCPRead,Require,1,L1 AIS-867
 internal/telemetry/query.go,*Service.ListSessions,check,Check,ScopeOrgRead,Require,1,L1 AIS-867

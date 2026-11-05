@@ -55,9 +55,7 @@ const (
 // split packages that more than one batch migrates.
 var foundationPackageOwners = map[string]string{
 	"cmd/directory-roles":                                    ownerF5,
-	"cmd/gram":                                               ownerF5,
 	"internal/access":                                        ownerO2,
-	"internal/admin":                                         ownerX1,
 	"internal/agent":                                         ownerO8,
 	"internal/agentmanagement":                               ownerAG1,
 	"internal/agents/runtimepolicy":                          ownerX2,
@@ -66,13 +64,15 @@ var foundationPackageOwners = map[string]string{
 	"internal/assistantidentity":                             ownerAS1,
 	"internal/assistantmemories":                             ownerP5,
 	"internal/assistants":                                    ownerAS1,
+	"internal/platformtools/threadcontext":                   ownerAS1,
+	"internal/middleware":                                    ownerO2,
+	"internal/slackapp":                                      ownerM6,
 	"internal/auditapi":                                      ownerO7,
 	"internal/auth":                                          ownerA1,
 	"internal/auth/assistanttokens":                          ownerA1,
 	"internal/auth/deviceagenttoken":                         ownerO8,
 	"internal/auth/principalcredential":                      ownerA1,
 	"internal/authclients":                                   ownerM5,
-	"internal/background/activities":                         ownerX1,
 	"internal/billingnotifications":                          ownerO6,
 	"internal/businessmemory":                                ownerO7,
 	"internal/chat":                                          ownerC1,
@@ -101,7 +101,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/mcpmetadata":                                   ownerM2,
 	"internal/mcpregistry":                                   ownerP3,
 	"internal/mcpservers":                                    ownerM2,
-	"internal/mcpservers/upstreamclients":                    ownerM5,
 	"internal/mcpservers/upstreamclients/authclientbackfill": ownerM5,
 	"internal/metamcp":                                       ownerM3,
 	"internal/modelkeys":                                     ownerP5,
@@ -175,7 +174,8 @@ var foundationFunctionOwners = map[string]string{
 	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
 }
 
-// foundationOwner returns the batch that migrates consumer. Scope metadata
+// foundationOwner returns the batch that migrates consumer and the key of the
+// owner rule that decided it, or "" when a category rule decided it. Scope metadata
 // projections and stored-grant seeding move with the scope catalogue,
 // validation and default projections (runtime-policy and key-policy
 // projections move with runtime policy), wherever they are called from.
@@ -183,23 +183,26 @@ var foundationFunctionOwners = map[string]string{
 // with shared engine construction, except in demoseed, which builds its own
 // engine to seed data and moves with the demo seed. Everything else follows
 // its function, file or package.
-func foundationOwner(c inventoryConsumer) string {
+func foundationOwner(c inventoryConsumer) (owner, rule string) {
 	dir := path.Dir(c.File)
 	switch {
 	case c.Category == categoryProjection && (dir == "internal/agents/runtimepolicy" || dir == "internal/keys"):
-		return ownerX2
+		return ownerX2, ""
 	case c.Category == categoryProjection:
-		return ownerX1
+		return ownerX1, ""
 	case c.Category == categoryWriter && strings.HasPrefix(c.Entry, "Seed"):
-		return ownerX1
+		return ownerX1, ""
 	case c.Category == categoryWiring && dir != "internal/demoseed":
-		return ownerF5
+		return ownerF5, ""
 	}
 	if owner, ok := foundationFunctionOwners[c.File+" "+c.Function]; ok {
-		return owner
+		return owner, c.File + " " + c.Function
 	}
 	if owner, ok := foundationFileOwners[c.File]; ok {
-		return owner
+		return owner, c.File
 	}
-	return foundationPackageOwners[dir]
+	if owner, ok := foundationPackageOwners[dir]; ok {
+		return owner, dir
+	}
+	return "", ""
 }

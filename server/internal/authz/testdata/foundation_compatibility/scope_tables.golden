@@ -467,7 +467,7 @@ workload:read
   closure: [workload:read]
   sub_scopes: []
   selector_keys: []
-  roles: [admin]
+  roles: [admin member]
 workload:write
   visibility: user_visible
   resource_kind: workload
