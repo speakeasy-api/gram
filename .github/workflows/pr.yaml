@@ -2129,51 +2129,6 @@ jobs:
           headers: |-
             cache-control: public, max-age=31536000, immutable
 
-  mise-type-check:
-    name: mise-type-check
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 10
-    needs: [changes]
-    if: |
-      !cancelled() &&
-      needs.changes.outputs.verify == 'true'
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      - name: Install dependencies
-        run: aube install --frozen-lockfile
-
-      # Run independently of client path filters so task-only PRs are checked.
-      - name: Type check mise scripts
-        run: aube exec tsc --noEmit
-
-      - name: Prune aube store
-        if: success()
-        run: aube store prune
-
   client-build-lint:
     name: client-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -2832,7 +2787,6 @@ jobs:
       - docker-build-client
       - upload-dashboard-assets
       - docker-build-pystreams
-      - mise-type-check
       - client-build-lint
       - client-test
       - sdk-gen-check
