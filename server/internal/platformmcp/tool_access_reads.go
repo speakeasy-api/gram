@@ -66,7 +66,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_access",
-		Title:       "See Who Can Use an MCP Server",
+		Title:       "See Which Roles Can Use an MCP Server",
 		Description: "Inspect which roles can enter one exact configured MCP server through its configured endpoint and which known tools or behavior classes they can use. Uses the same authorization resource and selector semantics as that endpoint; dynamic servers may not have an enumerable tool catalog. Matching plugins summarize live contents assigned to each exact role, not access grants or installation state. shared_auth_client_roles lists each role with a rule on a shared credential the server offers in this project and whether it may use it (allowed, blocked, or not_granted), with unevaluated_grants when some rules could not be evaluated; that permission is separate from entering the server, is reported whatever the server's visibility, and set_mcp_role_auth_client_access changes it. Personal connections are not listed per role because each member only ever uses their own.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPAccessInput) (*mcp.CallToolResult, GetMCPAccessOutput, error) {
@@ -93,7 +93,7 @@ func registerUnavailableAccessReadTools(reg *Registrar) {
 		{"list_access_members", "Find People to Give MCP Access", "Find organization members for MCP access. This is not switched on for your organization yet.", bothAudiences, ProjectScopeNone, listAccessMembersInputSchema()},
 		{"list_my_mcp_access", "See My MCP Server Access", "Inspect your own access across MCP servers. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, listMyMCPAccessInputSchema()},
 		{"get_member_mcp_access", "See a Member's MCP Server Access", "Inspect one member's access across MCP servers. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, getMemberMCPAccessInputSchema()},
-		{"get_mcp_access", "See Who Can Use an MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", externalOnly, ProjectScopeExplicit, nil},
+		{"get_mcp_access", "See Which Roles Can Use an MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", externalOnly, ProjectScopeExplicit, nil},
 	} {
 		stub := &mcp.Tool{
 			Name:        tool.name,

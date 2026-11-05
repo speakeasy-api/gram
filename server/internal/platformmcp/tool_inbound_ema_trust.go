@@ -25,7 +25,7 @@ var inboundEMATrustMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin,
 func registerInboundEMATrustTools(reg *Registrar, service *InboundEMATrustService) {
 	addTool(reg, &mcp.Tool{
 		Name:        getInboundEMATrustToolName,
-		Title:       "List Trusted Identity Providers",
+		Title:       "Check Identity Provider Trust",
 		Description: "Read whether MCP clients can sign in to Speakeasy with an identity assertion (ID-JAG) from the company identity provider. Lists each organization-level user session issuer with the identity provider it trusts, that provider's key set URL, the audience to configure in the identity provider, whether interactive sign-in is federated through it, and the organization gateway URL when the gateway uses that issuer. Also reports how many directory users are synced: users resolve only through an active synced directory user with the same email, so without directory sync every exchange is refused. Reports each issuer's client ID metadata document admission mode, which also decides which MCP clients may exchange an ID-JAG, with its custom client URLs in presets mode and the preset clients presets mode admits. Read-only. Requires org:admin.",
 		Annotations: readOnlyAnnotations(),
 	}, inboundEMATrustMeta, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, GetInboundEMATrustOutput, error) {

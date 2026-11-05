@@ -50,7 +50,7 @@ func registerSkillUsageTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_skill_status",
-		Title:       "Check a Person's Skill Status",
+		Title:       "Check a Person's Skill Activity",
 		Description: "Use a person reference from list_skill_usage_users to confirm whether that person was observed activating the same skill in the same window. Returns categorical activity only; skill success and errors are not inferred from the surrounding session.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserSkillStatusInput) (*mcp.CallToolResult, GetUserSkillStatusOutput, error) {
@@ -77,7 +77,7 @@ func registerUnavailableSkillUsageTools(reg *Registrar) {
 	}{
 		{"query_skill_usage", "Skill Usage", "Summarize project skill activations. This is not switched on for your organization yet."},
 		{"list_skill_usage_users", "See Who Uses a Skill", "List masked people observed using one skill. This is not switched on for your organization yet."},
-		{"get_user_skill_status", "Check a Person's Skill Status", "Report one referenced person's categorical skill activity. This is not switched on for your organization yet."},
+		{"get_user_skill_status", "Check a Person's Skill Activity", "Report one referenced person's categorical skill activity. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

@@ -374,7 +374,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "add_skill_version",
-		Title:       "Publish a New Skill Version",
+		Title:       "Record a New Skill Version",
 		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
 		Annotations: skillWriteAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
@@ -503,7 +503,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		{"approve_skill_suggestion", "Approve a Skill Suggestion", "Take a proposed skill improvement as a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, externalOnly},
 		{"dismiss_skill_suggestion", "Dismiss a Skill Suggestion", "Discard a proposed skill improvement. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, externalOnly},
 		{"create_skill", "Create a Skill", "Write a new skill from complete SKILL.md content. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
-		{"add_skill_version", "Publish a New Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
+		{"add_skill_version", "Record a New Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
 		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
 		{"distribute_skill", "Add a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
 		{"list_skill_distributions", "List Where Skills Are Shared", "List which plugins carry which skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},

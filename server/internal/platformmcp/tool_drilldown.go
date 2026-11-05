@@ -96,7 +96,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_mcp_status",
-		Title:       "Check a Person's MCP Server Status",
+		Title:       "Check a Person's MCP Usage",
 		Description: drilldownPreamble + "Use a person reference from list_mcp_usage_users to show which tools that person was observed using and whether errors were observed. Constraints: categorical evidence only, no individual call counts or raw identity; the reference expires and is bound to this session, server, project, and window.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMCPStatusInput) (*mcp.CallToolResult, GetUserMCPStatusOutput, error) {
@@ -125,7 +125,7 @@ func registerUnavailableDrilldownTools(reg *Registrar) {
 	}{
 		{"query_mcp_events", "MCP Calls by Tool and Result", "Break one MCP server's calls down by tool and outcome. This is not switched on for your organization yet.", orgAdminMeta},
 		{"list_mcp_usage_users", "See Who Uses an MCP Server", "List the masked people observed using one MCP server. This is not switched on for your organization yet.", orgAdminMeta},
-		{"get_user_mcp_status", "Check a Person's MCP Server Status", "Report one referenced person's categorical usage against one MCP server. This is not switched on for your organization yet.", orgAdminMeta},
+		{"get_user_mcp_status", "Check a Person's MCP Usage", "Report one referenced person's categorical usage against one MCP server. This is not switched on for your organization yet.", orgAdminMeta},
 		{"query_mcp_traces", "Recent MCP Calls", "List recent calls for one MCP server. This is not switched on for your organization yet.", queryMCPTracesMeta},
 		{"query_mcp_metrics", "MCP Server Usage Totals", "Return one MCP server's totals. This is not switched on for your organization yet.", orgAdminMeta},
 	} {

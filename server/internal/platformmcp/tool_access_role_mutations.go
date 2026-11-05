@@ -75,7 +75,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, assign)
 	addTool(reg, &mcp.Tool{
-		Name: operationSetMCPRoleAuthClientAccess, Title: "Let a Role Use a Shared Credential",
+		Name: operationSetMCPRoleAuthClientAccess, Title: "Set a Role's Access to a Shared Credential",
 		Description: "Set whether one role may use one shared credential an MCP server offers to reach its upstream service: allowed, blocked, or not_granted (removes the role's own rule). Read get_mcp_access first and pass a role reference and auth_client_id it returned. The rule is on the credential, so it applies on every server that offers it. Rules on every credential or credential type, and a member's other roles, can still allow or block it; the result reports the role's effective access after the change. Personal connections cannot be set here because each member only ever uses their own. Requires explicit confirmation.",
 		Annotations: writeAnnotations(true, true, false),
 	}, meta, authClientAccess)
