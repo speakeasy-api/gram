@@ -38,7 +38,9 @@ case "$usage_name" in
     mise run check:http --url "http://$(probe_address "${GRAM_ADMIN_CONTROL_ADDRESS:-localhost:$GRAM_ADMIN_CONTROL_PORT}")/healthz"
     ;;
   admin-dashboard)
-    mise run check:http --url "$GRAM_HTTP_SCHEME://localhost:$GRAM_ADMIN_DASHBOARD_PORT/"
+    # The admin Vite server binds GRAM_BIND_IP, which is not loopback under
+    # zero:tailscale, so probe the host its TLS certificate names.
+    mise run check:http --url "$GRAM_HTTP_SCHEME://${GRAM_ADMIN_HOST:-localhost}:$GRAM_ADMIN_DASHBOARD_PORT/"
     ;;
   worker)
     mise run check:http --url "http://$(probe_address "${GRAM_WORKER_CONTROL_ADDRESS:-localhost:$GRAM_WORKER_CONTROL_PORT}")/healthz"

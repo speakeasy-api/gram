@@ -119,6 +119,10 @@ export default defineConfig(({ command }) => {
       // exactly.
       port: devPort,
       strictPort: true,
+      // Bind the same address as the other local daemons. GRAM_BIND_IP is
+      // loopback by default, and zero:tailscale sets it to the devbox's
+      // Tailscale IP so the admin dashboard is reachable from another machine.
+      host: process.env["GRAM_BIND_IP"] || "localhost",
       https: key && cert ? { key, cert } : undefined,
       proxy: adminBackendUrl
         ? {

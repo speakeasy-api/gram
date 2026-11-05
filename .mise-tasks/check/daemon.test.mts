@@ -51,3 +51,34 @@ for (const [name, addressVar, portVar] of daemons) {
     });
   }
 }
+
+const adminDashboardHosts = [
+  [undefined, "localhost"],
+  ["", "localhost"],
+  ["devbox.example.ts.net", "devbox.example.ts.net"],
+] as const;
+
+for (const [host, expected] of adminDashboardHosts) {
+  test(`admin-dashboard probes GRAM_ADMIN_HOST=${String(host)} as ${expected}`, () => {
+    const env = {
+      ...process.env,
+      GRAM_HTTP_SCHEME: "https",
+      GRAM_ADMIN_DASHBOARD_PORT: "23456",
+      usage_name: "admin-dashboard",
+      GRAM_ADMIN_HOST: host,
+    };
+    if (host === undefined) delete env["GRAM_ADMIN_HOST"];
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'mise() { printf "%s" "$4"; }; source "$1"',
+        "check-daemon-test",
+        task,
+      ],
+      { env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, `https://${expected}:23456/`);
+  });
+}
