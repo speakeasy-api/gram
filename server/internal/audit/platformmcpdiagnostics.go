@@ -54,6 +54,7 @@ func (l *Logger) LogPlatformMcpDiagnosticsUserStatusRead(ctx context.Context, db
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -105,6 +106,7 @@ func (l *Logger) LogPlatformMcpDiagnosticsAttributionRead(ctx context.Context, d
 		typeOfSubject = subjectTypeProject
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 		ActorID:            event.Actor.ID,

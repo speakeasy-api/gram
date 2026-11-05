@@ -11,9 +11,13 @@ import (
 )
 
 // PublishWebhook publishes the webhook event for an inserted entry of either
-// log, in the caller's transaction. Staff actions are masked as the Speakeasy
+// log, unless internal, in the caller's transaction. Staff actions are masked as the Speakeasy
 // team, and category tells subscribers which log the entry is in.
 func PublishWebhook(ctx context.Context, dbtx repo.DBTX, input repo.InsertAuditLogParams, result repo.InsertAuditLogRow, category Category, event *outbox.EventDef[events.AuditLogCreatedPayloadV1]) error {
+	// Internal entries are persisted but never reach any outbox consumer.
+	if input.IsInternal {
+		return nil
+	}
 	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
 	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
 	actingSurface := Surface(conv.FromPGTextOrEmpty[string](input.ActingSurface))

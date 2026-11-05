@@ -82,6 +82,7 @@ func (l *Logger) LogAgent(ctx context.Context, dbtx repo.DBTX, event LogAgentEve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
@@ -114,6 +115,7 @@ func (l *Logger) LogAgentPolicyGrant(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
