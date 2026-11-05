@@ -857,7 +857,7 @@ internal/telemetry/impl.go,*Service.GetUserMetricsSummary,check,Check,ScopeProje
 internal/telemetry/impl.go,*Service.ListAttributeKeys,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
 internal/telemetry/impl.go,*Service.ListFilterOptions,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
 internal/telemetry/impl.go,*Service.prepareTelemetrySearch,check,Check,requiredScope,Require,1,L1 AIS-867
-internal/telemetry/impl.go,*Service.resolveToolUsageParams,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
+internal/telemetry/impl.go,*Service.resolveToolUsageParamsWithOwners,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
 internal/telemetry/impl.go,readableGatewayOwners,check,Check,ScopeAgentRead,,1,L1 AIS-867
 internal/telemetry/impl.go,readableGatewayOwners,check,Check,ScopeProjectRead,,1,L1 AIS-867
 internal/telemetry/mcp_network_traffic.go,*Service.GetMcpNetworkTraffic,check,Check,ScopeProjectRead,Require,1,L1 AIS-867
