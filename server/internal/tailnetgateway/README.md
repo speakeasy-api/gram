@@ -32,14 +32,15 @@ per-ingress attestor pods.
 
 ## Which ingresses use it
 
-The `network_ingresses.runtime` column decides:
+The `network_ingresses.runtime` column decides, per organization:
 
-- `gateway`: hosted only by this gateway.
-- `NULL` (or anything else): hosted only by the Tailscale Kubernetes operator,
-  as before. Nothing in this package moves an ingress between the two.
+- `gateway`: hosted by this gateway. Any Kubernetes resources the operator
+  still owns for the ingress are torn down by the reconciler first.
+- `NULL` (or anything else): hosted by the Tailscale Kubernetes operator, as
+  before. Enabling the gateway never moves these.
 
 Every new ingress is created with `gateway`. Ingresses created before the
-gateway existed stay on the operator.
+gateway existed stay on the operator until staff move that organization.
 `GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
 are deployed; until it is set, gateway ingresses wait as
 `provider_configuration_unavailable` instead of falling back to the operator.

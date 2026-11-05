@@ -11,17 +11,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
-// OperatorProvisioner is the Tailscale Kubernetes operator provider: the
-// lifecycle methods plus the orphan inventory the reconciler sweeps.
+// OperatorProvisioner is the Tailscale Kubernetes operator provider as seen
+// by the cutover: it can report whether it still owns resources and inventory
+// orphans in addition to the lifecycle methods.
 type OperatorProvisioner interface {
 	k8s.NetworkIngressProvisioner
+	HasResources(context.Context, k8s.NetworkIngressResourceNames) (bool, error)
 	FindOrphans(context.Context, []k8s.NetworkIngressResourceNames) ([]k8s.NetworkIngressOrphan, error)
 }
 
 // CompositeProvisioner routes each ingress by its runtime column. An ingress
-// whose runtime is "gateway" is hosted only by the tailnet gateway; every
-// other ingress is handled only by the operator, exactly as before the
-// gateway existed. Nothing here moves an ingress between the two.
+// whose runtime is "gateway" is hosted by the tailnet gateway, and any
+// Kubernetes resources the operator still owns for it are torn down first.
+// Every other ingress stays on the operator: moving one is an explicit,
+// per-organization decision recorded in the runtime column, never a side
+// effect of enabling the gateway.
 type CompositeProvisioner struct {
 	operator OperatorProvisioner
 	gateway  *Provisioner
@@ -37,7 +41,7 @@ var (
 	_ k8s.NetworkIngressCredentialedDeleter = (*CompositeProvisioner)(nil)
 )
 
-// NewCompositeProvisioner builds the routing provider. operator may be nil
+// NewCompositeProvisioner builds the cutover provider. operator may be nil
 // once the operator is decommissioned. gatewayDeployed is false until the
 // gateway pods run in this environment.
 func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner, gatewayDeployed bool) (*CompositeProvisioner, error) {
@@ -55,7 +59,7 @@ func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIng
 	}
 	if !onGateway {
 		if c.operator == nil {
-			return errorObservation(k8s.NetworkIngressErrorUnsupportedProvider), errOperatorDisabled
+			return errorObservation(k8s.NetworkIngressErrorUnsupportedProvider), fmt.Errorf("%w: the operator provider is disabled and this ingress has not been moved to the tailnet gateway", k8s.ErrNetworkIngressUnsupportedProvider)
 		}
 		observation, err := c.operator.Apply(ctx, desired)
 		if err != nil {
@@ -66,6 +70,23 @@ func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIng
 
 	if !c.gatewayDeployed {
 		return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending}, fmt.Errorf("%w: the tailnet gateway is not deployed in this environment", k8s.ErrNetworkIngressProviderUnavailable)
+	}
+
+	// Never dismantle the operator backend for a desired state the gateway
+	// would reject anyway.
+	if _, observation, err := c.gateway.ValidateDesired(desired); err != nil {
+		return observation, err
+	}
+	if c.operator != nil {
+		present, err := c.operator.HasResources(ctx, desired.Resources)
+		if err != nil {
+			return errorObservation(k8s.NetworkIngressErrorKubernetes), fmt.Errorf("check operator resources: %w", err)
+		}
+		if present {
+			if err := c.operator.Delete(ctx, desired.Resources); err != nil {
+				return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending}, fmt.Errorf("tear down operator resources: %w", err)
+			}
+		}
 	}
 	return c.gateway.Apply(ctx, desired)
 }
@@ -85,7 +106,7 @@ func (c *CompositeProvisioner) Observe(ctx context.Context, resources k8s.Networ
 	return observation, nil
 }
 
-// onGateway reports whether the ingress is hosted by the tailnet gateway.
+// onGateway reports whether the ingress has been moved to the tailnet gateway.
 func (c *CompositeProvisioner) onGateway(ctx context.Context, id uuid.UUID) (bool, error) {
 	own, err := c.gateway.owner(ctx, id)
 	if err != nil {
@@ -95,21 +116,29 @@ func (c *CompositeProvisioner) onGateway(ctx context.Context, id uuid.UUID) (boo
 }
 
 func (c *CompositeProvisioner) Delete(ctx context.Context, resources k8s.NetworkIngressResourceNames) error {
-	return c.DeleteWithCredentials(ctx, resources, nil)
-}
-
-// DeleteWithCredentials tears down whichever provider hosts the ingress. The
-// operator's teardown needs no credentials; the gateway's does.
-func (c *CompositeProvisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
-	onGateway, err := c.onGateway(ctx, resources.OwnerID)
-	if err != nil {
+	if err := c.deleteOperatorResources(ctx, resources); err != nil {
 		return err
 	}
-	if onGateway {
-		return c.gateway.DeleteWithCredentials(ctx, resources, credentials)
+	return c.gateway.Delete(ctx, resources)
+}
+
+func (c *CompositeProvisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
+	if err := c.deleteOperatorResources(ctx, resources); err != nil {
+		return err
 	}
+	return c.gateway.DeleteWithCredentials(ctx, resources, credentials)
+}
+
+func (c *CompositeProvisioner) deleteOperatorResources(ctx context.Context, resources k8s.NetworkIngressResourceNames) error {
 	if c.operator == nil {
-		return errOperatorDisabled
+		return nil
+	}
+	present, err := c.operator.HasResources(ctx, resources)
+	if err != nil {
+		return fmt.Errorf("check operator resources: %w", err)
+	}
+	if !present {
+		return nil
 	}
 	if err := c.operator.Delete(ctx, resources); err != nil {
 		return fmt.Errorf("tear down operator resources: %w", err)
@@ -129,5 +158,3 @@ func (c *CompositeProvisioner) FindOrphans(ctx context.Context, known []k8s.Netw
 	}
 	return orphans, nil
 }
-
-var errOperatorDisabled = fmt.Errorf("%w: the operator provider is disabled and this ingress is not hosted by the tailnet gateway", k8s.ErrNetworkIngressUnsupportedProvider)

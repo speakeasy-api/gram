@@ -135,9 +135,11 @@ func errorObservation(code string) k8s.NetworkIngressObservation {
 	return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusError, ErrorCode: code}
 }
 
-// validateDesired checks everything Apply needs before any side effect. The
-// returned error observation carries the code Apply reports.
-func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailscaleapi.Credentials, k8s.NetworkIngressObservation, error) {
+// ValidateDesired checks everything Apply needs before any side effect, so a
+// cutover never tears down an operator backend for a desired state the
+// gateway would reject. The returned error observation carries the code
+// Apply would report.
+func (p *Provisioner) ValidateDesired(desired k8s.NetworkIngressDesired) (tailscaleapi.Credentials, k8s.NetworkIngressObservation, error) {
 	if desired.ID == uuid.Nil || desired.OrganizationID == "" || desired.Provider != k8s.NetworkIngressProviderTailscale || len(desired.Credentials) == 0 {
 		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: desired state is incomplete", k8s.ErrNetworkIngressInvalidDesiredState)
 	}
@@ -157,7 +159,7 @@ func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailsc
 // Apply defines the service, ensures slot rows and mints keys for slots that
 // have not registered and hold no unexpired key, then observes.
 func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
-	creds, observation, err := p.validateDesired(desired)
+	creds, observation, err := p.ValidateDesired(desired)
 	if err != nil {
 		return observation, err
 	}
