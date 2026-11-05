@@ -127,6 +127,10 @@ type ProxyManager struct {
 	// Connections records refused and failed tools/call requests; nil records nothing.
 	Connections *mcpconnectionattempts.Recorder
 
+	// MaxStreamAge bounds how long a relayed stream stays open before the
+	// proxy closes it for the client to reconnect; zero leaves streams open
+	// until they end on their own.
+	MaxStreamAge   time.Duration
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -209,6 +213,7 @@ func NewProxyManager(
 	return &ProxyManager{
 		TunnelMetrics:                         nil,
 		Connections:                           nil,
+		MaxStreamAge:                          0,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -483,6 +488,7 @@ func (f *ProxyManager) BuildTarget(
 		NonStreamingTimeout:         proxy.DefaultNonStreamingTimeout,
 		Drain:                       f.drain,
 		StreamingTimeout:            proxy.DefaultStreamingTimeout,
+		MaxStreamAge:                f.MaxStreamAge,
 		Metrics:                     f.proxyMetrics,
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                    identity,

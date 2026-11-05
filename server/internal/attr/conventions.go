@@ -438,6 +438,7 @@ const (
 	HTTPResponseExternalKey             = attribute.Key("gram.http.response.external")
 	HTTPResponseFilteredKey             = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey            = attribute.Key("gram.http.status_code_pattern")
+	HTTPStreamEndReasonKey              = attribute.Key("gram.http.stream.end_reason") // closed set of httpstream.EndReason values
 	IngressNameKey                      = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey      = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey                   = attribute.Key("gram.network.surface")
@@ -2311,6 +2312,11 @@ func SlogHTTPResponseFiltered(v bool) slog.Attr      { return slog.Bool(string(H
 func HTTPStatusCodePattern(v string) attribute.KeyValue { return HTTPStatusCodePatternKey.String(v) }
 func SlogHTTPStatusCodePattern(v string) slog.Attr {
 	return slog.String(string(HTTPStatusCodePatternKey), v)
+}
+
+func HTTPStreamEndReason(v string) attribute.KeyValue { return HTTPStreamEndReasonKey.String(v) }
+func SlogHTTPStreamEndReason(v string) slog.Attr {
+	return slog.String(string(HTTPStreamEndReasonKey), v)
 }
 
 func HTTPParamName(v string) attribute.KeyValue { return HTTPParamNameKey.String(v) }

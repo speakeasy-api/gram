@@ -2,20 +2,11 @@ package proxy
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
-)
 
-const (
-	// drainRetryMin and drainRetryJitter set the SSE retry delay sent when a
-	// listen stream closes for shutdown. Clients wait that long before
-	// reconnecting. The jitter spreads the reconnects from one draining
-	// replica across two seconds instead of landing them all at once.
-	drainRetryMin    = time.Second
-	drainRetryJitter = 2 * time.Second
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 )
 
 // Drain tells relayed streams that the server is shutting down, in two phases.
@@ -104,14 +95,14 @@ func runOnClose(ch <-chan struct{}, f func()) (stop func()) {
 	return func() { close(done) }
 }
 
-// writeSSERetry ends a stream closed for shutdown with an SSE retry field, the
-// polling signal MCP 2025-11-25 asks for when a server closes a connection the
-// client should reopen. Clients on earlier revisions reconnect regardless; the
-// field only sets their delay. No event id is written, because ids must stay
-// unique within the client's session and only the upstream assigns them.
+// writeSSERetry ends a stream the proxy closed on purpose, for shutdown or at
+// its maximum age, with an SSE retry field: the polling signal MCP 2025-11-25
+// asks for when a server closes a connection the client should reopen.
+// Clients on earlier revisions reconnect regardless; the field only sets
+// their delay. No event id is written, because ids must stay unique within
+// the client's session and only the upstream assigns them.
 func writeSSERetry(w http.ResponseWriter) (int64, error) {
-	delay := drainRetryMin + time.Duration(rand.Int64N(int64(drainRetryJitter))) // #nosec G404 -- reconnect jitter is not security-sensitive
-	return writeSSEBytes(w, []byte("retry: "+strconv.FormatInt(delay.Milliseconds(), 10)+"\n\n"))
+	return writeSSEBytes(w, httpstream.RetryField(httpstream.RetryDelay()))
 }
 
 // writeSSEBytes writes one complete SSE frame and flushes it to the client.

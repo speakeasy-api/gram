@@ -80,6 +80,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/instances"
@@ -524,6 +525,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			Name:    "meta-member-call-timeout",
 			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
+		},
+		&cli.DurationFlag{
+			Name:    "stream-max-age",
+			Usage:   "How long a long-lived SSE response (MCP streams, chat turn streams) may stay open before the server ends it with an SSE retry hint for the client to reconnect. Must stay under the load balancer's response deadline; zero or negative leaves streams open until they end on their own",
+			EnvVars: []string{"GRAM_STREAM_MAX_AGE"},
+			Value:   httpstream.DefaultMaxAge,
 		},
 		&cli.DurationFlag{
 			Name:    "remote-session-recheck-interval",
@@ -1267,7 +1274,8 @@ func newStartCommand() *cli.Command {
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
-				WithRiskFindings(chatRiskFindings)
+				WithRiskFindings(chatRiskFindings).
+				WithStreamRotation(meterProvider, c.Duration("stream-max-age"))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
