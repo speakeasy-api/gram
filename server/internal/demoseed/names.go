@@ -152,6 +152,33 @@ func ownerAgentSessionCount() int64 {
 	return n
 }
 
+// ownerHookSession is the agent session whose harness also sent hook rows:
+// the first one the agent drove, wherever it sits in ownerSessions.
+func ownerHookSession() ownerSession {
+	for _, sess := range ownerSessions {
+		if sess.agent {
+			return sess
+		}
+	}
+	var none ownerSession
+	return none
+}
+
+// An owner session's timeline, in minutes after its prompt: the assistant's
+// tool-call turn, then result n a minute apart, then the answer. Both stores
+// derive their timestamps from it so the transcript and Tool Logs agree.
+const ownerCallsTurnMin = 1
+
+func ownerResultMin(call int) int { return ownerCallsTurnMin + call }
+
+func ownerAnswerMin(calls int) int { return ownerResultMin(calls) + 1 }
+
+// ownerCallOffset is when call n ran: after the tool-call turn, 30s before
+// its result lands in the transcript.
+func ownerCallOffset(call int) time.Duration {
+	return time.Duration(ownerResultMin(call))*time.Minute - 30*time.Second
+}
+
 // ownerAgentID is the agent the owner persona owns.
 func (s *seeder) ownerAgentID() uuid.UUID { return s.det("managed-agent-5") }
 

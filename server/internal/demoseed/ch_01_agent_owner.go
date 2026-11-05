@@ -25,7 +25,7 @@ func (s *seeder) chOwnerSessionRows() []chTelemetryRow {
 		start := s.now.Add(-time.Duration(sess.ageMin) * time.Minute)
 		for k, tool := range sess.tools {
 			call := k + 1
-			ts := start.Add(time.Duration(call) * 40 * time.Second).UnixNano()
+			ts := start.Add(ownerCallOffset(call)).UnixNano()
 			attrs := `{"gram.tool.urn":"` + toolURN(tool) + `"` +
 				`,"gram.tool.name":"` + tool + `"` +
 				`,"gram.event.source":"tool_call"` +
@@ -60,7 +60,7 @@ func (s *seeder) chOwnerSessionRows() []chTelemetryRow {
 // sent with the agent's key, so each of its calls is also a PostToolUse hook
 // naming the agent and the gateway it called, as chfGatewayHooks shapes them.
 func (s *seeder) chOwnerHookRows(agentActor string) []chTelemetryRow {
-	sess := ownerSessions[0]
+	sess := ownerHookSession()
 	gatewaySlug := s.spec.OrgSlug + "-gateway"
 	gatewayURL := "https://app.getgram.ai/mcp/" + gatewaySlug
 	chatID := s.ownerSessionChatID(sess.key).String()
@@ -68,7 +68,7 @@ func (s *seeder) chOwnerHookRows(agentActor string) []chTelemetryRow {
 	rows := make([]chTelemetryRow, 0, len(sess.tools))
 	for k, tool := range sess.tools {
 		call := k + 1
-		ts := start.Add(time.Duration(call)*40*time.Second + 2*time.Second).UnixNano()
+		ts := start.Add(ownerCallOffset(call) + 2*time.Second).UnixNano()
 		rows = append(rows, chTelemetryRow{
 			timeNano:     ts,
 			observedNano: ts,
@@ -99,7 +99,7 @@ func (s *seeder) chOwnerHookRows(agentActor string) []chTelemetryRow {
 // ownerAgentTraces and ownerHumanTraces are how many traces the rows above
 // write for the agent and for the persona, which the postflight asserts.
 func ownerAgentTraces() int {
-	n := len(ownerSessions[0].tools)
+	n := len(ownerHookSession().tools)
 	for _, sess := range ownerSessions {
 		if sess.agent {
 			n += len(sess.tools)
