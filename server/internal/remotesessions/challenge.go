@@ -1089,6 +1089,14 @@ const (
 	RemoteSessionExpired RemoteSessionStatus = "expired"
 )
 
+const (
+	// callbackIssuerAbsent: the provider advertises RFC 9207 iss but its redirect carried none.
+	callbackIssuerAbsent = "issuer_absent"
+
+	// callbackIssuerMismatch: the redirect's iss differs from the issuer the login went to.
+	callbackIssuerMismatch = "issuer_mismatch"
+)
+
 // RemoteSessionState is the consent renderer's per-client view of a stored
 // remote_session: its usability plus the subject's stored auto-refresh
 // preference.
@@ -1739,10 +1747,26 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	// RFC 9207 §2.4: iss must be present and match before anything in the
 	// response is trusted, denial included.
-	if state.ExpectedIssuer != "" && q.Get("iss") != state.ExpectedIssuer {
+	responseIssuer := q.Get("iss")
+	if state.ExpectedIssuer != "" && responseIssuer != state.ExpectedIssuer {
+		reason := callbackIssuerMismatch
+		if !q.Has("iss") {
+			reason = callbackIssuerAbsent
+		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeIssuerMismatch)
 		return none, oops.E(oops.CodeUnauthorized, nil, "remote login callback did not identify the expected issuer").LogWarn(ctx, logger,
 			attr.SlogOAuthIssuer(state.ExpectedIssuer),
+			attr.SlogRemoteSessionIssuerID(state.RemoteSessionIssuerID.String()),
+			attr.SlogOAuthResponseIssuer(truncateForMessage(responseIssuer)),
+			attr.SlogOAuthFailureReason(reason),
+		)
+	}
+	// A provider that does not advertise iss has nothing to compare against yet.
+	// Recording what it sends shows whether comparing it would break that provider.
+	if state.ExpectedIssuer == "" && q.Has("iss") {
+		logger.InfoContext(ctx, "remote login callback carried an issuer the provider does not advertise",
+			attr.SlogRemoteSessionIssuerID(state.RemoteSessionIssuerID.String()),
+			attr.SlogOAuthResponseIssuer(truncateForMessage(responseIssuer)),
 		)
 	}
 

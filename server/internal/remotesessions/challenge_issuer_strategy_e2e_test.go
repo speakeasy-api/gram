@@ -3,9 +3,12 @@
 package remotesessions_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -505,6 +508,115 @@ func TestRemoteLoginCallback_IssIgnoredWhenIssuerDoesNotAdvertiseIt(t *testing.T
 
 	_, unsupported := newSyntheticExpiryEnv(t, "iss-unsupported", scopelessToken, withIssParameterSupported(false), wrongIss)
 	require.NotEqual(t, uuid.Nil, unsupported.session.ID)
+}
+
+func TestRemoteLoginCallback_RejectedIssLogsWhatArrived(t *testing.T) {
+	t.Parallel()
+
+	const wrongIssuer = "https://attacker.example.com"
+	cases := []struct {
+		name      string
+		slug      string
+		editQuery func(url.Values)
+		wantLog   []string
+	}{
+		{
+			name:      "absent",
+			slug:      "iss-log-absent",
+			editQuery: func(url.Values) {},
+			wantLog:   []string{`"gram.oauth.failure_reason":"issuer_absent"`},
+		},
+		{
+			name:      "different",
+			slug:      "iss-log-different",
+			editQuery: func(q url.Values) { q.Set("iss", wrongIssuer) },
+			wantLog:   []string{`"gram.oauth.failure_reason":"issuer_mismatch"`, `"gram.oauth.response_issuer":"` + wrongIssuer + `"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logs bytes.Buffer
+			_, env, _, err := driveSyntheticLogin(t, tc.slug, scopelessToken,
+				withIssParameterSupported(true),
+				withCallbackQuery(tc.editQuery),
+				withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+			)
+			require.ErrorContains(t, err, "expected issuer")
+			env.mgr.WaitIdentityRestatements()
+
+			for _, want := range tc.wantLog {
+				require.Contains(t, logs.String(), want)
+			}
+		})
+	}
+}
+
+func TestRemoteLoginCallback_UnadvertisedIssIsLoggedAndNotEnforced(t *testing.T) {
+	t.Parallel()
+
+	const unadvertisedIssuer = "https://other.example.com"
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-unadvertised", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", unadvertisedIssuer) }),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"`+unadvertisedIssuer+`"`)
+}
+
+func TestRemoteLoginCallback_AbsentUnadvertisedIssIsNotLogged(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-silent", scopelessToken,
+		withIssParameterSupported(false),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	require.NotContains(t, logs.String(), "gram.oauth.response_issuer")
+}
+
+func TestRemoteLoginCallback_OversizedIssIsTruncatedInLogs(t *testing.T) {
+	t.Parallel()
+
+	oversized := strings.Repeat("a", 4096)
+	var logs bytes.Buffer
+	_, env := newSyntheticExpiryEnv(t, "iss-log-oversized", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", oversized) }),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	env.mgr.WaitIdentityRestatements()
+
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"aaaa`)
+	require.NotContains(t, logs.String(), oversized)
+}
+
+func TestRemoteLoginCallback_UnadvertisedIssOnDenialIsLogged(t *testing.T) {
+	t.Parallel()
+
+	const unadvertisedIssuer = "https://other.example.com"
+	var logs bytes.Buffer
+	_, env, _, err := driveSyntheticLogin(t, "iss-log-denied", scopelessToken,
+		withIssParameterSupported(false),
+		withCallbackQuery(func(q url.Values) {
+			q.Del("code")
+			q.Set("error", "access_denied")
+			q.Set("iss", unadvertisedIssuer)
+		}),
+		withLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
+	)
+	require.NoError(t, err)
+	env.mgr.WaitIdentityRestatements()
+
+	require.Contains(t, logs.String(), `"gram.oauth.response_issuer":"`+unadvertisedIssuer+`"`)
 }
 
 // The error code on a denial redirect is browser-controlled text: only a code

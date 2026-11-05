@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -295,7 +296,7 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 	upstream := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
 		doc["introspection_endpoint"] = "https://introspect.example/introspect"
 		doc["introspection_endpoint_auth_methods_supported"] = []string{"client_secret_post"}
-		doc["authorization_response_iss_parameter_supported"] = true
+		doc[oauthwire.MetadataAuthorizationResponseIssParameterSupported] = true
 	}})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-enrich", upstream.URL))
@@ -321,12 +322,13 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 	require.NotNil(t, result.Issuer.BackchannelLogoutSupported)
 	require.True(t, *result.Issuer.BackchannelLogoutSupported)
 	require.NotNil(t, result.Issuer.AuthorizationResponseIssParameterSupported)
-	require.True(t, *result.Issuer.AuthorizationResponseIssParameterSupported)
+	require.False(t, *result.Issuer.AuthorizationResponseIssParameterSupported, "the OAuth document omits iss support, and the OpenID document cannot turn it on")
 
 	stored := loadIssuerRow(t, ctx, ti, created)
 	var members map[string]any
 	require.NoError(t, json.Unmarshal(stored.Metadata, &members), "the merged document is persisted")
 	require.Equal(t, "kept", members["oauth_only_extension"])
+	require.NotContains(t, members, oauthwire.MetadataAuthorizationResponseIssParameterSupported)
 	require.Contains(t, members, "claims_supported")
 }
 

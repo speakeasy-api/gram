@@ -585,6 +585,9 @@ const (
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
 
+	// OAuthResponseIssuerKey is the RFC 9207 iss value an authorization server returned on its redirect. It is untrusted input, so callers truncate it.
+	OAuthResponseIssuerKey = attribute.Key("gram.oauth.response_issuer")
+
 	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
 	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
 
@@ -2541,6 +2544,11 @@ func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGr
 
 func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
 func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
+
+func OAuthResponseIssuer(v string) attribute.KeyValue { return OAuthResponseIssuerKey.String(v) }
+func SlogOAuthResponseIssuer(v string) slog.Attr {
+	return slog.String(string(OAuthResponseIssuerKey), v)
+}
 
 func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 	return OAuthPresentedAuthMethodKey.String(v)
