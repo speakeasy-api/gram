@@ -17,6 +17,19 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 // when vite runs outside mise.
 const DEFAULT_DEV_PORT = 5174;
 
+// The address the Vite dev server listens on. It follows GRAM_BIND_IP so it
+// binds the same address as the other local daemons: loopback by default, the
+// devbox's Tailscale IP under zero:tailscale, and every interface when the
+// variable is empty, as mise.toml documents. Unset means Vite runs outside
+// mise. mise.toml brackets IPv6 literals for URLs, but Node's listen() rejects
+// the brackets. Keep in sync with client/{admin,dashboard}/vite.config.ts.
+function getHost(): string | true {
+  const bindIp = process.env["GRAM_BIND_IP"];
+  if (bindIp === undefined) return "localhost";
+  if (bindIp === "") return true;
+  return bindIp.replace(/^\[(.*)\]$/, "$1");
+}
+
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
 
@@ -119,10 +132,7 @@ export default defineConfig(({ command }) => {
       // exactly.
       port: devPort,
       strictPort: true,
-      // Bind the same address as the other local daemons. GRAM_BIND_IP is
-      // loopback by default, and zero:tailscale sets it to the devbox's
-      // Tailscale IP so the admin dashboard is reachable from another machine.
-      host: process.env["GRAM_BIND_IP"] || "localhost",
+      host: getHost(),
       https: key && cert ? { key, cert } : undefined,
       proxy: adminBackendUrl
         ? {

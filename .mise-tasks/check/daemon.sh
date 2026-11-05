@@ -19,7 +19,9 @@ probe_address() {
 # Most probe targets below are plain-HTTP-only regardless of GRAM_HTTP_SCHEME:
 # the Go/Python control servers and mock-oidc never enable TLS. The Vite dev
 # servers (dashboard, admin-dashboard) and dev-idp's public listener serve TLS
-# when GRAM_SSL_* is configured.
+# when GRAM_SSL_* is configured. Both Vite servers bind GRAM_BIND_IP, which is
+# not loopback under zero:tailscale, so they are probed at the host their TLS
+# certificate names.
 case "$usage_name" in
   dev-idp)
     mise run check:http --url "http://$(probe_address "${GRAM_DEVIDP_CONTROL_ADDRESS:-localhost:$GRAM_DEVIDP_CONTROL_PORT}")/healthz"
@@ -38,8 +40,6 @@ case "$usage_name" in
     mise run check:http --url "http://$(probe_address "${GRAM_ADMIN_CONTROL_ADDRESS:-localhost:$GRAM_ADMIN_CONTROL_PORT}")/healthz"
     ;;
   admin-dashboard)
-    # The admin Vite server binds GRAM_BIND_IP, which is not loopback under
-    # zero:tailscale, so probe the host its TLS certificate names.
     mise run check:http --url "$GRAM_HTTP_SCHEME://${GRAM_ADMIN_HOST:-localhost}:$GRAM_ADMIN_DASHBOARD_PORT/"
     ;;
   worker)
@@ -52,7 +52,7 @@ case "$usage_name" in
     mise run check:http --url "http://localhost:$GRAM_PYSTREAMS_CONTROL_PORT/readyz"
     ;;
   dashboard)
-    mise run check:http --url "$GRAM_HTTP_SCHEME://localhost:$GRAM_SITE_PORT/"
+    mise run check:http --url "$GRAM_HTTP_SCHEME://${GRAM_HOST:-localhost}:$GRAM_SITE_PORT/"
     ;;
   assistant-runtime)
     echo "no readiness probe: ${usage_name} streams logs and does not open a port."
