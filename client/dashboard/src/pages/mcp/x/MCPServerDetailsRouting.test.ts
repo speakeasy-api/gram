@@ -18,6 +18,7 @@ describe("activeTabFromPath", () => {
 
   it.each([
     "overview",
+    "setup",
     "inspect",
     "team-access",
     "guardrails",

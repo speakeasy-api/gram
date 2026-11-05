@@ -1349,6 +1349,49 @@ func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServ
 	return items, nil
 }
 
+const listServersAssociatedWithClient = `-- name: ListServersAssociatedWithClient :many
+SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
+WHERE a.remote_session_client_id = $1::uuid
+  AND ($2::text IS NULL OR a.organization_id = $2::text)
+ORDER BY a.organization_id, a.mcp_server_id
+`
+
+type ListServersAssociatedWithClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+type ListServersAssociatedWithClientRow struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Every live MCP server with an association to the client, tombstoned ones
+// included, with the organization and project it sits in. Without an
+// organization it spans every organization, for a platform-global client.
+func (q *Queries) ListServersAssociatedWithClient(ctx context.Context, arg ListServersAssociatedWithClientParams) ([]ListServersAssociatedWithClientRow, error) {
+	rows, err := q.db.Query(ctx, listServersAssociatedWithClient, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServersAssociatedWithClientRow
+	for rows.Next() {
+		var i ListServersAssociatedWithClientRow
+		if err := rows.Scan(&i.OrganizationID, &i.McpServerID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneRemoteSessionClientAssociations = `-- name: PruneRemoteSessionClientAssociations :execrows
 DELETE FROM mcp_server_remote_session_clients AS a
 USING mcp_servers AS s

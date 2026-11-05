@@ -1378,6 +1378,16 @@ func (q *Queries) ExpireActivePlatformMCPOnboardingWorkflow(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const expirePlatformMCPFeedbackFixture = `-- name: ExpirePlatformMCPFeedbackFixture :exec
+UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1
+`
+
+// Test fixture: backdates retention to simulate expiry.
+func (q *Queries) ExpirePlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPFeedbackFixture, id)
+	return err
+}
+
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
 SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
@@ -1900,7 +1910,7 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 }
 
 const getOwnedChatForRecall = `-- name: GetOwnedChatForRecall :one
-SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.cwd, c.updated_at, c.project_id
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = $1
@@ -1917,12 +1927,13 @@ type GetOwnedChatForRecallParams struct {
 }
 
 type GetOwnedChatForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
 }
 
 func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatForRecallParams) (GetOwnedChatForRecallRow, error) {
@@ -1932,6 +1943,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 		&i.ID,
 		&i.ExternalChatID,
 		&i.Title,
+		&i.TitleManuallySet,
 		&i.Cwd,
 		&i.UpdatedAt,
 		&i.ProjectID,
@@ -1940,7 +1952,7 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 }
 
 const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
@@ -1954,15 +1966,21 @@ type GetPlatformChatSearchChatParams struct {
 }
 
 type GetPlatformChatSearchChatRow struct {
-	ID          uuid.UUID
-	OwnerUserID string
-	Title       string
+	ID               uuid.UUID
+	OwnerUserID      string
+	Title            string
+	TitleManuallySet bool
 }
 
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
 	var i GetPlatformChatSearchChatRow
-	err := row.Scan(&i.ID, &i.OwnerUserID, &i.Title)
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.TitleManuallySet,
+	)
 	return i, err
 }
 
@@ -2654,6 +2672,38 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 		&i.DeliveryState,
 		&i.ExpiresAt,
 		&i.InputHash,
+	)
+	return i, err
+}
+
+const getPlatformMCPFeedbackFixture = `-- name: GetPlatformMCPFeedbackFixture :one
+SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
+FROM platform_mcp_feedback
+WHERE id = $1
+`
+
+type GetPlatformMCPFeedbackFixtureRow struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	Rating               pgtype.Int4
+	Note                 pgtype.Text
+	DeliveryState        string
+	ExpiresAt            pgtype.Timestamptz
+}
+
+// Test fixture: reads stored feedback columns that no production query returns.
+func (q *Queries) GetPlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) (GetPlatformMCPFeedbackFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPFeedbackFixture, id)
+	var i GetPlatformMCPFeedbackFixtureRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.Rating,
+		&i.Note,
+		&i.DeliveryState,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -4996,7 +5046,7 @@ func (q *Queries) ListHeadlessCallerClients(ctx context.Context, arg ListHeadles
 
 const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
 
-SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+SELECT c.id, c.external_chat_id, c.title, c.title_manually_set, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
 FROM chats c
 JOIN projects p ON p.id = c.project_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -5015,15 +5065,16 @@ type ListOwnedChatSessionsForRecallParams struct {
 }
 
 type ListOwnedChatSessionsForRecallRow struct {
-	ID             uuid.UUID
-	ExternalChatID pgtype.Text
-	Title          pgtype.Text
-	Summary        pgtype.Text
-	Cwd            pgtype.Text
-	UpdatedAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
-	ProjectName    string
-	ProjectSlug    string
+	ID               uuid.UUID
+	ExternalChatID   pgtype.Text
+	Title            pgtype.Text
+	TitleManuallySet bool
+	Summary          pgtype.Text
+	Cwd              pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
 }
 
 // Session recall (list_my_sessions / continue_session). Every read below
@@ -5052,6 +5103,7 @@ func (q *Queries) ListOwnedChatSessionsForRecall(ctx context.Context, arg ListOw
 			&i.ID,
 			&i.ExternalChatID,
 			&i.Title,
+			&i.TitleManuallySet,
 			&i.Summary,
 			&i.Cwd,
 			&i.UpdatedAt,
@@ -7672,6 +7724,16 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 	return i, err
 }
 
+const pingPlatformMCPDatabaseFixture = `-- name: PingPlatformMCPDatabaseFixture :exec
+SELECT 1
+`
+
+// Test fixture: proves a pooled connection is still healthy.
+func (q *Queries) PingPlatformMCPDatabaseFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pingPlatformMCPDatabaseFixture)
+	return err
+}
+
 const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
 SELECT EXISTS (
     SELECT 1
@@ -8843,6 +8905,7 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
        COALESCE(c.user_id, '')::text AS owner_user_id,
        CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
        CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
@@ -8863,7 +8926,11 @@ WHERE m.project_id = $1::uuid
        OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
        OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
        OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
-       OR c.title ILIKE $8 ESCAPE '\')
+       OR c.title ILIKE $8 ESCAPE '\'
+       -- A stored cron envelope is shown as "Cron: <job name>" (chattitle.Display),
+       -- so a search for the shown title matches it too.
+       OR (NOT c.title_manually_set
+           AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE $8 ESCAPE '\'))
   AND ($9::text = ''
        OR ($10::text = '' AND m.user_id = $9)
        OR EXISTS (
@@ -8900,20 +8967,21 @@ type SearchPlatformChatMessagesParams struct {
 }
 
 type SearchPlatformChatMessagesRow struct {
-	ID          uuid.UUID
-	ChatID      uuid.UUID
-	Seq         int64
-	CreatedAt   pgtype.Timestamptz
-	Role        string
-	Generation  int32
-	Source      string
-	UserID      string
-	ChatTitle   string
-	OwnerUserID string
-	Content     string
-	ToolCalls   []byte
-	ContentRaw  []byte
-	Oversized   bool
+	ID                   uuid.UUID
+	ChatID               uuid.UUID
+	Seq                  int64
+	CreatedAt            pgtype.Timestamptz
+	Role                 string
+	Generation           int32
+	Source               string
+	UserID               string
+	ChatTitle            string
+	ChatTitleManuallySet bool
+	OwnerUserID          string
+	Content              string
+	ToolCalls            []byte
+	ContentRaw           []byte
+	Oversized            bool
 }
 
 // Literal substring search over captured messages in one project and interval,
@@ -8954,6 +9022,7 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 			&i.Source,
 			&i.UserID,
 			&i.ChatTitle,
+			&i.ChatTitleManuallySet,
 			&i.OwnerUserID,
 			&i.Content,
 			&i.ToolCalls,

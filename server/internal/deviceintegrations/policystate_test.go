@@ -2,6 +2,7 @@ package deviceintegrations
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -318,4 +319,68 @@ func TestListManagedDevicesPolicyStateFilterAndAgentState(t *testing.T) {
 	require.Equal(t, rolledBackAt.Format(time.RFC3339), view.AgentState.LastRollback.At)
 	require.Equal(t, "0.42.0", *view.AgentState.LastRollback.From)
 	require.Equal(t, "0.41.3", *view.AgentState.LastRollback.To)
+}
+
+// TestEmailFallbackSkipsAnotherMachinesReport covers a device whose own agent
+// never reports its serial: the assigned user's report stands in for it only
+// when nothing shows that report came from a different machine.
+func TestEmailFallbackSkipsAnotherMachinesReport(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		mdmOS        string
+		reportSerial string
+		reportOS     string
+		want         string
+	}{
+		{name: "windows report on a mac", mdmOS: "macOS", reportOS: "windows", want: "unreported"},
+		{name: "report naming another serial", mdmOS: "macOS", reportSerial: "SERIAL-OTHER", want: "unreported"},
+		{name: "ios device and a mac's report", mdmOS: "iOS", reportOS: "darwin", want: "unreported"},
+		{name: "serial-less report from the same OS", mdmOS: "Mac", reportOS: "darwin", want: "attested"},
+		{name: "report with no OS", mdmOS: "macOS", want: "attested"},
+		{name: "OS the MDM names that we don't classify", mdmOS: "ChromeOS", reportOS: "windows", want: "attested"},
+	}
+	for _, tc := range cases {
+		for _, deviceLevel := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/device_level=%t", tc.name, deviceLevel), func(t *testing.T) {
+				t.Parallel()
+
+				ctx, conn, store, orgID := newStoreTestDB(t)
+				cfg := mustUpsert(t, ctx, conn, store, orgID, validCreds(), validSettings(), true)
+				now := time.Now().UTC()
+
+				const email = "fallback@example.test"
+				userID := seedUser(t, ctx, conn, email)
+				seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "device", email, &userID, "SERIAL-DEVICE", false)
+				require.NoError(t, testrepo.New(conn).SetMdmDeviceOSNameFixture(ctx, testrepo.SetMdmDeviceOSNameFixtureParams{
+					OsName:         conv.ToPGText(tc.mdmOS),
+					OrganizationID: orgID,
+					ExternalID:     "device",
+				}))
+				seedAgentSync(t, ctx, conn, orgID, email, now)
+				seedServedEtag(t, ctx, conn, orgID, email, "e1")
+				seedStateReport(t, ctx, conn, orgID, stateReport{email: email, serial: tc.reportSerial, at: now, etag: "e1"})
+				require.NoError(t, testrepo.New(conn).SetDeviceAgentStateReportOSFixture(ctx, testrepo.SetDeviceAgentStateReportOSFixtureParams{
+					Os:             conv.ToPGTextEmpty(tc.reportOS),
+					OrganizationID: orgID,
+					Email:          email,
+				}))
+
+				rows := listDevices(t, ctx, store, orgID, deviceLevel, now, "")
+				require.Equal(t, "agent_active", rows["device"].CoverageBucket, "the user's heartbeat still counts")
+				require.Equal(t, tc.want, rows["device"].PolicyState)
+
+				counts := coverageCounts(t, ctx, store, orgID, deviceLevel, now)
+				if tc.want == "attested" {
+					require.EqualValues(t, 1, counts.PolicyAttested)
+				} else {
+					require.EqualValues(t, 1, counts.PolicyUnreported)
+				}
+
+				fleet := byFleetKey(listFleet(t, ctx, store, orgID, deviceLevel, now, fleetFilter{}))
+				require.Equal(t, tc.want, fleet["SERIAL-DEVICE"].PolicyState, "the fleet agrees with the MDM list")
+			})
+		}
+	}
 }

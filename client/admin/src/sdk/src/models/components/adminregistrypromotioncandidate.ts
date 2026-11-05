@@ -12,6 +12,10 @@ import {
   AdminRegistryPromotionAuthDiscovery$inboundSchema,
 } from "./adminregistrypromotionauthdiscovery.js";
 import {
+  AdminRegistryPromotionSetupGuide,
+  AdminRegistryPromotionSetupGuide$inboundSchema,
+} from "./adminregistrypromotionsetupguide.js";
+import {
   AdminRegistryPromotionSuggestions,
   AdminRegistryPromotionSuggestions$inboundSchema,
 } from "./adminregistrypromotionsuggestions.js";
@@ -38,6 +42,10 @@ export type AdminRegistryPromotionCandidate = {
   docsStatus?: string | undefined;
   docsUrl?: string | undefined;
   eligible: boolean;
+  /**
+   * Slug of the one pinned guide that documents the suggested public endpoint.
+   */
+  endpointGuideSlug?: string | undefined;
   id: string;
   mcpServerId: string;
   observedDays: number;
@@ -50,6 +58,14 @@ export type AdminRegistryPromotionCandidate = {
   reason: string;
   registryEntryId?: string | undefined;
   remoteMcpServerId: string;
+  /**
+   * Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.
+   */
+  setupGuides?: Array<AdminRegistryPromotionSetupGuide> | undefined;
+  /**
+   * Pinned setup-docs export version that setup_guides came from.
+   */
+  setupGuidesVersion?: string | undefined;
   sourceName?: string | undefined;
   sourceRevision: string;
   status: string;
@@ -93,6 +109,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     docs_status: z.optional(z.string()),
     docs_url: z.optional(z.string()),
     eligible: z.boolean(),
+    endpoint_guide_slug: z.optional(z.string()),
     id: z.string(),
     mcp_server_id: z.string(),
     observed_days: z.int(),
@@ -107,6 +124,10 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     reason: z.string(),
     registry_entry_id: z.optional(z.string()),
     remote_mcp_server_id: z.string(),
+    setup_guides: z.optional(
+      z.array(AdminRegistryPromotionSetupGuide$inboundSchema),
+    ),
+    setup_guides_version: z.optional(z.string()),
     source_name: z.optional(z.string()),
     source_revision: z.string(),
     status: z.string(),
@@ -130,6 +151,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "docs_revision": "docsRevision",
       "docs_status": "docsStatus",
       "docs_url": "docsUrl",
+      "endpoint_guide_slug": "endpointGuideSlug",
       "mcp_server_id": "mcpServerId",
       "observed_days": "observedDays",
       "observed_failures": "observedFailures",
@@ -140,6 +162,8 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "public_title": "publicTitle",
       "registry_entry_id": "registryEntryId",
       "remote_mcp_server_id": "remoteMcpServerId",
+      "setup_guides": "setupGuides",
+      "setup_guides_version": "setupGuidesVersion",
       "source_name": "sourceName",
       "source_revision": "sourceRevision",
       "suggested_metadata": "suggestedMetadata",

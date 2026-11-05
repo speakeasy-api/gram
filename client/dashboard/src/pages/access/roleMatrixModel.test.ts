@@ -34,11 +34,15 @@ const def = (
 ): ScopeDefinition =>
   ({
     slug,
+    label: slug,
     resourceType,
+    category: resourceType,
     description: slug,
     agentEligible: true,
     visibility: "user_visible",
     exclusionScope,
+    sensitive: false,
+    subScopes: [],
   }) as ScopeDefinition;
 
 const scopes: ScopeDefinition[] = [

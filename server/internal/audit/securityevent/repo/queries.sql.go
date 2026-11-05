@@ -337,7 +337,7 @@ func (q *Queries) ListSecurityActorFacets(ctx context.Context, arg ListSecurityA
 }
 
 const listSecurityAuditLogs = `-- name: ListSecurityAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
+SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM security_audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
 LEFT JOIN organization_user_relationships actor_membership
@@ -410,6 +410,7 @@ type ListSecurityAuditLogsParams struct {
 
 type ListSecurityAuditLogsRow struct {
 	ID                   uuid.UUID
+	IsInternal           bool
 	Seq                  int64
 	OrganizationID       string
 	ProjectID            uuid.NullUUID
@@ -459,6 +460,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		var i ListSecurityAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.IsInternal,
 			&i.Seq,
 			&i.OrganizationID,
 			&i.ProjectID,
@@ -555,7 +557,7 @@ WITH batch AS (
   DELETE FROM audit_logs
   USING batch
   WHERE audit_logs.id = batch.id
-  RETURNING audit_logs.id, audit_logs.seq, audit_logs.organization_id, audit_logs.project_id, audit_logs.actor_id, audit_logs.actor_type, audit_logs.actor_display_name, audit_logs.actor_slug, audit_logs.action, audit_logs.subject_id, audit_logs.subject_type, audit_logs.subject_display_name, audit_logs.subject_slug, audit_logs.before_snapshot, audit_logs.after_snapshot, audit_logs.metadata, audit_logs.acting_surface, audit_logs.acting_client_id, audit_logs.created_at
+  RETURNING audit_logs.id, audit_logs.is_internal, audit_logs.seq, audit_logs.organization_id, audit_logs.project_id, audit_logs.actor_id, audit_logs.actor_type, audit_logs.actor_display_name, audit_logs.actor_slug, audit_logs.action, audit_logs.subject_id, audit_logs.subject_type, audit_logs.subject_display_name, audit_logs.subject_slug, audit_logs.before_snapshot, audit_logs.after_snapshot, audit_logs.metadata, audit_logs.acting_surface, audit_logs.acting_client_id, audit_logs.created_at
 )
 INSERT INTO security_audit_logs (
   id,

@@ -1762,7 +1762,7 @@ WHERE ccp.id = ANY(@ids::uuid[])
 -- titles are read from Postgres at page render time rather than denormalized
 -- into ClickHouse, because titles are generated after the scan and would be
 -- stale at ingest.
-SELECT c.id, c.title
+SELECT c.id, c.title, c.title_manually_set
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.id = ANY(@ids::uuid[])
@@ -2043,3 +2043,21 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: SetRiskPolicyApprovalConfigFixture :exec
+-- Test fixture: replaces only a policy's approval config, which no production
+-- query edits on its own.
+UPDATE risk_policies
+SET approval_config = @approval_config
+WHERE id = @id;
+
+-- name: LockExactRiskPolicyAudienceGrants :exec
+-- Locks existing exact audience grants against generic deletes and updates
+-- without blocking concurrent inserts.
+SELECT id
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors = @selectors
+ORDER BY id
+FOR UPDATE;

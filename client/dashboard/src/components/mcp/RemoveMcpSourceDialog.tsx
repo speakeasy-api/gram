@@ -29,6 +29,8 @@ export type RemoveMcpSourceDialogContentProps = {
   onSuccess: () => void;
   /** Performs the deletion; rejects on failure. */
   onConfirm: () => Promise<void>;
+  /** Who the deletion cuts off, shown above the typed confirmation. */
+  usage?: React.ReactNode;
 };
 
 function endpointSummary(
@@ -100,6 +102,7 @@ export function RemoveMcpSourceDialogContent({
   onClose,
   onSuccess,
   onConfirm,
+  usage,
 }: RemoveMcpSourceDialogContentProps): JSX.Element {
   const [confirmation, setConfirmation] = useState("");
   const inputMatches = confirmation === confirmValue;
@@ -157,6 +160,8 @@ export function RemoveMcpSourceDialogContent({
           </ul>
         </div>
       )}
+
+      {usage}
 
       <div className="grid gap-2">
         <Text small>

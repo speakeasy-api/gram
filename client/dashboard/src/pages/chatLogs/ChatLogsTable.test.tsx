@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
+import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
 
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -114,6 +115,29 @@ describe("ChatLogsTable", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("shows unknown cost, not $0, for a session whose agent reports no cost", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          { ...makeChat("chat-codex"), totalCost: 0, totalTokens: 900 },
+          { ...makeChat("chat-claude"), totalCost: 0.1234, totalTokens: 900 },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getAllByLabelText(UNKNOWN_COST_EXPLANATION)).toHaveLength(1);
+    expect(screen.getByText("$0.1234")).toBeTruthy();
+    expect(screen.queryByText("$0.0000")).toBeNull();
   });
 
   it("shows duration and message count under the start time, not the chat id", () => {

@@ -66,3 +66,8 @@ func DeleteToolMetadataMcpServersPath() string {
 func DeleteMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.delete"
 }
+
+// GetMcpServerUsageImpactMcpServersPath returns the URL path to the mcpServers service getMcpServerUsageImpact HTTP endpoint.
+func GetMcpServerUsageImpactMcpServersPath() string {
+	return "/rpc/mcpServers.getUsageImpact"
+}

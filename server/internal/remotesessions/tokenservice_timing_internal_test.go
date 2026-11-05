@@ -18,6 +18,9 @@ func TestRefreshTimingInvariant(t *testing.T) {
 	require.LessOrEqual(t, refreshLockTTL, refreshWaitBudget,
 		"a waiter must not give up while the lease could still be held, or it presents the refresh token the holder is still using")
 
+	require.Less(t, refreshUpstreamTimeout, refreshRotationTimeout,
+		"the rotation budget must leave time to store the provider's answer after the POST")
+
 	require.Less(t, refreshWaitPoll, refreshWaitBudget,
 		"the wait must poll at least once before giving up")
 }

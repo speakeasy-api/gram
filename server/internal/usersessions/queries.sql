@@ -3033,3 +3033,17 @@ WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.deleted IS FALSE
   AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
 RETURNING us.jti;
+
+-- name: SeedWorkloadAgentAssignmentFixture :exec
+-- Test fixture: workload identity writes belong to the workload identity
+-- management API.
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @agent_id);
+
+-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @name)
+RETURNING id;
+
+-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;
