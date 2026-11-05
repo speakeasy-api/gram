@@ -65,3 +65,13 @@ func TestNewSignupAttribution_Truncates(t *testing.T) {
 	require.True(t, utf8.ValidString(a.UTMSource))
 	require.Empty(t, a.Host)
 }
+
+func TestNewSignupAttribution_TruncationKeepsValueWithEarlierInvalidBytes(t *testing.T) {
+	t.Parallel()
+
+	// An invalid byte well before the cut must not empty the whole value.
+	long := "\xff" + strings.Repeat("a", maxAttributionValueLength+10)
+	a := NewSignupAttribution(long, "", "", "", "", "", "")
+	require.NotNil(t, a)
+	require.Len(t, a.UTMSource, maxAttributionValueLength)
+}

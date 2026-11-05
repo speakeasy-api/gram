@@ -106,10 +106,12 @@ func cleanAttributionValue(value string) string {
 	if len(value) <= maxAttributionValueLength {
 		return value
 	}
-	value = value[:maxAttributionValueLength]
-	// Don't leave half a multi-byte character at the cut.
-	for !utf8.ValidString(value) {
-		value = value[:len(value)-1]
+	// Back the cut up to a rune boundary so it never splits a multi-byte
+	// character. Only the cut point matters: invalid bytes earlier in the
+	// value are kept as they are rather than emptying the whole value.
+	cut := maxAttributionValueLength
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
 	}
-	return value
+	return value[:cut]
 }
