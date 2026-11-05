@@ -622,7 +622,7 @@ func buildTestMCPService(
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -660,7 +660,7 @@ func buildTestMCPService(
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	principalCredentials := principalcredential.New(callerAssertions, conn)
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)

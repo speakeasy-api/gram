@@ -135,6 +135,7 @@ func (a *catalogPromotionActivities) dispatch(ctx context.Context) error {
 	metrics := activity.GetMetricsHandler(ctx)
 	metrics.Gauge("catalog_promotion_pending_docs").Update(float64(status.PendingDocs))
 	metrics.Gauge("catalog_promotion_needs_attention").Update(float64(status.NeedsAttention))
+	metrics.Gauge("catalog_promotion_guide_in_review").Update(float64(status.GuideInReview))
 	metrics.Gauge("catalog_promotion_discovery_failures").Update(float64(status.DiscoveryFailures))
 	oldestAge := 0.0
 	if !status.OldestPendingAt.IsZero() {

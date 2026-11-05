@@ -43,6 +43,7 @@ func (l *Logger) LogRemoteSessionBinding(ctx context.Context, dbtx repo.DBTX, ac
 		return fmt.Errorf("marshal binding audit metadata: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:       false,
 		OrganizationID:   event.OrganizationID,
 		ProjectID:        uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID:          event.Actor.ID,

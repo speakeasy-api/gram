@@ -1131,6 +1131,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		Action:                 conv.PtrToPGTextEmpty(filter.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
+		IncludeInternalEvents:  true,
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
@@ -1165,7 +1166,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 
 	const pageSize = 50
 	page, next := mergeActivity(configuration, security, cursor, pageSize)
-	logs := make([]*gen.AuditLog, 0, len(page))
+	logs := make([]*gen.AdminAuditLog, 0, len(page))
 	for _, entry := range page {
 		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
@@ -1182,7 +1183,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AdminAuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -1207,11 +1208,12 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (
 		actingSurface = string(audit.SurfaceUnknown)
 	}
 
-	return &gen.AuditLog{
+	return &gen.AdminAuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
 		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
-		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
+		IsInternal: new(row.IsInternal),
+		SubjectID:  row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }

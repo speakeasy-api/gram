@@ -40,6 +40,7 @@ func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX,
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -91,6 +92,7 @@ func (l *Logger) LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -165,6 +167,7 @@ func (l *Logger) LogUserSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -203,6 +206,7 @@ type LogUserSessionIssuerDeleteEvent struct {
 func (l *Logger) LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerDeleteEvent) error {
 	action := ActionUserSessionIssuerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

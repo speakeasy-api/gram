@@ -22,6 +22,7 @@ import (
 )
 
 type auditLogSeed struct {
+	isInternal         bool
 	organizationID     string
 	projectID          uuid.NullUUID
 	actorID            string
@@ -944,6 +945,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 	t.Helper()
 
 	params := repo.InsertAuditLogParams{
+		IsInternal:         seed.isInternal,
 		OrganizationID:     seed.organizationID,
 		ProjectID:          seed.projectID,
 		ActorID:            seed.actorID,
