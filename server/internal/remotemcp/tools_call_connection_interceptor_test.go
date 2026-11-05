@@ -363,6 +363,9 @@ func TestRefusalHappened(t *testing.T) {
 
 	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
 	require.False(t, ok, "a call held for approval is not an end state")
+
+	_, ok = refusalHappened(fmt.Errorf("resolve remote MCP tool disposition: %w", errToolNotOnUpstream))
+	require.False(t, ok, "an unknown tool name is the caller's mistake, not a connection outcome")
 }
 
 func TestToolsCallConnections_PreSendFailures(t *testing.T) {
