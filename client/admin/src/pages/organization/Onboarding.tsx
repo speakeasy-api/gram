@@ -34,6 +34,7 @@ import {
   onboardingUseCasesQuery,
   organizationOnboardingPlaybookQuery,
   updateAdminOnboardingPlaybook,
+  statusCode,
 } from "@/lib/gramAdminClient";
 import { OnboardingStack } from "./OnboardingStack";
 
@@ -191,6 +192,18 @@ export function Onboarding({
           contentSnapshot(value.template)
       )
         return;
+      if (
+        value.kind === "custom" &&
+        value.current?.organizationId === organizationId &&
+        snapshot(latest.data?.playbook) !== value.base &&
+        latest.data?.playbook?.organizationId === organizationId &&
+        snapshot(latest.data.playbook) ===
+          snapshot({
+            ...value.current,
+            steps: value.steps.map((slug) => ({ slug, title: slug })),
+          })
+      )
+        return;
       if (snapshot(latest.data?.playbook) !== value.base) {
         throw new Error(
           "The current plan changed since editing began. Reload the current plan and review it before saving. Your draft has not been applied.",
@@ -271,7 +284,20 @@ export function Onboarding({
               steps: value.steps.map((slug) => ({ slug })),
             }),
           };
-          createdPlan.current = await createAdminOnboardingPlaybook(request);
+          try {
+            createdPlan.current = await createAdminOnboardingPlaybook(request);
+          } catch (error) {
+            const status = statusCode(error);
+            if (
+              status !== undefined &&
+              status >= 400 &&
+              status < 500 &&
+              status !== 408
+            ) {
+              pendingCreation.current = null;
+            }
+            throw error;
+          }
         }
         if (
           JSON.stringify(value.steps) !==
@@ -421,7 +447,14 @@ export function Onboarding({
             {draft?.kind === "custom" ? (
               <>
                 {draft.presetName && (
-                  <h3 className="font-medium">Review {draft.presetName}</h3>
+                  <>
+                    <h3 className="font-medium">Review {draft.presetName}</h3>
+                    {draft.current?.organizationId === organizationId && (
+                      <p>
+                        The plan keeps its current name: {draft.current.name}.
+                      </p>
+                    )}
+                  </>
                 )}
                 <p>
                   Saving applies these changes to this organization. Existing
@@ -543,7 +576,9 @@ export function Onboarding({
           </h2>
           <p className="text-muted-foreground text-sm">
             Start from a built-in preset or a shared template. Review before
-            saving; shared templates are never edited here.
+            saving. Shared templates are never edited here. Presets do not
+            guarantee compatibility with the recorded stack. Saving rejects
+            unsupported steps, and you can remove them from the draft.
           </p>
           {templates.isError ? (
             <div role="alert">
@@ -580,6 +615,8 @@ export function Onboarding({
                         disabled={!presetAvailable(preset.stepSlugs)}
                       >
                         {preset.name}
+                        {!presetAvailable(preset.stepSlugs) &&
+                          " (required steps unavailable)"}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -614,10 +651,7 @@ export function Onboarding({
                     !presetAvailable(selectedPreset.stepSlugs))
                 }
                 onClick={() => {
-                  if (
-                    selectedPreset &&
-                    presetAvailable(selectedPreset.stepSlugs)
-                  ) {
+                  if (selectedPreset) {
                     begin({
                       kind: "custom",
                       current,
@@ -632,6 +666,15 @@ export function Onboarding({
               </Button>
             </>
           )}
+          <p>
+            <Link
+              to="/onboarding-playbooks"
+              search={{ organization: organizationId }}
+              className="underline"
+            >
+              Manage organization playbooks
+            </Link>
+          </p>
           <p>
             <Link to="/onboarding-playbooks" className="underline">
               Manage shared templates

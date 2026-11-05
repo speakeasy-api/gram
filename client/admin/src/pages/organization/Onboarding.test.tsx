@@ -126,6 +126,11 @@ describe("tenant onboarding", () => {
         .getByRole("link", { name: "Manage shared templates" })
         .getAttribute("href"),
     ).toBe("/onboarding-playbooks");
+    expect(
+      screen
+        .getByRole("link", { name: "Manage organization playbooks" })
+        .getAttribute("href"),
+    ).toBe("/onboarding-playbooks?organization=org_test");
     expect(screen.getByText("Stack editor")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /reset|delete/i })).toBeNull();
   });
@@ -151,6 +156,9 @@ describe("tenant onboarding", () => {
       expect(screen.getByText(preset.description)).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Review preset" }));
       await screen.findByRole("heading", { name: `Review ${preset.name}` });
+      expect(
+        screen.getByText(`The plan keeps its current name: ${owned.name}.`),
+      ).toBeTruthy();
       expect(api.update).not.toHaveBeenCalled();
       expect(api.create).not.toHaveBeenCalled();
       expect(api.assign).not.toHaveBeenCalled();
@@ -175,9 +183,11 @@ describe("tenant onboarding", () => {
     );
     for (const preset of onboardingPresets) {
       expect(
-        (await screen.findByRole("option", { name: preset.name })).getAttribute(
-          "aria-disabled",
-        ),
+        (
+          await screen.findByRole("option", {
+            name: `${preset.name} (required steps unavailable)`,
+          })
+        ).getAttribute("aria-disabled"),
       ).toBe("true");
     }
     expect(api.update).not.toHaveBeenCalled();
@@ -358,18 +368,106 @@ describe("tenant onboarding", () => {
       playbookId: "recovered",
     });
   });
-  it("does not repeat ambiguous creation while its result cannot be discovered", async () => {
+  it("allows an edited draft to create again after a definite 400 rejection", async () => {
     api.assignment.mockResolvedValue({ playbook: template });
-    api.create.mockRejectedValueOnce(new Error("Response lost"));
+    api.create.mockRejectedValueOnce(
+      Object.assign(new Error("Unsupported steps"), { statusCode: 400 }),
+    );
     await render();
     await edit();
     fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Unsupported steps/);
+    fireEvent.click(screen.getByRole("combobox", { name: "Add a step" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Invite people" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText("Onboarding saved.");
+    expect(api.create).toHaveBeenCalledTimes(2);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stepSlugs: ["setup", "invite"] }),
+    );
+    expect(api.assign).toHaveBeenCalledExactlyOnceWith({
+      organizationId: "org_test",
+      playbookId: "created",
+    });
+  });
+
+  it("recognizes a committed in-place update after its response is lost", async () => {
+    api.assignment.mockResolvedValue({ playbook: owned });
+    api.update.mockImplementationOnce(async () => {
+      api.assignment.mockResolvedValue({
+        playbook: { ...owned, steps: [second, group] },
+      });
+      throw new Error("Response lost");
+    });
+    await render();
+    await edit();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move Invite people up" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
     await screen.findByText(/Your draft is retained/);
     fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
-    await screen.findByText(/Creation could not be verified/);
-    expect(api.create).toHaveBeenCalledTimes(1);
-    expect(api.assign).not.toHaveBeenCalled();
+    await screen.findByText("Onboarding saved.");
+    expect(api.update).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    { id: "different-plan" },
+    { name: "Renamed externally" },
+    { description: "Edited externally" },
+    { organizationId: "different-org" },
+  ])(
+    "does not reconcile an in-place update with differing metadata: %j",
+    async (change) => {
+      api.assignment.mockResolvedValue({ playbook: owned });
+      api.update.mockImplementationOnce(async () => {
+        api.assignment.mockResolvedValue({
+          playbook: { ...owned, steps: [second, group], ...change },
+        });
+        throw new Error("Response lost");
+      });
+      await render();
+      await edit();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Move Invite people up" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save wizard steps" }),
+      );
+      await screen.findByText(/Your draft is retained/);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save wizard steps" }),
+      );
+      await screen.findByText(/The current plan changed since editing began/);
+      expect(api.update).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Onboarding saved.")).toBeNull();
+    },
+  );
+
+  it.each([
+    new Error("Response lost"),
+    Object.assign(new Error("Request timeout"), { statusCode: 408 }),
+  ])(
+    "does not repeat ambiguous creation while its result cannot be discovered: %j",
+    async (error) => {
+      api.assignment.mockResolvedValue({ playbook: template });
+      api.create.mockRejectedValueOnce(error);
+      await render();
+      await edit();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save wizard steps" }),
+      );
+      await screen.findByText(/Your draft is retained/);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save wizard steps" }),
+      );
+      await screen.findByText(/Creation could not be verified/);
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(api.assign).not.toHaveBeenCalled();
+    },
+  );
   it("does not reuse a pre-existing identical plan after ambiguous creation", async () => {
     const identical = {
       ...owned,

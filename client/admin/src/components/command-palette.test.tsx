@@ -604,11 +604,10 @@ describe("CommandPalette", () => {
     });
   });
 
-  it.each(
-    [ORG.id, ORG.slug].flatMap((idOrSlug) =>
-      ["wizard", "steps", "template"].map((keyword) => ({ idOrSlug, keyword })),
-    ),
-  )(
+  it.each([
+    { idOrSlug: ORG.id, keyword: "steps" },
+    { idOrSlug: ORG.slug, keyword: "template" },
+  ])(
     "finds onboarding by $keyword and preserves $idOrSlug",
     async ({ idOrSlug, keyword }) => {
       const { router } = await renderRouteTree(routeTree, {

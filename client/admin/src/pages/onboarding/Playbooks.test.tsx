@@ -688,7 +688,40 @@ describe("OnboardingPlaybooks", () => {
     expect(created?.querySelectorAll("td")[1]?.textContent).toBe("Acme");
   });
 
-  it("keeps nothing when the stack refuses a customer's new playbook", async () => {
+  it("recognizes an assigned customer playbook when the response is lost", async () => {
+    useCases = [structuredClone(distribution)];
+    playbooks = [structuredClone(gatewayFirst)];
+    const respond = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (request: Request) => {
+      const response = await respond(request);
+      if (
+        request.method === "POST" &&
+        new URL(request.url).pathname ===
+          "/admin/organization.onboardingPlaybook"
+      ) {
+        throw new Error("Response lost");
+      }
+      return response;
+    });
+    await renderPage("org_acme");
+    await screen.findByRole("table", { name: "Playbooks" });
+    fireEvent.click(screen.getByRole("button", { name: "New playbook" }));
+    await screen.findByRole("form", { name: "New playbook" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Playbook name" }), {
+      target: { value: "Custom wizard" },
+    });
+    await pick("Add a step", /Set up Platform MCP/);
+    fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("form", { name: "New playbook" })).toBeNull(),
+    );
+    expect(assignedId).toBe("pb-2");
+    expect(playbooks.map((p) => p.id)).toEqual(["pb-1", "pb-2"]);
+    expect(postTo("/admin/onboarding.playbooks.delete")).toHaveLength(0);
+    expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
+  });
+
+  it("preserves and reuses a customer's new playbook after assignment is refused", async () => {
     useCases = [structuredClone(distribution)];
     playbooks = [structuredClone(gatewayFirst)];
     await renderPage("org_acme");
@@ -702,9 +735,15 @@ describe("OnboardingPlaybooks", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
     const alert = await within(form).findByRole("alert");
     expect(alert.textContent).toContain("needs Anthropic in the stack");
-    expect(
-      await postTo("/admin/onboarding.playbooks.delete")[0]!.clone().json(),
-    ).toEqual({ playbook_id: "pb-2" });
-    expect(playbooks.map((p) => p.id)).toEqual(["pb-1"]);
+    expect(alert.textContent).toContain("The new plan is preserved");
+    expect(postTo("/admin/onboarding.playbooks.delete")).toHaveLength(0);
+    expect(playbooks.map((p) => p.id)).toEqual(["pb-1", "pb-2"]);
+    fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+    await vi.waitFor(() =>
+      expect(postTo("/admin/organization.onboardingPlaybook")).toHaveLength(2),
+    );
+    expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
+    expect(postTo("/admin/onboarding.playbooks.update")).toHaveLength(1);
+    expect(playbooks.map((p) => p.id)).toEqual(["pb-1", "pb-2"]);
   });
 });

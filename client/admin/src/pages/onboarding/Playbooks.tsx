@@ -140,6 +140,7 @@ export function OnboardingPlaybooks({
   organizationId?: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const retainedCreation = useRef<AdminOnboardingPlaybook | null>(null);
   const scoped = organizationId !== undefined;
   const useCasesQuery = onboardingUseCasesQuery();
   const playbooksQuery = onboardingPlaybooksQuery(organizationId);
@@ -211,14 +212,23 @@ export function OnboardingPlaybooks({
   const createPlaybook = useMutation({
     mutationFn: async (draft: PlaybookDraft) => {
       const customer = draft.owner === "customer";
-      const created = await createAdminOnboardingPlaybook({
+      const request = {
         useCaseId: customer ? undefined : draft.useCaseId,
         organizationId: customer ? draft.organizationId : undefined,
         name: draft.name,
         description: draft.description,
         isDefault: customer ? false : draft.isDefault,
         stepSlugs: draft.stepSlugs,
-      });
+      };
+      const retained = retainedCreation.current;
+      const created =
+        retained && retained.organizationId === request.organizationId
+          ? await updateAdminOnboardingPlaybook({
+              ...request,
+              playbookId: retained.id,
+            })
+          : await createAdminOnboardingPlaybook(request);
+      retainedCreation.current = created;
       if (customer && draft.organizationId) {
         try {
           await assignAdminOrganizationOnboardingPlaybook({
@@ -226,12 +236,18 @@ export function OnboardingPlaybooks({
             playbookId: created.id,
           });
         } catch (err) {
-          // The stack refused it. Leave nothing behind; the reason is what
-          // matters, so a failed clean-up must not replace it.
-          await deleteAdminOnboardingPlaybook({
-            playbookId: created.id,
-          }).catch(() => undefined);
-          throw err;
+          // The response can fail after commit. Keep the plan and reuse it on retry.
+          const reconciled = await queryClient
+            .fetchQuery({
+              ...organizationOnboardingPlaybookQuery(draft.organizationId),
+              staleTime: 0,
+            })
+            .catch(() => undefined);
+          if (reconciled?.playbook?.id !== created.id) {
+            throw new Error(
+              `${errorMessage(err)} The new plan is preserved. Retry updates and assigns the same plan.`,
+            );
+          }
         }
       }
       return created;
@@ -330,6 +346,7 @@ export function OnboardingPlaybooks({
     setUseCaseDraft({ name: "", slug: "", description: "" });
   };
   const openPlaybook = (draft: PlaybookDraft) => {
+    retainedCreation.current = null;
     setDialogError("");
     setPlaybookDraft(draft);
   };

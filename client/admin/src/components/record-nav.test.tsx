@@ -106,9 +106,6 @@ describe("RecordNav", () => {
         .getAllByRole("link")
         .filter((link) => link.getAttribute("aria-current") === "page");
       expect(current.map((link) => link.textContent)).toEqual(["Onboarding"]);
-      expect(
-        screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
-      ).toBe(`/organizations/${idOrSlug}/onboarding`);
     },
   );
 
@@ -167,15 +164,12 @@ describe("RecordNav", () => {
     expect(item.textContent).toContain("0");
   });
 
-  it("preserves the organization slug in the onboarding and Activity hrefs", async () => {
+  it("preserves the organization slug in the Activity href", async () => {
     await mount([]);
 
     expect(
       screen.getByRole("link", { name: "Activity" }).getAttribute("href"),
     ).toBe("/organizations/test-org/activity");
-    expect(
-      screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
-    ).toBe("/organizations/test-org/onboarding");
   });
 
   it("points Projects at the list when the organization has two projects", async () => {

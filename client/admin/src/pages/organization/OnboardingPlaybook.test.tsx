@@ -118,10 +118,24 @@ describe("OnboardingPlaybook", () => {
     ).toBe("org_pb_test");
   });
 
+  it("keeps customization reachable while the assignment is loading", async () => {
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />);
+    expect(screen.getByRole("status").textContent).toBe("Loading…");
+    expect(
+      screen
+        .getByRole("link", { name: "Customize onboarding" })
+        .getAttribute("href"),
+    ).toBe("/organizations/org_pb_test/onboarding");
+  });
+
   it("reports load failures and retries", async () => {
     failures = 1;
     await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />);
     await screen.findByText("Unable to load the playbook.");
+    expect(
+      screen.getByRole("link", { name: "Customize onboarding" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry playbook" }));
     await screen.findByText("No playbook assigned");
   });
@@ -137,7 +151,11 @@ describe("OnboardingPlaybook", () => {
     failures = 1;
     await act(() => client.invalidateQueries());
     await screen.findByText("Unable to load the playbook.");
-    expect(screen.queryByRole("link")).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Customize onboarding" })
+        .getAttribute("href"),
+    ).toBe("/organizations/org_pb_test/onboarding");
     fireEvent.click(screen.getByRole("button", { name: "Retry playbook" }));
     await screen.findByRole("link", { name: "Customize onboarding" });
   });

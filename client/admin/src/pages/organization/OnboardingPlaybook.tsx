@@ -17,40 +17,34 @@ export function OnboardingPlaybook({
     ...organizationOnboardingPlaybookQuery(organizationId),
     throwOnError: false,
   });
-  if (assigned.isPending) {
-    return (
-      <span role="status" className="text-muted-foreground text-sm">
-        Loading…
-      </span>
-    );
-  }
-  // A failed refresh hides the stale name too: the status is the truth about
-  // what the wizard walks, so it offers the retry instead.
-  if (!assigned.data || assigned.isError) {
-    return (
-      <div
-        role="alert"
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
-      >
-        <span className="text-muted-foreground">
-          Unable to load the playbook.
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void assigned.refetch()}
-        >
-          Retry playbook
-        </Button>
-      </div>
-    );
-  }
-  const current = assigned.data.playbook;
+  const current = assigned.data?.playbook;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <span className="text-muted-foreground">
-        {current ? `Playbook: ${current.name}` : "No playbook assigned"}
-      </span>
+      {assigned.isPending ? (
+        <span role="status" className="text-muted-foreground">
+          Loading…
+        </span>
+      ) : !assigned.data || assigned.isError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1"
+        >
+          <span className="text-muted-foreground">
+            Unable to load the playbook.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void assigned.refetch()}
+          >
+            Retry playbook
+          </Button>
+        </div>
+      ) : (
+        <span className="text-muted-foreground">
+          {current ? `Playbook: ${current.name}` : "No playbook assigned"}
+        </span>
+      )}
       <Link
         to="/organizations/$idOrSlug/onboarding"
         params={{ idOrSlug: idOrSlug ?? organizationId }}
