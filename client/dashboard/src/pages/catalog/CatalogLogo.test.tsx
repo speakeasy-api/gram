@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { CatalogLogo } from "./CatalogLogo";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -31,6 +31,12 @@ vi.mock("@/components/asset-image", () => ({
     <img alt="custom" src={assetId} />
   ),
 }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.isFetched = true;
+  mocks.metadata = undefined;
+  mocks.catalog.meta["com.speakeasy.ai/icons"].dark.src = "dark";
+});
 describe("catalog branding", () => {
   it("reacts to active theme and live catalog updates without inversion", () => {
     const view = (theme: "light" | "dark") => (
@@ -51,7 +57,6 @@ describe("catalog branding", () => {
     expect(container.querySelector("img")!.getAttribute("src")).toBe(
       "custom-asset",
     );
-    mocks.metadata = undefined;
   });
   it("preserves placeholder for dark-only logos in light theme", () => {
     render(
@@ -74,5 +79,4 @@ it("does not render cached curated branding while metadata is pending", () => {
     <SourceMcpIcon mcpServerId="server" className="size-8" />,
   );
   expect(container.querySelector("img")).toBeNull();
-  mocks.isFetched = true;
 });

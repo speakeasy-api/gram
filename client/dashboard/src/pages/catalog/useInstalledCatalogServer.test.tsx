@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { useInstalledCatalogServer } from "./useInstalledCatalogServer";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 const mocks = vi.hoisted(() => ({
@@ -57,6 +57,12 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     return { data: { servers: mocks.catalog } };
   },
 }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.server = { id: "server", remoteMcpServerId: "remote" };
+  mocks.deploymentData = undefined;
+  mocks.catalog = [];
+});
 it("scopes every lookup and the catalog cache/request to the server project", async () => {
   renderHook(() => useInstalledCatalogServer("server", true, "server-project"));
   for (const query of [
