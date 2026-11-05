@@ -50,12 +50,12 @@ describe("authGrantParts", () => {
     {
       case: "an unrestricted grant",
       fields: {},
-      want: "Every upstream credential in the organization",
+      want: "Any upstream credential in the organization",
     },
     {
       case: "a wildcard connection owner as unrestricted",
       fields: { connectionOwner: "*" },
-      want: "Every upstream credential in the organization",
+      want: "Any upstream credential in the organization",
     },
     {
       case: "one credential by name and type, with the servers it serves",
@@ -104,17 +104,17 @@ describe("authGrantParts", () => {
     {
       case: "everyone's connections to one upstream",
       fields: { upstreamClient: "upstream-grain" },
-      want: "Every personal connection to Grain · on Grain",
+      want: "Any personal connection to Grain · on Grain",
     },
     {
       case: "every personal connection",
       fields: { clientType: "remote_session" as const },
-      want: "Every personal connection in the organization",
+      want: "Any personal connection in the organization",
     },
     {
       case: "every credential of another type",
       fields: { clientType: "service_account" as const },
-      want: "Every service account in the organization",
+      want: "Any service account in the organization",
     },
   ])("names $case", ({ fields, want }) => {
     expect(label(fields)).toBe(want);
@@ -186,10 +186,10 @@ describe("authGrantRank", () => {
     expect(
       ordered.map((grant) => authGrantText(authGrantParts(grant, names))),
     ).toEqual([
-      "Every upstream credential in the organization",
-      "Every personal connection in the organization",
-      "Every personal connection in the organization",
-      "Every personal connection to Grain · on Grain",
+      "Any upstream credential in the organization",
+      "Any personal connection in the organization",
+      "Any personal connection in the organization",
+      "Any personal connection to Grain · on Grain",
       "Personal connections of the person the agent acts for",
       "The Grain connection of the person the agent acts for · on Grain",
       "Ada Lovelace's personal connections",

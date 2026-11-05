@@ -150,25 +150,25 @@ export function authGrantParts(
     return [person, text("'s personal connections")];
   }
   if (upstream && upstreamPart) {
-    return [text("Every personal connection to "), upstreamPart, ...servers];
+    return [text("Any personal connection to "), upstreamPart, ...servers];
   }
   if (upstreamPart) {
     return [
-      text("Every personal connection through upstream client "),
+      text("Any personal connection through upstream client "),
       upstreamPart,
     ];
   }
   if (selector.clientType === "remote_session") {
-    return [text("Every personal connection in the organization")];
+    return [text("Any personal connection in the organization")];
   }
   if (isAgentPolicyConstraint(selector.clientType)) {
     return [
       text(
-        `Every ${clientTypeLabel(selector.clientType).toLowerCase()} in the organization`,
+        `Any ${clientTypeLabel(selector.clientType).toLowerCase()} in the organization`,
       ),
     ];
   }
-  return [text("Every upstream credential in the organization")];
+  return [text("Any upstream credential in the organization")];
 }
 
 /** The label as plain text, with each linked name in its place. */

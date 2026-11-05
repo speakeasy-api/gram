@@ -343,7 +343,7 @@ describe("Agent profile permissions", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Every upstream credential in the organization"),
+      screen.getByText("Any upstream credential in the organization"),
     ).toBeTruthy();
     expect(
       screen
@@ -372,7 +372,7 @@ describe("Agent profile permissions", () => {
     expect(
       screen.getAllByRole("listitem").map((item) => item.textContent),
     ).toEqual([
-      "Every upstream credential in the organization",
+      "Any upstream credential in the organization",
       "Personal connections of the person the agent acts for",
       "Ada Lovelace's Meeting notes connection · on Notes server",
       "User d265f01b…'s connection through upstream client 01a10332…",
