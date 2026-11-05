@@ -398,6 +398,31 @@ func TestHTTPClientBlockedGatewayAddressIsNotUnpublished(t *testing.T) {
 	require.Equal(t, []string{gateway.URL}, candidates)
 }
 
+// Routes are picked at random, so repeat until both orders have run.
+func TestHTTPClientMixedGatewayRefusalsIgnoreRouteOrder(t *testing.T) {
+	t.Parallel()
+	refuse := func(status string) *httptest.Server {
+		gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set(ErrorHeader, status)
+			w.WriteHeader(http.StatusBadGateway)
+		}))
+		t.Cleanup(gateway.Close)
+		return gateway
+	}
+	busy, failed := refuse(wire.TunnelErrorTunnelBusy), refuse(wire.TunnelErrorActiveCheckFailed)
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel", busy.URL, time.Minute))
+	require.NoError(t, routes.Publish(t.Context(), "tunnel", failed.URL, time.Minute))
+	client := newTestHTTPClient(t, routes)
+	for range 32 {
+		resp, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel") //nolint:bodyclose // error path returns a nil response
+		require.Nil(t, resp)
+		code, ok := FailureHappened("", err)
+		require.True(t, ok)
+		require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
+	}
+}
+
 func TestHTTPClientExhaustedGatewayStatusPreserved(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

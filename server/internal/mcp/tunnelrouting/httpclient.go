@@ -125,11 +125,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 	exclude := map[string]struct{}{}
 	var unpublishErr error
 	var dialErr error
-	var lastGatewayStatus string
+	var gatewayStatus string
 	for range maxForwardAttempts {
 		addr, ok := SelectRoute("", candidates, exclude)
 		if !ok {
-			return nil, withGatewayStatus(errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr), lastGatewayStatus)
+			return nil, withGatewayStatus(errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr), gatewayStatus)
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
@@ -173,7 +173,10 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:
-			lastGatewayStatus = resp.Header.Get(ErrorHeader)
+			// A failed availability check is ours, so it outranks a busy gateway in any route order.
+			if gatewayStatus != wire.TunnelErrorActiveCheckFailed {
+				gatewayStatus = resp.Header.Get(ErrorHeader)
+			}
 			drainAndClose(resp)
 			exclude[addr] = struct{}{}
 		default:
@@ -185,7 +188,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute),
 		dialErr,
 		unpublishErr,
-	), lastGatewayStatus)
+	), gatewayStatus)
 }
 
 // isDeadGateway reports whether err means this gateway is definitively gone:
