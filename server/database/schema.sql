@@ -3945,6 +3945,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- Administrator-chosen label. NULL means unset, and readers show client_id.
   display_name TEXT,
 
+  -- Opt-in: send the MCP client's name upstream as speakeasy_client_name on /authorize.
+  forward_client_name boolean NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -4028,6 +4031,7 @@ COMMENT ON COLUMN remote_session_clients.resource_tos_uri IS '@access: restricte
 COMMENT ON COLUMN remote_session_clients.upstream_rejected_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.identity_provider_connection_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.credential_owner IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.forward_client_name IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.created_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.updated_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.deleted_at IS '@access: confidential';
