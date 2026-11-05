@@ -29,6 +29,11 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("log:read")).toBe("project");
   });
 
+  it("returns project for memory scopes", () => {
+    expect(resourceKindForScope("memory:read")).toBe("project");
+    expect(resourceKindForScope("memory:write")).toBe("project");
+  });
+
   it("returns 'mcp' for mcp scopes", () => {
     expect(resourceKindForScope("mcp:read")).toBe("mcp");
     expect(resourceKindForScope("mcp:write")).toBe("mcp");

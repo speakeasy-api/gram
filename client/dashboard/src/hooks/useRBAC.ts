@@ -17,7 +17,8 @@ export function resourceKindForScope(scope: string): string {
   if (
     scope.startsWith("project:") ||
     scope.startsWith("plugin:") ||
-    scope.startsWith("log:")
+    scope.startsWith("log:") ||
+    scope.startsWith("memory:")
   )
     return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
