@@ -6359,14 +6359,20 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"trigger_event_id != ''", "trigger_event_id",
 		"toString(log_id)",
 	)
-	// An MCP hook call can name its server on only one of its rows (OpenClaw
-	// reports it on the post-call result alone). Every row of the log group
-	// inherits it, so the call classifies as one MCP target instead of
-	// splitting into an MCP row and a local-tool row, matching the
-	// max(tool_source) the summary path reads.
+	// An MCP hook call can name its server, or the URL it reached, on only
+	// some of its rows (an OpenClaw call blocked before it ran reports no
+	// server on its result, and older relays report OpenClaw servers on the
+	// result alone). Every row of the log group inherits them, so the call
+	// classifies as one target instead of splitting into a gateway or MCP row
+	// and a shadow or local-tool row, matching the max() the summary path reads.
+	logGroupWindow := "OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	rawSQL = fmt.Sprintf(
-		"SELECT * REPLACE (if(tool_source != '', tool_source, max(tool_source) OVER (PARTITION BY %s, %s)) AS tool_source) FROM (%s)",
-		logGroupKind, logGroupValue, rawSQL,
+		"SELECT * REPLACE ("+
+			"if(tool_source != '', tool_source, max(tool_source) %[1]s) AS tool_source, "+
+			"if(mcp_match != '', mcp_match, max(mcp_match) %[1]s) AS mcp_match, "+
+			"if(mcp_server_url != '', mcp_server_url, max(mcp_server_url) %[1]s) AS mcp_server_url"+
+			") FROM (%[2]s)",
+		logGroupWindow, rawSQL,
 	)
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
