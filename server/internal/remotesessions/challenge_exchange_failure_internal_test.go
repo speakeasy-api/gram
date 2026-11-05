@@ -170,3 +170,15 @@ type routeStoreDownDoer struct{}
 func (routeStoreDownDoer) Do(*http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("list tunnel routes: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis down"))
 }
+
+// A gateway refusing the forward token keeps the answer an untagged 403 gets.
+func TestExchangeFailure_ForwardRejectedKeepsItsResponse(t *testing.T) {
+	t.Parallel()
+
+	tagged := newTokenEndpointError(http.StatusForbidden, "403 Forbidden", nil)
+	tagged.tunnelError = wire.TunnelErrorForwardRejected
+	want := exchangeFailure(t.Context(), testenv.NewLogger(t), newTokenEndpointError(http.StatusForbidden, "403 Forbidden", nil), true)
+	got := exchangeFailure(t.Context(), testenv.NewLogger(t), tagged, true)
+	require.Equal(t, want.Error(), got.Error())
+	require.Equal(t, want.Code, got.Code)
+}
