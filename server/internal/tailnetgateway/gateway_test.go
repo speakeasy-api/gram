@@ -35,14 +35,16 @@ import (
 )
 
 type fakeNode struct {
-	mu      sync.Mutex
-	spec    tailnetgateway.NodeSpec
-	online  bool
-	fqdn    string
-	nodeID  string
-	handler http.Handler
-	closed  bool
-	who     *apitype.WhoIsResponse
+	mu         sync.Mutex
+	spec       tailnetgateway.NodeSpec
+	online     bool
+	needsLogin bool
+	closeDelay time.Duration
+	fqdn       string
+	nodeID     string
+	handler    http.Handler
+	closed     bool
+	who        *apitype.WhoIsResponse
 }
 
 func (n *fakeNode) Serve(handler http.Handler) error {
@@ -56,10 +58,13 @@ func (n *fakeNode) Status(context.Context) (tailnetgateway.NodeState, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	state := "Starting"
-	if n.online {
+	switch {
+	case n.needsLogin:
+		state = "NeedsLogin"
+	case n.online:
 		state = "Running"
 	}
-	return tailnetgateway.NodeState{Online: n.online, BackendState: state, NodeID: n.nodeID, FQDN: n.fqdn}, nil
+	return tailnetgateway.NodeState{Online: n.online && !n.needsLogin, BackendState: state, NeedsLogin: n.needsLogin, NodeID: n.nodeID, FQDN: n.fqdn}, nil
 }
 
 func (n *fakeNode) WhoIs(context.Context, netip.Addr) (*apitype.WhoIsResponse, error) {
@@ -71,11 +76,29 @@ func (n *fakeNode) WhoIs(context.Context, netip.Addr) (*apitype.WhoIsResponse, e
 	return n.who, nil
 }
 
-func (n *fakeNode) Close(context.Context) error {
+func (n *fakeNode) Close(ctx context.Context) error {
+	n.mu.Lock()
+	delay := n.closeDelay
+	n.mu.Unlock()
+	// Simulates a node that takes a while to disconnect.
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.closed = true
 	return nil
+}
+
+// setNeedsLogin simulates control refusing the node's identity, as when the
+// device is removed from the tailnet.
+func (n *fakeNode) setNeedsLogin() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.needsLogin = true
 }
 
 func (n *fakeNode) setOnline(nodeID string) {
@@ -98,15 +121,25 @@ type fakeRuntime struct {
 	// writePartial makes a failing start leave a machine key behind, like a
 	// real login that timed out after tsnet persisted its keys.
 	writePartial bool
+	// writeLogin makes a failing start persist a completed login first, like
+	// ListenService failing after Up succeeded.
+	writeLogin bool
+	// closeDelay is how long each started node takes to close.
+	closeDelay time.Duration
 }
 
 func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (tailnetgateway.Node, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.failStart != nil {
-		if r.writePartial {
+		if r.writePartial || r.writeLogin {
 			if err := spec.Store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")); err != nil {
 				return nil, fmt.Errorf("persist partial fake node state: %w", err)
+			}
+		}
+		if r.writeLogin {
+			if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
+				return nil, fmt.Errorf("persist fake node profile: %w", err)
 			}
 		}
 		return nil, r.failStart
@@ -119,7 +152,7 @@ func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (ta
 	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
 		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
-	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
+	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, needsLogin: false, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
 	r.nodes = append(r.nodes, node)
 	return node, nil
 }
@@ -156,7 +189,7 @@ func (u *upstreamCapture) seen() []*http.Request {
 	return append([]*http.Request(nil), u.requests...)
 }
 
-func newGatewayFixture(t *testing.T, name string, ordinal int32) *gatewayFixture {
+func newGatewayFixture(t *testing.T, name string, ordinal int32, configure ...func(*tailnetgateway.Config, *fakeRuntime)) *gatewayFixture {
 	t.Helper()
 	db, err := infra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
@@ -174,13 +207,17 @@ func newGatewayFixture(t *testing.T, name string, ordinal int32) *gatewayFixture
 	tokenPath := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(tokenPath, []byte("projected-token"), 0o600))
 
-	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false}
-	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, tailnetgateway.Config{
+	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false, writeLogin: false, closeDelay: 0}
+	cfg := tailnetgateway.Config{
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
 		Tag: tailnetgateway.DefaultTag, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
 		MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
-	}, runtime)
+	}
+	for _, apply := range configure {
+		apply(&cfg, runtime)
+	}
+	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, cfg, runtime)
 	require.NoError(t, err)
 	return &gatewayFixture{db: db, enc: enc, runtime: runtime, gateway: gateway, upstream: capture}
 }
@@ -391,6 +428,133 @@ func TestGatewayRecordsStartFailures(t *testing.T) {
 		assert.Contains(c, row.LastError.String, "control plane unreachable")
 	}, 5*time.Second, 20*time.Millisecond)
 	require.Empty(t, f.gateway.Hosts())
+}
+
+func TestGatewayKeepsIdentityWhenStartFailsAfterLogin(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaykeeplogin", 0)
+	f.runtime.failStart = errors.New("advertise tailscale service: refused")
+	f.runtime.writeLogin = true
+	ingressID, orgID := seedIngress(t, f.db, "gateway-keep-login")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
+	}, 5*time.Second, 20*time.Millisecond)
+	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
+	require.NoError(t, err)
+	registered, err := store.Registered(ctx)
+	require.NoError(t, err)
+	require.True(t, registered, "a login that completed is a real device and is kept")
+	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, messages, "no new key is needed")
+
+	f.runtime.mu.Lock()
+	f.runtime.failStart = nil
+	f.runtime.mu.Unlock()
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	nodes := f.runtime.started()
+	require.Len(t, nodes, 1)
+	require.Empty(t, nodes[0].spec.AuthKey, "the retry reconnects as the same device")
+}
+
+func TestGatewayStopsHostThatNeedsLogin(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayneedslogin", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-needs-login")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+	node.setOnline("nREMOVED")
+	f.gateway.Poll(ctx)
+
+	node.setNeedsLogin()
+	f.gateway.Poll(ctx)
+	require.Empty(t, f.gateway.Hosts())
+	require.True(t, node.isClosed())
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusNeedsLogin), row.Status)
+	require.Equal(t, "nREMOVED", row.NodeID.String, "the reconciler needs the old device id")
+	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(messages), 2, "the reconciler is woken to replace the identity")
+
+	// Until the reconciler resets the slot, the refused identity is not retried.
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusNeedsLogin), row.Status)
+		assert.Equal(c, "awaiting re-registration", row.LastError.String)
+	}, 5*time.Second, 20*time.Millisecond)
+	require.Len(t, f.runtime.started(), 1)
+}
+
+func TestGatewayMarksRefusedIdentityAtStart(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayrefused", 0)
+	f.runtime.failStart = fmt.Errorf("bring tsnet node up: %w", tailnetgateway.ErrNodeNeedsLogin)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-refused")
+	f.seedSlot(t, ingressID, orgID, 0, "")
+	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
+	require.NoError(t, err)
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
+
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusNeedsLogin), row.Status)
+	}, 5*time.Second, 20*time.Millisecond)
+	registered, err := store.Registered(ctx)
+	require.NoError(t, err)
+	require.True(t, registered, "the gateway leaves the reset to the reconciler")
+}
+
+func TestGatewayFillsHostCapInOnePoll(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaycap", 0, func(cfg *tailnetgateway.Config, _ *fakeRuntime) { cfg.MaxHosts = 2 })
+	for _, name := range []string{"gateway-cap-a", "gateway-cap-b", "gateway-cap-c"} {
+		ingressID, orgID := seedIngress(t, f.db, name)
+		f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	}
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 2)
+	require.Never(t, func() bool { return len(f.gateway.Hosts()) > 2 }, 200*time.Millisecond, 20*time.Millisecond)
+	require.Len(t, f.runtime.started(), 2, "one poll fills the cap, and no further")
+}
+
+func TestGatewayStopsHostsConcurrently(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	const closeDelay = 400 * time.Millisecond
+	f := newGatewayFixture(t, "tailnetgatewayconcurrentstop", 0, func(_ *tailnetgateway.Config, r *fakeRuntime) { r.closeDelay = closeDelay })
+	var ids []uuid.UUID
+	for _, name := range []string{"gateway-stop-a", "gateway-stop-b", "gateway-stop-c"} {
+		ingressID, orgID := seedIngress(t, f.db, name)
+		f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+		ids = append(ids, ingressID)
+	}
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 3)
+
+	for _, id := range ids {
+		require.NoError(t, testrepo.New(f.db).SetNetworkIngressEnabledFixture(ctx, testrepo.SetNetworkIngressEnabledFixtureParams{Enabled: false, ID: id}))
+	}
+	started := time.Now()
+	f.gateway.Poll(ctx)
+	elapsed := time.Since(started)
+	require.Empty(t, f.gateway.Hosts())
+	require.Less(t, elapsed, 2*closeDelay, "three stops cost about one close, not three")
 }
 
 func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {
