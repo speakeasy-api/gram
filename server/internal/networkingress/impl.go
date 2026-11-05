@@ -247,8 +247,8 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
-		// Every new connection is hosted by the tailnet gateway; only ingresses
-		// created before it existed stay on the operator until staff move them.
+		// Every new connection is hosted by the tailnet gateway; ingresses
+		// created before it existed stay on the operator.
 		Runtime: conv.ToPGText(RuntimeGateway),
 	})
 	if err != nil {
