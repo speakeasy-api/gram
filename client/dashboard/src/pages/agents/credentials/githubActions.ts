@@ -16,6 +16,13 @@ import { SUBJECT_CHOICE } from "./workloadCatalog";
 const ACTION = "speakeasy-api/device-agent-action";
 export const ACTION_DOCS = `https://github.com/${ACTION}`;
 
+/**
+ * The device agent action's minor tag. The action's release workflow moves it
+ * to each 0.1.x release, so the workflow shown here does not change with
+ * every release of the action.
+ */
+export const ACTION_TAG = "v0.1";
+
 export const OIDC_DOCS =
   "https://docs.github.com/en/actions/reference/security/oidc";
 
@@ -23,29 +30,29 @@ export const OIDC_DOCS =
 export const GITHUB_ACTIONS_KEY = "github-actions";
 
 /**
- * Every action the generated workflow uses, pinned to a commit rather than a
- * branch or tag: the job grants id-token: write, so each step can mint the
- * job's OIDC token, and a moved ref would run code nobody reviewed with the
- * agent's access. The tag or branch each commit was taken from is kept
+ * Every other action the generated workflow uses, pinned to a commit rather
+ * than a branch or tag: the job grants id-token: write, so each step can mint
+ * the job's OIDC token, and a moved ref would run code nobody reviewed with
+ * the agent's access. The tag or branch each commit was taken from is kept
  * beside it, so bumping one is a matter of looking that ref up again.
  *
- * speakeasyd is the deliberate exception. The device agent action installs
- * the latest stable release unless the step sets `version`, so a job picks
- * up a fix without its workflow being edited, and it checks every download,
- * pinned or not, against the stable release manifest in the same bucket.
- * That catches a download corrupted or tampered with in transit, not a
- * compromised bucket.
+ * Speakeasy's own device agent action is an exception: the workflow follows
+ * its minor tag (ACTION_TAG), so a job picks up each 0.1.x release of the
+ * action without its workflow being edited. A team that requires commit pins
+ * can pin a release commit instead, and the setup says so.
+ *
+ * speakeasyd is the other deliberate exception. The device agent action
+ * installs the latest stable release unless the step sets `version`, so a job
+ * picks up a fix without its workflow being edited, and it checks every
+ * download, pinned or not, against the stable release manifest in the same
+ * bucket. That catches a download corrupted or tampered with in transit, not
+ * a compromised bucket.
  */
 const PINNED_ACTIONS = {
   checkout: {
     uses: "actions/checkout",
     commit: "3d3c42e5aac5ba805825da76410c181273ba90b1",
     ref: "v7",
-  },
-  deviceAgent: {
-    uses: ACTION,
-    commit: "596e9f8598bf2896e6dda3c45eb098313b671962",
-    ref: "main",
   },
   claude: {
     uses: "anthropics/claude-code-action",
@@ -284,7 +291,7 @@ export function workflowYaml({
     "      # Installs the latest stable speakeasyd; add version: <x.y.z> to pin one.",
     "      - name: Connect to Speakeasy",
     "        id: speakeasy",
-    `        uses: ${uses("deviceAgent")}`,
+    `        uses: ${ACTION}@${ACTION_TAG}`,
     "        with:",
     `          organization-id: ${organizationId || "SPEAKEASY_ORGANIZATION_ID"}`,
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
