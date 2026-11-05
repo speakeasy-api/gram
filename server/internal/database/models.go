@@ -5604,6 +5604,8 @@ type RemoteSessionClient struct {
 	// @access: opaque-confidential
 	DisplayName pgtype.Text
 	// @access: confidential
+	ForwardClientName bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
