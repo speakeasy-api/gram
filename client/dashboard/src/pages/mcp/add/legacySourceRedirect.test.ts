@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";

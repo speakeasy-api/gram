@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { createActor } from "xstate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";

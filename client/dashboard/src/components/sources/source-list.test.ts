@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

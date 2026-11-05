@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it, vi } from "vitest";
 
 // The handwritten API and ordinary queries must not evaluate every generated

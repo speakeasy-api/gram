@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Agents } from "@gram/client/sdk/agents.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";

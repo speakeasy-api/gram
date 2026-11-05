@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { describe, expect, it } from "vitest";

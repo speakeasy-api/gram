@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
 import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
