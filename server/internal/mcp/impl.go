@@ -266,7 +266,7 @@ type Service struct {
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
-	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	// userSessionRefreshReplayCoordination elects the database rotation winner and claims attemptEndMarker.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
@@ -295,7 +295,9 @@ type Service struct {
 	remoteChallengeMgr *remotesessions.ChallengeManager
 
 	// connections records connection attempt steps.
-	connections    *mcpconnectionattempts.Recorder
+	connections *mcpconnectionattempts.Recorder
+	// attemptEndings claims once-only endings off the request path.
+	attemptEndings *attemptEndings
 	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
@@ -724,6 +726,7 @@ func NewService(
 		userSessionSigner:      userSessionSigner,
 		remoteChallengeMgr:     remoteChallengeMgr,
 		connections:            connections,
+		attemptEndings:         newAttemptEndings(),
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
@@ -976,7 +979,7 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 			result.RedirectURL = redirect.String()
 		}
 
-		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {
+		if deadline := s.verifyRemoteGrant(r.Context(), mcpconnectionattempts.FromRequest(r), *result.Grant); !deadline.IsZero() {
 			redirect, parseErr := url.Parse(result.RedirectURL)
 			if parseErr != nil {
 				return fmt.Errorf("parse remote login redirect: %w", parseErr)
@@ -2244,15 +2247,20 @@ func parseTagsFilter(raw string) []string {
 // RequirePrivateIdentityAuth runs identity authentication for a non-public
 // MCP. It tries the Authorization header first, then the
 // Gram-Chat-Session header, returning the authenticated context on success.
-// On failure, when isOAuthCapable, it sets a WWW-Authenticate header with
+// On credential rejection, when isOAuthCapable, it sets a WWW-Authenticate header with
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
-// returns 401.
+// returns 401. Infrastructure failures retain their server-error status.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
 	token := httpheaders.AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
 		return authedCtx, nil
+	}
+
+	var authErr *oops.ShareableError
+	if errors.As(err, &authErr) && authErr.HTTPStatus(ctx) >= http.StatusInternalServerError {
+		return ctx, err
 	}
 
 	if isOAuthCapable {
@@ -2345,6 +2353,11 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
 		return s.identityValidator.StampChatSession(ctx, chatSessionMinterUserID(ctx)), nil
+	}
+
+	var authErr *oops.ShareableError
+	if errors.As(err, &authErr) && authErr.HTTPStatus(ctx) >= http.StatusInternalServerError {
+		return ctx, err
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))

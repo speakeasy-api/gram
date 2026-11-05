@@ -174,7 +174,7 @@ const getNetworkIngressDescription = "Read the organization's private network (T
 func registerNetworkIngressTool(reg *Registrar, service *NetworkIngressStatusService) {
 	addTool(reg, &mcp.Tool{
 		Name:        getNetworkIngressToolName,
-		Title:       "Get Private Network Ingress",
+		Title:       "Get Private Network Settings",
 		Description: getNetworkIngressDescription,
 		Annotations: readOnlyAnnotations(),
 	}, networkIngressToolMeta(), func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, GetNetworkIngressOutput, error) {
@@ -199,7 +199,7 @@ func registerNetworkIngressTool(reg *Registrar, service *NetworkIngressStatusSer
 func registerUnavailableNetworkIngressTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        getNetworkIngressToolName,
-		Title:       "Get Private Network Ingress",
+		Title:       "Get Private Network Settings",
 		Description: "Read the organization's private network (Tailscale) ingress status. Private network ingress status is unavailable on this server.",
 		Annotations: readOnlyAnnotations(),
 	}, networkIngressToolMeta(), func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, featureUnavailableResult, error) {

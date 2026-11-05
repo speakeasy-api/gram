@@ -320,21 +320,21 @@ func discoveryTools(mode discoveryMode) []*mcp.Tool {
 	tools := []*mcp.Tool{
 		{
 			Name:        searchPlatformToolsName,
-			Title:       "Search Platform tools",
+			Title:       "Search Speakeasy Tools",
 			Description: "Search the Speakeasy Platform tools you may use, ranked for a plain-language query. Returns names and short descriptions; describe a tool before calling it.",
 			InputSchema: searchPlatformToolsSchema,
 			Annotations: readOnly,
 		},
 		{
 			Name:        describePlatformToolName,
-			Title:       "Describe Platform tools",
+			Title:       "Get Speakeasy Tool Details",
 			Description: "Return the full description, input schema, annotations and usage rules of named Platform tools. Names you may not use come back in not_found.",
 			InputSchema: describePlatformToolSchema,
 			Annotations: readOnly,
 		},
 		{
 			Name:        callPlatformToolName,
-			Title:       "Call a Platform tool",
+			Title:       "Run a Speakeasy Tool",
 			Description: "Run one Platform tool by exact name with arguments matching its input schema. The tool keeps its own authorization, confirmation, idempotency and audit rules, and returns its own result.",
 			InputSchema: callPlatformToolSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
@@ -343,7 +343,7 @@ func discoveryTools(mode discoveryMode) []*mcp.Tool {
 	if mode == discoveryCode {
 		tools = append(tools, &mcp.Tool{
 			Name:        executePlatformCodeName,
-			Title:       "Execute Python against Platform tools",
+			Title:       "Run Python with Speakeasy Tools",
 			Description: executePlatformCodeDescription,
 			InputSchema: executePlatformCodeSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},

@@ -30,7 +30,7 @@ func registerUserSearchTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_metrics_summary",
-		Title:       "One Person's Activity Summary",
+		Title:       "Summarize a Person's Activity",
 		Description: "Use a person reference from search_users, or from list_mcp_usage_users with the same mcp_id and window, to summarize that person's activity across the project over up to 30 days: call volume, failures, failure rate, the servers their tools name, and their most-failing tools with exact counts. Constraints: the person is reported by masked identity only, no tokens, cost, arguments, or results are returned, and the reference expires and is bound to this session and project.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMetricsSummaryInput) (*mcp.CallToolResult, GetUserMetricsSummaryOutput, error) {
@@ -56,7 +56,7 @@ func registerUnavailableUserSearchTools(reg *Registrar) {
 		description string
 	}{
 		{"search_users", "Find People in a Project", "Find the masked people observed in one project's telemetry by partial identity. This is not switched on for your organization yet."},
-		{"get_user_metrics_summary", "One Person's Activity Summary", "Summarize one referenced person's activity across a project. This is not switched on for your organization yet."},
+		{"get_user_metrics_summary", "Summarize a Person's Activity", "Summarize one referenced person's activity across a project. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

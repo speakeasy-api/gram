@@ -21,7 +21,7 @@ export const Category = {
  */
 export type Category = ClosedEnum<typeof Category>;
 
-export type AuditLog = {
+export type AdminAuditLog = {
   /**
    * The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
    */
@@ -46,6 +46,10 @@ export type AuditLog = {
    */
   createdAt: Date;
   id: string;
+  /**
+   * Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+   */
+  isInternal?: boolean | undefined;
   metadata?: { [k: string]: any } | undefined;
   projectId?: string | undefined;
   projectSlug?: string | undefined;
@@ -61,7 +65,10 @@ export const Category$inboundSchema: z.ZodMiniEnum<typeof Category> = z.enum(
 );
 
 /** @internal */
-export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
+export const AdminAuditLog$inboundSchema: z.ZodMiniType<
+  AdminAuditLog,
+  unknown
+> = z.pipe(
   z.object({
     acting_client_id: z.optional(z.string()),
     acting_surface: z.string(),
@@ -78,6 +85,7 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    is_internal: z.optional(z.boolean()),
     metadata: z.optional(z.record(z.string(), z.any())),
     project_id: z.optional(z.string()),
     project_slug: z.optional(z.string()),
@@ -97,6 +105,7 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
       "after_snapshot": "afterSnapshot",
       "before_snapshot": "beforeSnapshot",
       "created_at": "createdAt",
+      "is_internal": "isInternal",
       "project_id": "projectId",
       "project_slug": "projectSlug",
       "subject_display_name": "subjectDisplayName",
@@ -107,12 +116,12 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   }),
 );
 
-export function auditLogFromJSON(
+export function adminAuditLogFromJSON(
   jsonString: string,
-): SafeParseResult<AuditLog, SDKValidationError> {
+): SafeParseResult<AdminAuditLog, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AuditLog$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AuditLog' from JSON`,
+    (x) => AdminAuditLog$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminAuditLog' from JSON`,
   );
 }

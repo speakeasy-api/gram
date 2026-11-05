@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -78,6 +79,10 @@ type validationTarget struct {
 	build memberProxyBuilder
 	// tunnelID is set when the upstream is reached through a tunnel, so a keepalive can skip a dial that has no route.
 	tunnelID uuid.NullUUID
+	// memberID is the gateway member dialled, nil on a direct server.
+	memberID uuid.UUID
+	// setupFailed means routing failed before the provider could be contacted.
+	setupFailed bool
 }
 
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
@@ -99,7 +104,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -110,6 +115,7 @@ func (s *Service) probeRemoteSession(
 	ctx context.Context,
 	attribution remotesessions.RefreshAttribution,
 	logger *slog.Logger,
+	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
@@ -222,6 +228,7 @@ func (s *Service) probeRemoteSession(
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
+	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
@@ -406,6 +413,7 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
+		fromRequest:      mcpconnectionattempts.FromRequest(nil),
 		skippedUpstreams: nil,
 		request:          nil,
 		discoveryMode:    "progressive",
@@ -461,7 +469,7 @@ func (s *Service) metaValidationTarget(
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			// An unservable member is the probe's failure to report, not a reason to refuse the check.
-			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID}, nil
+			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: true}, nil
 		}
 		return ctx, none, fmt.Errorf("dial meta MCP member: %w", err)
 	}
@@ -473,7 +481,7 @@ func (s *Service) metaValidationTarget(
 	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
-	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID}, nil
+	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: false}, nil
 }
 
 // standaloneValidationTarget dials a proxied endpoint's own backend, routed as serveRemoteBackend and serveTunneledBackend route it.
@@ -525,7 +533,7 @@ func (s *Service) standaloneValidationTarget(
 		if berr != nil {
 			return ctx, none, fmt.Errorf("build remote backend proxy for validation: %w", berr)
 		}
-		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, memberID: uuid.Nil, setupFailed: false}, nil
 	}
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
@@ -545,7 +553,7 @@ func (s *Service) standaloneValidationTarget(
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}
 		return p, nil
-	}), tunnelID: server.TunneledMcpServerID}, nil
+	}), tunnelID: server.TunneledMcpServerID, memberID: uuid.Nil, setupFailed: false}, nil
 }
 
 // tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.

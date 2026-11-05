@@ -354,7 +354,7 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 
 	broken := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
 	require.NoError(t, broken.Close())
-	ti.service.SetChatSessionsManager(chatsessions.NewManager(testenv.NewLogger(t), broken, "test-jwt-secret"))
+	ti.service.SetChatSessionsManager(chatsessions.NewManager(testenv.NewLogger(t), broken, "test-jwt-secret", ti.sessionManager))
 
 	w, err := servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)
 	var shareable *oops.ShareableError

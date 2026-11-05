@@ -284,6 +284,36 @@ RETURNING *;
 -- record a transition that never happened.
 SELECT pg_advisory_xact_lock(hashtextextended(@mcp_server_id::text, 0));
 
+-- name: AddMissingMCPServerToolMetadata :many
+-- Records tools the catalog has no live entry for, leaving existing entries
+-- untouched. Used when the proxy discovers tools from the upstream, where
+-- concurrent requests routinely race to record the same tool, so a conflict
+-- means another request got there first rather than a stale caller. RETURNING
+-- yields only the rows actually inserted. See SetMCPServerToolMetadata for why
+-- the payload is unpacked with ->> rather than jsonb_to_recordset.
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    @project_id,
+    @mcp_server_id,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements(@tools::jsonb) AS elem
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
 -- name: SetMCPServerToolMetadata :many
 -- Authoritative write of an MCP server's tool metadata collection: every tool in
 -- @tools is upserted and every stored tool absent from @tools is soft-deleted, in a

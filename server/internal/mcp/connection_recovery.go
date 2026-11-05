@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -78,9 +79,16 @@ func (c connectionRecovery) expired() bool {
 }
 
 var (
-	errRecoveryNotSignedIn = errors.New("connection recovery requires a signed-in user")
-	errRecoveryOtherUser   = errors.New("connection recovery link belongs to another user")
-	errRecoveryNoAccess    = errors.New("connection recovery user may not use the client")
+	errRecoveryLoginExpired = errors.New("connection login expired")
+	errRecoveryNotSignedIn  = errors.New("connection recovery requires a signed-in user")
+	errRecoveryOtherUser    = errors.New("connection recovery link belongs to another user")
+
+	errRecoveryWrongLogin         = errors.New("connection login does not match its link")
+	errRecoveryNoBrowserBinding   = errors.New("connection login has no browser binding")
+	errRecoveryOtherBrowser       = errors.New("connection login callback is from another browser")
+	errRecoveryBrowserUnconfirmed = errors.New("connection login browser was not confirmed")
+
+	errRecoveryNoAccess = errors.New("connection recovery user may not use the client")
 	// errRecoveryUnavailable: the server no longer offers the link's client
 	// on the same registration, or the client cannot be used.
 	errRecoveryUnavailable = errors.New("connection recovery client is no longer available")
@@ -163,20 +171,34 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if err != nil || recovery.expired() || recovery.ID != token {
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
+	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
+		if errors.Is(err, errRecoveryNotSignedIn) {
+			t.Continue()
+		} else {
+			t.Refuse(ctx, recoveryHappened(err))
+		}
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
 	// Used once, and only by the person it names.
 	recovery, err = s.connectionRecoveryCache.GetAndDelete(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() {
+		if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		} else {
+			t.Continue()
+		}
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
 
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, recovery.ProjectID, recovery.OrganizationID, []uuid.UUID{recovery.RegistrationID})
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "load connection client").LogError(ctx, s.logger)
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
 	}
 	login := recovery
@@ -187,6 +209,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	// login browser hop when that host is not this one.
 	browser, err := generateOpaqueToken()
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "bind connection login").LogError(ctx, s.logger)
 	}
 	login.BrowserCookieID = uuid.NewString()
@@ -198,9 +221,14 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	login.BrowserHop = !sameOrigin(callbackOrigin, linkOrigin)
 	if err := s.connectionRecoveryCache.Store(ctx, login); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
+	attempt := mcpconnectionattempts.Begin(recoveryScope(recovery))
+	t.Attach(attempt)
+	t.Consumed()
+	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		TypedAuthorization:  nil,
 		ConnectionPopup:     false,
@@ -222,20 +250,24 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		Authority:           networkingress.Authority{Surface: "", BaseURL: "", OrganizationID: "", NetworkIngressID: uuid.Nil, NamespaceKind: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		BrowserCookieID:     "",
 		BrowserHash:         "",
-		Attempt:             mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink)),
+		Attempt:             attempt,
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 	}, clients[0])
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 	}
 	target := authorizationURL
 	if login.BrowserHop {
 		target, err = s.startConnectionRecoveryHop(ctx, login, browser, callbackOrigin, linkOrigin, authorizationURL)
 		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 		}
 	} else {
 		http.SetCookie(w, federatedBrowserCookie(login.BrowserCookieID, browser, int(login.TTL().Seconds())))
 	}
+	t.Continue()
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
 }
@@ -295,18 +327,18 @@ func (s *Service) validateConnectionRecoveryHopOwner(r *http.Request, state remo
 // browser passed the hop's confirm stop.
 func (s *Service) validateConnectionRecoveryBrowser(r *http.Request, login connectionRecovery) error {
 	if login.BrowserCookieID == "" || login.BrowserHash == "" {
-		return errors.New("connection login has no browser binding")
+		return errRecoveryNoBrowserBinding
 	}
 	cookie, err := r.Cookie(federationCookieName(login.BrowserCookieID))
 	if err != nil || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(login.BrowserHash)) != 1 {
-		return errors.New("connection login callback is from another browser")
+		return errRecoveryOtherBrowser
 	}
 	if !login.BrowserHop {
 		return nil
 	}
 	confirmed, err := s.remoteLoginHopCache.Get(r.Context(), "remoteLoginHop:"+remoteLoginHopConfirmedID(login.BrowserCookieID))
 	if err != nil || confirmed.Phase != remoteLoginHopConfirmed || !confirmed.ConnectionRecovery || confirmed.CookieID != login.BrowserCookieID || confirmed.ParentChallengeID != login.ID {
-		return errors.New("connection login browser was not confirmed")
+		return errRecoveryBrowserUnconfirmed
 	}
 	return nil
 }
@@ -323,12 +355,18 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	ctx := r.Context()
 	key := "connectionRecovery:" + remote.ParentChallengeID
 	login, err := s.connectionRecoveryCache.Get(ctx, key)
-	if err != nil || login.expired() || login.ID != remote.ParentChallengeID {
-		return true, errors.New("connection login expired")
+	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("load recovery login: %w", err)
+	}
+	if login.expired() || login.ID != remote.ParentChallengeID {
+		return true, errRecoveryLoginExpired
 	}
 	if remote.Subject == nil || remote.Subject.Kind != urn.SessionSubjectKindUser || remote.Subject.ID != login.UserID ||
 		remote.RemoteSessionClientID != login.RegistrationID || remote.OrganizationID != login.OrganizationID {
-		return true, errors.New("connection login does not match its link")
+		return true, errRecoveryWrongLogin
 	}
 	if err := s.validateConnectionRecoveryBrowser(r, login); err != nil {
 		return true, err
@@ -348,8 +386,13 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		return true, err
 	}
 	// Used up only once it has passed, so a stray callback cannot spend it.
-	if _, err := s.connectionRecoveryCache.GetAndDelete(ctx, key); err != nil {
-		return true, errors.New("connection login expired")
+	// Reserve the ending atomically: CompleteRemoteLogin records this callback's
+	// verdict; a late callback cannot claim a second, expired ending.
+	if _, err := s.connectionRecoveryCache.GetAndDeleteMarking(ctx, key, attemptEndMarker(remote.Attempt), connectionAttemptEndTTL); err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("consume recovery login: %w", err)
 	}
 	return true, nil
 }
