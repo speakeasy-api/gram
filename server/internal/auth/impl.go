@@ -1613,7 +1613,7 @@ func (s *Service) persistProvisionedOrganization(
 		}
 	}
 
-	org, created, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, _, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,
@@ -1626,15 +1626,6 @@ func (s *Service) persistProvisionedOrganization(
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
-	}
-
-	// Partner signup inserted through the create-only primitive above. Other
-	// flows may adopt metadata already written by identity synchronization;
-	// never backfill or alter issuers for those existing organizations.
-	if created || opts.StripePromotionCodeID != "" {
-		if err := s.createOrganizationIssuerTx(ctx, tx, org.ID, userID, opts.ActorEmail); err != nil {
-			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization sign-in issuer: %w", err)
-		}
 	}
 
 	if _, err := queries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
