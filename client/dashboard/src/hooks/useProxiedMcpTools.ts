@@ -2,20 +2,27 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { z } from "zod";
 import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 
+const INSPECT_META_KEY = "com.speakeasy/inspect";
+const UNAVAILABLE_META_KEY = "com.speakeasy/unavailable";
+
+/**
+ * Most tools an inspected listing may return, counting repeats. Real servers list
+ * at most hundreds; this stops a server repeating tools from holding the tab open.
+ */
+const MAX_LISTED_TOOLS = 10_000;
+
+/**
+ * Most pages an inspected listing may read. Ten tools a page reaches 2,000 tools,
+ * well past real servers; this stops a server returning empty pages with fresh
+ * cursors, which the tool limit can't see.
+ */
+const MAX_LISTED_PAGES = 200;
+
 /**
  * MCP tool annotation hints (the optional `annotations` object on a tool in the
  * `tools/list` response). All fields are advisory and may be absent; malformed
  * hint values are dropped (`.catch`) rather than failing the whole decode.
  */
-const INSPECT_META_KEY = "com.speakeasy/inspect";
-const UNAVAILABLE_META_KEY = "com.speakeasy/unavailable";
-
-/**
- * Most tools a listing may return. Real servers list at most hundreds; this stops
- * a server paginating without end from holding the tab open.
- */
-const MAX_LISTED_TOOLS = 10_000;
-
 const proxiedMcpToolAnnotationsSchema = z.object({
   /** Human-friendly display name for the tool. */
   title: z.string().optional(),
@@ -95,6 +102,13 @@ export interface UseProxiedMcpToolsOptions {
    * retryable error state themselves.
    */
   throwOnError?: boolean;
+  /**
+   * Read the server's whole catalog: every page, with tools this viewer can't use
+   * marked `unavailable` rather than dropped. Needed by anything that writes stored
+   * tool metadata from the result, where a partial list reads as removals. Without
+   * it the result is what this viewer can use, from the first page.
+   */
+  inspect?: boolean;
 }
 
 /**
@@ -108,7 +122,12 @@ export function useProxiedMcpTools(
   mcpUrl: string | undefined,
   options?: UseProxiedMcpToolsOptions,
 ): UseProxiedMcpToolsResult {
-  const { headers, enabled = true, throwOnError } = options ?? {};
+  const {
+    headers,
+    enabled = true,
+    throwOnError,
+    inspect = false,
+  } = options ?? {};
 
   // Key on the header values so the query refetches once the JWT arrives or
   // rotates, without keying on object identity.
@@ -119,7 +138,7 @@ export function useProxiedMcpTools(
     : [];
 
   const query: UseQueryResult<ProxiedMcpToolSet, Error> = useQuery({
-    queryKey: ["proxiedMcpTools", mcpUrl, headersKey],
+    queryKey: ["proxiedMcpTools", mcpUrl, headersKey, inspect],
     queryFn: async () => {
       // `enabled` guards against an undefined URL, but narrow for the type.
       if (!mcpUrl) throw new Error("No MCP URL configured");
@@ -149,23 +168,26 @@ export function useProxiedMcpTools(
         // Tracked for the ai-v6 migration in AIS-169.
         const lister = client as unknown as {
           listTools: (args: {
-            params: { cursor?: string; _meta: Record<string, unknown> };
+            params?: { cursor?: string; _meta: Record<string, unknown> };
           }) => Promise<unknown>;
         };
 
-        // Stored tool metadata is written from this list, so it must be the
-        // server's whole catalog: every page, with tools this viewer can't use
-        // marked rather than dropped. A partial list would read as removals.
         const toolSet: ProxiedMcpToolSet = {};
         const seenCursors = new Set<string>();
+        let toolsReceived = 0;
+        let pagesRead = 0;
         let cursor: string | undefined;
         do {
-          const raw = await lister.listTools({
-            params: {
-              ...(cursor ? { cursor } : {}),
-              _meta: { [INSPECT_META_KEY]: true },
-            },
-          });
+          const raw = await lister.listTools(
+            inspect
+              ? {
+                  params: {
+                    ...(cursor ? { cursor } : {}),
+                    _meta: { [INSPECT_META_KEY]: true },
+                  },
+                }
+              : {},
+          );
           const page = listToolsResultSchema.parse(raw);
           for (const tool of page.tools) {
             toolSet[tool.name] = {
@@ -176,7 +198,14 @@ export function useProxiedMcpTools(
             };
           }
 
-          if (Object.keys(toolSet).length > MAX_LISTED_TOOLS) {
+          if (!inspect) break;
+
+          toolsReceived += page.tools.length;
+          pagesRead += 1;
+          if (
+            toolsReceived > MAX_LISTED_TOOLS ||
+            pagesRead >= MAX_LISTED_PAGES
+          ) {
             throw new Error("MCP server listed too many tools");
           }
 

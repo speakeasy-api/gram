@@ -390,14 +390,13 @@ func (f *ProxyManager) BuildTarget(
 	if visibility == mcpservers.VisibilityPrivate {
 		filterInterceptor := NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
 		filterInterceptor.catalog = catalog
-		toolsListRespInterceptors = append(toolsListRespInterceptors, filterInterceptor)
+		toolsListRespInterceptors = append(toolsListRespInterceptors, ToolsListReservedMetaInterceptor{}, filterInterceptor)
 	}
 
 	// Session-selection enforcement runs after the RBAC interceptors above so
 	// the effective catalog is the intersection of RBAC and consent.
 	if selection != nil {
 		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
-		selectionInterceptor.inspection = &toolsListInspection{authz: f.authz, mcpServerID: identity.McpServerID, projectID: projectID}
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}

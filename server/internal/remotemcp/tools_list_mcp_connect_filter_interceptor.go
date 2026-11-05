@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -135,9 +136,12 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	}
 
 	inspection := toolsListInspection{authz: i.authz, mcpServerID: i.mcpServerID, projectID: i.projectID}
-	inspecting, err := inspection.enabled(ctx, list)
-	if err != nil {
-		return err
+	inspecting := false
+	if slices.Contains(matched, false) && inspection.requested(list) {
+		inspecting, err = inspection.allowed(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	allowed := make([]*mcp.Tool, 0, len(tools))

@@ -464,3 +464,32 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 		})
 	}
 }
+
+func TestToolsListReservedMetaInterceptor_RemovesAnUpstreamMark(t *testing.T) {
+	t.Parallel()
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "ghost", InputSchema: map[string]any{}, Meta: mcp.Meta{remotemcp.ToolUnavailableMetaKey: true, "other": "kept"}},
+		{Name: "plain", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, remotemcp.ToolsListReservedMetaInterceptor{}.InterceptToolsListResponse(t.Context(), resp))
+
+	require.NotContains(t, resp.Result.Tools[0].Meta, remotemcp.ToolUnavailableMetaKey)
+	require.Equal(t, "kept", resp.Result.Tools[0].Meta["other"])
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	require.NotContains(t, string(rpcResp.Result), remotemcp.ToolUnavailableMetaKey)
+}
+
+func TestToolsListReservedMetaInterceptor_LeavesOtherListingsUntouched(t *testing.T) {
+	t.Parallel()
+
+	const payload = `{"tools":[{"name":"plain","inputSchema":{},"x-extension":true}]}`
+	resp := newToolsListResponseFromWire(t, payload)
+	require.NoError(t, remotemcp.ToolsListReservedMetaInterceptor{}.InterceptToolsListResponse(t.Context(), resp))
+
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	require.JSONEq(t, payload, string(rpcResp.Result))
+}

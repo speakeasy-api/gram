@@ -34,9 +34,8 @@ const ToolNotApprovedMessage = "tool is not approved for this session"
 // that shared record; pagination mismatches drop it, so races fail narrow,
 // never wide.
 type SessionSelectionInterceptor struct {
-	selection  *toolfilter.SessionSelection
-	store      *toolfilter.SessionToolWitnessStore
-	inspection *toolsListInspection
+	selection *toolfilter.SessionSelection
+	store     *toolfilter.SessionToolWitnessStore
 }
 
 var (
@@ -51,7 +50,7 @@ var (
 // nil, which disables witnessing — live grants then narrow to the frozen
 // name grant on both sides.
 func NewSessionSelectionInterceptor(selection *toolfilter.SessionSelection, store *toolfilter.SessionToolWitnessStore) *SessionSelectionInterceptor {
-	return &SessionSelectionInterceptor{selection: selection, store: store, inspection: nil}
+	return &SessionSelectionInterceptor{selection: selection, store: store}
 }
 
 // Name implements both interceptor interfaces.
@@ -134,11 +133,6 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 	live := i.selection.LiveAnnotations()
 	liveEligible := len(live) > 0 && i.store != nil
 
-	inspecting, err := i.inspection.enabled(ctx, list)
-	if err != nil {
-		return err
-	}
-
 	allowed := make([]*mcp.Tool, 0, len(list.Result.Tools))
 	witnessed := make([]toolfilter.WitnessedTool, 0, len(list.Result.Tools))
 	for _, tool := range list.Result.Tools {
@@ -155,10 +149,6 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 				Name:        tool.Name,
 				Annotations: sdkAnnotationValues(tool.Annotations),
 			})
-			continue
-		}
-		if inspecting {
-			allowed = append(allowed, markToolUnavailable(tool))
 		}
 	}
 

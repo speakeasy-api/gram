@@ -120,7 +120,7 @@ export function useRemoteMcpToolConnection({
     connectUrl,
     // Every failure stays inline as `isError`, so each consumer can offer its
     // own retry instead of an error boundary.
-    { headers, enabled: connectionEnabled, throwOnError: false },
+    { headers, enabled: connectionEnabled, throwOnError: false, inspect: true },
   );
 
   // The first-party connect page is opened as a top-level new tab, so it rides

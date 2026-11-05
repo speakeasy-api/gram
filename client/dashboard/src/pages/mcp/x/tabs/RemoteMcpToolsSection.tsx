@@ -367,8 +367,8 @@ function RemoteMcpToolsList({
               Not available ({unavailable.length})
             </h4>
             <Text muted small className="mb-2">
-              Your access doesn&apos;t include these tools. Ask an admin to
-              change your role.
+              Your access or this server&apos;s policy doesn&apos;t allow these
+              tools.
             </Text>
             {renderRows(unavailable)}
           </div>

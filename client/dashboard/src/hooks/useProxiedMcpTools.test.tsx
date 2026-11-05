@@ -29,7 +29,11 @@ describe("useProxiedMcpTools", () => {
       });
 
     const { result } = renderHook(
-      () => useProxiedMcpTools("https://mcp.example", { throwOnError: false }),
+      () =>
+        useProxiedMcpTools("https://mcp.example", {
+          throwOnError: false,
+          inspect: true,
+        }),
       { wrapper },
     );
 
@@ -55,7 +59,11 @@ describe("useProxiedMcpTools", () => {
     });
 
     const { result } = renderHook(
-      () => useProxiedMcpTools("https://mcp.example", { throwOnError: false }),
+      () =>
+        useProxiedMcpTools("https://mcp.example", {
+          throwOnError: false,
+          inspect: true,
+        }),
       { wrapper },
     );
 
@@ -64,11 +72,48 @@ describe("useProxiedMcpTools", () => {
     expect(page).toBeLessThan(20);
   });
 
+  it("fails on empty pages with fresh cursors", async () => {
+    let page = 0;
+    listTools.mockImplementation(async () => {
+      page += 1;
+      return { tools: [], nextCursor: `page-${page}` };
+    });
+
+    const { result } = renderHook(
+      () =>
+        useProxiedMcpTools("https://mcp.example", {
+          throwOnError: false,
+          inspect: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(page).toBe(200);
+  });
+
+  it("reads only the first page, without asking to inspect, by default", async () => {
+    listTools.mockResolvedValue({ tools: [{ name: "one" }], nextCursor: "b" });
+
+    const { result } = renderHook(
+      () => useProxiedMcpTools("https://mcp.example", { throwOnError: false }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tools).toBeDefined());
+    expect(listTools).toHaveBeenCalledTimes(1);
+    expect(listTools).toHaveBeenCalledWith({});
+  });
+
   it("fails rather than returning part of a catalog when a cursor repeats", async () => {
     listTools.mockResolvedValue({ tools: [{ name: "one" }], nextCursor: "a" });
 
     const { result } = renderHook(
-      () => useProxiedMcpTools("https://mcp.example", { throwOnError: false }),
+      () =>
+        useProxiedMcpTools("https://mcp.example", {
+          throwOnError: false,
+          inspect: true,
+        }),
       { wrapper },
     );
 

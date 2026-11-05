@@ -30,29 +30,32 @@ const (
 // It takes mcp:read or mcp:write on the server. mcp:read already exposes stored
 // tool names, and mcp:write is checked separately because it survives a
 // read block and is what lets a caller overwrite the stored catalog, which must
-// always be written from the whole list.
+// always be written from the whole list. A consent selection is not subject to
+// this: a session bound to one is never shown tools outside it.
 type toolsListInspection struct {
 	authz       *authz.Engine
 	mcpServerID string
 	projectID   string
 }
 
-func (i *toolsListInspection) enabled(ctx context.Context, list *proxy.ToolsListResponse) (bool, error) {
-	if i == nil || i.authz == nil || list.Request == nil || list.Request.Params == nil {
-		return false, nil
+// requested reports whether the listing asked to be inspected.
+func (i toolsListInspection) requested(list *proxy.ToolsListResponse) bool {
+	if i.authz == nil || list.Request == nil || list.Request.Params == nil {
+		return false
 	}
-	if requested, _ := list.Request.Params.Meta[ToolsListInspectMetaKey].(bool); !requested {
-		return false, nil
-	}
+	requested, _ := list.Request.Params.Meta[ToolsListInspectMetaKey].(bool)
+	return requested
+}
 
-	matched, err := i.authz.FindMatched(ctx, []authz.Check{
-		authz.MCPCheck(authz.ScopeMCPRead, i.mcpServerID, i.projectID),
-		authz.MCPCheck(authz.ScopeMCPWrite, i.mcpServerID, i.projectID),
-	})
-	if err != nil {
-		return false, fmt.Errorf("authorize tools/list inspection: %w", err)
-	}
-	for _, ok := range matched {
+// allowed reports whether the caller may inspect. It probes with
+// [authz.Engine.Evaluate] because being refused only means an ordinary listing;
+// recording a denial would ask admins to grant something nobody needed.
+func (i toolsListInspection) allowed(ctx context.Context) (bool, error) {
+	for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
+		ok, err := i.authz.Evaluate(ctx, authz.MCPCheck(scope, i.mcpServerID, i.projectID))
+		if err != nil {
+			return false, fmt.Errorf("authorize tools/list inspection: %w", err)
+		}
 		if ok {
 			return true, nil
 		}
@@ -69,4 +72,51 @@ func markToolUnavailable(tool *mcp.Tool) *mcp.Tool {
 	}
 	marked.Meta[ToolUnavailableMetaKey] = true
 	return &marked
+}
+
+// ToolsListReservedMetaInterceptor removes [ToolUnavailableMetaKey] from what an
+// upstream sent, so the mark only ever means Speakeasy set it. It runs ahead of
+// the access filter on private servers, the only ones that set the mark, because
+// any interceptor on a public server would cost its listings the upstream's cache
+// hints. A response without the key is left untouched.
+type ToolsListReservedMetaInterceptor struct{}
+
+var _ proxy.ToolsListResponseInterceptor = ToolsListReservedMetaInterceptor{}
+
+// Name implements [proxy.ToolsListResponseInterceptor].
+func (ToolsListReservedMetaInterceptor) Name() string {
+	return "tools-list-reserved-meta"
+}
+
+// InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
+func (ToolsListReservedMetaInterceptor) InterceptToolsListResponse(_ context.Context, list *proxy.ToolsListResponse) error {
+	if list == nil || list.Result == nil {
+		return nil
+	}
+
+	cleaned := make([]*mcp.Tool, 0, len(list.Result.Tools))
+	found := false
+	for _, tool := range list.Result.Tools {
+		if tool == nil {
+			cleaned = append(cleaned, tool)
+			continue
+		}
+		if _, set := tool.Meta[ToolUnavailableMetaKey]; !set {
+			cleaned = append(cleaned, tool)
+			continue
+		}
+		found = true
+		stripped := *tool
+		stripped.Meta = maps.Clone(tool.Meta)
+		delete(stripped.Meta, ToolUnavailableMetaKey)
+		cleaned = append(cleaned, &stripped)
+	}
+	if !found {
+		return nil
+	}
+
+	if err := list.SetTools(cleaned); err != nil {
+		return fmt.Errorf("commit tools/list result without reserved meta: %w", err)
+	}
+	return nil
 }
