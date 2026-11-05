@@ -559,7 +559,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
-			Title:       "Send Feedback About This Platform",
+			Title:       "Send Feedback to Speakeasy",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
 			Annotations: feedbackAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
@@ -585,7 +585,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"search_mcp_catalog", "Search Reviewed MCP Servers", "Search the reviewed MCP servers available to add. This is not switched on for your organization yet."},
+		{"search_mcp_catalog", "Search the MCP Catalog", "Search the reviewed MCP servers available to add. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
@@ -608,7 +608,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
-		Title:       "Add a Reviewed MCP Server to a Project",
+		Title:       "Add a Catalog MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
 		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog_registration"))

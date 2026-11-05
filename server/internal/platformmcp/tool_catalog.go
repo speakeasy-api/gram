@@ -65,7 +65,7 @@ type CandidateInspection struct {
 func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_mcp_catalog",
-		Title:       "Search Reviewed MCP Servers",
+		Title:       "Search the MCP Catalog",
 		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything. Each result's auth_setup says how the server signs users in: present it with the result, and when it is unknown check the setup guide with search_speakeasy_docs before saying how it signs in.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{

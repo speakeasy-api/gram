@@ -58,7 +58,7 @@ type RegisterRemoteMCPToolOutput struct {
 func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
-		Title:       "Add a Reviewed MCP Server to a Project",
+		Title:       "Add a Catalog MCP Server to a Project",
 		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: it is not distributed to anyone until it is put into a plugin. When already_registered is true the server was already in that project and nothing new was added: say so instead of calling it added.",
 		Annotations: registrationAnnotations(),
 		Meta:        cardToolMeta(),
