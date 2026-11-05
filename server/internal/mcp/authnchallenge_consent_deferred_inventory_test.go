@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -256,17 +255,17 @@ func seedChainedCredentialChoice(t *testing.T, tag string) (context.Context, con
 func requirePageInventoryDeferral(t *testing.T, page string, deferred bool) {
 	t.Helper()
 	if deferred {
-		require.Regexp(t, regexp.MustCompile(`id="consent-tools-root"[^>]*`+inventoryDeferredAttr), page)
+		require.Regexp(t, `id="consent-tools-root"[^>]*`+inventoryDeferredAttr, page)
 		return
 	}
-	require.Regexp(t, regexp.MustCompile(`id="consent-tools-root"[^>]*`+inventoryNotDeferredAttr), page)
+	require.Regexp(t, `id="consent-tools-root"[^>]*`+inventoryNotDeferredAttr, page)
 }
 
 // requireCredentialInventoryDeferral checks whether choosing authClient on
 // the page defers the tool inventory.
 func requireCredentialInventoryDeferral(t *testing.T, page string, authClient uuid.UUID, deferred bool) {
 	t.Helper()
-	option := regexp.MustCompile(`id="auth-client-` + authClient.String() + `"[^>]*` + inventoryDeferredAttr)
+	option := `id="auth-client-` + authClient.String() + `"[^>]*` + inventoryDeferredAttr
 	require.Contains(t, page, `id="auth-client-`+authClient.String()+`"`)
 	if deferred {
 		require.Regexp(t, option, page)
