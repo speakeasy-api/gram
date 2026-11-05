@@ -16,6 +16,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -191,11 +193,31 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	attach := &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()}
+	sessionAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
+	// The agent's own history records each attachment the connection's does.
+	sessionAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
+	require.Positive(t, sessionAttachesAfter-sessionAttachesBefore)
+	require.Equal(t, sessionAttachesAfter-sessionAttachesBefore, agentAttachesAfter-agentAttachesBefore)
+	agentAttach, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "agent", agentAttach.SubjectType)
+	require.Equal(t, agent.Name, agentAttach.SubjectDisplay)
+	require.Equal(t, auth.UserID, agentAttach.ActorID)
+	attachMetadata, err := audittest.DecodeAuditData(agentAttach.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, mine.ID.String(), attachMetadata["remote_session_id"])
+	require.Equal(t, binding.ID, attachMetadata["binding_id"])
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	locked, err := repo.New(tx).LockPrincipalRemoteSessionBindings(ctx, repo.LockPrincipalRemoteSessionBindingsParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config,
@@ -313,8 +335,13 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	_, err = ti.service.AttachBinding(ctx, attach)
 	requireOopsCode(t, err, oops.CodeConflict)
 	detach := &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: list.Items[0].ID}
+	agentDetachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
+	agentDetachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
+	require.Equal(t, agentDetachesBefore+1, agentDetachesAfter, "only the detach that removed the connection is recorded")
 	rebound, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.NotEqual(t, binding.ID, rebound.ID)

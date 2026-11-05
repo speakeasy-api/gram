@@ -109,10 +109,10 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if attached.GrantGeneration != attempt.GrantGeneration {
 		return nil, oops.C(oops.CodeConflict)
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, binding.ID, binding.RemoteSessionID, binding.RemoteSessionClientID, binding.GrantGeneration); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, binding.ID, binding.RemoteSessionID, binding.RemoteSessionClientID, binding.GrantGeneration, ""); err != nil {
 		return nil, err
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, attached.ID, attached.RemoteSessionID, attached.RemoteSessionClientID, attached.GrantGeneration); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, attached.ID, attached.RemoteSessionID, attached.RemoteSessionClientID, attached.GrantGeneration, ""); err != nil {
 		return nil, err
 	}
 	if err := op.tx.Commit(ctx); err != nil {

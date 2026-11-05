@@ -6332,3 +6332,10 @@ WHERE c.id = @auth_client_id::uuid
   AND m.deleted IS FALSE
   AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
 FOR SHARE OF c, link, m, p, r;
+
+-- name: GetBindingAgentName :one
+-- The name of the agent a connection is attached to, for its audit entry.
+SELECT name
+FROM agents
+WHERE id = @id
+  AND organization_id = @organization_id;

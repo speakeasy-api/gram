@@ -3110,6 +3110,26 @@ func (q *Queries) GetActiveRemoteSessionInTenant(ctx context.Context, arg GetAct
 	return i, err
 }
 
+const getBindingAgentName = `-- name: GetBindingAgentName :one
+SELECT name
+FROM agents
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetBindingAgentNameParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The name of the agent a connection is attached to, for its audit entry.
+func (q *Queries) GetBindingAgentName(ctx context.Context, arg GetBindingAgentNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, getBindingAgentName, arg.ID, arg.OrganizationID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getClientCredentialsGrantClient = `-- name: GetClientCredentialsGrantClient :one
 SELECT
     c.id                                   AS client_id,

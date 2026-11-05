@@ -178,7 +178,8 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	if row.GrantGeneration != generation {
 		return nil, oops.E(oops.CodeConflict, nil, "session changed while attaching; retry")
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration); err != nil {
+	upstreamAccount := conv.PtrValOr(sessionView.UpstreamEmail, conv.PtrValOr(sessionView.UpstreamDisplayName, ""))
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, upstreamAccount); err != nil {
 		return nil, err
 	}
 	if err := op.tx.Commit(ctx); err != nil {
@@ -208,7 +209,7 @@ func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingP
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach remote session")
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, id, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, id, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, ""); err != nil {
 		return err
 	}
 	if err := op.tx.Commit(ctx); err != nil {
@@ -221,7 +222,9 @@ func bindingView(id, principalID, issuerID, clientID, sessionID uuid.UUID) *gen.
 	return &gen.PrincipalRemoteSessionBinding{ID: id.String(), PrincipalID: principalID.String(), UserSessionIssuerID: issuerID.String(), RemoteSessionClientID: clientID.String(), RemoteSessionID: sessionID.String(), RemoteSession: nil}
 }
 
-func (s *Service) logBinding(ctx context.Context, op *bindingOperation, action audit.Action, bindingID, sessionID, clientID uuid.UUID, generation int64) error {
+// logBinding records a binding change twice: on the connection, and on the
+// agent it is attached to, as agentAction, so the agent's history shows it.
+func (s *Service) logBinding(ctx context.Context, op *bindingOperation, action, agentAction audit.Action, bindingID, sessionID, clientID uuid.UUID, generation int64, upstreamAccount string) error {
 	auth, err := bindingHuman(ctx)
 	if err != nil {
 		return err
@@ -233,6 +236,28 @@ func (s *Service) logBinding(ctx context.Context, op *bindingOperation, action a
 		Metadata:         audit.RemoteSessionBindingMetadata{BindingID: bindingID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, RemoteSessionClientID: clientID, GrantGeneration: generation},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log remote session binding")
+	}
+	agentName, err := op.queries.GetBindingAgentName(ctx, repo.GetBindingAgentNameParams{ID: op.principalID, OrganizationID: op.organizationID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read attached agent")
+	}
+	if err := s.auditLogger.LogAgentConnection(ctx, op.tx, audit.LogAgentConnectionEvent{
+		OrganizationID:   op.organizationID,
+		ProjectID:        op.projectID,
+		AgentURN:         urn.NewAgentIdentity(op.principalID.String()),
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID),
+		ActorDisplayName: auth.Email,
+		Action:           agentAction,
+		Name:             agentName,
+		Metadata: audit.AgentConnectionMetadata{
+			BindingID:             bindingID,
+			RemoteSessionID:       sessionID,
+			RemoteSessionClientID: clientID,
+			UserSessionIssuerID:   op.issuerID,
+			UpstreamAccount:       upstreamAccount,
+		},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log agent connection")
 	}
 	return nil
 }
