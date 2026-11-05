@@ -106,6 +106,9 @@ describe("RecordNav", () => {
         .getAllByRole("link")
         .filter((link) => link.getAttribute("aria-current") === "page");
       expect(current.map((link) => link.textContent)).toEqual(["Onboarding"]);
+      expect(
+        screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
+      ).toBe(`/organizations/${idOrSlug}/onboarding`);
     },
   );
 

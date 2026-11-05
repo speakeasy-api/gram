@@ -67,6 +67,7 @@ import {
 import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/gramAdminApi";
+import { statusCode } from "@/lib/adminAuth";
 import {
   assignAdminOrganizationOnboardingPlaybook,
   createAdminOnboardingPlaybook,
@@ -141,6 +142,13 @@ export function OnboardingPlaybooks({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const retainedCreation = useRef<AdminOnboardingPlaybook | null>(null);
+  const pendingCreation = useRef<{
+    organizationId: string;
+    knownIds: string[];
+    name: string;
+    description: string;
+    stepSlugs: string[];
+  } | null>(null);
   const scoped = organizationId !== undefined;
   const useCasesQuery = onboardingUseCasesQuery();
   const playbooksQuery = onboardingPlaybooksQuery(organizationId);
@@ -220,14 +228,69 @@ export function OnboardingPlaybooks({
         isDefault: customer ? false : draft.isDefault,
         stepSlugs: draft.stepSlugs,
       };
+      if (!retainedCreation.current && pendingCreation.current) {
+        const attempt = pendingCreation.current;
+        const library = await queryClient.fetchQuery({
+          ...onboardingPlaybooksQuery(attempt.organizationId),
+          staleTime: 0,
+        });
+        const matches = library.playbooks.filter(
+          (plan) =>
+            plan.organizationId === attempt.organizationId &&
+            !attempt.knownIds.includes(plan.id) &&
+            plan.name === attempt.name &&
+            plan.description === attempt.description &&
+            JSON.stringify(plan.steps.map((step) => step.slug)) ===
+              JSON.stringify(attempt.stepSlugs),
+        );
+        if (matches.length !== 1) {
+          throw new Error(
+            "Creation could not be verified. Retry searches for the previous plan without creating another. Review the library before starting over.",
+          );
+        }
+        retainedCreation.current = matches[0]!;
+      }
       const retained = retainedCreation.current;
-      const created =
-        retained && retained.organizationId === request.organizationId
-          ? await updateAdminOnboardingPlaybook({
-              ...request,
-              playbookId: retained.id,
-            })
-          : await createAdminOnboardingPlaybook(request);
+      if (retained && retained.organizationId !== request.organizationId) {
+        throw new Error(
+          "The previous creation belongs to another organization. Close this draft and review the library before changing its owner.",
+        );
+      }
+      let created: AdminOnboardingPlaybook;
+      if (retained) {
+        created = await updateAdminOnboardingPlaybook({
+          ...request,
+          playbookId: retained.id,
+        });
+      } else {
+        if (customer && draft.organizationId) {
+          const library = await queryClient.fetchQuery({
+            ...onboardingPlaybooksQuery(draft.organizationId),
+            staleTime: 0,
+          });
+          pendingCreation.current = {
+            organizationId: draft.organizationId,
+            knownIds: library.playbooks.map((plan) => plan.id),
+            name: draft.name.trim(),
+            description: draft.description.trim(),
+            stepSlugs: [...draft.stepSlugs],
+          };
+        }
+        try {
+          created = await createAdminOnboardingPlaybook(request);
+        } catch (error) {
+          const status = statusCode(error);
+          if (
+            status !== undefined &&
+            status >= 400 &&
+            status < 500 &&
+            status !== 408
+          ) {
+            pendingCreation.current = null;
+          }
+          throw error;
+        }
+      }
       retainedCreation.current = created;
       if (customer && draft.organizationId) {
         try {
@@ -347,6 +410,7 @@ export function OnboardingPlaybooks({
   };
   const openPlaybook = (draft: PlaybookDraft) => {
     retainedCreation.current = null;
+    pendingCreation.current = null;
     setDialogError("");
     setPlaybookDraft(draft);
   };

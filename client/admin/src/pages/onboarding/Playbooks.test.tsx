@@ -273,8 +273,8 @@ beforeEach(() => {
           use_case_name: useCase?.name,
           organization_id: body.organization_id,
           organization_name: body.organization_id ? ORG.name : undefined,
-          name: body.name,
-          description: body.description ?? "",
+          name: body.name.trim(),
+          description: (body.description ?? "").trim(),
           is_default: body.is_default === true,
           steps: withSteps(body.step_slugs),
         };
@@ -288,8 +288,8 @@ beforeEach(() => {
         const index = playbooks.findIndex((p) => p.id === body.playbook_id);
         const updated: Playbook = {
           ...playbooks[index]!,
-          name: body.name,
-          description: body.description ?? "",
+          name: body.name.trim(),
+          description: (body.description ?? "").trim(),
           is_default: body.is_default === true,
           steps: withSteps(body.step_slugs),
         };
@@ -704,6 +704,126 @@ describe("OnboardingPlaybooks", () => {
     expect(created?.querySelectorAll("td")[1]?.textContent).toBe("Acme");
   });
 
+  it.each([false, true])(
+    "recovers an uncertain customer creation and rejects an owner change: %s",
+    async (changeOwner) => {
+      useCases = [structuredClone(distribution)];
+      playbooks = [structuredClone(gatewayFirst)];
+      const respond = fetchMock.getMockImplementation()!;
+      let lost = false;
+      fetchMock.mockImplementation(async (request: Request) => {
+        const response = await respond(request);
+        if (
+          !lost &&
+          new URL(request.url).pathname === "/admin/onboarding.playbooks.create"
+        ) {
+          lost = true;
+          throw new Error("Response lost");
+        }
+        return response;
+      });
+      await renderPage("org_acme");
+      await screen.findByRole("table", { name: "Playbooks" });
+      fireEvent.click(screen.getByRole("button", { name: "New playbook" }));
+      const form = await screen.findByRole("form", { name: "New playbook" });
+      fireEvent.change(screen.getByRole("textbox", { name: "Playbook name" }), {
+        target: { value: " Original wizard " },
+      });
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "Playbook description" }),
+        { target: { value: " Original description " } },
+      );
+      await pick("Add a step", /Set up Platform MCP/);
+      fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+      await within(form).findByRole("alert");
+      fireEvent.change(screen.getByRole("textbox", { name: "Playbook name" }), {
+        target: { value: "Edited wizard" },
+      });
+      if (changeOwner) {
+        chooseOwner("Use case");
+        await pick("Use case", /Distribution/);
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+      if (changeOwner) {
+        await within(form).findByText(
+          /The previous creation belongs to another organization/,
+        );
+        expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
+        expect(postTo("/admin/onboarding.playbooks.update")).toHaveLength(0);
+        expect(postTo("/admin/organization.onboardingPlaybook")).toHaveLength(
+          0,
+        );
+        return;
+      }
+      await vi.waitFor(() =>
+        expect(screen.queryByRole("form", { name: "New playbook" })).toBeNull(),
+      );
+      expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
+      expect(playbooks.map((p) => p.id)).toEqual(["pb-1", "pb-2"]);
+      expect(playbooks[1]?.name).toBe("Edited wizard");
+      expect(assignedId).toBe("pb-2");
+      expect(
+        await postTo("/admin/onboarding.playbooks.update")[0]!.clone().json(),
+      ).toEqual(expect.objectContaining({ playbook_id: "pb-2" }));
+    },
+  );
+
+  it.each(["transport", "408"])(
+    "does not repeat an uncertain customer creation after %s failure",
+    async (failure) => {
+      useCases = [structuredClone(distribution)];
+      playbooks = [structuredClone(gatewayFirst)];
+      const respond = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (request: Request) => {
+        if (
+          new URL(request.url).pathname === "/admin/onboarding.playbooks.create"
+        ) {
+          if (failure === "408")
+            return json({ message: "Request timeout" }, 408);
+          throw new Error("Response lost");
+        }
+        return respond(request);
+      });
+      await renderPage("org_acme");
+      await screen.findByRole("table", { name: "Playbooks" });
+      fireEvent.click(screen.getByRole("button", { name: "New playbook" }));
+      const form = await screen.findByRole("form", { name: "New playbook" });
+      fireEvent.change(screen.getByRole("textbox", { name: "Playbook name" }), {
+        target: { value: "Custom wizard" },
+      });
+      await pick("Add a step", /Set up Platform MCP/);
+      fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+      await within(form).findByRole("alert");
+      fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+      await within(form).findByText(/Creation could not be verified/);
+      expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
+      expect(postTo("/admin/organization.onboardingPlaybook")).toHaveLength(0);
+    },
+  );
+
+  it("retries a customer creation after a definite rejection", async () => {
+    useCases = [structuredClone(distribution)];
+    playbooks = [structuredClone(gatewayFirst)];
+    rejectCreate = true;
+    await renderPage("org_acme");
+    await screen.findByRole("table", { name: "Playbooks" });
+    fireEvent.click(screen.getByRole("button", { name: "New playbook" }));
+    const form = await screen.findByRole("form", { name: "New playbook" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Playbook name" }), {
+      target: { value: "Custom wizard" },
+    });
+    await pick("Add a step", /Set up Platform MCP/);
+    fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+    await within(form).findByText(/list the group instead/);
+    rejectCreate = false;
+    fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("form", { name: "New playbook" })).toBeNull(),
+    );
+    expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(2);
+    expect(assignedId).toBe("pb-2");
+  });
+
   it("recognizes an assigned customer playbook when the response is lost", async () => {
     useCases = [structuredClone(distribution)];
     playbooks = [structuredClone(gatewayFirst)];
@@ -760,6 +880,12 @@ describe("OnboardingPlaybooks", () => {
     );
     expect(postTo("/admin/onboarding.playbooks.create")).toHaveLength(1);
     expect(postTo("/admin/onboarding.playbooks.update")).toHaveLength(1);
+    expect(
+      await postTo("/admin/onboarding.playbooks.update")[0]!.clone().json(),
+    ).toEqual(expect.objectContaining({ playbook_id: "pb-2" }));
+    expect(
+      await postTo("/admin/organization.onboardingPlaybook")[1]!.clone().json(),
+    ).toEqual({ organization_id: "org_acme", playbook_id: "pb-2" });
     expect(playbooks.map((p) => p.id)).toEqual(["pb-1", "pb-2"]);
   });
 });
