@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ServerConnection } from "@/pages/agents/credentials/ownerConnections";
-import { GrantOnBehalfOf, onBehalfOfPerson } from "./GrantOnBehalfOf";
+import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
+import { onBehalfOfPerson } from "./onBehalfOf";
 
 const mocks = vi.hoisted(() => ({
   connection: undefined as ServerConnection | undefined,
@@ -97,6 +98,19 @@ describe("GrantOnBehalfOf", () => {
     expect(
       screen.getByRole("link", { name: "Ada Lovelace" }).getAttribute("href"),
     ).toBe("/identities/user:user-ada");
+    // Their face, drawn as initials when there is no photo.
+    expect(screen.getByText("AL")).toBeTruthy();
+    expect(screen.queryByText("(connection expired)")).toBeNull();
+  });
+
+  it("marks a connection that is assigned but has expired", () => {
+    mocks.connection = {
+      status: "ended",
+      sessions: [session({ subjectDisplayName: "Ada Lovelace" })],
+    };
+    render(<GrantOnBehalfOf agentId="agent-1" resourceId="toolset-1" />);
+    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeTruthy();
+    expect(screen.getByText("(connection expired)")).toBeTruthy();
   });
 
   it("shows nothing for a shared credential", () => {
