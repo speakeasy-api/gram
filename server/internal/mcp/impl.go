@@ -324,7 +324,7 @@ type Service struct {
 	codeSessions *codeMemberSessions
 	// replayLiveness overrides the refresh-replay session check in unit tests
 	// that run without a database.
-	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
+	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool, error)
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
