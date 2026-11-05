@@ -1,7 +1,13 @@
-import { act, cleanup, render } from "@testing-library/react";
-import { type ReactNode } from "react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHideInsightsDock } from "./insights-context";
+import { useHideInsightsDock, useInsightsState } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
 import { GramElementsProvider } from "@/elements";
 
@@ -32,7 +38,9 @@ const mocks = vi.hoisted(() => ({
   grants: [] as { scope: "skill:read"; selectors: Record<string, string>[] }[],
   permissionsLoading: false,
   getSkillIds: undefined as (() => string[]) | undefined,
-  activeRoute: "detail" as "detail" | "new" | "home",
+  activeRoute: "detail" as "detail" | "new" | "home" | "page",
+  assistantReady: true,
+  composerSetText: vi.fn(),
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
     | undefined,
@@ -86,10 +94,15 @@ vi.mock("@/elements", async () => {
 
 vi.mock("@assistant-ui/react", () => ({
   useAui: () => ({
-    composer: () => ({ stopDictation: vi.fn() }),
+    composer: () => ({
+      stopDictation: vi.fn(),
+      setText: mocks.composerSetText,
+    }),
     thread: () => ({ append: vi.fn() }),
   }),
   useAuiState: () => false,
+  AuiConfig: () => ({}),
+  AuiProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock("@/hooks/useObservabilityMcpConfig", () => ({
@@ -104,8 +117,9 @@ vi.mock("@/hooks/useServerAssistantTransport", () => ({
     mocks.getSkillIds = options.getSkillIds;
     return {
       transport: undefined,
-      assistantId: "managed-assistant",
-      ready: true,
+      assistantId: mocks.assistantReady ? "managed-assistant" : "",
+      ready: mocks.assistantReady,
+      allowed: true,
       error: undefined,
       needsAdmin: false,
     };
@@ -170,6 +184,7 @@ vi.mock("react-router", async (importOriginal) => ({
       new: "/org/projects/project/assistants/new",
       detail: "/org/projects/project/assistants/assistant-id",
       home: "/org/projects/project",
+      page: "/org/projects/project/settings",
     }[mocks.activeRoute],
   }),
 }));
@@ -187,6 +202,8 @@ beforeEach(() => {
   mocks.getSkillIds = undefined;
   mocks.skillContext = undefined;
   mocks.activeRoute = "detail";
+  mocks.assistantReady = true;
+  mocks.composerSetText.mockClear();
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
 });
@@ -413,7 +430,7 @@ describe("InsightsProvider", () => {
     },
   );
   it.each(["new", "detail"] as const)(
-    "does not wrap the assistant %s route in the shared runtime",
+    "does not mount the shared runtime on the assistant %s route",
     (activeRoute) => {
       mocks.activeRoute = activeRoute;
 
@@ -428,6 +445,134 @@ describe("InsightsProvider", () => {
           </InsightsProvider>,
         ),
       ).not.toThrow();
+      expect(mocks.elementsConfig).not.toHaveBeenCalledWith(
+        expect.objectContaining({ history: expect.anything() }),
+      );
     },
   );
+
+  describe("page state", () => {
+    let mounts = 0;
+    let newConversation: () => void = () => {};
+
+    beforeEach(() => {
+      mounts = 0;
+      mocks.activeRoute = "page";
+    });
+
+    function StatefulPage(): JSX.Element {
+      const [draft, setDraft] = useState("");
+      const insights = useInsightsState();
+      newConversation = insights.newConversation;
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return (
+        <input
+          aria-label="Project name"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      );
+    }
+
+    function page(): JSX.Element {
+      return (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <StatefulPage />
+        </InsightsProvider>
+      );
+    }
+
+    function typeDraft(): HTMLElement {
+      const input = screen.getByLabelText("Project name");
+      fireEvent.change(input, { target: { value: "half typed" } });
+      return input;
+    }
+
+    it("survives the runtime becoming ready", () => {
+      mocks.assistantReady = false;
+      const { rerender, container } = render(page());
+      const input = typeDraft();
+      expect(container.querySelector(".gram-elements")).toBeNull();
+
+      mocks.assistantReady = true;
+      rerender(page());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+      expect(input.closest(".gram-elements")).not.toBeNull();
+    });
+
+    it("survives a new conversation restarting the runtime", () => {
+      render(page());
+      const input = typeDraft();
+
+      act(() => newConversation());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+    });
+
+    it("survives the runtime going away for a route that owns its own", () => {
+      const { rerender } = render(page());
+      const input = typeDraft();
+
+      mocks.activeRoute = "detail";
+      rerender(page());
+      expect(input.closest(".gram-elements")).toBeNull();
+
+      mocks.activeRoute = "page";
+      rerender(page());
+
+      expect(screen.getByLabelText("Project name")).toBe(input);
+      expect(input).toHaveProperty("value", "half typed");
+      expect(mounts).toBe(1);
+    });
+
+    it("exposes the runtime as ready only once it can be read", () => {
+      const seen: boolean[] = [];
+      function ReadinessProbe(): null {
+        seen.push(useInsightsState().assistantReady);
+        return null;
+      }
+      mocks.assistantReady = false;
+      const probe = () => (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <ReadinessProbe />
+        </InsightsProvider>
+      );
+      const { rerender } = render(probe());
+      expect(seen.at(-1)).toBe(false);
+
+      mocks.assistantReady = true;
+      rerender(probe());
+
+      expect(seen.at(-1)).toBe(true);
+    });
+
+    it("moves a draft from the fallback input to the composer when ready", () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(page());
+      fireEvent.change(screen.getByLabelText("Ask the Project Assistant"), {
+        target: { value: "why is usage up" },
+      });
+
+      mocks.assistantReady = true;
+      rerender(page());
+
+      expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
+      expect(screen.queryByLabelText("Ask the Project Assistant")).toBeNull();
+    });
+  });
 });

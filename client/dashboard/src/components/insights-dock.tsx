@@ -19,6 +19,13 @@ import {
   GramElementsProvider,
   useThreadId,
 } from "@/elements";
+import { ROOT_SELECTOR } from "@/elements/constants/tailwind";
+import {
+  createElementsContextBridge,
+  ElementsContextSource,
+  ElementsContextTarget,
+  usePublishedElementsSource,
+} from "@/elements/contexts/ElementsContextBridge";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
@@ -547,6 +554,16 @@ function InsightsDock({
     >
       <ComposerDraftReporter onChange={setSharedDraft} />
       <ChatComposer />
+      <FallbackDraftHandover
+        value={value}
+        onHandedOver={() => {
+          setValue("");
+          // The input that held focus is gone, so typing carries on here.
+          if (document.activeElement === document.body) {
+            focusChatComposer(composerHostRef.current);
+          }
+        }}
+      />
     </div>
   ) : (
     <input
@@ -1075,7 +1092,15 @@ export function InsightsProvider({
     routes.playground.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
-  const runtimeMounted = assistantReady && !pageOwnsRuntime;
+  const shouldMountRuntime = assistantReady && !pageOwnsRuntime;
+  // The runtime mounts beside the page and reaches it through this bridge (see
+  // the return below). Chat surfaces wait for the current instance to publish,
+  // which also takes them down and back up around a new conversation.
+  const [runtimeBridge] = useState(createElementsContextBridge);
+  const runtimeInstance = `${mcpConfig.projectSlug}:${runtimeKey}`;
+  const publishedRuntime = usePublishedElementsSource(runtimeBridge);
+  const runtimeMounted =
+    shouldMountRuntime && publishedRuntime === runtimeInstance;
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
@@ -1467,8 +1492,8 @@ export function InsightsProvider({
   // Expanded chat panel rendered inside the dock card. Granola-style header:
   // icon-only controls with no title bar — history picker on the left; new
   // conversation, full-page chat, and close on the right. The chat runtime is
-  // the shared GramElementsProvider mounted around the whole dock + outlet (see
-  // the return below), so this panel just renders against it.
+  // the shared GramElementsProvider bridged to the whole dock + outlet (see the
+  // return below), so this panel just renders against it.
   const panelContent = (
     <div className="flex h-full flex-col">
       {runtimeMounted ? (
@@ -1613,29 +1638,41 @@ export function InsightsProvider({
   return (
     <InsightsContext.Provider value={contextValue}>
       <InsightsRainbowStyles />
+      {/* The page keeps this position whether or not the runtime is mounted,
+          so the runtime appearing or restarting never resets page state. The
+          wrapper only takes the Elements scope once there is a runtime; until
+          then it generates no box. */}
+      <ElementsContextTarget bridge={runtimeBridge}>
+        <div
+          className={runtimeMounted ? cn(ROOT_SELECTOR, "h-full") : "contents"}
+        >
+          {dockSurface}
+        </div>
+      </ElementsContextTarget>
       {/* The dock and the full-page chat share ONE runtime so an in-flight
           conversation survives moving between them. It mounts eagerly for
           composer/history state, but does not run client-side MCP discovery.
           It remounts (via runtimeKey) only when a new conversation is started;
-          PendingPromptBridge appends any queued prompt to the fresh thread. */}
-      {runtimeMounted ? (
-        <GramElementsProvider
-          key={`${mcpConfig.projectSlug}:${runtimeKey}`}
-          config={elementsConfig}
-        >
-          <PendingPromptBridge
-            pending={pendingPrompt}
-            onConsume={consumePendingPrompt}
-          />
-          <StopDictationOnNavigate />
-          <OpenPanelOnSend
-            enabled={!isExpanded && !onChatRoute && !hideTrigger}
-            onSend={() => setIsExpanded(true)}
-          />
-          {dockSurface}
-        </GramElementsProvider>
-      ) : (
-        dockSurface
+          PendingPromptBridge appends any queued prompt to the fresh thread.
+          It renders no UI of its own, so its Elements root stays out of layout. */}
+      {shouldMountRuntime && (
+        <div hidden>
+          <GramElementsProvider key={runtimeInstance} config={elementsConfig}>
+            <ElementsContextSource
+              bridge={runtimeBridge}
+              sourceId={runtimeInstance}
+            />
+            <PendingPromptBridge
+              pending={pendingPrompt}
+              onConsume={consumePendingPrompt}
+            />
+            <StopDictationOnNavigate />
+            <OpenPanelOnSend
+              enabled={!isExpanded && !onChatRoute && !hideTrigger}
+              onSend={() => setIsExpanded(true)}
+            />
+          </GramElementsProvider>
+        </div>
       )}
     </InsightsContext.Provider>
   );
@@ -1644,8 +1681,8 @@ export function InsightsProvider({
 /**
  * Expand affordance in the chat panel header. Reads the current conversation
  * id from the runtime (so the full-page chat opens the same thread) and hands
- * it to the provider, which navigates to `/chat/:chatId`. Lives inside
- * GramElementsProvider so `useThreadId` resolves.
+ * it to the provider, which navigates to `/chat/:chatId`. Renders only once the
+ * shared runtime is bridged in, so `useThreadId` resolves.
  */
 function ExpandToPageButton({
   onExpand,
@@ -1716,6 +1753,26 @@ function ComposerDraftReporter({
     },
     [onChange],
   );
+  return null;
+}
+
+/**
+ * Moves text typed into the dock's fallback input to the shared composer when
+ * the runtime arrives, so the draft follows the swap between the two controls.
+ */
+function FallbackDraftHandover({
+  value,
+  onHandedOver,
+}: {
+  value: string;
+  onHandedOver: () => void;
+}): null {
+  const aui = useAui();
+  useEffect(() => {
+    if (!value.trim()) return;
+    aui.composer().setText(value);
+    onHandedOver();
+  }, [aui, value, onHandedOver]);
   return null;
 }
 
