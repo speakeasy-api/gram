@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/sandbox"
+	"go.opentelemetry.io/otel/trace"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -284,7 +285,11 @@ func (p *GKEProvider) notifyLocked() {
 // warming another pod when every pod is full and the organization is under
 // its cap, and otherwise waiting briefly for a free stream. Admission
 // refreshes cluster ownership, image and pod identity before returning a lease.
-func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
+func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (_ Lease, retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.acquire")
+	defer span.End()
+	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
+	waitedForAllocation := false
 	organization, err := runnerOrganization(scope)
 	if err != nil {
 		return nil, err
@@ -389,9 +394,10 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 			warming = &projectRunner{key: runnerScope{organization: organization, slot: slot}, name: "gram-code-" + uuid.NewString(), uid: "", podUID: "", ip: "", expires: p.now().UTC().Add(codeClaimTTL).Truncate(time.Second), claimed: p.now(), renewal: time.Time{}, idle: time.Time{}, refs: 0, waiting: 0, creating: true, retired: false, cleaning: false, ready: make(chan struct{}), client: nil, err: nil}
 			p.entries[warming.key] = warming
 			p.workers.Add(1)
-			go p.initialize(warming)
+			go p.initialize(warming, trace.SpanFromContext(ctx))
 		}
 		if best == nil {
+			waitedForAllocation = true
 			ready := warming.ready
 			warming.waiting++
 			p.mu.Unlock()
@@ -438,6 +444,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 			_ = p.release(ctx, entry, false)
 			continue
 		}
+		span.SetAttributes(attr.CodeRunnerReused(!waitedForAllocation))
 		return &gkeLease{provider: p, entry: entry, once: sync.Once{}}, nil
 	}
 }
@@ -479,9 +486,11 @@ func (p *GKEProvider) retireLocked(entry *projectRunner) bool {
 	return entry.refs == 0 && !entry.creating
 }
 
-func (p *GKEProvider) initialize(entry *projectRunner) {
+func (p *GKEProvider) initialize(entry *projectRunner, parent trace.Span) {
 	defer p.workers.Done()
-	ctx, cancel := context.WithTimeout(p.ctx, codeColdStartTimeout)
+	// Retain only the allocating span: request cancellation and request values
+	// must not govern the shared runner's lifetime.
+	ctx, cancel := context.WithTimeout(trace.ContextWithSpan(p.ctx, parent), codeColdStartTimeout)
 	defer cancel()
 	err := p.create(ctx, entry)
 	p.mu.Lock()
@@ -500,13 +509,19 @@ func (p *GKEProvider) initialize(entry *projectRunner) {
 	close(entry.ready)
 }
 
-func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
+func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) (retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.sandbox.allocate")
+	defer span.End()
+	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
 	claim := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": sandbox.ClaimsV1Beta1.Group + "/" + sandbox.ClaimsV1Beta1.Version, "kind": "SandboxClaim",
 		"metadata": map[string]any{"name": entry.name, "namespace": p.config.Namespace, "labels": map[string]any{codePurposeLabel: "code", codeOrganizationLabel: organizationLabel(entry.key.organization), codeOwnerLabel: p.owner}},
 		"spec":     map[string]any{"warmPoolRef": map[string]any{"name": p.config.WarmPool}, "lifecycle": map[string]any{"shutdownPolicy": "Delete", "shutdownTime": entry.expires.Format(time.RFC3339)}},
 	}}
-	created, err := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Create(ctx, claim, metav1.CreateOptions{})
+	claimCtx, claimSpan := runtimeTracer(ctx).Start(ctx, "codemode.sandbox.claim")
+	created, err := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Create(claimCtx, claim, metav1.CreateOptions{})
+	claimSpan.SetStatus(recordRuntimeOutcome(claimSpan, err))
+	claimSpan.End()
 	if err != nil {
 		// A timeout can hide a successful Create. Recover only our random-name claim
 		// and record its UID so cleanup cannot delete a replacement.
@@ -525,25 +540,8 @@ func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 	if err := p.checkClaim(created, entry); err != nil {
 		return err
 	}
-	poll := time.NewTimer(codeClaimPollStart)
-	defer poll.Stop()
-	for delay := codeClaimPollStart; ; delay = min(2*delay, codeClaimPoll) {
-		err := p.inspect(ctx, entry, true)
-		if err == nil {
-			break
-		}
-		// API brownouts must not discard a warming pod. Only a confirmed identity
-		// mismatch or a missing pool or template aborts before the provider-owned
-		// cold-start deadline.
-		if errors.Is(err, errCodeSandboxMismatch) || errors.Is(err, ErrRuntimeUnavailable) {
-			return err
-		}
-		poll.Reset(delay)
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for code sandbox: %w", ctx.Err())
-		case <-poll.C:
-		}
+	if err := p.waitForSandbox(ctx, entry); err != nil {
+		return err
 	}
 	dialer := *p.config.Dialer
 	control := dialer.ControlContext
@@ -565,6 +563,37 @@ func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 	return nil
 }
 
+func (p *GKEProvider) waitForSandbox(ctx context.Context, entry *projectRunner) (retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.sandbox.wait")
+	polls := 0
+	defer span.End()
+	defer func() {
+		span.SetAttributes(attr.CodeClaimPolls(polls))
+		span.SetStatus(recordRuntimeOutcome(span, retErr))
+	}()
+	poll := time.NewTimer(codeClaimPollStart)
+	defer poll.Stop()
+	for delay := codeClaimPollStart; ; delay = min(2*delay, codeClaimPoll) {
+		polls++
+		err := p.inspect(ctx, entry, true)
+		if err == nil {
+			return nil
+		}
+		// API brownouts must not discard a warming pod. Only a confirmed identity
+		// mismatch or a missing pool or template aborts before the provider-owned
+		// cold-start deadline.
+		if errors.Is(err, errCodeSandboxMismatch) || errors.Is(err, ErrRuntimeUnavailable) {
+			return err
+		}
+		poll.Reset(delay)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for code sandbox: %w", ctx.Err())
+		case <-poll.C:
+		}
+	}
+}
+
 func (p *GKEProvider) checkClaim(claim *unstructured.Unstructured, entry *projectRunner) error {
 	labels := claim.GetLabels()
 	pool, _, _ := unstructured.NestedString(claim.Object, "spec", "warmPoolRef", "name")
@@ -583,7 +612,11 @@ func (p *GKEProvider) checkClaim(claim *unstructured.Unstructured, entry *projec
 	return nil
 }
 
-func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial bool) error {
+func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial bool) (retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.sandbox.inspect")
+	span.SetAttributes(attr.CodeInspectionInitial(initial))
+	defer span.End()
+	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
 	claim, err := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Get(ctx, entry.name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		return fmt.Errorf("%w: claim no longer exists", errCodeSandboxMismatch)

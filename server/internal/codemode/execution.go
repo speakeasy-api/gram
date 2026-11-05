@@ -62,11 +62,12 @@ type ExecutionResult struct {
 
 // ExecutionTiming is where an execution spent its server-side time.
 type ExecutionTiming struct {
-	// Admission covers waiting for caller, organization and runner capacity
-	// and recording ownership, until the program could be submitted.
+	// Admission covers coordinator overhead outside Run: capacity, ownership,
+	// allocation and connection setup, plus callback and stream cleanup.
 	Admission time.Duration
 
-	// Run covers submission, Python and tool callbacks, until the result.
+	// Run covers submission, Python and tool callbacks until the result,
+	// excluding subsequent callback and stream cleanup.
 	Run time.Duration
 }
 
@@ -145,7 +146,10 @@ type executionState struct {
 
 // Run executes once, with no transport retry after submitting the start frame.
 func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code string, factory HostFactory) *ExecutionResult {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.run")
 	result := &ExecutionResult{Value: json.RawMessage("null"), Output: "", OutputTruncated: false, Error: nil, ToolCalls: []CallOutcome{}, Timing: ExecutionTiming{Admission: 0, Run: 0}}
+	defer span.End()
+	defer func() { span.SetStatus(recordOutcome(span, ExecutionOutcome(result.Error))) }()
 	fail := func(code, message string) { result.Error = &ExecutionError{Code: code, Message: message} }
 	if len(code) == 0 || len(code) > MaxSourceBytes || factory == nil {
 		fail("invalid_program", "code must contain 1 to 65536 UTF-8 bytes")
@@ -241,8 +245,8 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		fail("deadline_exceeded", "too little execution time remained to run the program; program was not submitted")
 		return result
 	}
-	// Everything before the start frame is admission; the coordinator reports
-	// the rest as the run.
+	// Time submission through the result, before the cleanup defers run.
+	// The coordinator counts all other elapsed time as admission overhead.
 	submitted := time.Now()
 	defer func() { result.Timing.Run = time.Since(submitted) }()
 	err = writeRunnerFrame(stream, runnerStart{Type: "start", Version: ProtocolVersion, ExecutionID: executionID.String(), Code: code, WallMS: remaining})

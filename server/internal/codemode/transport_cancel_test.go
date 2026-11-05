@@ -11,7 +11,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 type idleHost struct{}
@@ -34,6 +38,11 @@ func (idleHost) Call(context.Context, string, json.RawMessage) (*ToolResult, err
 // right away instead of waiting for the connect timeout.
 func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
+	parentCtx, parent := tracerProvider.Tracer("test").Start(t.Context(), "request")
+	defer parent.End()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
@@ -62,7 +71,8 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 	require.NoError(t, err)
 	factory := func(context.Context) (Host, error) { return idleHost{}, nil }
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 	results := make(chan *ExecutionResult, RunnerStreams)
 	for range RunnerStreams {
 		go func() { results <- client.Run(ctx, uuid.New(), "1", factory) }()
@@ -89,6 +99,16 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 	require.Less(t, time.Since(cancelled), connectTimeout)
 	require.True(t, client.slots.TryAcquire(RunnerStreams), "cancelled runs released their slots")
 	client.slots.Release(RunnerStreams)
+
+	connects := 0
+	for _, span := range recorder.Ended() {
+		if span.Name() == "codemode.runner.connect" {
+			connects++
+		}
+		require.Equal(t, codes.Unset, span.Status().Code, span.Name())
+		require.Contains(t, span.Attributes(), attr.CodeOutcome("cancelled"), span.Name())
+	}
+	require.Positive(t, connects)
 }
 
 type callFailureHost struct {
