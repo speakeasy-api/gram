@@ -6,6 +6,7 @@ import "encoding/json"
 // tools/list.
 type Tool struct {
 	Name        string
+	Title       string
 	Description string
 	InputSchema json.RawMessage
 }
@@ -51,27 +52,32 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 	return []Tool{
 		{
 			Name:        ToolListServers,
+			Title:       "List MCP Servers",
 			Description: "List the member MCP servers this gateway fronts: which systems are reachable, their ordering, and their connection state. Status \"unknown\" means not checked, not broken: this list does not contact remote servers; call connection_status to check sign-in. Start here to orient before drilling into a specific server.",
 			InputSchema: listServersSchema,
 		},
 		{
 			Name:        ToolDescribeServer,
+			Title:       "Get MCP Server Details",
 			Description: "Describe one member server's tool catalog: qualified tool names and descriptions, without input schemas. Call describe_tools for the schemas of the specific tools you intend to use.",
 			InputSchema: describeServerSchema,
 		},
 		{
 			Name:        ToolDescribeTools,
+			Title:       "Get Tool Details",
 			Description: "Fetch full input schemas for named tools. Do not call a tool without first describing it to get its input schema. Member catalog failures are reported under failed rather than failing the whole call.",
 			InputSchema: describeToolsSchema,
 		},
 		{
 			Name:        ToolExecuteTool,
+			Title:       "Run a Tool",
 			Description: "Execute one tool. Pass its qualified name (serverslug--toolname) as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`.",
 			InputSchema: executeToolSchema,
 		},
 		{
 			Name:        ToolConnectionStatus,
-			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or reconnect this gateway.",
+			Title:       "Check Connection Status",
+			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or reconnect this gateway. A status of `unavailable` means a temporary problem: retry shortly.",
 			InputSchema: connectionStatusSchema,
 		},
 	}

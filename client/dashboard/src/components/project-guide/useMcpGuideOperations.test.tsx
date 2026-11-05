@@ -5,7 +5,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
@@ -90,16 +90,14 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 import { useMcpGuideOperations } from "./useMcpGuideOperations";
 import { markProjectGuideMcpServerSelected } from "./projectGuideStores";
 
-function catalogServer(
-  overrides: Partial<PulseMCPServer> = {},
-): PulseMCPServer {
+function catalogServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "Read-only test server",
     registryId: "registry",
-    registrySpecifier: "example/read-only",
+    registrySpecifier: "app.linear/mcp",
     version: "1.0.0",
     title: "Linear",
-    meta: { "com.pulsemcp/server": { isOfficial: true } },
+    meta: {},
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,
@@ -110,7 +108,7 @@ function catalogServer(
       },
     ],
     ...overrides,
-  } as PulseMCPServer;
+  } as CatalogServer;
 }
 
 const SERVER = catalogServer();
@@ -293,14 +291,32 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("rejects preferred display-title lookalikes with unapproved registry identifiers", () => {
+    queryHooks.catalog.mockReturnValue(
+      queryResult({
+        servers: [
+          catalogServer({
+            registrySpecifier: "example/linear",
+            title: "Linear",
+          }),
+          catalogServer({
+            registrySpecifier: "app.linear/mcp",
+            title: "Renamed Linear",
+          }),
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.registrySpecifier),
+    ).toEqual(["app.linear/mcp"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "api_key" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "manual",
     });
     queryHooks.catalog.mockReturnValue(
       queryResult({ servers: [catalogServer(), apiKeyServer] }),
@@ -308,6 +324,31 @@ describe("useMcpGuideOperations", () => {
 
     const { result } = renderHook(() => useMcpGuideOperations());
 
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
+  it("includes preferred explicit no-auth native records without a verification flag", () => {
+    const publicServer = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      authSetup: "none",
+    });
+    const sparse = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      meta: undefined,
+    });
+    const notPreferred = catalogServer({
+      title: "Other service",
+      registrySpecifier: "example/other",
+      authSetup: "none",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [publicServer, sparse, notPreferred] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
     expect(
       result.current.catalogServers?.map((server) => server.title),
     ).toEqual(["Linear"]);
@@ -337,11 +378,8 @@ describe("useMcpGuideOperations", () => {
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "oauth" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "dcr",
     });
     queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));
 

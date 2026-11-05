@@ -938,6 +938,8 @@ type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	IsInternal bool
+	// @access: confidential
 	Seq int64
 	// @access: confidential
 	OrganizationID string
@@ -5372,6 +5374,12 @@ type RegistryPromotionCandidate struct {
 	CurationRetryRevision pgtype.Text
 	// @access: confidential
 	CurationRetryAction pgtype.Text
+	// How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL with docs_queued_at set means requested (resolved before this was recorded); NULL with docs_queued_at NULL means delivery has not resolved yet.
+	// @access: confidential
+	DocsOutcome pgtype.Text
+	// When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+	// @access: confidential
+	DocsReviewSince pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6264,6 +6272,8 @@ type SecurityAuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	IsInternal bool
+	// @access: confidential
 	Seq int64
 	// @access: confidential
 	OrganizationID string
@@ -6963,6 +6973,9 @@ type SlackDirectoryConnection struct {
 	LastSyncFailedAt pgtype.Timestamptz
 	// @access: confidential
 	LastErrorCode pgtype.Text
+	// Project whose managed assistant answers the Speakeasy app in this workspace.
+	// @access: confidential
+	DefaultProjectID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

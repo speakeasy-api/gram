@@ -2294,15 +2294,23 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2331,15 +2339,23 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2368,15 +2384,23 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2405,15 +2429,23 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -24050,15 +24082,23 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -24094,6 +24134,13 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionSetupGuideResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSetupGuideResponseBody struct {
+	Slug  *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
@@ -37402,6 +37449,8 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37426,6 +37475,16 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37597,6 +37656,8 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37621,6 +37682,16 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37792,6 +37863,8 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37816,6 +37889,16 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37987,6 +38070,8 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -38011,6 +38096,16 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -46075,6 +46170,13 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -46164,6 +46266,13 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.SuggestedMetadata != nil {
 		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.AuthDiscovery != nil {
@@ -46257,6 +46366,13 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -46346,6 +46462,13 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	if body.SuggestedMetadata != nil {
 		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.AuthDiscovery != nil {
@@ -75028,6 +75151,13 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -75058,6 +75188,18 @@ func ValidateAdminRegistryPromotionSuggestionsResponseBody(body *AdminRegistryPr
 		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
 		}
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionSetupGuideResponseBody runs the validations
+// defined on AdminRegistryPromotionSetupGuideResponseBody
+func ValidateAdminRegistryPromotionSetupGuideResponseBody(body *AdminRegistryPromotionSetupGuideResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
 	return
 }

@@ -9,10 +9,11 @@
   body { margin: 0; padding: 12px 16px; font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: transparent; }
   h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
   ul { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
-  .name { flex: 1; min-width: 0; }
+  li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .name { flex: 1 1 6rem; min-width: 0; overflow-wrap: anywhere; }
   .detail { color: var(--muted); font-size: 12px; }
   .ok { color: var(--ok); } .warn { color: var(--warn); }
+  .note { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; }
   button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 0; background: var(--btn); color: var(--btn-fg); cursor: pointer; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
 </style>
@@ -43,7 +44,7 @@
       reportSize();
       return;
     }
-    let ready = 0, needs = 0, hidden = 0, consented = false, needsConsent = false;
+    let ready = 0, needs = 0, unavailable = 0, hidden = 0, consented = false, needsConsent = false;
     for (const s of data.servers) {
       const li = document.createElement("li");
       const name = document.createElement("div");
@@ -83,6 +84,24 @@
         state.className = "ok";
         state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
         li.append(state);
+      } else if (s.status === "unavailable") {
+        unavailable++;
+        state.className = "warn";
+        state.textContent = "Temporarily unavailable";
+        li.append(state);
+        const outage = s.outage || {};
+        const note = document.createElement("div");
+        note.className = "detail note";
+        note.textContent = outage.message || "Try again shortly.";
+        if (outage.reconnectUrl) {
+          const btn = document.createElement("button");
+          btn.textContent = "Reconnect";
+          btn.onclick = () => request("ui/open-link", { url: outage.reconnectUrl }).catch(() => {
+            note.textContent = "Open " + outage.reconnectUrl + " in your browser";
+          });
+          li.append(btn);
+        }
+        li.append(note);
       } else {
         needs++;
         state.className = "warn";
@@ -105,8 +124,9 @@
     const hint = document.getElementById("hint");
     hint.textContent = needsConsent ? "Reconnect this gateway in your AI app to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
-      : "After signing in, ask again to refresh this list.";
-    hint.hidden = !consented && !needsConsent && needs === 0;
+      : needs > 0 ? "After signing in, ask again to refresh this list."
+      : "Ask again shortly to refresh this list.";
+    hint.hidden = !consented && !needsConsent && needs === 0 && unavailable === 0;
     reportSize();
   };
 

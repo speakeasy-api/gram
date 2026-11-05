@@ -203,6 +203,35 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 	return states, nil
 }
 
+// connectionRouteFailure names the state of a member that could not be routed.
+func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
+	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		if outage.session == nil {
+			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
+		}
+		retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(outage.session)) + "."
+		switch remotesessions.OutageKindOf(outage.session) {
+		case remotesessions.RefreshOutageTunnel:
+			return "unreachable", "This server can't renew its sign-in right now. " + retry + " If it keeps happening, ask your administrator to check that the server and its sign-in provider are running."
+		case remotesessions.RefreshOutageProvider:
+			if canConnect {
+				return "unreachable", "This server's provider isn't available right now. " + retry + " If it keeps happening, call tools.connect(server=...) to reconnect."
+			}
+			return "unreachable", "This server's provider isn't available right now. " + retry + " If it keeps happening, ask your administrator."
+		case remotesessions.RefreshOutageNone:
+		}
+		return "unreachable", "This server can't renew its sign-in right now. " + retry + " If it keeps happening, ask your administrator to contact Speakeasy support."
+	}
+	_, needsSignIn := errors.AsType[memberCredentialError](err)
+	if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
+		if !canConnect {
+			return "reauth_required", "This server needs a sign-in, which can't be started from here. Ask your administrator."
+		}
+		return "reauth_required", "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
+	}
+	return "unknown", "Connection verification could not complete; try again later."
+}
+
 func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateContext, members []metaMember, server string) *codemode.ConnectionState {
 	member, ok := findMetaMember(members, server)
 	if !ok {
@@ -241,14 +270,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 			}
 			return state
 		}
-		_, needsSignIn := errors.AsType[memberCredentialError](err)
-		if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
-			state.Authentication = "reauth_required"
-			state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
-		} else {
-			state.Authentication = "unknown"
-			state.Instructions = "Connection verification could not complete; try again later."
-		}
+		state.Authentication, state.Instructions = connectionRouteFailure(err, codeConnectAvailable(gate))
 		return state
 	}
 	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)

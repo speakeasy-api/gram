@@ -109,7 +109,6 @@ type platformMCPConfig struct {
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
-	Registry               *externalmcp.RegistryClient
 	Catalog                *externalmcp.CatalogService
 	GuardianPolicy         *guardian.Policy
 	RemoteChallengeManager *remotesessions.ChallengeManager
@@ -270,13 +269,14 @@ func configurePlatformMCP(ctx context.Context, config platformMCPConfig) (Assist
 
 func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	fixtureConfig := config.LocalFixture.Fixture
-	if config.Registry == nil || fixtureConfig == nil {
+	if fixtureConfig == nil {
 		return AssistantSurface{}, errors.New("local Platform MCP fixture configuration is incomplete")
 	}
 	if config.RegistryDiscoveryEnabled {
 		fixtureConfig.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
 	}
-	if err := config.Registry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
+	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, cache.NewRedisCacheAdapter(config.Redis)).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
+	if err := fixtureRegistry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
 
@@ -315,7 +315,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	chaining := platformMCPIdentityChaining(config)
 	fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
 	fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
-	fixtureRegistry := config.Registry.WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		browserSources, err := loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 		if err != nil {
@@ -586,7 +585,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -1382,7 +1382,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)

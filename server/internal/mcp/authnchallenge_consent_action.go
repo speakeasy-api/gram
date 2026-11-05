@@ -249,6 +249,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		)
 		if refreshErr != nil {
 			switch {
+			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
+				logger.WarnContext(ctx, "manual refresh did not finish", attr.SlogError(refreshErr))
+				http.Redirect(w, r, backURL+"&refresh_unavailable="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+				return nil
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
@@ -278,6 +282,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			return nil
 		case errors.Is(err, errRemoteSessionNoUsableCredential):
 			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errValidationUnfinished):
+			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
 			return err
@@ -429,6 +436,7 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
+		Attempt:             challengeState.connectionAttempt(endpoint),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)

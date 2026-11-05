@@ -28,7 +28,7 @@ import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCat
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -65,7 +65,7 @@ import {
 } from "./remotes";
 
 export interface AddServerDialogProps {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
@@ -97,10 +97,10 @@ export interface AddServerDialogProps {
  * strip their headers, so the details call is the authoritative source for the
  * endpoint data the install flow needs.
  */
-const EMPTY_SERVERS: PulseMCPServer[] = [];
+const EMPTY_SERVERS: CatalogServer[] = [];
 
 function useEnrichedServers(
-  servers: PulseMCPServer[],
+  servers: CatalogServer[],
   open: boolean,
   targetProjectSlug?: string,
 ) {
@@ -143,11 +143,7 @@ function useEnrichedServers(
                 return current;
               })
             : details.remotes;
-          return filterToHttpRemotes({
-            ...server,
-            tools: details.tools,
-            remotes,
-          });
+          return filterToHttpRemotes({ ...server, remotes });
         }),
       ),
   });
@@ -540,7 +536,8 @@ export function AddServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="gap-2">
+      {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
+      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
