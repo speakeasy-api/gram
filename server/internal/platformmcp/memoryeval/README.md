@@ -31,7 +31,7 @@ Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
 `search_team_memory`) are added by the PRs that ship those tools.
 
 Planned rollout criterion, once arm D lands: Organizational Memory is enabled for
-customers (the staff admin Org Memory toggle) only when arm D meets every
+customers (the staff admin Business Memory Extraction toggle) only when arm D meets every
 gate. Nothing in this package evaluates the gates yet; read them off the report.
 
 - **Complete run**: no errored answers in either arm, since errors drop out
