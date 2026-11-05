@@ -74,6 +74,21 @@ VALUES (@project_id, @organization_id, @parent_chat_id::uuid, @child_chat_id::uu
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
 VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, @source_kind, now() - interval '38 minutes');
 
+-- name: ActivityInsertAssistantSlackInvocation :exec
+-- Use an existing synthetic directory member, distinct from the chat owner.
+INSERT INTO assistant_thread_events (
+  id, assistant_thread_id, assistant_id, project_id, event_id, correlation_id,
+  status, normalized_payload_json, source_payload_json, processed_at
+)
+SELECT @id::uuid, t.id, t.assistant_id, t.project_id, @event_id::text, t.correlation_id,
+  'processed', jsonb_build_object('_gram_source_kind', 'speakeasy_slack',
+    'team_id', m.slack_team_id, 'user_id', m.slack_user_id, 'text', 'Summarize project activity.'),
+  '{}'::jsonb, now() - interval '38 minutes'
+FROM assistant_threads t
+JOIN projects p ON p.id = t.project_id
+JOIN slack_directory_memberships m ON m.organization_id = p.organization_id AND m.id = @membership_id::uuid
+WHERE t.project_id = @project_id::uuid AND t.id = @thread_id::uuid;
+
 -- Historical shortened trial: audit history shows both dates, not an extension.
 -- name: ActivityInsertTrialEndChangedAuditLog :exec
 INSERT INTO audit_logs

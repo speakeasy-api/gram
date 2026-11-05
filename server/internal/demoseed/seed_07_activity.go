@@ -266,6 +266,17 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("insert demo assistant thread %s: %w", fixture, err)
 		}
+		if fixture == "bound" {
+			if err := s.q.ActivityInsertAssistantSlackInvocation(ctx, repo.ActivityInsertAssistantSlackInvocationParams{
+				ID:           s.det("assistant-slack-invocation"),
+				ProjectID:    proj,
+				ThreadID:     s.det("assistant-thread-" + fixture),
+				MembershipID: s.rolesSlackMemberID(1),
+				EventID:      s.name("assistant-slack-invocation"),
+			}); err != nil {
+				return fmt.Errorf("insert demo assistant Slack invocation: %w", err)
+			}
+		}
 	}
 
 	// Historical shortened trial: audit history shows both dates, not an extension.

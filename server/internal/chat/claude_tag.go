@@ -81,9 +81,23 @@ func (s *Service) chatParticipants(ctx context.Context, projectID uuid.UUID, ids
 	for _, row := range rows {
 		participant := &gen.ChatParticipant{Provider: row.Provider, ProviderUserID: row.ProviderUserID, ProviderTeamID: conv.FromPGText[string](row.ProviderTeamID), UserID: conv.FromPGText[string](row.UserID), DisplayName: conv.FromPGText[string](row.DisplayName)}
 		chatID := row.ChatID.UUID.String()
-		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID.String + ":" + row.ProviderUserID + ":" + row.UserID.String
+		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID.String + ":" + row.ProviderUserID
 		if !seen[key] {
 			byChat[chatID] = append(byChat[chatID], participant)
+			seen[key] = true
+		}
+	}
+	// Event senders describe hosted Slack invocations without changing ownership
+	// or assigning context/history senders to individual messages.
+	invokers, err := s.repo.ListAssistantSlackParticipants(ctx, repo.ListAssistantSlackParticipantsParams{ProjectID: projectID, ChatIds: ids})
+	if err != nil {
+		return nil, nil, fmt.Errorf("load assistant Slack participants: %w", err)
+	}
+	for _, row := range invokers {
+		chatID := row.ChatID.String()
+		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID + ":" + row.ProviderUserID
+		if !seen[key] {
+			byChat[chatID] = append(byChat[chatID], &gen.ChatParticipant{Provider: row.Provider, ProviderUserID: row.ProviderUserID, ProviderTeamID: &row.ProviderTeamID, UserID: conv.FromPGText[string](row.UserID), DisplayName: &row.DisplayName})
 			seen[key] = true
 		}
 	}

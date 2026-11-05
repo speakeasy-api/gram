@@ -434,5 +434,8 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 
 The Agent sessions list includes a **Speakeasy Slackbot** surface on the seeded
 agent-backed assistant conversation, alongside the legacy dashboard assistant
-conversation. Filter by Speakeasy Slackbot to verify separate attribution; the
-underlying inference messages still use the assistants billing source.
+conversation. Filter by Speakeasy Slackbot to verify separate attribution: its
+recorded Slack invocation names a different person from the conversation owner,
+and both the list and detail header show the assistant on behalf of that invoker.
+The underlying inference messages still use the assistants billing source.
+Browser verification and live reseeding have not been run for this attribution change.

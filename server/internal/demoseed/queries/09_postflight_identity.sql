@@ -715,4 +715,15 @@ WHERE t.project_id = @project_id::uuid
   AND t.source_kind = 'speakeasy_slack'
   AND t.deleted IS FALSE
   AND c.deleted IS FALSE
-  AND c.session_surface = 'speakeasy-slack';
+  AND c.session_surface = 'speakeasy-slack'
+  AND EXISTS (
+    SELECT 1 FROM assistant_thread_events e
+    JOIN slack_identity_mappings m ON m.organization_id = c.organization_id
+      AND m.slack_team_id = e.normalized_payload_json->>'team_id'
+      AND m.slack_user_id = e.normalized_payload_json->>'user_id'
+      AND m.revoked_at IS NULL
+    WHERE e.project_id = t.project_id AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.normalized_payload_json->>'_gram_source_kind' = 'speakeasy_slack'
+      AND m.user_id <> c.user_id
+  );
