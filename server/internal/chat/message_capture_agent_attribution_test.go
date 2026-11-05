@@ -266,6 +266,34 @@ func TestStartOrResumeChat_HumanTurnOnAgentSessionClosesItToBoth(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+// A turn with no identity at all (no user, no external user, no agent actor)
+// is still a non-agent turn, so it closes the agent-only session the same way a
+// named human turn does.
+func TestStartOrResumeChat_IdentitylessTurnOnAgentSessionClosesIt(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	agentOwner := "agent-owner-" + uuid.NewString()
+	agentID := seedAgent(t, ctx, ti, agentOwner, "Agent whose session an anonymous turn joins")
+	chatID := uuid.New()
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, agentOwner), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	anonymous := contextvalues.SetAuthContext(ctx, withoutHumanIdentity(t, ctx))
+	_, err = strategy.StartOrResumeChat(anonymous, completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.Equal(t, agentID, row.AgentID.UUID, "the agent stays recorded")
+	require.True(t, row.UserID.Valid)
+	require.Empty(t, row.UserID.String, "mixed attribution leaves no author")
+
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, agentOwner), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 // An agent from another organization never lands on the chat: the stamp
 // resolves the agent against the caller's tenant at write time.
 func TestStartOrResumeChat_ForeignTenantAgentIsNotRecorded(t *testing.T) {

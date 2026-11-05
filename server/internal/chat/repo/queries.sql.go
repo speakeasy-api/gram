@@ -5039,7 +5039,7 @@ END
       WHEN chats.user_id IS NULL
         AND COALESCE(chats.external_user_id, '') = ''
         AND chats.agent_id IS NOT NULL
-        AND (COALESCE(EXCLUDED.user_id, '') <> '' OR COALESCE(EXCLUDED.external_user_id, '') <> '')
+        AND (EXCLUDED.user_id IS NOT NULL OR COALESCE(EXCLUDED.external_user_id, '') <> '')
       THEN ''
       ELSE chats.user_id
     END
@@ -5084,11 +5084,11 @@ type UpsertChatParams struct {
 // caller's project, so the guard holds on the conflict path too.
 // An existing row keeps its author, and an empty-string user_id from before
 // NULL attribution stays empty, which names the agent without opening the
-// session to its owner. One exception: a human turn landing on an agent-only
-// session (no human identity, an agent recorded) makes its attribution mixed.
-// Neither the agent's owner nor that human may then open it by ownership
-// alone, so the row is demoted to the empty-string "no author" shape instead
-// of being handed to either side.
+// session to its owner. One exception: a non-agent turn landing on an
+// agent-only session (no human identity, an agent recorded) makes its
+// attribution mixed. Agent turns write NULL user_id; every other turn writes
+// a non-NULL one, even an empty string. The row is then demoted to the
+// empty-string "no author" shape instead of being handed to either side.
 // The conflict target is the bare primary key, so a caller supplying another
 // project's chat id would otherwise land on that row and get its id back from
 // RETURNING. Rejecting the conflict yields no row, which the caller maps to an
