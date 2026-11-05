@@ -347,10 +347,11 @@ FROM chats WHERE project_id = @project_id::uuid AND organization_id <> @org_id::
 
 -- name: PostflightCountOwnerlessChats :one
 -- A session driven by an agent credential carries no user ids by design: the
--- agent is its actor, and its owner reads it through ownership.
+-- agent is its actor, and its owner reads it through ownership. Only that
+-- shape is exempt; an agent-stamped chat with partial user ids is still flagged.
 SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
-  AND agent_id IS NULL
+  AND NOT (agent_id IS NOT NULL AND user_id IS NULL AND external_user_id IS NULL)
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
 
 -- name: PostflightCountAgentOwnerSessions :one

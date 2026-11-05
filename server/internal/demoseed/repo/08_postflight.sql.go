@@ -869,12 +869,13 @@ func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Con
 const postflightCountOwnerlessChats = `-- name: PostflightCountOwnerlessChats :one
 SELECT count(*)
 FROM chats WHERE organization_id = $1::text
-  AND agent_id IS NULL
+  AND NOT (agent_id IS NOT NULL AND user_id IS NULL AND external_user_id IS NULL)
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
 `
 
 // A session driven by an agent credential carries no user ids by design: the
-// agent is its actor, and its owner reads it through ownership.
+// agent is its actor, and its owner reads it through ownership. Only that
+// shape is exempt; an agent-stamped chat with partial user ids is still flagged.
 func (q *Queries) PostflightCountOwnerlessChats(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountOwnerlessChats, orgID)
 	var count int64

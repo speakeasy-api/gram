@@ -30,7 +30,7 @@ func (s *seeder) seedAgentOwnerSessions(ctx context.Context) error {
 
 func (s *seeder) insertOwnerChat(ctx context.Context, chatID uuid.UUID, sess ownerSession) error {
 	created := activityMinutes(sess.ageMin)
-	updated := activityMinutes(sess.ageMin - len(sess.tools) - 2)
+	updated := activityMinutes(sess.ageMin - ownerAnswerMin(len(sess.tools)))
 	if sess.agent {
 		if err := s.q.ActivityInsertAgentChat(ctx, repo.ActivityInsertAgentChatParams{
 			ID:             chatID,
@@ -80,14 +80,14 @@ func (s *seeder) ownerTranscript(sess ownerSession) []activityMessage {
 	for k, tool := range sess.tools {
 		calls = append(calls, `{"id":"`+ownerToolCallID(sess.key, k+1)+`","type":"function","function":{"name":"`+tool+`","arguments":"`+s.ownerToolArgs(sess, k+1)+`"}}`)
 	}
-	msgs = append(msgs, activityMessage{key + "-calls", "assistant", "", nil, []byte("[" + strings.Join(calls, ",") + "]"), src, model, activityMinutes(sess.ageMin - 1), activityNull})
+	msgs = append(msgs, activityMessage{key + "-calls", "assistant", "", nil, []byte("[" + strings.Join(calls, ",") + "]"), src, model, activityMinutes(sess.ageMin - ownerCallsTurnMin), activityNull})
 	for k := range sess.tools {
 		// Telemetry payloads are escaped for embedding inside the attributes
 		// JSON document; the transcript stores the JSON itself.
 		result := strings.ReplaceAll(s.ownerToolResult(sess, k+1), `\"`, `"`)
 		msgs = append(msgs, activityMessage{key + "-result-" + strconv.Itoa(k+1), "tool", result, nil, nil, src, model,
-			activityMinutes(sess.ageMin - 2 - k), activityText(ownerToolCallID(sess.key, k+1))})
+			activityMinutes(sess.ageMin - ownerResultMin(k+1)), activityText(ownerToolCallID(sess.key, k+1))})
 	}
 	return append(msgs, activityMessage{key + "-answer", "assistant", sess.answer, activityTextRaw(sess.answer), nil, src, model,
-		activityMinutes(sess.ageMin - len(sess.tools) - 2), activityNull})
+		activityMinutes(sess.ageMin - ownerAnswerMin(len(sess.tools))), activityNull})
 }
