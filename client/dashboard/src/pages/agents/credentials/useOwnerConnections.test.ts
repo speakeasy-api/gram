@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, renderHook } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { connectionSelectable } from "./ownerConnections";
 import { useOwnerConnections } from "./useOwnerConnections";
@@ -16,8 +16,12 @@ const mocks = vi.hoisted(() => {
     auth: new Map<string, { data?: unknown; isError?: boolean }>(),
     clients: [] as unknown[],
     sessions: [] as unknown[],
+    enforcement: "legacy" as string,
   };
 });
+vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
+  useUpstreamAuthEnforcement: () => mocks.enforcement,
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useSession: () => ({ user: { id: "user_example" } }),
@@ -51,6 +55,7 @@ afterEach(() => {
   mocks.auth.clear();
   mocks.clients = [];
   mocks.sessions = [];
+  mocks.enforcement = "legacy";
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -128,6 +133,68 @@ it("shows a shared server as needing no assignment when editing", () => {
   );
   expect(result.current.assignedByServer?.get(server.id)).toEqual({
     status: "not-required",
+  });
+});
+
+describe("a server sharing an org-wide issuer with another server", () => {
+  // The issuer binds the other server's registration; this server's own
+  // auth client signs in through its own.
+  const ownSignIn = {
+    clientType: "remote_session",
+    enabled: true,
+    personal: true,
+    remoteSessionClientId: "client_own",
+  };
+  const ownSession = {
+    id: "session_own",
+    remoteSessionClientId: "client_own",
+    userSessionIssuerId: server.issuerId,
+    subjectUrn: "user:user_example",
+    accessExpiresAt: new Date(Date.now() + 3_600_000),
+    hasRefreshToken: true,
+    scopes: [],
+  };
+  beforeEach(() => {
+    mocks.clients = [otherServersSignIn];
+    mocks.sessions = [ownSession];
+    mocks.auth.set(server.id, {
+      data: { status: "configured", clients: [ownSignIn] },
+    });
+  });
+
+  it("asks for the server's own sign-in when upstream auth is enforced", () => {
+    mocks.enforcement = "enforced";
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [ownSession],
+    });
+  });
+
+  it("asks for the issuer's sign-in when it is not, as the issuer routes the call", () => {
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+    });
+  });
+
+  it("falls back to the issuer while the server's setup is incomplete", () => {
+    mocks.enforcement = "enforced";
+    mocks.auth.set(server.id, {
+      data: { status: "setup_incomplete", clients: [] },
+    });
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+    });
+  });
+
+  it("keeps the server checking until enforcement is known", () => {
+    mocks.enforcement = "loading";
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "checking",
+    });
   });
 });
 

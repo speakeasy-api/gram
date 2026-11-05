@@ -8,6 +8,7 @@ import {
   connectionSelectable,
   offersPersonalSignIn,
   serverConnection,
+  serverSignIns,
   type ConnectionApi,
 } from "./ownerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -407,5 +408,34 @@ describe("attachOwnerConnections", () => {
     expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
       attachBindingRequestBody: { userSessionIssuerId: "issuer_two" },
     });
+  });
+});
+
+describe("serverSignIns", () => {
+  const base = {
+    clientType: "remote_session",
+    enabled: true,
+    personal: true,
+    remoteSessionClientId: "client_own",
+  } as McpServerAuthentication["clients"][number];
+
+  it("lists the registrations of the server's enabled personal auth clients", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [
+          base,
+          { ...base, remoteSessionClientId: "client_disabled", enabled: false },
+          { ...base, remoteSessionClientId: "client_shared", personal: false },
+          { ...base, remoteSessionClientId: undefined },
+        ],
+      }),
+    ).toEqual([{ id: "client_own", credentialOwner: "subject" }]);
+  });
+
+  it("has no answer while setup is incomplete", () => {
+    expect(
+      serverSignIns({ status: "setup_incomplete", clients: [base] }),
+    ).toBeUndefined();
   });
 });

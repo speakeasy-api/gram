@@ -111,18 +111,33 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  const linkedQuery = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
-  );
-  // Enforcing organizations also attach registrations to the server as
-  // credentials, without linking them to its sign-in.
+  // Enforcing organizations attach registrations to the server as
+  // credentials, and those decide which one a call signs in through. The
+  // issuer can be shared across the organization and binds one registration,
+  // which may belong to another server, so it is read only where it still
+  // routes calls: without enforcement, or while the server's setup is
+  // incomplete and its credentials do not record the upstream yet.
   const upstreamAuth = useUpstreamAuthEnforcement();
   const enforced = upstreamAuth === "enforced";
   const credentialsQuery = useMcpServerAuthentication(
     { mcpServerId: mcpServer.id },
     undefined,
     { enabled: enforced, throwOnError: false },
+  );
+  const typed =
+    enforced &&
+    !!credentialsQuery.data &&
+    credentialsQuery.data.status !== "setup_incomplete";
+  const linkedQuery = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    {
+      enabled:
+        !!userSessionIssuerId &&
+        upstreamAuth !== "loading" &&
+        (!enforced ||
+          credentialsQuery.data?.status === "setup_incomplete" ||
+          credentialsQuery.isError),
+    },
   );
   const credentialRegistrationIds = new Set(
     (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap(
@@ -139,12 +154,13 @@ export function IdentityChainingSection({
       enabled: !!userSessionIssuerId && credentialRegistrationIds.size > 0,
     },
   );
+  const linked = typed ? [] : linkedQuery.items;
   const clients = [
-    ...linkedQuery.items,
+    ...linked,
     ...registrationsQuery.items.filter(
       (client) =>
         credentialRegistrationIds.has(client.id) &&
-        !linkedQuery.items.some((linked) => linked.id === client.id),
+        !linked.some((other) => other.id === client.id),
     ),
   ];
   const sourceQuery = useGetRemoteMcpServer(

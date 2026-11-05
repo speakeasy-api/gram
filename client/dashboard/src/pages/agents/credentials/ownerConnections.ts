@@ -42,7 +42,7 @@ export function userSubject(userId: string): string {
  */
 export function serverConnection(
   issuerId: string,
-  clients: RemoteSessionClient[],
+  clients: ServerSignIn[],
   sessions: RemoteSession[],
   now: number = Date.now(),
 ): ServerConnection {
@@ -88,6 +88,29 @@ export function offersPersonalSignIn(
   if (auth.status === "setup_incomplete") return true;
   return auth.clients.some(
     (client) => client.enabled && client.clientType === "remote_session",
+  );
+}
+
+/** An upstream sign-in a server asks for: its OAuth registration and who owns it. */
+export type ServerSignIn = Pick<RemoteSessionClient, "id" | "credentialOwner">;
+
+/**
+ * The upstream sign-ins a server asks each person for, read from its own auth
+ * clients. Under upstream auth enforcement these decide which registration a
+ * call signs in through, so they are the answer even when the server shares
+ * its user session issuer with others: the issuer binds one registration,
+ * which can belong to another server. Undefined while setup is incomplete,
+ * when the auth clients do not record the upstream yet and the issuer's
+ * registrations stay the only signal.
+ */
+export function serverSignIns(
+  auth: Pick<McpServerAuthentication, "status" | "clients">,
+): ServerSignIn[] | undefined {
+  if (auth.status === "setup_incomplete") return undefined;
+  return auth.clients.flatMap((client) =>
+    client.enabled && client.personal && client.remoteSessionClientId
+      ? [{ id: client.remoteSessionClientId, credentialOwner: "subject" }]
+      : [],
   );
 }
 
