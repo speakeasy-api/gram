@@ -10,6 +10,8 @@ import {
 } from "./suggestionToCatalogServer";
 
 const mocks = vi.hoisted(() => ({
+  catalog: vi.fn(() => ({ data: undefined })),
+  dark: vi.fn(() => false),
   list: vi.fn(),
   dismiss: vi.fn(),
   restore: vi.fn(),
@@ -19,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   restoreOptions: vi.fn(),
   projects: [{ id: "p1", slug: "default", name: "Default" }],
 }));
+vi.mock("@/pages/catalog/hooks", () => ({ useListMCPCatalog: mocks.catalog }));
+vi.mock("@/lib/theme", () => ({ useIsDarkTheme: mocks.dark }));
 vi.mock("@gram/client/react-query/oktaServerSuggestions.js", () => ({
   useOktaServerSuggestions: mocks.list,
   invalidateAllOktaServerSuggestions: mocks.invalidate,
@@ -46,6 +50,9 @@ vi.mock("@/pages/catalog/AddServerDialog", () => ({
 }));
 afterEach(() => {
   cleanup();
+  mocks.catalog.mockReset();
+  mocks.catalog.mockReturnValue({ data: undefined });
+  mocks.dark.mockReturnValue(false);
   vi.clearAllMocks();
   mocks.projects.splice(1);
 });
@@ -270,6 +277,9 @@ it("shows a project picker only when the organization has several projects", () 
     screen.queryByRole("combobox", { name: "Project to add servers to" }),
   ).toBeNull();
   cleanup();
+  mocks.catalog.mockReset();
+  mocks.catalog.mockReturnValue({ data: undefined });
+  mocks.dark.mockReturnValue(false);
   mocks.projects.push({ id: "p2", slug: "second", name: "Second" });
   show([suggestion()]);
   expect(
@@ -336,4 +346,54 @@ it("does not invent tool counts or read-only evidence for suggestions", () => {
   const server = suggestionToCatalogServer(suggestion());
   expect(server.toolCount).toBeUndefined();
   expect(server.isReadOnly).toBeUndefined();
+});
+
+it.each([false, true])(
+  "uses curated suggestion logos with dark theme %s",
+  (dark) => {
+    mocks.dark.mockReturnValue(dark);
+    const meta = {
+      "com.speakeasy.ai/icons": {
+        default: { src: "https://example.com/light.png" },
+        dark: { src: "https://example.com/dark.png" },
+      },
+    };
+    mocks.catalog.mockReturnValue({
+      data: {
+        servers: [
+          {
+            registrySpecifier: "com.example/mcp",
+            meta,
+            supportsDcr: true,
+            remotes: [],
+          },
+        ],
+      },
+    } as never);
+    show([suggestion({ iconUrl: "https://example.com/legacy.png" })]);
+    expect(document.querySelector("img")?.getAttribute("src")).toBe(
+      `https://example.com/${dark ? "dark" : "light"}.png`,
+    );
+    expect(mocks.catalog).toHaveBeenCalledWith(undefined, undefined, {
+      projectSlug: "default",
+      enabled: true,
+      throwOnError: false,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+    expect(mocks.dialog.mock.lastCall?.[0].servers[0]).toEqual({
+      ...suggestionToCatalogServer(
+        suggestion({ iconUrl: "https://example.com/legacy.png" }),
+      ),
+      meta,
+    });
+  },
+);
+it("keeps legacy logos when the catalog fails", () => {
+  mocks.catalog.mockReturnValue({ data: undefined, isError: true } as never);
+  show([suggestion({ iconUrl: "https://example.com/legacy.png" })]);
+  expect(document.querySelector("img")?.getAttribute("src")).toBe(
+    "https://example.com/legacy.png",
+  );
+  fireEvent.error(document.querySelector("img")!);
+  expect(document.querySelector("img")).toBeNull();
 });

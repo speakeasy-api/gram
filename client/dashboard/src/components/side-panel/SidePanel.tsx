@@ -1,3 +1,4 @@
+import { SetupGuideIcon } from "@/components/setup-guide/SetupGuideIcon";
 import { Text } from "@/components/ui/Text";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -149,7 +150,9 @@ export function SidePanelSurface(): React.JSX.Element | null {
                 publish no icon fall back to the mark for what the panel holds,
                 which is a guide. */}
             <div className="bg-primary/5 flex size-8 shrink-0 items-center justify-center dark:bg-neutral-800">
-              {shown.iconUrl ? (
+              {shown.kind === "setup-guide" ? (
+                <SetupGuideIcon {...shown.props} iconUrl={shown.iconUrl} />
+              ) : shown.iconUrl ? (
                 <img
                   src={shown.iconUrl}
                   alt=""

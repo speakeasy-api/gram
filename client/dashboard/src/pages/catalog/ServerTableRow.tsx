@@ -1,5 +1,6 @@
-import { catalogLogoClassName } from "./logo";
-import { cn } from "@/lib/utils";
+import { resolveCatalogLogo } from "./logo";
+import { useIsDarkTheme } from "@/lib/theme";
+import { CatalogLogo } from "./CatalogLogo";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
@@ -24,6 +25,7 @@ export function ServerTableRow({
   onAdd,
 }: ServerTableRowProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
+  const theme = useIsDarkTheme() ? "dark" : "light";
 
   return (
     <DotRow
@@ -32,14 +34,11 @@ export function ServerTableRow({
       iconRailClassName="bg-surface-secondary-default"
       iconTileClassName="bg-card dark:bg-card"
       icon={
-        server.iconUrl ? (
-          <img
-            src={server.iconUrl}
+        resolveCatalogLogo(server, theme).src ? (
+          <CatalogLogo
+            server={server}
             alt={displayName}
-            className={cn(
-              "h-6 w-6 object-contain",
-              catalogLogoClassName(server.registrySpecifier),
-            )}
+            className="h-6 w-6 object-contain"
           />
         ) : undefined
       }

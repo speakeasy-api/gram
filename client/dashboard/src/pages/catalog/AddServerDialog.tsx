@@ -2,7 +2,8 @@ import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
 import { useNavigate } from "react-router";
-import { catalogLogoClassName } from "./logo";
+import { hasCatalogLogo } from "./logo";
+import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -701,14 +702,14 @@ function SelectRemotesPhaseContent({
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
-            {currentConfig.server.iconUrl ? (
-              <img
-                src={currentConfig.server.iconUrl}
+            {hasCatalogLogo(currentConfig.server) ? (
+              <CatalogLogo
+                server={currentConfig.server}
                 alt=""
-                className={cn(
-                  "h-6 w-6",
-                  catalogLogoClassName(currentConfig.server.registrySpecifier),
-                )}
+                className={cn("h-6 w-6")}
+                fallback={
+                  <ServerIcon className="text-muted-foreground h-5 w-5" />
+                }
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -1225,14 +1226,14 @@ function BatchServerConfig({
           >
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
-                {config.server.iconUrl ? (
-                  <img
-                    src={config.server.iconUrl}
+                {hasCatalogLogo(config.server) ? (
+                  <CatalogLogo
+                    server={config.server}
                     alt=""
-                    className={cn(
-                      "h-4 w-4",
-                      catalogLogoClassName(config.server.registrySpecifier),
-                    )}
+                    className={cn("h-4 w-4")}
+                    fallback={
+                      <ServerIcon className="text-muted-foreground h-3 w-3" />
+                    }
                   />
                 ) : (
                   <ServerIcon className="text-muted-foreground h-3 w-3" />
@@ -1719,14 +1720,14 @@ function AddedServerCard({
         className="min-h-[128px] cursor-pointer [&_*]:no-underline"
         iconRailClassName="w-32"
         icon={
-          server?.iconUrl ? (
-            <img
-              src={server.iconUrl}
+          server && hasCatalogLogo(server) ? (
+            <CatalogLogo
+              server={server}
               alt=""
-              className={cn(
-                "h-10 w-10 object-contain",
-                catalogLogoClassName(server.registrySpecifier),
-              )}
+              className={cn("h-10 w-10 object-contain")}
+              fallback={
+                <ServerIcon className="text-muted-foreground h-8 w-8" />
+              }
             />
           ) : (
             <ServerIcon className="text-muted-foreground h-8 w-8" />

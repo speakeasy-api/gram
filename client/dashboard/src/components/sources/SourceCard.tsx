@@ -1,3 +1,5 @@
+import { useInstalledCatalogServer } from "@/pages/catalog/useInstalledCatalogServer";
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { AssetImage } from "@/components/asset-image";
 import { cn } from "@/lib/utils";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -21,8 +23,20 @@ export function SourceMcpIcon({
   });
   const logoAssetId = data?.metadata?.logoAssetId;
 
+  const catalogServer = useInstalledCatalogServer(mcpServerId, !logoAssetId);
+
   if (logoAssetId) {
     return <AssetImage assetId={logoAssetId} className={className} />;
   }
+  if (catalogServer)
+    return (
+      <CatalogLogo
+        server={catalogServer}
+        className={className}
+        fallback={
+          <Network className={cn("text-muted-foreground", className)} />
+        }
+      />
+    );
   return <Network className={cn("text-muted-foreground", className)} />;
 }

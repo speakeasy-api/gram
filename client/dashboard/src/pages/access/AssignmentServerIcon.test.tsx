@@ -1,12 +1,20 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const state = vi.hoisted(() => ({ assetId: "logo-asset", metadata: vi.fn() }));
+const state = vi.hoisted(() => ({
+  assetId: "logo-asset",
+  metadata: vi.fn(),
+  catalog: vi.fn(),
+}));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: (...args: unknown[]) => {
     state.metadata(...args);
     return { data: { metadata: { logoAssetId: state.assetId || undefined } } };
   },
 }));
+vi.mock("@/pages/catalog/useInstalledCatalogServer", () => ({
+  useInstalledCatalogServer: (...args: unknown[]) => state.catalog(...args),
+}));
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { AssignmentServerIcon } from "./AssignmentServerIcon";
 const server = {
   id: "server-a",
@@ -18,6 +26,7 @@ const server = {
 beforeEach(() => {
   state.assetId = "logo-asset";
   vi.clearAllMocks();
+  state.catalog.mockReturnValue(undefined);
   vi.stubGlobal(
     "Image",
     class extends EventTarget {
@@ -54,4 +63,63 @@ it("uses the server's initial when branding is absent", () => {
   state.assetId = "";
   render(<AssignmentServerIcon server={server} />);
   expect(screen.getByText("G")).toBeDefined();
+});
+
+it("uses live curated variants from the server project, behind custom branding", async () => {
+  state.catalog.mockReturnValue({
+    registrySpecifier: "app.linear/linear",
+    iconUrl: "legacy",
+    meta: {
+      "com.speakeasy.ai/icons": {
+        default: { src: "light-logo" },
+        dark: { src: "dark-logo" },
+      },
+    },
+  });
+  const view = (theme: "light" | "dark") => (
+    <ConfigProvider theme={theme} setTheme={() => {}}>
+      <AssignmentServerIcon server={server} />
+    </ConfigProvider>
+  );
+  const { container, rerender } = render(view("dark"));
+  await waitFor(() =>
+    expect(container.querySelector("img")?.getAttribute("src")).toContain(
+      "logo-asset",
+    ),
+  );
+  expect(state.catalog).toHaveBeenCalledWith("server-a", false, "engineering");
+  state.assetId = "";
+  rerender(view("dark"));
+  await waitFor(() =>
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "dark-logo",
+    ),
+  );
+  expect(container.querySelector("img")?.className).not.toContain("invert");
+  expect(state.catalog).toHaveBeenCalledWith("server-a", true, "engineering");
+  rerender(view("light"));
+  await waitFor(() =>
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "light-logo",
+    ),
+  );
+});
+it("retains the avatar initial when a curated image fails", async () => {
+  state.assetId = "";
+  state.catalog.mockReturnValue({
+    registrySpecifier: "test",
+    iconUrl: "broken",
+  });
+  vi.stubGlobal(
+    "Image",
+    class extends EventTarget {
+      set src(_value: string) {
+        queueMicrotask(() => {
+          this.dispatchEvent(new Event("error"));
+        });
+      }
+    },
+  );
+  render(<AssignmentServerIcon server={server} />);
+  await waitFor(() => expect(screen.getByText("G")).toBeDefined());
 });

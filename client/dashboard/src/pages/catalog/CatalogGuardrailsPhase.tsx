@@ -20,7 +20,8 @@ import {
 import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import { ServerIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { catalogLogoClassName } from "./logo";
+import { hasCatalogLogo } from "./logo";
+import { CatalogLogo } from "./CatalogLogo";
 import type {
   GuardrailServerSummary,
   GuardrailsPhase,
@@ -170,14 +171,12 @@ function ServerSummaryRow({
   return (
     <div className="flex items-center gap-3">
       <div className="bg-muted flex size-10 shrink-0 items-center justify-center border">
-        {server.iconUrl ? (
-          <img
-            src={server.iconUrl}
+        {server && hasCatalogLogo(server) ? (
+          <CatalogLogo
+            server={server}
             alt=""
-            className={cn(
-              "size-6",
-              catalogLogoClassName(server.registrySpecifier),
-            )}
+            className={cn("size-6")}
+            fallback={<ServerIcon className="text-muted-foreground size-4" />}
           />
         ) : (
           <ServerIcon className="text-muted-foreground size-4" />

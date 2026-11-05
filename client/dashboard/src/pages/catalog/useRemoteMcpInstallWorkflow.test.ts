@@ -866,147 +866,25 @@ describe("useRemoteMcpInstallWorkflow", () => {
   // catalog icon persistence
   // -------------------------------------------------------------------------
 
-  it("uploads the catalog icon and attaches it to the new mcp server", async () => {
-    const servers = [
-      makeServer({
-        title: "My Server",
-        iconUrl: "https://cdn.example/logo.png",
-      }),
-    ];
-    const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({ servers }),
-    );
-
-    await startInstall(result);
-
-    await waitFor(() => expect(result.current.phase).toBe("complete"));
-    expect(mockFetchImageFromURL).toHaveBeenCalledWith(
-      { fetchImageFromURLForm2: { url: "https://cdn.example/logo.png" } },
-      undefined,
-      undefined,
-    );
-    expect(mockMcpMetadataSet).toHaveBeenCalledWith(
-      {
-        setMcpMetadataRequestBody: {
-          mcpServerId: "mcp-server-1",
-          logoAssetId: "asset-1",
-        },
-      },
-      undefined,
-      undefined,
-    );
-  });
-
-  it("persists the catalog icon for unproxied installs too", async () => {
-    const servers = [
-      makeServer({
-        title: "Figma",
-        registrySpecifier: "com.figma.mcp/mcp",
-        remotes: [remote("https://mcp.figma.com/mcp")],
-        iconUrl: "https://cdn.example/figma.png",
-      }),
-    ];
-    const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({ servers }),
-    );
-
-    await startInstall(result);
-
-    await waitFor(() => expect(result.current.phase).toBe("complete"));
-    expect(mockUnproxiedCreateServer).toHaveBeenCalled();
-    expect(mockMcpMetadataSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        setMcpMetadataRequestBody: {
-          mcpServerId: "mcp-server-1",
-          logoAssetId: "asset-1",
-        },
-      }),
-      undefined,
-      undefined,
-    );
-  });
-
-  it("skips the icon calls entirely when the server has no iconUrl", async () => {
-    const servers = [makeServer({ title: "My Server", iconUrl: undefined })];
-    const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({ servers }),
-    );
-
-    await startInstall(result);
-
-    await waitFor(() => expect(result.current.phase).toBe("complete"));
-    expect(mockFetchImageFromURL).not.toHaveBeenCalled();
-    expect(mockMcpMetadataSet).not.toHaveBeenCalled();
-  });
-
-  it("completes the install even when the icon upload fails", async () => {
-    const error = new Error("upload boom");
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      mockFetchImageFromURL.mockRejectedValue(error);
+  it.each(["https://mcp.example.com/mcp", "https://mcp.figma.com/mcp"])(
+    "keeps catalog icons live instead of copying them on install: %s",
+    async (url) => {
       const servers = [
         makeServer({
           title: "My Server",
           iconUrl: "https://cdn.example/logo.png",
+          remotes: [remote(url)],
         }),
       ];
       const { result } = renderHook(() =>
         useRemoteMcpInstallWorkflow({ servers }),
       );
-
       await startInstall(result);
-
       await waitFor(() => expect(result.current.phase).toBe("complete"));
-      const complete = result.current;
-      if (complete.phase !== "complete") throw new Error("unexpected phase");
-      expect(complete.statuses[0]).toMatchObject({ status: "completed" });
+      expect(mockFetchImageFromURL).not.toHaveBeenCalled();
       expect(mockMcpMetadataSet).not.toHaveBeenCalled();
-      expect(consoleWarn).toHaveBeenCalledExactlyOnceWith(
-        "Failed to persist server icon during install.",
-        {
-          mcpServerId: "mcp-server-1",
-          iconUrl: "https://cdn.example/logo.png",
-          iconError: error,
-        },
-      );
-    } finally {
-      consoleWarn.mockRestore();
-    }
-  });
-
-  it("completes the install even when attaching the icon metadata fails", async () => {
-    const error = new Error("metadata boom");
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      mockMcpMetadataSet.mockRejectedValue(error);
-      const servers = [
-        makeServer({
-          title: "My Server",
-          iconUrl: "https://cdn.example/logo.png",
-        }),
-      ];
-      const { result } = renderHook(() =>
-        useRemoteMcpInstallWorkflow({ servers }),
-      );
-
-      await startInstall(result);
-
-      await waitFor(() => expect(result.current.phase).toBe("complete"));
-      const complete = result.current;
-      if (complete.phase !== "complete") throw new Error("unexpected phase");
-      expect(complete.statuses[0]).toMatchObject({ status: "completed" });
-      expect(consoleWarn).toHaveBeenCalledExactlyOnceWith(
-        "Failed to persist server icon during install.",
-        {
-          mcpServerId: "mcp-server-1",
-          iconUrl: "https://cdn.example/logo.png",
-          iconError: error,
-        },
-      );
-    } finally {
-      consoleWarn.mockRestore();
-    }
-  });
+    },
+  );
 
   it("sends gram-project request options for cross-project installs", async () => {
     const servers = [makeServer()];
