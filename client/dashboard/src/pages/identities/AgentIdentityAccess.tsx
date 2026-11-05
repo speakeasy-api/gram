@@ -19,6 +19,7 @@ import type { AgentPolicySelector } from "@gram/client/models/components/agentpo
 import { useQuery } from "@tanstack/react-query";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
+import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
 
 /**
  * Every narrowing beyond the resource itself, including constraints the
@@ -162,6 +163,16 @@ export function AgentIdentityPermissions({
                           {narrowing}
                         </Text>
                       )}
+                      {/* A server the agent signs in to with a person's
+                          own connection is used on that person's behalf. */}
+                      {grant.scope === "mcp:connect" &&
+                        selector.resourceKind === "mcp" &&
+                        selector.resourceId !== ANY_RESOURCE && (
+                          <GrantOnBehalfOf
+                            agentId={agent.id}
+                            resourceId={selector.resourceId}
+                          />
+                        )}
                     </li>
                   );
                 })}
