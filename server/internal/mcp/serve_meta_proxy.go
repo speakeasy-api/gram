@@ -167,8 +167,8 @@ func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader)
 	})
 }
 
-func (d memberDial) upstreamCredential() remotemcp.UpstreamCredential {
-	return remotemcp.UpstreamCredential{Attached: !d.anonymous, Self: d.clientCredential, Configured: d.configuredHeaders}
+func (d memberDial) upstreamCredential() remotemcp.UpstreamCredentialSent {
+	return remotemcp.UpstreamCredentialSent{Attached: !d.anonymous, Self: d.clientCredential, Configured: d.configuredHeaders}
 }
 
 func memberSessionKey(route any, token string) string {
