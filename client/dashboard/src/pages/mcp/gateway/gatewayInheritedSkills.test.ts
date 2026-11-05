@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
 import { describe, expect, it } from "vitest";
 import { inheritedSkills } from "./gatewayInheritedSkills";

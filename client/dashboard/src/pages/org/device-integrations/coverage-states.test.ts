@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { FleetDevice } from "@gram/client/models/components/fleetdevice.js";
 import { describe, expect, it } from "vitest";
 import {
