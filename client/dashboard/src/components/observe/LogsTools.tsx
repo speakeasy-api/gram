@@ -9,7 +9,10 @@ import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { GatewayDispatchLink } from "@/components/observe/GatewayDispatchLink";
+import {
+  GatewayDispatchLink,
+  GatewayTargetLink,
+} from "@/components/observe/GatewayDispatchLink";
 import {
   FilterChip,
   type ObserveStatusFilterValue,
@@ -2044,14 +2047,10 @@ function LogsToolsTraceRow({
                 >
                   {targetLabel}
                 </Link>
-              ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
-                <Link
-                  to={routes.mcp.gateway.overview.href(trace.targetId)}
-                  onClick={(event) => event.stopPropagation()}
-                  className="hover:text-foreground hover:underline"
-                >
+              ) : trace.targetType === "meta_mcp_server" ? (
+                <GatewayTargetLink trace={trace}>
                   {targetLabel}
-                </Link>
+                </GatewayTargetLink>
               ) : (
                 targetLabel
               )}
