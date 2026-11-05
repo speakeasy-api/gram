@@ -58,10 +58,16 @@ func (s *Service) loadReconnectConnection(ctx context.Context, q *usersessionsre
 	return policy, catalog, nil
 }
 
-// reconnectApprovalCommitted reports this challenge's approval already saved, whatever the review page still says.
-func (s *Service) reconnectApprovalCommitted(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) bool {
+// reconnectApprovalCommitted reports this challenge's approval already saved, or an error when a failed read can't tell.
+func (s *Service) reconnectApprovalCommitted(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (bool, error) {
 	policy, _, err := s.loadReconnectConnection(ctx, usersessionsrepo.New(s.db), endpoint, state, time.Now())
-	return err == nil && policy.Catalog.ID != state.CodeReconnect.CatalogID
+	if err != nil {
+		if _, _, terminal := reconnectFailure(err); terminal {
+			return false, nil
+		}
+		return false, err
+	}
+	return policy.Catalog.ID != state.CodeReconnect.CatalogID, nil
 }
 
 // OAuth completion opens review; only the subsequent approval changes tools.
@@ -93,7 +99,9 @@ func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions
 		return err
 	}
 	if _, _, err := s.loadReconnectConnection(r.Context(), usersessionsrepo.New(s.db), endpoint, state, time.Now()); err != nil {
-		s.refuseReconnect(r, s.logger, s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r)), attempt, err)
+		t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r))
+		defer t.Finish(r.Context())
+		s.refuseReconnect(r, s.logger, t, attempt, err)
 		return err
 	}
 	binding := *state.CodeReconnect

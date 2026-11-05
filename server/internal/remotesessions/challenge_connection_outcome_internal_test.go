@@ -78,8 +78,8 @@ func TestAuthorityHappened(t *testing.T) {
 
 func TestTypedAuthorizationHappened(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, typedAuthorizationHappened(fmt.Errorf("binding revoked: %w", ErrTypedAuthorizationDenied)))
-	require.Equal(t, mcpconnectionattempts.CodeInternalError, typedAuthorizationHappened(errors.New("database unavailable")))
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, TypedAuthorizationHappened(fmt.Errorf("binding revoked: %w", ErrTypedAuthorizationDenied)))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, TypedAuthorizationHappened(errors.New("database unavailable")))
 }
 
 func TestTypedAuthorizationProvenance(t *testing.T) {
@@ -94,6 +94,6 @@ func TestTypedAuthorizationProvenance(t *testing.T) {
 		{ErrTypedAuthorizationConfiguration, mcpconnectionattempts.CodeConfigurationRequired},
 	} {
 		require.ErrorIs(t, tc.err, ErrTypedAuthorizationDenied)
-		require.Equal(t, tc.want, typedAuthorizationHappened(fmt.Errorf("validator: %w", tc.err)))
+		require.Equal(t, tc.want, TypedAuthorizationHappened(fmt.Errorf("validator: %w", tc.err)))
 	}
 }

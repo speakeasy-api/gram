@@ -55,9 +55,9 @@ func RegisteredCodeLabel(code string) string {
 	// OpenID Connect Core §3.1.2.6. Keep this separate from the IETF registry:
 	// these standardized codes are safe labels, but are not IETF registrations.
 	switch code {
-	case "interaction_required", "login_required", "account_selection_required",
-		"consent_required", "invalid_request_uri", "invalid_request_object",
-		"request_not_supported", "request_uri_not_supported", "registration_not_supported":
+	case OIDCCodeInteractionRequired, OIDCCodeLoginRequired, OIDCCodeAccountSelectionRequired,
+		OIDCCodeConsentRequired, OIDCCodeInvalidRequestURI, OIDCCodeInvalidRequestObject,
+		OIDCCodeRequestNotSupported, OIDCCodeRequestURINotSupported, OIDCCodeRegistrationNotSupported:
 		return code
 	default:
 		return "unregistered"

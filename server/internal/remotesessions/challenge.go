@@ -416,7 +416,8 @@ var (
 	ErrTypedAuthorizationConfiguration = fmt.Errorf("%w: connection setup is ambiguous", ErrTypedAuthorizationDenied)
 )
 
-func typedAuthorizationHappened(err error) mcpconnectionattempts.Code {
+// TypedAuthorizationHappened classifies a typed authorization refusal.
+func TypedAuthorizationHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, ErrTypedAuthorizationInvalid):
 		return mcpconnectionattempts.CodeInternalError
@@ -1791,7 +1792,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	if err := m.validateTypedAuthorization(ctx, state); err != nil {
-		t.Refuse(ctx, typedAuthorizationHappened(err))
+		t.Refuse(ctx, TypedAuthorizationHappened(err))
 		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 
@@ -1972,7 +1973,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// Recheck subject permission after the exchange, before taking database
 	// locks. The exact typed binding is then locked through grant commit below.
 	if err := m.validateTypedAuthorization(ctx, state); err != nil {
-		t.Refuse(ctx, typedAuthorizationHappened(err))
+		t.Refuse(ctx, TypedAuthorizationHappened(err))
 		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
 	}
 	dbtx, err := m.db.Begin(ctx)
@@ -2329,7 +2330,7 @@ func (m *ChallengeManager) retryWithoutResource(r *http.Request, t *mcpconnectio
 	var err error
 	if state.TypedAuthorization != nil {
 		if err = m.validateTypedAuthorization(ctx, state); err != nil {
-			t.Refuse(ctx, typedAuthorizationHappened(err))
+			t.Refuse(ctx, TypedAuthorizationHappened(err))
 			return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid")
 		}
 		clients, err = m.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})

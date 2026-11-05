@@ -508,6 +508,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		completionFailure bool
 		cancelAfterCommit bool
 		cancel            bool
+		cancelReadFailure bool
 	}{
 		{name: "all tools"},
 		{name: "commit failure preserves catalogue", commitFailure: true},
@@ -518,6 +519,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		{name: "revoked during consent", revoke: true},
 		{name: "catalogue evicted during consent", evictCatalog: true},
 		{name: "cancel preserves catalogue", cancel: true},
+		{name: "cancel that cannot read the approval leaves the review open", cancel: true, cancelReadFailure: true},
 		{name: "revoked while reviewing", revokeAtApproval: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -719,9 +721,23 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
 				req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.cancelReadFailure {
+					_, err := ti.conn.Exec(ctx, `UPDATE user_sessions SET tool_selection = '{"version":"unreadable"}' WHERE credential_id = $1 OR id = $1`, sessionPolicy.CredentialID)
+					require.NoError(t, err)
+				}
 				response := httptest.NewRecorder()
 				require.NoError(t, ti.service.ServeConsent(response, req, endpoint))
 				require.Contains(t, response.Body.String(), "No tool changes were approved")
+				if tc.cancelReadFailure {
+					require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+					rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+					rec.RequireNotEnded()
+					pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+					require.NoError(t, err)
+					require.False(t, pending.CodeReconnect.CatalogComplete)
+					require.False(t, pending.CodeReconnect.CatalogCanceled)
+					return
+				}
 				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
 				require.Equal(t, before, after)
 				require.NoError(t, ti.service.DrainConnectionEndings(ctx))

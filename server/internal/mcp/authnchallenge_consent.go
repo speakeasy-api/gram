@@ -1147,20 +1147,26 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if catalogReview {
 		if action == "deny" {
 			// An earlier approval that committed but failed to complete stands.
-			approved := s.reconnectApprovalCommitted(ctx, endpoint, challengeState)
-			completed := *challengeState.CodeReconnect
-			completed.CatalogComplete = true
-			completed.CatalogCanceled = !approved
-			if err := s.updateCodeReconnect(ctx, challengeState, completed); err != nil {
+			approved, readErr := s.reconnectApprovalCommitted(ctx, endpoint, challengeState)
+			if readErr != nil {
+				// Unknown, so the review and attempt stay open for a later approval to finish.
+				logger.ErrorContext(ctx, "read reconnect approval on cancel", attr.SlogError(readErr))
 				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-				return err
-			}
-			if approved {
-				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.Detail("approved_before_cancel"))
 			} else {
-				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
+				completed := *challengeState.CodeReconnect
+				completed.CatalogComplete = true
+				completed.CatalogCanceled = !approved
+				if err := s.updateCodeReconnect(ctx, challengeState, completed); err != nil {
+					t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+					return err
+				}
+				if approved {
+					s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.Detail("approved_before_cancel"))
+				} else {
+					s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
+				}
+				t.Continue()
 			}
-			t.Continue()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, err := w.Write([]byte("<!doctype html><title>Connection unchanged</title><p>No tool changes were approved. You can close this tab.</p>"))
 			if err != nil {
@@ -1489,6 +1495,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview before approving.").LogWarn(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "validate consent inventory credential").LogError(ctx, logger)
 	}
 

@@ -176,8 +176,9 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
 		if errors.Is(err, errRecoveryNotSignedIn) {
 			t.Continue()
+		} else {
+			t.Refuse(ctx, recoveryHappened(err))
 		}
-		t.Refuse(ctx, recoveryHappened(err))
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
 	// Used once, and only by the person it names.
@@ -208,6 +209,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	// login browser hop when that host is not this one.
 	browser, err := generateOpaqueToken()
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "bind connection login").LogError(ctx, s.logger)
 	}
 	login.BrowserCookieID = uuid.NewString()
@@ -219,6 +221,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	login.BrowserHop = !sameOrigin(callbackOrigin, linkOrigin)
 	if err := s.connectionRecoveryCache.Store(ctx, login); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)

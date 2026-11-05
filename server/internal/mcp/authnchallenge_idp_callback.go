@@ -413,8 +413,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		logger.WarnContext(ctx, "code reconnect owner authorization rejected", attr.SlogError(err))
 		if challengeState.CodeReconnect.expired(time.Now()) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+		} else {
+			t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		}
-		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}
 	if challengeState.CodeReconnect != nil {
@@ -431,8 +432,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		logger.WarnContext(ctx, "workload reconnect owner authorization rejected", attr.SlogError(err))
 		if challengeState.WorkloadReconnect.expired(time.Now()) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+		} else {
+			t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		}
-		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}
 

@@ -15,8 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var errTypedLoginDenied = remotesessions.ErrTypedAuthorizationDenied
-
 // ValidateRemoteLoginTypedAuthorization rechecks the exact binding and subject
 // that authorized a typed login, not another client that happens to be usable.
 func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, state remotesessions.RemoteLoginState) error {
@@ -69,7 +67,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		return fmt.Errorf("authorize typed login server: %w", err)
 	}
 	if !decision.Allowed {
-		return fmt.Errorf("%w: typed login server access is no longer authorized", errTypedLoginDenied)
+		return fmt.Errorf("%w: typed login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
 	}
 	res, err := s.resolveAuthClientChoiceForConsent(ctx, a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
 	if err != nil {
@@ -108,7 +106,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 			}
 			a, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challenge, client, chosenMetaMember{serverID: uuid.NullUUID{UUID: candidate.serverID, Valid: true}, projectID: candidate.projectID})
 			if err != nil {
-				if !errors.Is(err, errTypedLoginDenied) {
+				if !errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
 					return nil, err
 				}
 				denied = err
@@ -144,7 +142,7 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err == nil {
 			return a, nil
 		} else {
-			if !errors.Is(err, errTypedLoginDenied) {
+			if !errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
 				return nil, err
 			}
 			denied = err

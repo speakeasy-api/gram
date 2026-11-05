@@ -329,6 +329,7 @@ func (s *Service) endChainedFirstPartyInBackground(ctx context.Context, logger *
 	}
 }
 
+// attemptEndMarker's writers must share one store, which NewService gives them through cacheImpl.
 func attemptEndMarker(attempt mcpconnectionattempts.Attempt) string {
 	return "connectionAttemptEnded:" + attempt.ID().String()
 }
@@ -459,7 +460,8 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 		return
 	}
 	app := mcpconnectionattempts.AppUnverified
-	if reason == "ai_tool_blocked" || reason == "cimd_metadata_invalid" || reason == "cimd_admission_denied" || reason == "cimd_admission_disabled" {
+	switch what {
+	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.CodeAIToolBlocked:
 		app = mcpconnectionattempts.AppOf(clientID)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
