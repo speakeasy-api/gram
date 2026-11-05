@@ -236,9 +236,11 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	callCancel()
 	if err != nil {
 		failure := providerFailure(err, "")
+		// A missing permission blocks cleanup the same way rejected
+		// credentials do, and the dashboard explains both with one message.
 		blocker := ""
-		if failure.Code == k8s.NetworkIngressErrorProviderCredentialsRejected {
-			blocker = failure.Code
+		if errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected) {
+			blocker = k8s.NetworkIngressErrorProviderCredentialsRejected
 		}
 		if err := recordCleanupBlocker(ctx, repo.New(conn), row, blocker); err != nil {
 			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
@@ -323,7 +325,8 @@ func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.Netw
 	status := observation.Status
 	code := observation.ErrorCode
 	switch code {
-	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api":
+	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable:
 	default:
 		code = "provider_error"
 		failure = reconcileFailure(code)
@@ -411,8 +414,14 @@ func sameIngressDesired(a, b repo.NetworkIngress) bool {
 
 func providerFailure(err error, code string) *ReconcileError {
 	switch {
+	case errors.Is(err, k8s.ErrNetworkIngressProviderForbidden):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderForbidden)
 	case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
 		return reconcileFailure(k8s.NetworkIngressErrorProviderCredentialsRejected)
+	case errors.Is(err, k8s.ErrNetworkIngressProviderRateLimited):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderRateLimited)
+	case errors.Is(err, k8s.ErrNetworkIngressProviderAPIUnavailable):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderAPIUnavailable)
 	case errors.Is(err, k8s.ErrNetworkIngressDeletionPending):
 		return reconcileFailure("deletion_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressReplacementPending):
@@ -425,7 +434,8 @@ func providerFailure(err error, code string) *ReconcileError {
 		return reconcileFailure("unsupported_provider")
 	}
 	switch code {
-	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api":
+	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable:
 		return reconcileFailure(code)
 	default:
 		return reconcileFailure("provider_error")
@@ -438,7 +448,7 @@ func reconcileFailure(code string) *ReconcileError {
 	// Rejected provider credentials need a human to fix them. The hourly sweep
 	// and "Retry cleanup" re-drive the ingress instead of spinning here.
 	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "provider_configuration_unavailable",
-		k8s.NetworkIngressErrorProviderCredentialsRejected:
+		k8s.NetworkIngressErrorProviderCredentialsRejected, k8s.NetworkIngressErrorProviderForbidden:
 		retryable = false
 	}
 	return &ReconcileError{Code: code, Retryable: retryable}

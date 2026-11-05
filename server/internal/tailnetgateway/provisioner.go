@@ -167,11 +167,8 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	err = p.api.UpsertService(ctx, creds, tailscaleapi.Service{
 		Name: ServiceName(desired.Hostname), Ports: []string{servicePortSpec}, Tags: []string{p.cfg.Tag}, Comment: serviceComment,
 	})
-	if errors.Is(err, tailscaleapi.ErrUnauthorized) {
-		return errorObservation(k8s.NetworkIngressErrorInvalidCredentials), err
-	}
 	if err != nil {
-		return errorObservation(""), err
+		return apiFailure(err)
 	}
 
 	queries := repo.New(p.db)
@@ -195,7 +192,7 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	// A label change leaves the previous service behind; the hosts' reported
 	// FQDNs remember which one it was.
 	if err := p.deleteRenamedServices(ctx, creds, desired.Hostname, nodes); err != nil {
-		return errorObservation(""), err
+		return apiFailure(err)
 	}
 	now := p.cfg.Now()
 	for _, node := range nodes {
@@ -203,7 +200,7 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 			// A retired slot whose host has stopped is purged: its device leaves
 			// the tailnet and a later slot count increase starts a fresh identity.
 			if err := p.purgeRetiredSlot(ctx, creds, desired.ID, desired.OrganizationID, node, now); err != nil {
-				return errorObservation(""), err
+				return apiFailure(err)
 			}
 			continue
 		}
@@ -227,11 +224,8 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		key, err := p.api.CreateAuthKey(ctx, creds, tailscaleapi.AuthKeyRequest{
 			Tag: p.cfg.Tag, Description: fmt.Sprintf("Speakeasy gateway slot %d (%s)", node.Slot, desired.ID), TTL: p.cfg.AuthKeyTTL,
 		})
-		if errors.Is(err, tailscaleapi.ErrUnauthorized) {
-			return errorObservation(k8s.NetworkIngressErrorInvalidCredentials), err
-		}
 		if err != nil {
-			return errorObservation(""), err
+			return apiFailure(err)
 		}
 		ciphertext, err := p.enc.Encrypt([]byte(key.Key))
 		if err != nil {
@@ -264,7 +258,7 @@ func (p *Provisioner) purgeRetiredSlot(ctx context.Context, creds tailscaleapi.C
 	}
 	if node.NodeID.Valid && node.NodeID.String != "" {
 		if err := p.api.DeleteDevice(ctx, creds, node.NodeID.String); err != nil {
-			return mapAPIError(err)
+			return fmt.Errorf("delete retired slot device: %w", err)
 		}
 	}
 	queries := repo.New(p.db)
@@ -293,7 +287,7 @@ func (p *Provisioner) deleteRenamedServices(ctx context.Context, creds tailscale
 		}
 		seen[previous] = struct{}{}
 		if err := p.api.DeleteService(ctx, creds, ServiceName(previous)); err != nil {
-			return mapAPIError(err)
+			return fmt.Errorf("delete renamed service: %w", err)
 		}
 	}
 	return nil
@@ -431,11 +425,42 @@ func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.N
 	return nil
 }
 
+// mapAPIError tags a Tailscale API failure with the provider-neutral sentinel
+// the reconciler and metrics classify by.
 func mapAPIError(err error) error {
-	if errors.Is(err, tailscaleapi.ErrUnauthorized) {
-		return fmt.Errorf("%w: %w", k8s.ErrNetworkIngressProviderCredentialsRejected, err)
+	var sentinel error
+	switch {
+	case errors.Is(err, tailscaleapi.ErrForbidden):
+		sentinel = k8s.ErrNetworkIngressProviderForbidden
+	case errors.Is(err, tailscaleapi.ErrUnauthorized):
+		sentinel = k8s.ErrNetworkIngressProviderCredentialsRejected
+	case errors.Is(err, tailscaleapi.ErrRateLimited):
+		sentinel = k8s.ErrNetworkIngressProviderRateLimited
+	case errors.Is(err, tailscaleapi.ErrUnavailable):
+		sentinel = k8s.ErrNetworkIngressProviderAPIUnavailable
+	default:
+		return err
 	}
-	return err
+	return fmt.Errorf("%w: %w", sentinel, err)
+}
+
+// apiFailure is the observation and error Apply reports for a failed
+// Tailscale API call. A rejected OAuth client keeps the invalid_credentials
+// code that connection setup reports; the teardown blocker sentinel is only
+// for Delete. Every other failure gets its own bounded code.
+func apiFailure(err error) (k8s.NetworkIngressObservation, error) {
+	switch {
+	case errors.Is(err, tailscaleapi.ErrForbidden):
+		return errorObservation(k8s.NetworkIngressErrorProviderForbidden), mapAPIError(err)
+	case errors.Is(err, tailscaleapi.ErrUnauthorized):
+		return errorObservation(k8s.NetworkIngressErrorInvalidCredentials), err
+	case errors.Is(err, tailscaleapi.ErrRateLimited):
+		return errorObservation(k8s.NetworkIngressErrorProviderRateLimited), mapAPIError(err)
+	case errors.Is(err, tailscaleapi.ErrUnavailable):
+		return errorObservation(k8s.NetworkIngressErrorProviderAPIUnavailable), mapAPIError(err)
+	default:
+		return errorObservation(""), err
+	}
 }
 
 // FindOrphans is a no-op: the gateway owns no Kubernetes resources.

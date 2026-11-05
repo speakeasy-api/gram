@@ -194,8 +194,14 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 
 func classifyNetworkIngressError(err error, observationCode string) string {
 	switch {
+	case errors.Is(err, ErrNetworkIngressProviderForbidden):
+		return NetworkIngressErrorProviderForbidden
 	case errors.Is(err, ErrNetworkIngressProviderCredentialsRejected):
 		return NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, ErrNetworkIngressProviderRateLimited):
+		return NetworkIngressErrorProviderRateLimited
+	case errors.Is(err, ErrNetworkIngressProviderAPIUnavailable):
+		return NetworkIngressErrorProviderAPIUnavailable
 	case errors.Is(err, ErrNetworkIngressInvalidDesiredState):
 		return NetworkIngressErrorInvalidDesiredState
 	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
@@ -216,7 +222,8 @@ func classifyNetworkIngressError(err error, observationCode string) string {
 	switch observationCode {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
-		NetworkIngressErrorProviderCredentialsRejected:
+		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable:
 		return observationCode
 	default:
 		return networkIngressErrorCodeInternal
@@ -258,7 +265,10 @@ func clampNetworkIngressErrorCode(value string) string {
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,
-		NetworkIngressErrorKubernetes:
+		NetworkIngressErrorKubernetes,
+		NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited,
+		NetworkIngressErrorProviderAPIUnavailable:
 		return value
 	default:
 		return networkIngressErrorCodeInternal
