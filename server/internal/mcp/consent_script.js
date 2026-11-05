@@ -689,11 +689,12 @@
   }
 
   // Tells the tool access island that a chained service was refused. The
-  // island defers its inventory only while the credential it signs in with
-  // is chain-only, and a chained card serves the upstream the inventory
-  // needs, so one refusal means the tools can't load after approval either.
-  // Signing in separately reloads the page with that service connected,
-  // which the server no longer renders as deferred.
+  // island defers its inventory only while the service it signs in through
+  // is chain-only, so a refusal of that service means the tools can't load
+  // after approval either. The island finds the refused service by the
+  // data-chain-check its card carries by now. Signing in separately reloads
+  // the page with that service connected, which the server no longer
+  // renders as deferred.
   function signalChainRejected() {
     document.documentElement.setAttribute(
       "data-consent-chain-rejected",

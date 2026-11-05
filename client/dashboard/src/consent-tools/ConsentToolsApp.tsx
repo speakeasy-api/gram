@@ -32,7 +32,8 @@ export interface ConsentToolsAppProps {
    * reached only through identity chaining: chaining runs after approval, so
    * the inventory is "not connected" until then and access is given with all
    * tools. Where the page offers a credential choice, each `auth_client`
-   * control carries its own answer and the selected one decides instead.
+   * control names the service its tools wait for and the selected one
+   * decides instead.
    */
   inventoryDeferred: boolean;
   serverName: string;
@@ -127,8 +128,8 @@ const UNSUPPORTED_MESSAGE =
 /**
  * The consent page script raises this, and sets the matching attribute on
  * the document element, when any identity-chained service is refused. A
- * deferred inventory signs in through identity chaining alone, so it can no
- * longer load after approval.
+ * deferred inventory signs in through identity chaining alone, so once its
+ * service is refused it can no longer load after approval.
  */
 export const CHAIN_REJECTED_EVENT = "gram:consent-chain-rejected";
 const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
@@ -140,10 +141,25 @@ const CHAIN_REJECTED_PHASE: ConsentPhase = {
     "Your identity provider couldn't connect this service, so its tools can't load.",
 };
 
-function chainRejectedOnPage(): boolean {
-  return (
-    document.documentElement.getAttribute(CHAIN_REJECTED_ATTRIBUTE) === "true"
-  );
+/**
+ * Whether the service a deferred inventory waits for was refused: the
+ * selected credential's own service card where the page names it, any
+ * chained service on a page without a credential choice.
+ */
+function chainRejectedFor(service: string | undefined): boolean {
+  if (service === undefined) {
+    return (
+      document.documentElement.getAttribute(CHAIN_REJECTED_ATTRIBUTE) === "true"
+    );
+  }
+  for (const card of document.querySelectorAll("[data-remote-client]")) {
+    if (
+      card.getAttribute("data-remote-client") === service &&
+      card.querySelector('[data-chain-check="rejected"]')
+    )
+      return true;
+  }
+  return false;
 }
 
 /**
@@ -222,7 +238,8 @@ function initialAccessMode(
 /** The credential the approve form submits, as its page control states it. */
 interface SelectedAuthClient {
   id: string;
-  inventoryDeferred: boolean;
+  /** The service card whose identity chaining its tools wait for, if any. */
+  deferredService: string | undefined;
 }
 
 /** Null when the page offers no credential choice. */
@@ -236,7 +253,7 @@ function selectedAuthClient(formId: string): SelectedAuthClient | null {
     )
       return {
         id: input.value,
-        inventoryDeferred: input.dataset["inventoryDeferred"] === "true",
+        deferredService: input.dataset["deferredService"] || undefined,
       };
   }
   return null;
@@ -264,8 +281,11 @@ export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
       key={authClient?.id ?? ""}
       {...props}
       inventoryDeferred={
-        authClient ? authClient.inventoryDeferred : props.inventoryDeferred
+        authClient
+          ? authClient.deferredService !== undefined
+          : props.inventoryDeferred
       }
+      deferredService={authClient?.deferredService}
       authClient={authClient?.id ?? ""}
     />
   );
@@ -284,7 +304,11 @@ function ConsentToolsSelection({
   serverName,
   prefill,
   authClient,
-}: ConsentToolsAppProps & { authClient: string }): JSX.Element {
+  deferredService,
+}: ConsentToolsAppProps & {
+  authClient: string;
+  deferredService: string | undefined;
+}): JSX.Element {
   // A stored narrower selection must never be replaced by all tools.
   const canDefer = !gateway && inventoryDeferred && prefill === null;
   // The server already decided these tools load after approval, so that
@@ -384,13 +408,16 @@ function ConsentToolsSelection({
     gatewayInventory,
   ]);
 
-  const [chainRejected, setChainRejected] = useState(chainRejectedOnPage);
+  const [chainRejected, setChainRejected] = useState(() =>
+    chainRejectedFor(deferredService),
+  );
   useEffect(() => {
-    const onRejected = () => setChainRejected(true);
+    const onRejected = () =>
+      setChainRejected(chainRejectedFor(deferredService));
     document.addEventListener(CHAIN_REJECTED_EVENT, onRejected);
-    if (chainRejectedOnPage()) setChainRejected(true);
+    onRejected();
     return () => document.removeEventListener(CHAIN_REJECTED_EVENT, onRejected);
-  }, []);
+  }, [deferredService]);
   const phase: ConsentPhase =
     loadPhase.name === "deferred" && chainRejected
       ? CHAIN_REJECTED_PHASE

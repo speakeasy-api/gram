@@ -261,17 +261,18 @@ func requirePageInventoryDeferral(t *testing.T, page string, deferred bool) {
 	require.Regexp(t, `id="consent-tools-root"[^>]*`+inventoryNotDeferredAttr, page)
 }
 
-// requireCredentialInventoryDeferral checks whether choosing authClient on
-// the page defers the tool inventory.
-func requireCredentialInventoryDeferral(t *testing.T, page string, authClient uuid.UUID, deferred bool) {
+// requireCredentialInventoryDeferral checks that choosing authClient on the
+// page defers the tool inventory until service's identity chaining runs, or,
+// with a nil service, that it does not defer.
+func requireCredentialInventoryDeferral(t *testing.T, page string, authClient uuid.UUID, service uuid.UUID) {
 	t.Helper()
-	option := `id="auth-client-` + authClient.String() + `"[^>]*` + inventoryDeferredAttr
-	require.Contains(t, page, `id="auth-client-`+authClient.String()+`"`)
-	if deferred {
-		require.Regexp(t, option, page)
+	option := `id="auth-client-` + authClient.String() + `"`
+	require.Contains(t, page, option)
+	if service == uuid.Nil {
+		require.NotRegexp(t, option+`[^>]*data-deferred-service`, page)
 		return
 	}
-	require.NotRegexp(t, option, page)
+	require.Regexp(t, option+`[^>]*data-deferred-service="`+service.String()+`"`, page)
 }
 
 func TestConsentPage_ChainedCredentialDefersBesideUnconnectedService(t *testing.T) {
@@ -283,9 +284,9 @@ func TestConsentPage_ChainedCredentialDefersBesideUnconnectedService(t *testing.
 	require.Contains(t, page, "0 of 2 connected")
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	requirePageInventoryDeferral(t, page, true)
-	requireCredentialInventoryDeferral(t, page, choices.identityProvider, true)
-	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, true)
-	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, false)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, fx.clientA)
+	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, fx.clientA)
+	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, uuid.Nil)
 }
 
 func TestConsentPage_ChainedCredentialStillDefersOnceAnotherServiceConnects(t *testing.T) {
@@ -297,8 +298,8 @@ func TestConsentPage_ChainedCredentialStillDefersOnceAnotherServiceConnects(t *t
 	page := renderToolsIsland(t, fx)
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	requirePageInventoryDeferral(t, page, true)
-	requireCredentialInventoryDeferral(t, page, choices.identityProvider, true)
-	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, false)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, fx.clientA)
+	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, uuid.Nil)
 }
 
 func TestConsentPage_StoredSelectionDoesNotDeferChainedCredential(t *testing.T) {
@@ -310,8 +311,8 @@ func TestConsentPage_StoredSelectionDoesNotDeferChainedCredential(t *testing.T) 
 	page := renderToolsIsland(t, fx)
 	require.Contains(t, page, `data-prefill=`)
 	requirePageInventoryDeferral(t, page, false)
-	requireCredentialInventoryDeferral(t, page, choices.identityProvider, false)
-	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, false)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, uuid.Nil)
+	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, uuid.Nil)
 
 	requireConsentInventoryConflict(t, fx, choices.identityProvider)
 	require.Empty(t, logRecords(t, logs, deferredConflictLog), "the page keeps blocking, so the conflict is not expected")

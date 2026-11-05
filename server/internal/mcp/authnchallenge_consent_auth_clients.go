@@ -68,9 +68,11 @@ type consentAuthClientOption struct {
 	// Selected marks the option the page preselects or the person picked.
 	Selected bool
 
-	// InventoryDeferred marks an option whose tools load only after approval,
-	// by consentInventoryDeferred. The consent page sets it.
-	InventoryDeferred bool
+	// DeferredService is the consent card whose identity chaining this
+	// option's tools wait for, by consentInventoryDeferred: they load only
+	// after approval. It is empty for an option whose tools load before. The
+	// consent page sets it.
+	DeferredService string
 
 	// registrationID is the OAuth registration the client authenticates
 	// through, recorded with the pick.
@@ -257,14 +259,14 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 				continue
 			}
 			option := consentAuthClientOption{
-				ID:                row.AuthClientID.UUID,
-				Name:              row.AuthClientName.String,
-				Type:              clientType,
-				State:             consentClientReady,
-				ConnectClientID:   "",
-				Selected:          false,
-				InventoryDeferred: false,
-				registrationID:    row.RemoteSessionClientID,
+				ID:              row.AuthClientID.UUID,
+				Name:            row.AuthClientName.String,
+				Type:            clientType,
+				State:           consentClientReady,
+				ConnectClientID: "",
+				Selected:        false,
+				DeferredService: "",
+				registrationID:  row.RemoteSessionClientID,
 			}
 			switch {
 			case res.outcome == authClientGap:

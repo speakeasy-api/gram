@@ -949,8 +949,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		inventoryDeferred = false
 		for i := range upstreamAuth.Options {
 			option := &upstreamAuth.Options[i]
-			option.InventoryDeferred = consentInventoryDeferred(consentCredentialCards(cards, option.registrationID), prefillAttr != "")
-			inventoryDeferred = inventoryDeferred || (option.Selected && option.InventoryDeferred)
+			if consentInventoryDeferred(consentCredentialCards(cards, option.registrationID), prefillAttr != "") {
+				option.DeferredService = option.registrationID.UUID.String()
+				inventoryDeferred = inventoryDeferred || option.Selected
+			}
 		}
 	}
 	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)

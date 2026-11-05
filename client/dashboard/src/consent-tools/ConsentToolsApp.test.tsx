@@ -226,7 +226,7 @@ describe("ConsentToolsApp", () => {
     document.body.insertAdjacentHTML(
       "beforeend",
       `
-      <input type="radio" name="auth_client" form="consent-approve-form" value="chained" data-inventory-deferred="true" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="chained" data-deferred-service="card-chained" checked>
       <input type="radio" name="auth_client" form="consent-approve-form" value="personal">
     `,
     );
@@ -259,12 +259,50 @@ describe("ConsentToolsApp", () => {
   it("defers the inventory for a sole chained credential", async () => {
     document.body.insertAdjacentHTML(
       "beforeend",
-      '<input type="hidden" name="auth_client" form="consent-approve-form" value="client-only" data-inventory-deferred="true">',
+      '<input type="hidden" name="auth_client" form="consent-approve-form" value="client-only" data-deferred-service="card-chained">',
     );
     connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
     const { button } = renderApp();
     await screen.findByText(/Tools load after you give access/);
     expect(button.disabled).toBe(false);
+  });
+
+  it("blocks a deferred credential only when its own service is refused", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="hidden" name="auth_client" form="consent-approve-form" value="client-only" data-deferred-service="card-chained">
+      <ul>
+        <li data-remote-client="card-chained"><span data-chain-check="pending"></span></li>
+        <li data-remote-client="card-other"><span data-chain-check="pending"></span></li>
+      </ul>
+    `,
+    );
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp();
+    await waitFor(() => expect(connect).toHaveBeenCalledOnce());
+
+    // The page script settles a card's check, then raises the event.
+    const refuse = (card: string) => {
+      document
+        .querySelector(`[data-remote-client="${card}"] [data-chain-check]`)!
+        .setAttribute("data-chain-check", "rejected");
+      document.documentElement.setAttribute(
+        "data-consent-chain-rejected",
+        "true",
+      );
+      act(() => {
+        document.dispatchEvent(new CustomEvent(CHAIN_REJECTED_EVENT));
+      });
+    };
+    refuse("card-other");
+    expect(screen.getByText(/Tools load after you give access/)).toBeTruthy();
+    expect(button.disabled).toBe(false);
+
+    refuse("card-chained");
+    await screen.findByText(/couldn't connect this service/);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
   });
 
   it("performs an MCP session with the consent headers and enables approval", async () => {
