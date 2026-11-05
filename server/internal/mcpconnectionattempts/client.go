@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // The client families client_family can hold. New ones can be appended.
@@ -46,7 +48,7 @@ var clientFamilies = []struct {
 	{FamilyClaudeCode, []string{"claude-code", "claude-cli"}},
 	{FamilyClaudeAI, []string{"claude-user", "claude-ai"}},
 	{FamilyCodexCLI, []string{"codex-cli-rs", "codex-cli", "codex-mcp-client", "codex"}},
-	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt"}},
+	{FamilyOpenAIConnector, []string{"openai-mcp", "openai-connectors", "chatgpt-user", "chatgpt"}},
 	{FamilyCursor, []string{"cursor"}},
 	{FamilyCopilot, []string{"copilot"}},
 	{FamilyZed, []string{"zed"}},
@@ -58,6 +60,30 @@ var clientFamilies = []struct {
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
 }
+
+// productFamilies maps an aivendors product to its family. Only a product whose client_id
+// documents belong to it alone is listed: claude.ai's two documents are Claude Code and Claude.
+var productFamilies = map[string]string{
+	"claude-code":        FamilyClaudeCode,
+	"claude":             FamilyClaudeAI,
+	"chatgpt":            FamilyOpenAIConnector,
+	"codex":              FamilyCodexCLI,
+	"vscode":             FamilyVSCode,
+	"zed":                FamilyZed,
+	"notion":             FamilyNotion,
+	"github-copilot-cli": FamilyCopilot,
+}
+
+// documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
+var documentFamilies = func() map[string]string {
+	families := make(map[string]string)
+	for _, entry := range aivendors.CIMDDocuments() {
+		if family, ok := productFamilies[entry.Product.ID]; ok {
+			families[entry.Document.URL] = family
+		}
+	}
+	return families
+}()
 
 // clientVersionShape is what a version may look like, so caller text never reaches the column.
 var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.]{1,16})?$`)
@@ -148,6 +174,9 @@ type requestClient struct {
 	userAgent    string
 	forwardedFor string
 
+	// appFamily is what the row's catalog client_id proves.
+	appFamily string
+
 	// reported reads what the MCP session said about itself. It runs on the writer.
 	reported func() (name, version string)
 }
@@ -176,18 +205,23 @@ func ReportedClient(read func() (name, version string)) Option {
 	return Option{apply: func(row *Row) { row.client.reported = read }}
 }
 
-// stampClient reads a row's request on the writer: its family, version and device key.
+// stampClient reads a row's request on the writer: its family, version and device key. A reported
+// name comes first, then a User-Agent that names a client, then the catalog client_id.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil}
+	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: "", reported: nil}
 	if client.reported != nil {
 		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
 	}
+	if row.ClientFamily == "" && client.present {
+		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	}
+	// A catalog client_id beats a runtime User-Agent like Claude Code's Bun/1.4.4, whose version isn't the app's.
+	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther || row.ClientFamily == FamilyScript) {
+		row.ClientFamily, row.ClientVersion = client.appFamily, ""
+	}
 	if !client.present {
 		return
-	}
-	if row.ClientFamily == "" {
-		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
 	}
 	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
 }

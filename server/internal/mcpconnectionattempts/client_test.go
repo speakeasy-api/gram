@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -55,6 +57,8 @@ func TestClassifyUserAgent(t *testing.T) {
 		{"Replit-Agent-MCP-Client/1.0", FamilyReplit, "1.0"},
 		{"Replit/2.0", FamilyReplit, "2.0"},
 		{"notion-mcp-client/1.4.0", FamilyNotion, "1.4.0"},
+		{"openai-connectors-oauth/1.0", FamilyOpenAIConnector, ""},
+		{"Bun/1.4.4", FamilyOther, ""},
 
 		{"Visual Studio Code - Insiders/1.100.0-insider", FamilyVSCode, "1.100.0-insider"},
 		{"PerplexityBot/1.0; +https://perplexity.ai/perplexitybot", FamilyOther, ""},
@@ -199,6 +203,68 @@ func TestReportedClient_ReadsFirstAndFallsBack(t *testing.T) {
 			require.Equal(t, tc.family, row.ClientFamily)
 			require.Equal(t, tc.version, row.ClientVersion)
 		})
+	}
+}
+
+// Token requests carry a runtime's User-Agent, so the catalog client_id names the client.
+func TestStampClient_CatalogClientID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		claudeCode = "https://claude.ai/oauth/claude-code-client-metadata"
+		claudeWeb  = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+		chatGPT    = "https://chatgpt.com/oauth/client.json"
+	)
+	for _, tc := range []struct {
+		name, clientID, userAgent, reported string
+		family, version                     string
+	}{
+		{name: "claude code token exchange", clientID: claudeCode, userAgent: "Bun/1.4.4", family: FamilyClaudeCode},
+		{name: "claude code user agent keeps its version", clientID: claudeCode, userAgent: "claude-code/2.1.318 (sdk-cli)", family: FamilyClaudeCode, version: "2.1.318"},
+		{name: "claude web connector", clientID: claudeWeb, userAgent: "python-httpx/0.28.1", family: FamilyClaudeAI},
+		{name: "chatgpt connector", clientID: chatGPT, userAgent: "openai-connectors-oauth/1.0", family: FamilyOpenAIConnector},
+		{name: "chatgpt connector with no user agent", clientID: chatGPT, family: FamilyOpenAIConnector},
+		{name: "codex is not the chatgpt connector", clientID: "https://chatgpt.com/oauth/codex/client.json", userAgent: "Bun/1.4.4", family: FamilyCodexCLI},
+		{name: "codex workspace document", clientID: "https://chatgpt.com/oauth/codex/ws-123/client.json", userAgent: "Bun/1.4.4", family: FamilyCodexCLI},
+		{name: "chatgpt workspace document", clientID: "https://chatgpt.com/oauth/ws-123/client.json", userAgent: "Bun/1.4.4", family: FamilyOpenAIConnector},
+		{name: "consent page stays the browser", clientID: claudeCode, userAgent: "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/141.0.0.0", family: FamilyBrowser},
+		{name: "named user agent wins", clientID: claudeCode, userAgent: "Cursor/2.0.77", family: FamilyCursor, version: "2.0.77"},
+		{name: "reported name wins", clientID: claudeCode, userAgent: "Bun/1.4.4", reported: "codex-mcp-client", family: FamilyCodexCLI},
+		{name: "registered client stays generic", clientID: "3fa85f64-5717-4562-b3fc-2c963f66afa6", userAgent: "Bun/1.4.4", family: FamilyOther},
+		{name: "unlisted metadata url stays generic", clientID: "https://client.example.com/m", userAgent: "node", family: FamilyScript},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodPost, "/token", nil)
+			req.Header.Set("User-Agent", tc.userAgent)
+			opts := []Option{FromRequest(req)}
+			if tc.reported != "" {
+				opts = append(opts, ReportedClient(func() (string, string) { return tc.reported, "" }))
+			}
+			scope := ServerScope("org-test", uuid.New(), uuid.New(), AppOf(tc.clientID))
+			row, err := RowAt(Begin(scope), StepInboundToken, ResultCodeIssued, true, time.Now(), opts...)
+			require.NoError(t, err)
+			(&Recorder{}).stampClient(&row)
+			require.Equal(t, tc.family, row.ClientFamily)
+			require.Equal(t, tc.version, row.ClientVersion)
+		})
+	}
+}
+
+// Each product named in productFamilies must still publish a catalog document.
+func TestProductFamilies_NameCatalogProducts(t *testing.T) {
+	t.Parallel()
+
+	named := make(map[string]bool)
+	for _, entry := range aivendors.CIMDDocuments() {
+		if entry.Document.Enabled {
+			named[entry.Product.ID] = true
+		}
+	}
+	for product, family := range productFamilies {
+		require.True(t, named[product], product)
+		require.Contains(t, knownFamilies(), family)
 	}
 }
 
