@@ -12,7 +12,11 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), listMembers: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  listMembers: vi.fn(),
+  getUpstream: vi.fn(),
+}));
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
     identifier,
@@ -71,6 +75,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: { listPolicyGrants: mocks.list },
     access: { listMembers: mocks.listMembers },
+    organizationRemoteSessionClients: { get: mocks.getUpstream },
   }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "example" }),
 }));
@@ -122,6 +127,15 @@ beforeEach(() => {
     members: [
       { id: "user_ada", name: "Ada Lovelace", email: "ada@example.com" },
     ],
+  });
+  mocks.getUpstream.mockImplementation(async ({ id }: { id: string }) => {
+    if (id !== "upstream_notes") throw new Error("Not found");
+    return {
+      id,
+      clientId: "notes-oauth-app",
+      displayName: "Notes OAuth app",
+      remoteSessionIssuerId: "issuer_notes",
+    };
   });
 });
 describe("Agent profile permissions", () => {
@@ -310,6 +324,16 @@ describe("Agent profile permissions", () => {
           upstreamClient: "upstream_notes",
         },
       },
+      {
+        id: "auth_gone",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          connectionOwner: "d265f01b-0000-4000-8000-000000000000",
+          upstreamClient: "01a10332-0000-4000-8000-000000000000",
+        },
+      },
     ]);
     setup();
     expect(await screen.findByText("mcp:auth")).toBeTruthy();
@@ -334,6 +358,16 @@ describe("Agent profile permissions", () => {
         "href",
       ),
     ).toBe("/identities/user:user_ada");
+    expect(
+      (await screen.findByRole("link", { name: "Meeting notes" })).getAttribute(
+        "href",
+      ),
+    ).toMatch(/\/issuer_notes\/clients\/upstream_notes$/);
+    // A person who left is still linked; a removed upstream client is not.
+    expect(
+      screen.getByRole("link", { name: "User d265f01b…" }).getAttribute("href"),
+    ).toBe("/identities/user:d265f01b-0000-4000-8000-000000000000");
+    expect(screen.queryByRole("link", { name: "01a10332…" })).toBeNull();
     // Broadest first, down to one named credential.
     expect(
       screen.getAllByRole("listitem").map((item) => item.textContent),
@@ -341,6 +375,7 @@ describe("Agent profile permissions", () => {
       "Every upstream credential in the organization",
       "Personal connections of the person the agent acts for",
       "Ada Lovelace's Meeting notes connection · on Notes server",
+      "User d265f01b…'s connection through upstream client 01a10332…",
       "Content calendar · Service account · on Calendar server",
     ]);
     expect(screen.queryByText("All resources")).toBeNull();

@@ -22,20 +22,26 @@ export type AuthGrantNames = {
     | { name: string; clientType: string; servers: AuthGrantServer[] }
     | undefined;
   /**
-   * The name of an upstream OAuth client and the servers whose auth clients
-   * sign in through it, by its id.
+   * An upstream OAuth client by its id: its name, the issuer it is registered
+   * with (for its page) and the servers whose auth clients sign in through it.
    */
   upstreamClient: (
     id: string,
-  ) => { name: string; servers: AuthGrantServer[] } | undefined;
+  ) =>
+    | { name: string; issuerId?: string; servers: AuthGrantServer[] }
+    | undefined;
   /** A member's display name, by user id. */
   member: (userId: string) => string | undefined;
 };
 
-/** One piece of a label: words, a person to link, or servers to link. */
+/**
+ * One piece of a label: words, or a person, upstream OAuth client or servers
+ * to link. An upstream client without an issuer has no page to link to.
+ */
 export type AuthGrantPart =
   | { kind: "text"; text: string }
   | { kind: "person"; userId: string; name: string }
+  | { kind: "upstream"; id: string; name: string; issuerId?: string }
   | { kind: "servers"; servers: AuthGrantServer[] };
 
 /** The first characters of an id, for when its name is unknown. */
@@ -89,46 +95,69 @@ export function authGrantParts(
     : undefined;
   const upstream = upstreamId ? names.upstreamClient(upstreamId) : undefined;
   const servers = upstream ? onServers(upstream.servers) : [];
-  // An upstream client nobody's auth client names any more keeps its id.
-  const through =
-    upstreamId && !upstream
-      ? ` through upstream client ${shortId(upstreamId)}`
-      : "";
+  // An upstream client that cannot be found any more keeps its short id.
+  const upstreamPart: AuthGrantPart | undefined = upstreamId
+    ? {
+        kind: "upstream",
+        id: upstreamId,
+        name: upstream?.name ?? shortId(upstreamId),
+        issuerId: upstream?.issuerId,
+      }
+    : undefined;
 
   if (owner === REPRESENTED_USER) {
-    if (upstream) {
+    if (upstream && upstreamPart) {
       return [
-        text(
-          `The ${upstream.name} connection of the person the agent acts for`,
-        ),
+        text("The "),
+        upstreamPart,
+        text(" connection of the person the agent acts for"),
         ...servers,
       ];
     }
-    return [
-      text(
-        upstreamId
-          ? `The connection of the person the agent acts for${through}`
-          : "Personal connections of the person the agent acts for",
-      ),
-    ];
+    if (upstreamPart) {
+      return [
+        text(
+          "The connection of the person the agent acts for through upstream client ",
+        ),
+        upstreamPart,
+      ];
+    }
+    return [text("Personal connections of the person the agent acts for")];
   }
   if (owner) {
-    const name = names.member(owner);
-    const person: AuthGrantPart = name
-      ? { kind: "person", userId: owner, name }
-      : text(`User ${shortId(owner)}`);
-    if (upstream) {
-      return [person, text(`'s ${upstream.name} connection`), ...servers];
+    // A person who is not a member any more is still linked by their id.
+    const person: AuthGrantPart = {
+      kind: "person",
+      userId: owner,
+      name: names.member(owner) ?? `User ${shortId(owner)}`,
+    };
+    if (upstream && upstreamPart) {
+      return [
+        person,
+        text("'s "),
+        upstreamPart,
+        text(" connection"),
+        ...servers,
+      ];
     }
+    if (upstreamPart) {
+      return [
+        person,
+        text("'s connection through upstream client "),
+        upstreamPart,
+      ];
+    }
+    return [person, text("'s personal connections")];
+  }
+  if (upstream && upstreamPart) {
+    return [text("Every personal connection to "), upstreamPart, ...servers];
+  }
+  if (upstreamPart) {
     return [
-      person,
-      text(upstreamId ? `'s connection${through}` : "'s personal connections"),
+      text("Every personal connection through upstream client "),
+      upstreamPart,
     ];
   }
-  if (upstream) {
-    return [text(`Every personal connection to ${upstream.name}`), ...servers];
-  }
-  if (upstreamId) return [text(`Every personal connection${through}`)];
   if (selector.clientType === "remote_session") {
     return [text("Every personal connection in the organization")];
   }
@@ -147,7 +176,9 @@ export function authGrantText(parts: AuthGrantPart[]): string {
   return parts
     .map((part) => {
       if (part.kind === "text") return part.text;
-      if (part.kind === "person") return part.name;
+      if (part.kind === "person" || part.kind === "upstream") {
+        return part.name;
+      }
       return part.servers.map((server) => server.name).join(", ");
     })
     .join("");

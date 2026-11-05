@@ -18,7 +18,10 @@ import { ANY_RESOURCE } from "@/pages/agents/agent-api-key-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { queryKeyOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
+import { useRoutes } from "@/routes";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import {
@@ -108,11 +111,13 @@ function authGrantServer(
 }
 
 /**
- * A grant's credential label, with each person linked to their identity page
- * and each server to its authentication settings, where the credential lives.
+ * A grant's credential label, with each person linked to their identity page,
+ * each upstream OAuth client to its page, and each server to its
+ * authentication settings, where the credential lives.
  */
 function AuthGrantLabel({ parts }: { parts: AuthGrantPart[] }): JSX.Element {
   const organization = useOrganization();
+  const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const projectSlug = (projectId: string) =>
     organization.projects?.find((project) => project.id === projectId)?.slug;
@@ -125,6 +130,21 @@ function AuthGrantLabel({ parts }: { parts: AuthGrantPart[] }): JSX.Element {
             <IdentityLink key={index} identifier={{ userId: part.userId }}>
               {part.name}
             </IdentityLink>
+          );
+        }
+        if (part.kind === "upstream") {
+          if (!part.issuerId) return part.name;
+          return (
+            <Link
+              key={index}
+              to={routes.remoteIdentityProviders.clientDetail.href(
+                part.issuerId,
+                part.id,
+              )}
+              className="underline-offset-2 hover:underline"
+            >
+              {part.name}
+            </Link>
           );
         }
         return part.servers.map((server, serverIndex) => {
@@ -170,6 +190,29 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
   const clients = useAllAuthClients({
     enabled: authGrants.length > 0 && hasScope("org:read"),
   });
+  const upstreamIds = [
+    ...new Set(
+      authGrants.flatMap(({ selector }) =>
+        isAgentPolicyConstraint(selector.upstreamClient)
+          ? [selector.upstreamClient]
+          : [],
+      ),
+    ),
+  ];
+  // Each upstream client a grant names, for its issuer (its page) and its own
+  // name when no auth client signs in through it.
+  const upstreamClients = useQueries({
+    queries: upstreamIds.map((id) => ({
+      queryKey: queryKeyOrganizationRemoteSessionClient({ id }),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.organizationRemoteSessionClients.get({ id }, undefined, {
+          signal,
+        }),
+      enabled: hasScope("org:read"),
+      retry: false,
+      throwOnError: false,
+    })),
+  });
   const members = useQuery({
     queryKey: ["agent-auth-grant-members", organization.id],
     queryFn: ({ signal }) => sdk.access.listMembers({}, undefined, { signal }),
@@ -187,16 +230,21 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
       },
     ]),
   );
+  const upstreamClientById = new Map(
+    upstreamClients.flatMap(({ data }) => (data ? [[data.id, data]] : [])),
+  );
   // An upstream OAuth client is named after the first auth client using it,
   // and reaches every server those auth clients serve.
   const upstreamById = new Map<
     string,
-    { name: string; servers: AuthGrantServer[] }
+    { name: string; issuerId?: string; servers: AuthGrantServer[] }
   >();
   for (const client of clients.data ?? []) {
     if (!client.remoteSessionClientId) continue;
     const seen = upstreamById.get(client.remoteSessionClientId) ?? {
       name: client.name,
+      issuerId: upstreamClientById.get(client.remoteSessionClientId)
+        ?.remoteSessionIssuerId,
       servers: [],
     };
     for (const server of client.servers) {
@@ -204,6 +252,15 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
       seen.servers.push(authGrantServer(server));
     }
     upstreamById.set(client.remoteSessionClientId, seen);
+  }
+  // One no auth client signs in through any more keeps its own name.
+  for (const upstream of upstreamClientById.values()) {
+    if (upstreamById.has(upstream.id)) continue;
+    upstreamById.set(upstream.id, {
+      name: remoteSessionClientDisplayName(upstream),
+      issuerId: upstream.remoteSessionIssuerId,
+      servers: [],
+    });
   }
   const memberById = new Map(
     (members.data?.members ?? []).map((member) => [

@@ -32,7 +32,7 @@ const names: AuthGrantNames = {
       : undefined,
   upstreamClient: (id) =>
     id === "upstream-grain"
-      ? { name: "Grain", servers: [grainServer] }
+      ? { name: "Grain", issuerId: "issuer-grain", servers: [grainServer] }
       : undefined,
   member: (id) => (id === "user-ada" ? "Ada Lovelace" : undefined),
 };
@@ -133,7 +133,34 @@ describe("authGrantParts", () => {
       userId: "user-ada",
       name: "Ada Lovelace",
     });
+    expect(parts[2]).toEqual({
+      kind: "upstream",
+      id: "upstream-grain",
+      name: "Grain",
+      issuerId: "issuer-grain",
+    });
     expect(parts.at(-1)).toEqual({ kind: "servers", servers: [grainServer] });
+  });
+
+  it("still links a person and an upstream client it cannot name", () => {
+    const parts = authGrantParts(
+      selector({
+        connectionOwner: "d265f01b-0000-4000-8000-000000000000",
+        upstreamClient: "01a10332-0000-4000-8000-000000000000",
+      }),
+      names,
+    );
+    expect(parts[0]).toEqual({
+      kind: "person",
+      userId: "d265f01b-0000-4000-8000-000000000000",
+      name: "User d265f01b…",
+    });
+    expect(parts.at(-1)).toEqual({
+      kind: "upstream",
+      id: "01a10332-0000-4000-8000-000000000000",
+      name: "01a10332…",
+      issuerId: undefined,
+    });
   });
 });
 
