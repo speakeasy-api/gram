@@ -61,6 +61,9 @@ function statusVariant(
   }
 }
 
+// The tailnet has not approved Speakeasy's gateway to host the service.
+const SERVICE_NOT_APPROVED = "provider_service_not_approved";
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -166,6 +169,7 @@ function ConfiguredPrivateNetwork({
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
   const update = useUpdateNetworkIngressMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
@@ -259,12 +263,40 @@ function ConfiguredPrivateNetwork({
             </dd>
           </div>
         </dl>
-        {ingress.lastError && (
+        {serviceNotApproved ? (
           <Alert variant="error" dismissible={false}>
-            Latest check: {statusLabel(ingress.lastError)}
+            <div className="space-y-2">
+              <Text small>
+                Your tailnet hasn&apos;t approved Speakeasy to host{" "}
+                <code>svc:{ingress.hostname}</code>, so devices can&apos;t reach
+                it yet. Approve the <code>speakeasy-gw</code> hosts on the
+                service&apos;s page in the Tailscale admin console, or add{" "}
+                <code>
+                  &quot;svc:{ingress.hostname}&quot;:
+                  [&quot;tag:speakeasy&quot;]
+                </code>{" "}
+                to <code>autoApprovers.services</code> in your tailnet policy.
+                This page updates on its own once the hosts are approved.
+              </Text>
+              <Button asChild variant="secondary" size="sm">
+                <a
+                  href="https://login.tailscale.com/admin/services"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open Tailscale services
+                </a>
+              </Button>
+            </div>
           </Alert>
+        ) : (
+          ingress.lastError && (
+            <Alert variant="error" dismissible={false}>
+              Latest check: {statusLabel(ingress.lastError)}
+            </Alert>
+          )
         )}
-        {ingress.status === "error" && (
+        {ingress.status === "error" && !serviceNotApproved && (
           <Alert variant="warning" dismissible={false}>
             <div className="space-y-3">
               <Text small>
@@ -397,8 +429,14 @@ export function PrivateNetworkSection(): JSX.Element | null {
     enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
     throwOnError: false,
-    refetchInterval: (query) =>
-      query.state.data?.ingress?.status === "deleting" ? 5_000 : false,
+    refetchInterval: (query) => {
+      const current = query.state.data?.ingress;
+      if (current?.status === "deleting") return 5_000;
+      // Admins approve the host in Tailscale's console, so pick that up
+      // without a reload.
+      if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
+      return false;
+    },
   });
   const ingress = ingressResult.data?.ingress;
   const unsupportedProvider = ingress && ingress.provider !== "tailscale";
