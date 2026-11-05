@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 
@@ -1029,13 +1028,11 @@ func (s *Service) consentCanReplaceChoice(ctx context.Context, gate *metaGateCon
 }
 
 // decideConsentCanReplaceChoice reports whether a new consent would offer member a usable connection.
+// Where typed auth clients choose upstream authentication, that is one a
+// client offers ready, or a registration within the member's reach, which
+// consent shows a card for whether or not the server is associated with it or
+// the gateway's sign-in is bound to it.
 func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaGateContext, member metaMember) (bool, error) {
-	bound, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: member.projectID, OrganizationID: gate.organizationID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("list issuer clients: %w", err)
-	}
 	subject := gate.memberChoices.subject
 	enforced, err := s.consentAuthChoicesEnforced(ctx, gate.organizationID)
 	if err != nil {
@@ -1050,38 +1047,29 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 		if auth == nil || auth.Status != consentAuthChoose {
 			return false, nil
 		}
-		associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
-		if err != nil {
-			return false, err
-		}
+		var registrations []uuid.UUID
 		for _, option := range auth.Options {
 			switch option.State {
 			case consentClientReady:
 				return true, nil
 			case consentClientConnect, consentClientReconnect:
-				if !option.registrationID.Valid {
-					continue
-				}
-				// Connect needs a client the member claims and the issuer is bound to.
-				if associated[member.serverID][option.registrationID.UUID] && slices.Contains(bound, option.registrationID.UUID) {
-					return true, nil
-				}
-				// An existing connection needs no Connect.
-				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
-					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
-					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
-					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
-				})
-				if err != nil {
-					return false, fmt.Errorf("check member connection: %w", err)
-				}
-				if !reconnect {
-					return true, nil
+				if option.registrationID.Valid {
+					registrations = append(registrations, option.registrationID.UUID)
 				}
 			case consentClientSetup:
 			}
 		}
-		return false, nil
+		reachable, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, gate.organizationID, registrations)
+		if err != nil {
+			return false, fmt.Errorf("list member registrations: %w", err)
+		}
+		return len(reachable) > 0, nil
+	}
+	bound, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: member.projectID, OrganizationID: gate.organizationID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("list issuer clients: %w", err)
 	}
 	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
 	if err != nil {

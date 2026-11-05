@@ -149,6 +149,27 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 	if reuse && (inventoryHash == "" || remoteHash == "") {
 		return nil, nil
 	}
+	// The inventory is fingerprinted without a proxied server's derived
+	// authorization server where typed auth clients choose upstream
+	// authentication, and with it elsewhere. A saved approval holds the form
+	// written when it was approved, so it is compared in both: switching mode
+	// alone asks nobody again. One approved under typed auth clients then keeps
+	// ignoring the derived authorization server, and its upstream clients,
+	// resource and permissions are still compared through the remote set.
+	otherModeHash := ""
+	if reuse {
+		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, err
+		}
+		backend, err := s.consentBackendEvidence(ctx, endpoint, enforced)
+		if err != nil {
+			return nil, err
+		}
+		otherMode := *inventory
+		otherMode.BackendHash = backend
+		otherModeHash = consentInventoryFingerprint(&otherMode)
+	}
 	// Resolve the default only when saving reusable evidence. Other explicit
 	// grants keep zero so token exchange applies its normal duration default.
 	if duration == 0 && !reuse && inventoryHash != "" && remoteHash != "" {
@@ -188,7 +209,7 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 		if err != nil {
 			return nil, fmt.Errorf("read resource approval: %w", err)
 		}
-		if saved.InventoryHash != inventoryHash || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
+		if (saved.InventoryHash != inventoryHash && saved.InventoryHash != otherModeHash) || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
 			return nil, nil
 		}
 		selection, err = toolfilter.ParseSessionSelection(saved.ToolSelection)
@@ -315,7 +336,22 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 
 // consentBackendFingerprint binds discovery to access-relevant configuration.
 // Display names and update timestamps do not change the authorization surface.
+// Where typed auth clients choose upstream authentication, a proxied server's
+// derived authorization server decides nothing and is left out, so
+// resynchronizing it changes no evidence.
 func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (string, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return "", err
+	}
+	return s.consentBackendEvidence(ctx, endpoint, !enforced)
+}
+
+// consentBackendEvidence fingerprints the endpoint's access-relevant
+// configuration, covering a proxied server's derived authorization server
+// only with derivedIssuer. A hosted server is routed by that authorization
+// server, so it is always covered.
+func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *ResolvedMcpEndpoint, derivedIssuer bool) (string, error) {
 	evidence := map[string]any{"resource": endpoint.UpstreamResource, "toolset": endpoint.ToolsetID}
 	if !endpoint.McpServerID.Valid {
 		return consentEvidenceHash(evidence), nil
@@ -331,7 +367,9 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 	evidence["tunnel"] = server.TunneledMcpServerID
 	evidence["toolset"] = server.ToolsetID
 	evidence["variation"] = server.ToolVariationsGroupID
-	evidence["issuer"] = server.RemoteSessionIssuerID
+	if derivedIssuer || server.ToolsetID.Valid {
+		evidence["issuer"] = server.RemoteSessionIssuerID
+	}
 	evidence["visibility"] = server.Visibility
 	evidence["network"] = server.NetworkAccessMode
 	if server.RemoteMcpServerID.Valid {

@@ -389,6 +389,52 @@ func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
 }
 
+// TestDetachServerClientAssociation_EnforcedSoleConsumer proves an enforced
+// organization can stop its issuer's only server offering a bound client:
+// the binding still implies the association, so the association stays for the
+// upstream client choice, while the link the server offers the client through
+// is retired and a later synchronization does not bring it back.
+func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced-own")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-own")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced-own")
+	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.NotEmpty(t, offered)
+	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, serverID)
+
+	payload := &gen.DetachServerClientAssociationPayload{McpServerID: serverID.String(), RemoteSessionClientID: clientID.String()}
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, payload), "the binding must not refuse an enforced organization")
+
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID),
+		"the association the binding implies is left for the upstream client choice")
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"only the link derived from the association is retired")
+	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))
+
+	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"a later synchronization keeps the detach")
+
+	err := ti.service.DetachServerClientAssociation(ctx, payload)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to retire")
+}
+
 // TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync
 // never reaches records an administrator owns: a client and link they created
 // survive a legacy detach of the registration-derived ones.
