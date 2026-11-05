@@ -7,6 +7,15 @@ import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
  * `tools/list` response). All fields are advisory and may be absent; malformed
  * hint values are dropped (`.catch`) rather than failing the whole decode.
  */
+const INSPECT_META_KEY = "com.speakeasy/inspect";
+const UNAVAILABLE_META_KEY = "com.speakeasy/unavailable";
+
+/**
+ * Most tools a listing may return. Real servers list at most hundreds; this stops
+ * a server paginating without end from holding the tab open.
+ */
+const MAX_LISTED_TOOLS = 10_000;
+
 const proxiedMcpToolAnnotationsSchema = z.object({
   /** Human-friendly display name for the tool. */
   title: z.string().optional(),
@@ -24,11 +33,16 @@ const proxiedMcpToolSchema = z.object({
   // UI when rendering parameters.
   inputSchema: z.unknown().optional(),
   annotations: proxiedMcpToolAnnotationsSchema.optional(),
+  _meta: z
+    .object({ [UNAVAILABLE_META_KEY]: z.boolean().optional().catch(undefined) })
+    .optional()
+    .catch(undefined),
 });
 
-/** The decoded shape of an MCP `tools/list` result. */
+/** The decoded shape of one page of an MCP `tools/list` result. */
 const listToolsResultSchema = z.object({
   tools: z.array(proxiedMcpToolSchema),
+  nextCursor: z.string().optional(),
 });
 
 export type ProxiedMcpToolAnnotations = z.infer<
@@ -40,6 +54,8 @@ export interface ProxiedMcpTool {
   description?: string;
   inputSchema?: unknown;
   annotations?: ProxiedMcpToolAnnotations;
+  /** The server offers this tool, but this viewer's access doesn't include it. */
+  unavailable?: boolean;
 }
 
 /** A record of tools keyed by tool name, mirroring the `tools/list` response. */
@@ -131,19 +147,46 @@ export function useProxiedMcpTools(
         // *executable* tools via `tools()`), so we reach it structurally and
         // decode its untyped result with Zod rather than asserting a shape.
         // Tracked for the ai-v6 migration in AIS-169.
-        const raw = await (
-          client as unknown as { listTools: () => Promise<unknown> }
-        ).listTools();
-        const { tools } = listToolsResultSchema.parse(raw);
+        const lister = client as unknown as {
+          listTools: (args: {
+            params: { cursor?: string; _meta: Record<string, unknown> };
+          }) => Promise<unknown>;
+        };
 
+        // Stored tool metadata is written from this list, so it must be the
+        // server's whole catalog: every page, with tools this viewer can't use
+        // marked rather than dropped. A partial list would read as removals.
         const toolSet: ProxiedMcpToolSet = {};
-        for (const tool of tools) {
-          toolSet[tool.name] = {
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-            annotations: tool.annotations,
-          };
-        }
+        const seenCursors = new Set<string>();
+        let cursor: string | undefined;
+        do {
+          const raw = await lister.listTools({
+            params: {
+              ...(cursor ? { cursor } : {}),
+              _meta: { [INSPECT_META_KEY]: true },
+            },
+          });
+          const page = listToolsResultSchema.parse(raw);
+          for (const tool of page.tools) {
+            toolSet[tool.name] = {
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+              annotations: tool.annotations,
+              unavailable: tool._meta?.[UNAVAILABLE_META_KEY] === true,
+            };
+          }
+
+          if (Object.keys(toolSet).length > MAX_LISTED_TOOLS) {
+            throw new Error("MCP server listed too many tools");
+          }
+
+          cursor = page.nextCursor || undefined;
+          if (cursor && seenCursors.has(cursor)) {
+            throw new Error("MCP server repeated a tools/list cursor");
+          }
+          if (cursor) seenCursors.add(cursor);
+        } while (cursor);
+
         return toolSet;
       } finally {
         // Streamable HTTP keeps a connection open; release it once we have the

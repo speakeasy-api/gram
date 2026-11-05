@@ -397,6 +397,7 @@ func (f *ProxyManager) BuildTarget(
 	// the effective catalog is the intersection of RBAC and consent.
 	if selection != nil {
 		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
+		selectionInterceptor.inspection = &toolsListInspection{authz: f.authz, mcpServerID: identity.McpServerID, projectID: projectID}
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}

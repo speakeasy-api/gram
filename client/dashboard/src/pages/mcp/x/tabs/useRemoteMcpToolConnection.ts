@@ -58,6 +58,8 @@ export interface RemoteMcpToolConnection {
   /** Make the stored tool metadata mirror the session. */
   sync: () => void;
   isSyncing: boolean;
+  /** This viewer can change the stored tool metadata. */
+  canWrite: boolean;
 }
 
 /**
@@ -142,7 +144,7 @@ export function useRemoteMcpToolConnection({
 
   // Only remote-backed servers carry tool metadata, and there is nothing to
   // reconcile until both the session and the stored set have loaded.
-  const { sync, isSyncing } = useSyncToolMetadata({
+  const { sync, isSyncing, canWrite } = useSyncToolMetadata({
     mcpServerId,
     live: tools,
     stored: metadataByTool,
@@ -163,5 +165,6 @@ export function useRemoteMcpToolConnection({
       : undefined,
     sync,
     isSyncing,
+    canWrite,
   };
 }

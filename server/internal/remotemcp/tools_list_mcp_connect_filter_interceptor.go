@@ -15,7 +15,8 @@ import (
 // ToolsListMCPConnectFilterInterceptor drops tools the caller is not
 // authorized for via the per-tool `mcp:connect` RBAC dimension, mirroring at
 // tools/list response time the refinement [ToolsCallAuthzInterceptor] enforces
-// on tools/call, so the caller never sees a tool they couldn't invoke.
+// on tools/call, so an ordinary listing never shows a tool the caller couldn't
+// invoke.
 //
 // Attached only for private-visibility servers, matching
 // [ToolsCallAuthzInterceptor]'s gate in [ProxyManager.BuildTarget]. Public
@@ -28,6 +29,9 @@ import (
 // enforcement does. With a [toolCatalogSync] attached, tools missing from the
 // catalog are recorded from this response before filtering. Without one, they
 // resolve to the empty disposition, leaving a pure tool-name match.
+//
+// An inspected listing (see [toolsListInspection]) keeps the tools this filter
+// would drop and marks them instead.
 //
 // The filter leaves cache labelling to the proxy, which marks every tools/list
 // result relayed through a chain with this filter attached caller-varying with
@@ -83,7 +87,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 // It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
 // [authz.Engine.FindMatched] for per-tool match indicators (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
-// keeping only authorized entries.
+// keeping only authorized entries, or marking the rest in an inspected listing.
 //
 // A response carrying a JSON-RPC error rather than a result is left alone: it
 // holds no inventory to filter. An empty filtered result is a valid outcome,
@@ -130,17 +134,30 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}
 
+	inspection := toolsListInspection{authz: i.authz, mcpServerID: i.mcpServerID, projectID: i.projectID}
+	inspecting, err := inspection.enabled(ctx, list)
+	if err != nil {
+		return err
+	}
+
 	allowed := make([]*mcp.Tool, 0, len(tools))
+	unchanged := true
 	for idx, t := range tools {
-		if matched[idx] {
+		switch {
+		case matched[idx]:
 			allowed = append(allowed, t)
+		case inspecting:
+			allowed = append(allowed, markToolUnavailable(t))
+			unchanged = false
+		default:
+			unchanged = false
 		}
 	}
 
 	// Replacing an unchanged catalog is not free: SetTools re-marshals every
 	// kept tool through mcp.Tool, dropping per-tool members the SDK does not
 	// model. Leave it alone so the tools member keeps its original values.
-	if len(allowed) == len(tools) {
+	if unchanged {
 		return nil
 	}
 
