@@ -124,20 +124,26 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 // their auth clients. It is for a writer that has just configured those
 // bindings or moved a server onto them, for which the issuer's one server is
 // the server being configured. Without enforcement Reconcile has already done
-// this and it writes nothing. The caller holds LockEMAWriterScope.
-func CaptureSoleConsumers(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
-	sole, err := repo.New(tx).CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-		OrganizationID:       organizationID,
-		ProjectID:            projectID,
-		UserSessionIssuerIds: userIssuerIDs,
+// this and it writes nothing. dbtx is either the caller's transaction, whose
+// writer scope must predate its first mutation, or a pool to begin one from.
+func CaptureSoleConsumers(ctx context.Context, dbtx repo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	return inTx(ctx, dbtx, func(tx pgx.Tx) error {
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
+			return fmt.Errorf("lock upstream association writer scope: %w", err)
+		}
+		sole, err := repo.New(tx).CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+			UserSessionIssuerIds: userIssuerIDs,
+		})
+		if err != nil {
+			return fmt.Errorf("capture mcp server upstream clients: %w", err)
+		}
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, sole...); err != nil {
+			return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("capture mcp server upstream clients: %w", err)
-	}
-	if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, sole...); err != nil {
-		return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
-	}
-	return nil
 }
 
 func prune(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID) ([]uuid.UUID, error) {

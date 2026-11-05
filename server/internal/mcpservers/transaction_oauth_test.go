@@ -94,9 +94,7 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 			// bound, so the client is its own.
 			first := create("Configured server", "https://mcp.example.com/configured")
 			_, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
-			captureTx := testenv.BeginTx(t, ctx, ti.conn)
-			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, captureTx, auth.ActiveOrganizationID, *auth.ProjectID, []uuid.UUID{uuid.MustParse(issuer)}))
-			require.NoError(t, captureTx.Commit(ctx))
+			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, []uuid.UUID{uuid.MustParse(issuer)}))
 			typedClient := backfill.OAuthClientID(auth.ActiveOrganizationID, remoteClient, backfill.TypeRemoteSession)
 			links, err := fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)

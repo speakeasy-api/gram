@@ -66,6 +66,7 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 					wantOwner = ac.UserID
 					clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", []uuid.UUID{issuerID})
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}))
+					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}))
 					owner := urn.NewUserSubject(ac.UserID)
 					insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, owner, "exact-owner-connection", upstream.url)
 					q := remotesessionsrepo.New(ti.conn)
