@@ -142,7 +142,7 @@ func TestRefreshHappened_LocalTunnelTransportIsInternal(t *testing.T) {
 		what, ok := refreshHappened(refreshOutcomeForError(context.Background(), err), client, err)
 		require.True(t, ok)
 		require.Equal(t, mcpconnectionattempts.CodeInternalError, what)
-		require.Equal(t, errors.Is(err, errRefreshTunnelTransport), refreshOutagePaced(remotesessionmetrics.RefreshOutcomeInternalError, err))
+		require.True(t, refreshOutagePaced(remotesessionmetrics.RefreshOutcomeInternalError, err))
 	}
 }
 

@@ -49,7 +49,7 @@ func (s *RefreshService) recordRefresh(
 		mcpconnectionattempts.UserSessionIssuer(sess.UserSessionIssuerID),
 		mcpconnectionattempts.Subject(&sess.SubjectUrn),
 		mcpconnectionattempts.Detail(string(trigger)),
-		mcpconnectionattempts.FromRequest(attribution.request),
+		attribution.client,
 	}
 	if !attribution.attempt.IsZero() {
 		s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
