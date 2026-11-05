@@ -88,7 +88,7 @@ func accessRoleMutationInputHash(operation string, normalized any) (string, erro
 }
 
 func accessRoleMutationOperation(operation string) bool {
-	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole || operation == operationConfigureInferenceAccessRole
+	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole || operation == operationConfigureInferenceAccessRole || operation == operationConfigureMemoryAccessRole
 }
 
 func encodeAccessRoleMutationReceipt(operation string, result AccessRoleMutationReceiptResult) ([]byte, error) {
@@ -139,7 +139,7 @@ func validAccessRoleMutationReceiptResult(operation string, result AccessRoleMut
 	switch operation {
 	case operationCreateMCPAccessRole:
 		expectedCategory = "created"
-	case operationUpdateMCPAccessRole, operationConfigureInferenceAccessRole:
+	case operationUpdateMCPAccessRole, operationConfigureInferenceAccessRole, operationConfigureMemoryAccessRole:
 		expectedCategory = "updated"
 	default:
 		return false

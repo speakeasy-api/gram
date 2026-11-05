@@ -103510,6 +103510,8 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - memory:read
+            - memory:write
             - inference:execute
             - log:read
             - agent:read
@@ -103567,6 +103569,8 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - memory:read
+              - memory:write
               - inference:execute
               - log:read
               - agent:read
@@ -113169,6 +113173,8 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - memory:read
+            - memory:write
             - inference:execute
             - log:read
             - agent:read
@@ -113587,6 +113593,8 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - memory:read
+            - memory:write
             - inference:execute
             - log:read
             - agent:read
@@ -113667,6 +113675,8 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - memory:read
+              - memory:write
               - inference:execute
               - log:read
               - agent:read

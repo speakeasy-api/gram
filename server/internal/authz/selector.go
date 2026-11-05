@@ -149,7 +149,7 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindMCPAuthClient
 	}
 	switch scope.Parts().Resource {
-	case "project", "plugin", "log":
+	case "project", "plugin", "log", "memory":
 		return ResourceKindProject
 	case "remote-mcp":
 		return ResourceKindMCP

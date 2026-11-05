@@ -585,6 +585,22 @@ const EXTRA_COPY: Record<string, { label: string; description: string }> = {
     label: "Agent ownership",
     description: "Hand an agent to another owner",
   },
+  "memory:read": {
+    label: "Team memory",
+    description: "Search and recall the project's team memory",
+  },
+  "memory:write": {
+    label: "Team memos",
+    description: "Save memos to the project's team memory",
+  },
+};
+
+/**
+ * Single permissions that a broader one already grants, so the matrix shows
+ * them as included rather than off. Mirrors the server's scope expansions.
+ */
+export const EXTRA_INCLUDED_BY: Record<string, string> = {
+  "memory:read": "memory:write",
 };
 
 export function extraCopy(scope: ScopeDefinition): {
