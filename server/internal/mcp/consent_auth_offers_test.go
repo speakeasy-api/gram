@@ -201,11 +201,13 @@ func TestConfiguredAuthOffersDoNotDecryptOrVetoAdminHeaders(t *testing.T) {
 	headers, err := f.service.gatewayAuthHeaderMetadata(t.Context(), f.orgID, []uuid.UUID{id})
 	require.NoError(t, err)
 	require.Equal(t, "configured", headers[id][0].StaticValue)
+	require.True(t, headers[id][0].IsSecret)
 	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID)}
 	metadata, err := f.service.loadGatewayOfferMetadata(t.Context(), f.orgID, []metaMember{member}, offers)
 	require.NoError(t, err)
 	supported := gatewayOfferCapability(member, offers[f.serverID], metadata, nil)
 	require.True(t, supported, "administrator client replaces the source credential headers")
+	require.True(t, metadata.source[f.remoteID][0].IsSecret)
 }
 
 func TestConfiguredAuthOffersBackfillUsesLegacyHeaderSource(t *testing.T) {

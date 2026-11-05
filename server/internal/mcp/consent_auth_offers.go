@@ -62,7 +62,7 @@ func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID 
 		if row.HasStoredValue {
 			value = "configured"
 		}
-		headers[row.AuthClientID] = append(headers[row.AuthClientID], proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value})
+		headers[row.AuthClientID] = append(headers[row.AuthClientID], proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, IsSecret: row.IsSecret, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value})
 	}
 	return headers, nil
 }
@@ -114,7 +114,7 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 		if row.HasStoredValue {
 			value = "configured"
 		}
-		header := proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value}
+		header := proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, IsSecret: row.IsSecret, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value}
 		metadata.source[row.RemoteMcpServerID] = append(metadata.source[row.RemoteMcpServerID], header)
 		if !proxy.IsCredentialHeader(row.Name, row.IsSecret, row.ValueFromRequestHeader.String != "") {
 			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)
