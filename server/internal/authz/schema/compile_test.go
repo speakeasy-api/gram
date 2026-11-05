@@ -369,6 +369,27 @@ func TestCompile_ReportsProjectionProblemsWithDeclarationProblems(t *testing.T) 
 	require.Contains(t, err.Error(), `retired runtime scope "thing:read" is still declared`)
 }
 
+func TestCompile_ReportsEachMemberProblemOnce(t *testing.T) {
+	t.Parallel()
+
+	_, err := s.Compile(testConfig, s.NewType("thing", s.WrittenBy("access"),
+		s.Attr("reader", "user"),
+		s.Grant("reader", s.StoredAs("thing:read"), s.Describe("read")),
+		s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
+		s.Permission("read", s.Rel("reader"), s.Checks("thing:read"), s.ExcludedBy("read_blocked")),
+	))
+	var compileErr *s.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	duplicate := `type "thing": grant "reader" reuses the name of a attr`
+	count := 0
+	for _, problem := range compileErr.Problems {
+		if problem == duplicate {
+			count++
+		}
+	}
+	require.Equal(t, 1, count, "problems: %v", compileErr.Problems)
+}
+
 func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 	t.Parallel()
 

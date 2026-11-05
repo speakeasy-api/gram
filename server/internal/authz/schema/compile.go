@@ -71,7 +71,10 @@ type compiler struct {
 	byName     map[string]*TypeDecl
 	conditions map[string]Condition
 	scopeOwner map[string]string
-	problems   []string
+	// typeMembers holds each validated type's members, so later passes reuse
+	// them instead of collecting them again and repeating their problems.
+	typeMembers map[string]members
+	problems    []string
 }
 
 func (c *compiler) problemf(format string, args ...any) {
@@ -82,12 +85,13 @@ func (c *compiler) problemf(format string, args ...any) {
 // reports every problem it finds in one *CompileError.
 func Compile(cfg Config, types ...TypeDecl) (*Registry, error) {
 	c := &compiler{
-		cfg:        cfg,
-		types:      types,
-		byName:     make(map[string]*TypeDecl, len(types)),
-		conditions: make(map[string]Condition, len(cfg.Conditions)),
-		scopeOwner: make(map[string]string),
-		problems:   nil,
+		cfg:         cfg,
+		types:       types,
+		byName:      make(map[string]*TypeDecl, len(types)),
+		conditions:  make(map[string]Condition, len(cfg.Conditions)),
+		scopeOwner:  make(map[string]string),
+		typeMembers: make(map[string]members, len(types)),
+		problems:    nil,
 	}
 	c.validateConfig()
 	c.indexTypes()
@@ -112,10 +116,10 @@ func (c *compiler) validateBlockExpansions() {
 	broaderByBlock := make(map[string][]string)
 	for i := range c.types {
 		t := &c.types[i]
-		if c.byName[t.name] != t {
+		m, ok := c.typeMembers[t.name]
+		if !ok || c.byName[t.name] != t {
 			continue
 		}
-		m := c.members(t)
 		for _, p := range t.permissions {
 			if p.checks == "" || len(p.excludedBy) == 0 {
 				continue
@@ -285,6 +289,7 @@ func (c *compiler) validateType(t *TypeDecl) {
 		return
 	}
 	m := c.members(t)
+	c.typeMembers[t.name] = m
 	c.validateParent(t)
 	c.validateFacts(t, m)
 	c.validateRelations(t)
