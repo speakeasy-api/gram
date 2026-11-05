@@ -1,4 +1,3 @@
-import { hasCatalogLogo } from "./logo";
 import { CatalogLogo } from "./CatalogLogo";
 import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
@@ -213,18 +212,14 @@ export default function CatalogDetail(): JSX.Element {
               {/* Header */}
               <div className="flex items-start gap-6">
                 <div className="bg-card flex h-24 w-24 shrink-0 items-center justify-center border">
-                  {server && hasCatalogLogo(server) ? (
-                    <CatalogLogo
-                      server={server}
-                      alt={displayName}
-                      className={cn("h-16 w-16 object-contain")}
-                      fallback={
-                        <ServerIcon className="text-muted-foreground h-12 w-12" />
-                      }
-                    />
-                  ) : (
-                    <ServerIcon className="text-muted-foreground h-12 w-12" />
-                  )}
+                  <CatalogLogo
+                    server={server}
+                    alt={displayName}
+                    className={cn("h-16 w-16 object-contain")}
+                    fallback={
+                      <ServerIcon className="text-muted-foreground h-12 w-12" />
+                    }
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <Page.Eyebrow className="mb-2" />

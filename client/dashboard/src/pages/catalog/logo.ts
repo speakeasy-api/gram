@@ -37,13 +37,3 @@ export function resolveCatalogLogo(
         className: catalogLogoClassName(server.registrySpecifier),
       };
 }
-
-export function hasCatalogLogo(server: CatalogLogoServer | undefined): boolean {
-  return (
-    !!server &&
-    !!(
-      resolveCatalogLogo(server, "light").src ||
-      resolveCatalogLogo(server, "dark").src
-    )
-  );
-}
