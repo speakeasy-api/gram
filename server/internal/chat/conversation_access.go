@@ -46,7 +46,7 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 			return nil, fmt.Errorf("load conversation reference: %w", err)
 		}
 		grant := allowed[raw]
-		if err := s.authorizeChatAccess(ctx, auth, chat, chatAccessRead, &grant); err == nil {
+		if err := s.access.authorizeChatAccess(ctx, auth, chat, chatAccessRead, &grant); err == nil {
 			visible = append(visible, raw)
 		}
 	}

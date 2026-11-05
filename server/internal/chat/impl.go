@@ -86,6 +86,9 @@ type Service struct {
 	billingRepo      billing.Repository
 	audit            *audit.Logger
 	riskFindings     *chatfindings.Reader
+	// access is the per-chat gate, shared with services that reveal session
+	// content under another name (see SessionAccess).
+	access *SessionAccess
 	// turnStream carries assistant turn frames to dashboard subscribers. Nil
 	// disables streaming — turns still complete and the dashboard falls back
 	// to loading the reply once it lands.
@@ -177,6 +180,7 @@ func NewService(
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
 		riskFindings:     nil,
+		access:           NewSessionAccess(logger, db, authzEngine),
 		turnStream:       nil, // opt in via WithTurnStream
 		streamMetrics:    nil, // opt in via WithStreamRotation
 		streamMaxAge:     0,   // opt in via WithStreamRotation
@@ -1208,7 +1212,7 @@ func (a chatAccess) check(chatID string) authz.Check {
 // belonged to the caller's project, which let an embedded chat-session token
 // watch any other user's chat in that project.
 func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
-	return s.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead, nil)
+	return s.access.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead, nil)
 }
 
 // authorizeChatAccess is the shared gate behind every per-chat endpoint.
@@ -1216,7 +1220,7 @@ func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.
 // Project scoping lives here as well as in the SQL so it cannot be dropped by
 // one call site, and so the turn stream (which keeps its own lookup) answers
 // the ownership question identically.
-func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess, filteredGrant *bool) error {
+func (a *SessionAccess) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess, filteredGrant *bool) error {
 	// older chat_messages may not have project_id in the model, but it will
 	// always exist on the chat
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -1277,7 +1281,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// agent did still needs chat:write.
 	agentOnlySession := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
 	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && agentOnlySession {
-		answers, err := s.answersForAgent(ctx, authCtx, chat)
+		answers, err := a.answersForAgent(ctx, authCtx, chat)
 		if err != nil {
 			return err
 		}
@@ -1290,7 +1294,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 			}
 			return nil
 		}
-		if err := s.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
+		if err := a.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
 			return err
 		}
 	}
@@ -1302,22 +1306,22 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 // agent-only session or holds agent:write on it. The write check is evaluated
 // only when RBAC is enforced: a disabled check allows everything and must not
 // turn every agent's sessions into the caller's.
-func (s *Service) answersForAgent(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) (bool, error) {
-	owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
+func (a *SessionAccess) answersForAgent(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) (bool, error) {
+	owns, err := a.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
 		AgentID:        chat.AgentID.UUID,
 		OrganizationID: chat.OrganizationID,
 		OwnerUserID:    authCtx.UserID,
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, a.logger)
 	}
 	if owns {
 		return true, nil
 	}
 
-	enforce, err := s.authz.ShouldEnforce(ctx)
+	enforce, err := a.authz.ShouldEnforce(ctx)
 	if err != nil {
-		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for agent session access", attr.SlogError(err))
+		a.logger.WarnContext(ctx, "could not determine RBAC enforcement for agent session access", attr.SlogError(err))
 		return false, nil
 	}
 	if !enforce {
@@ -1325,21 +1329,21 @@ func (s *Service) answersForAgent(ctx context.Context, authCtx *contextvalues.Au
 	}
 	// A grant on a deleted or foreign agent id answers for nothing, as the
 	// listing's candidate agents exclude them.
-	live, err := s.repo.IsLiveAgent(ctx, repo.IsLiveAgentParams{
+	live, err := a.repo.IsLiveAgent(ctx, repo.IsLiveAgentParams{
 		AgentID:        chat.AgentID.UUID,
 		OrganizationID: chat.OrganizationID,
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "resolve agent").LogError(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "resolve agent").LogError(ctx, a.logger)
 	}
 	if !live {
 		return false, nil
 	}
 	// Evaluate, not Require: falling through to the chat:read gate below is
 	// the expected outcome for a non-editor, not a denial worth recording.
-	canEdit, err := s.authz.Evaluate(ctx, agentWriteCheck(chat.AgentID.UUID))
+	canEdit, err := a.authz.Evaluate(ctx, agentWriteCheck(chat.AgentID.UUID))
 	if err != nil {
-		s.logger.WarnContext(ctx, "agent:write check failed for agent session access", attr.SlogError(err))
+		a.logger.WarnContext(ctx, "agent:write check failed for agent session access", attr.SlogError(err))
 		return false, nil
 	}
 	return canEdit, nil
@@ -1372,7 +1376,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 		return none, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
-	if err := s.authorizeChatAccess(ctx, authCtx, chat, access, nil); err != nil {
+	if err := s.access.authorizeChatAccess(ctx, authCtx, chat, access, nil); err != nil {
 		return none, err
 	}
 

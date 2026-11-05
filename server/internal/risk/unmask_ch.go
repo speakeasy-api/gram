@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,7 +60,7 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		if err != nil {
 			chatID = uuid.Nil
 		}
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
+		if err := s.requireChatRead(ctx, authCtx, chatID); err != nil {
 			return nil, err
 		}
 		if row.MatchLen == 0 {
@@ -81,13 +82,13 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 	reveal := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
 	anchor := reveal.LoadAnchor(ctx, projectID, row)
 
-	// The chat:read gate runs on the ingest-stamped chat id, falling back to
-	// the anchored Postgres row's chat. When neither resolves (attribution
-	// never resolved and the anchor is gone) the check runs against the nil
-	// UUID, so only a wildcard chat:read grant passes. A stamped id
-	// that disagrees with the anchor's chat is refused outright: serving the
-	// anchor's content under the stamped chat's grant would hand a caller
-	// another chat's transcript.
+	// The chat gate runs on the ingest-stamped chat id, falling back to the
+	// anchored Postgres row's chat. When neither resolves (attribution never
+	// resolved and the anchor is gone) the check runs against the nil UUID,
+	// so only a wildcard chat:read grant passes and no owner can answer. A
+	// stamped id that disagrees with the anchor's chat is refused outright:
+	// serving the anchor's content under the stamped chat's grant would hand
+	// a caller another chat's transcript.
 	chatID, attributed := ResolveChatID(row, anchor)
 	if !attributed {
 		s.logger.WarnContext(ctx, "risk finding chat id diverges from its anchor; refusing reveal",
@@ -97,7 +98,7 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
 	}
 
-	if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
+	if err := s.requireChatRead(ctx, authCtx, chatID); err != nil {
 		return nil, err
 	}
 
@@ -114,6 +115,37 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 	}
 
 	return s.finishRiskResultUnmask(ctx, authCtx, row.ID, chatID, match)
+}
+
+// requireChatRead gates a chat-bound finding on chat:read first. When that
+// fails for a human member, the chat service's owner rule stands in (own the
+// session, or own or edit its agent): the transcript already shows the value.
+func (s *Service) requireChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID) error {
+	err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String()))
+	if err == nil {
+		return nil
+	}
+	if chatID == uuid.Nil || s.sessionAccess == nil || !ownerPathCaller(ctx, authCtx) {
+		return err
+	}
+	answers, accessErr := s.sessionAccess.AnswersForSession(ctx, chatID)
+	if accessErr != nil {
+		return fmt.Errorf("authorize risk match reveal by session owner: %w", accessErr)
+	}
+	if !answers {
+		return err
+	}
+	return nil
+}
+
+// ownerPathCaller limits the owner path to human members. API keys, embedded
+// chat-session tokens and the assistant runtime keep the plain grant check,
+// the same caller split other owner-scoped reads use.
+func ownerPathCaller(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); isAssistantCall {
+		return false
+	}
+	return authCtx.UserID != "" && authCtx.ExternalUserID == "" && authCtx.APIKeyID == ""
 }
 
 func evidenceNotStoredResult(id uuid.UUID) *gen.RiskUnmaskResultResult {
