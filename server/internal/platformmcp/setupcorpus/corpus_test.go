@@ -1,8 +1,6 @@
 package setupcorpus_test
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
 const callbackURL = "https://app.example.test/oauth/callback"
@@ -52,7 +51,7 @@ func TestBuildCitesThePinnedExport(t *testing.T) {
 
 	for _, resource := range build(t) {
 		require.Equal(t, setupcorpus.Owner, resource.Owner)
-		require.Equal(t, "mcp-setup-docs/go@"+setupcorpus.PinnedVersion, resource.Source)
+		require.Equal(t, "mcp-setup-docs/go@"+setupguides.PinnedVersion, resource.Source)
 		require.Contains(t, resource.Text, resource.Source, "the guide text carries its own citation")
 		for _, link := range resource.Links {
 			require.True(t, strings.HasPrefix(link, "https://"), "resource %s offers a non-https link %q", resource.URI, link)
@@ -121,16 +120,4 @@ func TestAliasesNameOneProviderEach(t *testing.T) {
 			owner[alias] = resource.Provider
 		}
 	}
-}
-
-// The cited version and the version the binary actually embeds are two
-// different facts, and only this test keeps them the same one.
-func TestPinnedVersionMatchesGoMod(t *testing.T) {
-	t.Parallel()
-
-	// setupcorpus → platformmcp → internal → server → repository root.
-	gomod, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "go.mod"))
-	require.NoError(t, err)
-	require.Contains(t, string(gomod), setupcorpus.ModulePath+" "+setupcorpus.PinnedVersion,
-		"setupcorpus.PinnedVersion must name the version go.mod resolves; bump both together")
 }

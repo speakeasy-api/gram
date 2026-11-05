@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminHTTP "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -109,12 +111,14 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "assistant", action: "assistant:run"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "trial", subjectName: pgtype.Text{String: "Test Trial", Valid: true}, action: "trial:extend"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", actorID: "system", actorType: "system", subjectType: "organization", action: "system:update"})
+	// Catalogue curation is hidden from customer feeds but stays visible to staff.
+	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", isInternal: true, subjectType: "catalog_promotion", action: "catalog-promotion:archive", surface: pgtype.Text{String: "admin", Valid: true}})
 
 	result, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_target"})
 	require.NoError(t, err)
-	require.Len(t, result.Logs, 5)
+	require.Len(t, result.Logs, 6)
 
-	var full, system *gen.AuditLog
+	var full, system *gen.AdminAuditLog
 	for _, log := range result.Logs {
 		if log.ID == wanted.String() {
 			full = log
@@ -123,6 +127,8 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 			system = log
 		}
 		require.NotEqual(t, "other:create", log.Action)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, log.Action == "catalog-promotion:archive", *log.IsInternal)
 	}
 	require.NotNil(t, full)
 	require.Equal(t, project.ID.String(), *full.ProjectID)
@@ -295,6 +301,7 @@ func TestListOrganizationActivity(t *testing.T) {
 }
 
 type activitySeed struct {
+	isInternal                     bool
 	organizationID                 string
 	projectID                      uuid.NullUUID
 	actorID, actorType             string
@@ -318,6 +325,7 @@ func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed 
 		seed.subjectID = uuid.NewString()
 	}
 	params := auditrepo.InsertAuditLogParams{
+		IsInternal:     seed.isInternal,
 		OrganizationID: seed.organizationID, ProjectID: seed.projectID, ActorID: seed.actorID, ActorType: seed.actorType,
 		ActorDisplayName: seed.actorName, ActorSlug: seed.actorSlug, Action: seed.action, SubjectID: seed.subjectID,
 		SubjectType: seed.subjectType, SubjectDisplayName: seed.subjectName, SubjectSlug: seed.subjectSlug,
@@ -626,5 +634,26 @@ func TestListOrganizationActivityFiltered_PaginationAndDelegation(t *testing.T) 
 		if cursor == nil {
 			break
 		}
+	}
+}
+
+func TestInternalClassificationResponse(t *testing.T) {
+	t.Parallel()
+	for _, internal := range []bool{false, true} {
+		log, err := adminActivityLog(auditrepo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
+		require.NoError(t, err)
+		require.NotNil(t, log.IsInternal)
+		require.Equal(t, internal, *log.IsInternal)
+		recorder := httptest.NewRecorder()
+		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{log}, NextCursor: nil}
+		require.NoError(t, adminHTTP.EncodeListOrganizationActivityResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var body struct {
+			Logs []map[string]any `json:"logs"`
+		}
+		require.NoError(t, json.NewDecoder(recorder.Body).Decode(&body))
+		require.Len(t, body.Logs, 1)
+		require.Contains(t, body.Logs[0], "is_internal")
+		require.Equal(t, internal, body.Logs[0]["is_internal"])
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -135,7 +136,7 @@ func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
 	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 
-	err := service.probeRemoteSession(t.Context(), remotesessions.RefreshAttribution{}, testenv.NewLogger(t), endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	err := service.probeRemoteSession(t.Context(), remotesessions.RefreshAttribution{}, testenv.NewLogger(t), mcpconnectionattempts.Option{}, endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)

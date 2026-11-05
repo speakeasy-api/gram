@@ -27,7 +27,7 @@ var ErrConflict = errors.New("registry entry conflict")
 var ErrInvalidToken = errors.New("invalid registry write token")
 
 // ErrEndpointStructureImmutable enforces a temporary restriction for the initial
-// catalog rollout and migration from Pulse: endpoint structure is frozen even
+// catalog rollout: endpoint structure is frozen even
 // when no references exist. Switching providers alone does not make edits safe.
 // Relax this only when endpoint changes can safely preserve existing references.
 var ErrEndpointStructureImmutable = errors.New("registry endpoint structure is immutable")

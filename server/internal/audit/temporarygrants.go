@@ -163,6 +163,7 @@ func temporaryGrantAuditParams(
 	displayName := grant.Scope + " for " + recipient
 
 	return repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

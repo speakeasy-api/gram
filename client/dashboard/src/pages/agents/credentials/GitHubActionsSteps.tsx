@@ -18,6 +18,7 @@ import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
 import {
   ACTION_DOCS,
+  ACTION_TAG,
   WORKFLOW_AGENTS,
   WORKFLOW_AGENT_OPTIONS,
   pluginGateways,
@@ -358,6 +359,11 @@ export function WorkflowStep({ scope }: { scope: JobScope }): JSX.Element {
               Keep <strong>Connect to Speakeasy</strong> before{" "}
               <strong>Run {selected.name}</strong> in the same job so it can use
               the configured MCP servers.
+            </li>
+            <li>
+              The device agent action&apos;s <code>@{ACTION_TAG}</code> tag
+              moves to each {ACTION_TAG}.x release. If your team requires commit
+              pins, pin a release commit instead.
             </li>
           </ul>
           <Links
