@@ -6444,7 +6444,7 @@ ON chats (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS chats_id_project_id_key
 ON chats (id, project_id);
 
--- Team memory reads (recall, zoom, the nightly digest rollup) walk one
+-- Per-project team memory reads (ListRecallChats, ListDayDigestChats) walk one
 -- project's eligible chat summaries by when they were written. Partial on the
 -- eligibility predicate those queries share, so it stays small while most
 -- chats have no redacted summary.
