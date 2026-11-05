@@ -8657,7 +8657,8 @@ SELECT DISTINCT
     p.slug AS project_slug,
     m.name,
     m.slug,
-    (CASE WHEN attached.offered THEN COALESCE(rms.url, tms.resource_identifier, '') ELSE COALESCE(rms.url, '') END)::text AS url,
+    COALESCE(rms.url, '')::text AS url,
+    (CASE WHEN attached.offered THEN COALESCE(rms.url, tms.resource_identifier, '') ELSE COALESCE(rms.url, '') END)::text AS resource,
     attached.offered
 FROM (
     SELECT link.remote_session_client_id AS client_id,
@@ -8714,6 +8715,7 @@ type ListOrganizationMcpServersForClientsRow struct {
 	Name        pgtype.Text
 	Slug        pgtype.Text
 	Url         string
+	Resource    string
 	Offered     bool
 }
 
@@ -8728,10 +8730,12 @@ type ListOrganizationMcpServersForClientsRow struct {
 // whether or not a user session issuer links the two. The offer is judged as
 // the consent screen judges it: the auth client is the organization's and,
 // when it belongs to a project, the server's own. offered marks those rows,
-// which sort first for each client. An offered tunneled server names its own
-// resource identifier: serving routes the chosen client by that client's
-// issuer, so the identifier cannot unqualify a sibling's grant, and a provider
-// that requires a resource needs it on the login.
+// which sort first for each client. url is the server's remote URL, for display.
+// resource is what the row contributes to the client's derived resource: an
+// offered tunneled server names its own resource identifier, because serving
+// routes the chosen client by that client's issuer, so the identifier cannot
+// unqualify a sibling's grant, and a provider that requires a resource needs it
+// on the login.
 func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg ListOrganizationMcpServersForClientsParams) ([]ListOrganizationMcpServersForClientsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClients, arg.RemoteSessionClientIds, arg.OrganizationID)
 	if err != nil {
@@ -8749,6 +8753,7 @@ func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg 
 			&i.Name,
 			&i.Slug,
 			&i.Url,
+			&i.Resource,
 			&i.Offered,
 		); err != nil {
 			return nil, err
@@ -14512,17 +14517,21 @@ const setRemoteSessionAutoRefreshInTenant = `-- name: SetRemoteSessionAutoRefres
 UPDATE remote_sessions AS s
 SET auto_refresh = $1
 FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
      user_session_issuers AS u
      LEFT JOIN projects AS up ON up.id = u.project_id,
      projects AS p
 WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
   AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
   AND u.id = s.user_session_issuer_id
   AND p.id = $4::uuid
   AND p.organization_id = $5::text
   AND p.deleted IS FALSE
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -14985,6 +14994,7 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
      -- A deleted sign-in still names the organization the consent was made in.
      user_session_issuers AS u
      LEFT JOIN projects AS up ON up.id = u.project_id,
@@ -14992,11 +15002,14 @@ FROM remote_session_clients AS c,
 WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
   AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
   AND u.id = s.user_session_issuer_id
   AND p.id = $3::uuid
   AND p.organization_id = $4::text
   AND p.deleted IS FALSE
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
   AND s.deleted IS FALSE

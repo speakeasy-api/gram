@@ -151,6 +151,49 @@ func TestClientMcpServers_IncludeOfferingServersWithoutASignInLink(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, servers.Items, 1)
 	require.Equal(t, serverID.String(), servers.Items[0].ID)
+
+	// Deleting the client also detaches it from the servers behind its links,
+	// so they stay in the list beside the servers that offer it, each once.
+	otherSignIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offered-impact-linked")
+	linkedServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, otherSignIn, "linked-impact", "https://linked-impact.example.com/mcp")
+	for _, id := range []uuid.UUID{signIn, otherSignIn} {
+		require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: id}))
+	}
+
+	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"offered-impact", "linked-impact"}, preflight.McpServerNames)
+
+	servers, err = ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(servers.Items))
+	for _, item := range servers.Items {
+		ids = append(ids, item.ID)
+	}
+	require.ElementsMatch(t, []string{serverID.String(), linkedServer.String()}, ids)
+}
+
+// A tunneled server's identifier decides a login's resource but is not a URL an
+// administrator is shown.
+func TestClientMcpServers_DoNotShowATunnelIdentifierAsItsURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID, organizationID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offered-tunnel-url")
+	serverID := seedTunneledMCPServerForIssuer(t, ctx, ti, signIn, "offered-tunnel-url", "https://tunnel-url.internal.example.com/mcp")
+	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "offered-tunnel-url-issuer", "https://issuer.example.com/offered-tunnel-url")
+	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "offered-tunnel-url-cid")
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, serverID, registration)
+	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
+
+	servers, err := ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
+	require.NoError(t, err)
+	require.Len(t, servers.Items, 1)
+	require.Nil(t, servers.Items[0].URL)
 }
 
 // A sign-in can front servers with different upstreams. Where typed auth
@@ -282,4 +325,27 @@ func TestRefreshAuthClientRemoteSession_RefreshesWithoutASignInLink(t *testing.T
 	statuses, err := mgr.AuthClientRemoteSessionStatuses(ctx, subject, projectID, organizationID, []uuid.UUID{registration})
 	require.NoError(t, err)
 	require.True(t, statuses[registration].AutoRefresh)
+}
+
+// A registration whose provider has been retired is out of the tenant's reach,
+// as token resolution reads it, so its grant is not written to.
+func TestAuthClientRemoteSessionActions_RefuseARetiredIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	fx := seedRevocableSession(t, ctx, ti, "offered-retired", "", "s3cret", true)
+	mgr := newDisconnectChallengeManager(t, ti)
+	_, err := repo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, fx.issuerID)
+	require.NoError(t, err)
+
+	n, err := mgr.DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
+	require.NoError(t, err)
+	require.Zero(t, n)
+
+	n, err = mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
+	require.NoError(t, err)
+	require.Zero(t, n)
+
+	session, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err, "the grant is untouched")
+	require.False(t, session.AutoRefresh)
 }

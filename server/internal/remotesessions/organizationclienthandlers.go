@@ -165,13 +165,13 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
 	}
 
-	attachments, err := attachmentsForClients(ctx, s.db, authCtx.ActiveOrganizationID, []uuid.UUID{clientID})
+	mcpRows, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
-	names := make([]string, 0, len(attachments[clientID]))
-	for _, row := range attachments[clientID] {
+	names := make([]string, 0, len(mcpRows))
+	for _, row := range mcpRows {
 		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
@@ -220,6 +220,40 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 	}, nil
 }
 
+// serversUsingClient is every server an administrator's change to the client
+// affects, newest first: those behind its user session issuer links and, where
+// typed auth clients are enforced, those that offer it. A server reached both
+// ways appears once.
+func serversUsingClient(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) ([]repo.ListOrganizationMcpServersForClientRow, error) {
+	rows, err := repo.New(db).ListOrganizationMcpServersForClients(ctx, repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: []uuid.UUID{clientID},
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mcp servers for client: %w", err)
+	}
+	seen := make(map[uuid.UUID]bool, len(rows))
+	servers := make([]repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
+	for _, row := range rows {
+		if seen[row.ID] {
+			continue
+		}
+		seen[row.ID] = true
+		servers = append(servers, repo.ListOrganizationMcpServersForClientRow{
+			ID:          row.ID,
+			ProjectID:   row.ProjectID,
+			ProjectSlug: row.ProjectSlug,
+			Name:        row.Name,
+			Slug:        row.Slug,
+			Url:         row.Url,
+		})
+	}
+	slices.SortFunc(servers, func(a, b repo.ListOrganizationMcpServersForClientRow) int {
+		return strings.Compare(b.ID.String(), a.ID.String())
+	})
+	return servers, nil
+}
+
 // ListClientMcpServers lists the MCP servers a client is attached to in the
 // caller's organization.
 func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsgen.ListClientMcpServersPayload) (*orgclientsgen.ListOrganizationMcpServersResult, error) {
@@ -252,13 +286,13 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	attachments, err := attachmentsForClients(ctx, s.db, authCtx.ActiveOrganizationID, []uuid.UUID{clientID})
+	rows, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
-	items := make([]*orgclientsgen.OrganizationMcpServer, 0, len(attachments[clientID]))
-	for _, row := range attachments[clientID] {
+	items := make([]*orgclientsgen.OrganizationMcpServer, 0, len(rows))
+	for _, row := range rows {
 		items = append(items, &orgclientsgen.OrganizationMcpServer{
 			ID:          row.ID.String(),
 			ProjectID:   row.ProjectID.String(),

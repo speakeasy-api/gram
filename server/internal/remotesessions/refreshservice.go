@@ -302,9 +302,10 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 // round trip, within organizationID. A client with no attachments has no entry.
 //
 // Where the organization enforces typed auth clients, the servers that offer a
-// client through one are its attachments, and the servers behind its user
-// session issuer links add none: such a client's resource is decided by the
-// servers configured to use it, linked to their sign-in or not.
+// client through one replace the servers behind its user session issuer links:
+// a client with an offer has its resource decided by the servers configured to
+// use it, linked to their sign-in or not. A client with no offer keeps the
+// servers behind its links.
 func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
@@ -328,7 +329,7 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 			ProjectSlug: row.ProjectSlug,
 			Name:        row.Name,
 			Slug:        row.Slug,
-			Url:         row.Url,
+			Url:         row.Resource,
 		})
 	}
 	return attachments, nil
