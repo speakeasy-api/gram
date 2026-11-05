@@ -191,6 +191,23 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		observation.Issue = routingIssue
 		preserveCertificateExpiry = true
 	default:
+		caaIssue, caaErr := checkCustomDomainCAA(ctx, c.resolver, domain.Domain)
+		if caaErr != nil {
+			if !isFinalHealthCheckAttempt(ctx) {
+				return noNotification, fmt.Errorf("check custom domain CAA: %w", caaErr)
+			}
+			c.logger.WarnContext(ctx, "custom domain CAA health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(caaErr))
+			observation.Status = customdomains.HealthStatusUnhealthy
+			observation.Issue = customdomains.HealthIssueCheckFailed
+			preserveCertificateExpiry = true
+			break
+		}
+		if caaIssue != "" {
+			observation.Status = customdomains.HealthStatusUnhealthy
+			observation.Issue = caaIssue
+			preserveCertificateExpiry = true
+			break
+		}
 		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
 			Domain:                    domain.Domain,
 			ResourceName:              domain.IngressName.String,
