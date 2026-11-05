@@ -87,20 +87,6 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid auth client id").LogError(ctx, logger)
 	}
 
-	// A deleted agent can never act again, so a rule the client already holds
-	// for one decides nothing. The page sends back every rule it shows, so
-	// these are dropped from the save rather than rejected, which also removes
-	// the stale grants. A deleted agent the client holds no rule for is still
-	// refused below.
-	stored, err := clientGrants(ctx, s.db, authCtx.ActiveOrganizationID, clientID.String())
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list auth client grants").LogError(ctx, logger)
-	}
-	held := make(map[string]struct{}, len(stored))
-	for _, grant := range stored {
-		held[grant.PrincipalUrn] = struct{}{}
-	}
-
 	desired := make(map[string]audienceRule, len(payload.Entries))
 	for _, entry := range payload.Entries {
 		if entry == nil {
@@ -119,9 +105,6 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 			return nil, oops.E(oops.CodeInvalid, nil, "principal %q is listed more than once at the same level", entry.PrincipalUrn)
 		}
 		if err := authz.ValidatePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, principal); err != nil {
-			if _, stale := held[principal.String()]; stale && principal.Type == urn.PrincipalTypeAgent && errors.Is(err, authz.ErrPrincipalNotFound) {
-				continue
-			}
 			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
 				return nil, oops.E(oops.CodeInvalid, err, "unknown principal %q", entry.PrincipalUrn)
 			}
@@ -351,7 +334,27 @@ func readAudience(ctx context.Context, db repo.DBTX, client repo.McpAuthClient) 
 	type entryKey struct{ principal, level, appliesTo, project string }
 	seen := make(map[entryKey]struct{})
 	entries := make([]*types.AuthClientAudienceEntry, 0, len(own)+len(broad))
+	// A deleted agent can never act again, so its rule decides nothing.
+	// Leaving it out also keeps it out of the save, which replaces this
+	// client's rules and so removes the stale grant.
+	deletedAgents := make(map[string]struct{})
+	for _, grant := range slices.Concat(own, broad) {
+		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
+		if err != nil || principal.Type != urn.PrincipalTypeAgent {
+			continue
+		}
+		err = authz.ValidatePrincipal(ctx, db, client.OrganizationID, principal)
+		switch {
+		case errors.Is(err, authz.ErrPrincipalNotFound):
+			deletedAgents[grant.PrincipalUrn] = struct{}{}
+		case err != nil:
+			return nil, fmt.Errorf("check agent principal: %w", err)
+		}
+	}
 	add := func(grant authz.Grant, appliesTo string) {
+		if _, deleted := deletedAgents[grant.PrincipalUrn]; deleted {
+			return
+		}
 		level := LevelUse
 		if grant.Scope == authz.ScopeMCPBlockedAuth {
 			level = LevelBlocked

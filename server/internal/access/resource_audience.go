@@ -205,16 +205,6 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	if err != nil {
 		return nil, err
 	}
-	// A deleted agent can never act again, so a rule naming it decides
-	// nothing. The page sends back every rule it shows, so these are dropped
-	// from the save rather than rejected, which also removes the stale grants.
-	deletedAgents, err := s.deletedAgentPrincipals(ctx, ac.ActiveOrganizationID, retainableAgents, assignableAgents)
-	if err != nil {
-		return nil, err
-	}
-	for principal := range deletedAgents {
-		delete(retainableAgents, principal)
-	}
 
 	if err := preserveUnassignableAgentBlocks(retainableAgents, assignableAgents, payload.Entries); err != nil {
 		return nil, err
@@ -232,9 +222,6 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		principal, err := parseAudiencePrincipal(entry.PrincipalUrn)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
-		}
-		if _, deleted := deletedAgents[principal.String()]; deleted {
-			continue
 		}
 		if principal.Type == urn.PrincipalTypeAgent {
 			if !slices.Contains(agentAudienceLevels, entry.Level) {
@@ -658,6 +645,12 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	for key, rule := range rules {
 		name := names[key.principalURN]
 		if name.displayName == "" {
+			// A deleted agent can never act again, so its rule decides
+			// nothing. Leaving it out also keeps it out of the save, which
+			// replaces this resource's rules and so removes the stale grant.
+			if strings.HasPrefix(key.principalURN, string(urn.PrincipalTypeAgent)+":") {
+				continue
+			}
 			name = describeUnknownPrincipal(key.principalURN)
 		}
 		entries = append(entries, &gen.ResourceAudienceEntry{
@@ -808,30 +801,6 @@ func (s *Service) storedAgentRules(ctx context.Context, organizationID, resource
 	return stored, nil
 }
 
-// deletedAgentPrincipals returns the agents this resource's own rules name that
-// have since been deleted. Only stored rules are considered, so a payload
-// naming a deleted agent the resource never held is still rejected.
-func (s *Service) deletedAgentPrincipals(ctx context.Context, organizationID string, stored map[string]map[string]struct{}, assignable map[string]struct{}) (map[string]struct{}, error) {
-	deleted := make(map[string]struct{})
-	for principalURN := range stored {
-		if _, active := assignable[principalURN]; active {
-			continue
-		}
-		principal, err := urn.ParsePrincipal(principalURN)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse stored agent principal").LogError(ctx, s.logger)
-		}
-		err = authz.ValidatePrincipal(ctx, s.db, organizationID, principal)
-		switch {
-		case errors.Is(err, authz.ErrPrincipalNotFound):
-			deleted[principalURN] = struct{}{}
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "validate stored agent principal").LogError(ctx, s.logger)
-		}
-	}
-	return deleted, nil
-}
-
 // assignableAgentPrincipals returns the agents that may be given new access.
 func (s *Service) assignableAgentPrincipals(ctx context.Context, organizationID string) (map[string]struct{}, error) {
 	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
@@ -963,8 +932,6 @@ func describeUnknownPrincipal(principalURN string) audienceName {
 		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
 	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
 		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
-	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeAgent)+":"):
-		return audienceName{kind: "agent", displayName: "Deleted agent", description: nil, memberCount: nil}
 	default:
 		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
 	}

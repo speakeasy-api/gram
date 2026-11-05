@@ -66,9 +66,9 @@ func TestSetAuthClientAudienceWritesUseAndBlocked(t *testing.T) {
 	require.Empty(t, ownRules(cleared))
 }
 
-// A rule naming a deleted agent must not block saving the rest of the
-// audience: the page sends it back, and it is dropped instead of rejected.
-func TestSetAuthClientAudienceDropsRulesForDeletedAgent(t *testing.T) {
+// A rule naming a deleted agent is left out of the audience, so the page
+// never sends it back, and the next save removes its grant.
+func TestSetAuthClientAudienceHidesAndRemovesRulesForDeletedAgent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -84,38 +84,35 @@ func TestSetAuthClientAudienceDropsRulesForDeletedAgent(t *testing.T) {
 		Name:           "Retired assistant",
 	})
 	require.NoError(t, err)
-	staleBlock := &gen.AuthClientAudienceRule{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: authclients.LevelBlocked}
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 
 	current, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
 	require.NoError(t, err)
-	saved, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+	_, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
 		ID:              clientID.String(),
 		ExpectedVersion: current.Version,
-		Entries:         []*gen.AuthClientAudienceRule{staleBlock},
+		Entries:         []*gen.AuthClientAudienceRule{{PrincipalUrn: agentPrincipal.String(), Level: authclients.LevelBlocked}},
 	})
 	require.NoError(t, err)
 
 	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{OrganizationID: ti.organizationID, ID: agent.ID})
 	require.NoError(t, err)
 
-	saved, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+	listed, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	require.Empty(t, ownRules(listed), "deleted agent's rule should be hidden")
+
+	saved, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
 		ID:              clientID.String(),
-		ExpectedVersion: saved.Version,
-		Entries: []*gen.AuthClientAudienceRule{
-			{PrincipalUrn: urn.PrincipalWildcard, Level: authclients.LevelUse},
-			staleBlock,
-		},
+		ExpectedVersion: listed.Version,
+		Entries:         []*gen.AuthClientAudienceRule{{PrincipalUrn: urn.PrincipalWildcard, Level: authclients.LevelUse}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{authz.AllUsersPrincipal().String() + "|" + authclients.LevelUse}, ownRules(saved))
 
-	// A deleted agent the client never held a rule for is still refused.
-	_, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
-		ID:              clientID.String(),
-		ExpectedVersion: saved.Version,
-		Entries:         []*gen.AuthClientAudienceRule{staleBlock},
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	grants, err := authz.LoadGrants(ctx, ti.conn, ti.organizationID, []urn.Principal{agentPrincipal})
+	require.NoError(t, err)
+	require.Empty(t, grants)
 }
 
 func TestSetAuthClientAudienceKeepsUntouchedProvisionedGrants(t *testing.T) {
