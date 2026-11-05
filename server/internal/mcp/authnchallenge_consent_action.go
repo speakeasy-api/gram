@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
@@ -530,8 +531,12 @@ func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, 
 		return ""
 	}
 	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
-	if err != nil {
-		logger.DebugContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "mcp client to forward the name of not found", attr.SlogError(err))
+		return ""
+	case err != nil:
+		logger.WarnContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
 		return ""
 	}
 	return row.ClientName
