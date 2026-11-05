@@ -114,6 +114,10 @@ var frozenCodes = []string{
 	"needs_sign_in",
 	"consent_not_approved",
 	"catalog_too_large",
+	"client_authentication_failed",
+	"sign_in_provider_error",
+	"review_canceled",
+	"connection_catalog_expired",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -129,6 +133,7 @@ var frozenResults = map[string]Result{
 	"allowed":                   ResultAllowed,
 	"listed":                    ResultListed,
 	"complete":                  ResultComplete,
+	"review_shown":              ResultReviewShown,
 	"partial":                   resultPartial,
 	"failed":                    resultFailed,
 	"policy_blocked":            resultPolicyBlocked,

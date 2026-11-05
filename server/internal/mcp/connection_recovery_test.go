@@ -2,11 +2,14 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,18 +20,23 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type connectionRecoveryFixture struct {
-	ti *testInstance
+	userAgent string
+	ti        *testInstance
 	//nolint:containedctx // the test's authenticated context, used by every request it makes
 	ctx      context.Context
 	link     mcp.ConnectionRecoveryLink
@@ -43,14 +51,14 @@ type connectionRecoveryFixture struct {
 // registration's callback lands on the dashboard's own host.
 func newConnectionRecoveryFixture(t *testing.T) *connectionRecoveryFixture {
 	t.Helper()
-	return newConnectionRecoveryFixtureWithCallback(t, "")
+	return newConnectionRecoveryFixtureWithCallback(t, "", nil)
 }
 
 // newConnectionRecoveryFixtureWithCallback records callbackBase, when set, as
-// the registration's callback origin.
-func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string) *connectionRecoveryFixture {
+// the registration's callback origin, and wraps the service's cache with wrap, when set.
+func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string, wrap func(cache.Cache) cache.Cache) *connectionRecoveryFixture {
 	t.Helper()
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, wrap)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	f := &connectionRecoveryFixture{ti: ti, ctx: ctx, router: chi.NewRouter(), userID: "user_" + uuid.NewString()[:8], otherID: "user_" + uuid.NewString()[:8]}
@@ -96,6 +104,9 @@ func (f *connectionRecoveryFixture) open(t *testing.T, path, userID string) *htt
 func (f *connectionRecoveryFixture) request(t *testing.T, path, userID string, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(f.ctx, http.MethodGet, path, nil)
+	if f.userAgent != "" {
+		req.Header.Set("User-Agent", f.userAgent)
+	}
 	if userID != "" {
 		req.AddCookie(&http.Cookie{Name: constants.SessionCookie, Value: userID})
 	}
@@ -211,7 +222,7 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 // person's own session.
 func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 	t.Parallel()
-	f := newConnectionRecoveryFixtureWithCallback(t, "https://callback.example.com")
+	f := newConnectionRecoveryFixtureWithCallback(t, "https://callback.example.com", nil)
 
 	remote, cookies := f.started(t)
 	require.NotEmpty(t, cookies)
@@ -282,6 +293,40 @@ func TestConnectionRecoveryShowsNoAccessWithoutAWayToConnect(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, denied.Code)
 	require.Contains(t, denied.Body.String(), "No access")
 	require.NotContains(t, denied.Body.String(), f.asBase)
+}
+
+type recoveryStoreFailureCache struct {
+	codemode.OwnershipStore
+	fail atomic.Bool
+}
+
+func (c *recoveryStoreFailureCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.Contains(key, "connectionRecovery:") && c.fail.Load() {
+		return errors.New("injected store failure")
+	}
+	return c.OwnershipStore.Set(ctx, key, value, ttl) //nolint:wrapcheck // test double passes the delegate's result through
+}
+
+// A link spent before its login could be stored reports why, not a missed branch.
+func TestConnectionRecoveryStoreFailureRecordsAVerdict(t *testing.T) {
+	t.Parallel()
+	var failing *recoveryStoreFailureCache
+	f := newConnectionRecoveryFixtureWithCallback(t, "", func(delegate cache.Cache) cache.Cache {
+		store, ok := delegate.(codemode.OwnershipStore)
+		require.True(t, ok)
+		failing = &recoveryStoreFailureCache{OwnershipStore: store}
+		return failing
+	})
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	rec := recordConnections(t, f.ti)
+	failing.fail.Store(true)
+
+	response := f.open(t, path, f.userID)
+
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+	rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError)
+	rec.RequireNoUnclassifiedExit()
 }
 
 func TestConnectionRecoveryRefusesUnknownLinks(t *testing.T) {

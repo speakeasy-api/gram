@@ -40,6 +40,7 @@ type LogTriggerInstanceCreateEvent struct {
 func (l *Logger) LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceCreateEvent) error {
 	action := ActionTriggerInstanceCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -92,6 +93,7 @@ func (l *Logger) LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -131,6 +133,7 @@ type LogTriggerInstanceDeleteEvent struct {
 func (l *Logger) LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceDeleteEvent) error {
 	action := ActionTriggerInstanceDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -170,6 +173,7 @@ type LogTriggerInstancePauseEvent struct {
 func (l *Logger) LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstancePauseEvent) error {
 	action := ActionTriggerInstancePause
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -209,6 +213,7 @@ type LogTriggerInstanceResumeEvent struct {
 func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceResumeEvent) error {
 	action := ActionTriggerInstanceResume
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -259,6 +264,7 @@ func (l *Logger) logWakeEvent(ctx context.Context, dbtx repo.DBTX, action Action
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

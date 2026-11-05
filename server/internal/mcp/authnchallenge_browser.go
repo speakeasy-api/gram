@@ -11,6 +11,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -116,11 +117,23 @@ func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http
 // The remote state is immutable and single-use. Peek before the manager can
 // exchange a code or persist credentials; it still owns the atomic consumption.
 // Dashboard-owned linking (FinalRedirectURI) does not have a consent parent.
-func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
+func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	remote, err := s.remoteLoginCache.Get(r.Context(), "remoteLogin:"+r.URL.Query().Get("state"))
 	if err != nil {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	var parentReconnect *CodeReconnectBinding
+	var parentWorkload *WorkloadReconnectBinding
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		if parentReconnect.expired(time.Now()) || parentWorkload.expired(time.Now()) {
+			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))...)
+			return
+		}
+		s.recordRemoteLoginRefusal(r, remote, retErr)
+	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err
 	}
@@ -131,6 +144,8 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("load parent login state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	parentReconnect = parent.CodeReconnect
+	parentWorkload = parent.WorkloadReconnect
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}

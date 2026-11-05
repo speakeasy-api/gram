@@ -175,6 +175,8 @@ func registerCardResource(reg *Registrar) {
 }
 
 const (
+	// nextActionReady says no required setup is left.
+	nextActionReady = "ready"
 	// nextActionStartSetup leaves the user to check the new server's readiness.
 	nextActionStartSetup = "start_setup"
 	// nextActionContinueDashboardSetup sends the user to the dashboard to sign

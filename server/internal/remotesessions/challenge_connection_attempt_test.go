@@ -15,7 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -90,7 +92,7 @@ func TestCompleteRemoteLogin_CarriesTheAttemptThroughProviderSignIn(t *testing.T
 	require.NoError(t, recorder.Shutdown(ctx))
 
 	var rows []attemptRow
-	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE attempt_id = ?`, attempt.ID()))
+	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE attempt_id = ? AND step_result = 'signed_in'`, attempt.ID()))
 	require.Len(t, rows, 1)
 	require.WithinDuration(t, started, rows[0].AttemptStartedAt, time.Microsecond, "the clock started at /authorize")
 	require.Equal(t, fx.parent.OrganizationID, rows[0].OrganizationID)
@@ -109,6 +111,7 @@ func TestCompleteRemoteLogin_StateWithoutAnAttemptStillWorks(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-old", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 
 	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, fx.clients[0])
@@ -154,6 +157,7 @@ func TestCompleteRemoteLogin_RecordsTheGatewayMember(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-member", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	member := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	parent := fx.parent
@@ -198,6 +202,7 @@ func TestCompleteRemoteLogin_CancelReturningToConsentDoesNotEndTheAttempt(t *tes
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 
 	parent := fx.parent
@@ -220,6 +225,7 @@ func TestCompleteRemoteLogin_CancelWithAFinalDestinationEndsTheAttempt(t *testin
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel-final", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	parent := fx.parent
 	parent.FinalRedirectURI = "https://app.example.com/done"
@@ -233,4 +239,251 @@ func TestCompleteRemoteLogin_CancelWithAFinalDestinationEndsTheAttempt(t *testin
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
+}
+
+// Reaching the provider is a row, so an attempt that stops there is not invisible.
+func TestBuildAuthorizationUrl_RecordsReachingTheProvider(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-accepted", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppRecoveryLink))
+
+	_, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted)
+	require.NotEmpty(t, row.ProviderHost)
+	require.Equal(t, fx.clients[0].ID.String(), row.RemoteSessionClientID)
+	rec.RequireNotEnded()
+}
+
+// A provider error ends a login with its own destination. One from consent stays
+// open, because the person can go back and connect again on the same attempt.
+func TestCompleteRemoteLogin_ProviderErrorsAreRecorded(t *testing.T) {
+	t.Parallel()
+
+	for name, final := range map[string]string{"returns to consent": "", "final destination": "https://app.example.com/done"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var spy upstreamSpy
+			ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-provider-error", &spy)
+			rec := mcpconnectionattemptstest.New(t)
+			t.Cleanup(rec.RequireNoUnclassifiedExit)
+			remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+			parent := fx.parent
+			parent.FinalRedirectURI = final
+			parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+
+			authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=invalid_scope&state="+url.QueryEscape(loginState(t, authURL)), nil)
+			_, err = fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+			require.Error(t, err)
+
+			require.Equal(t, final != "", rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).IsFinal)
+			require.Equal(t, "invalid_scope", rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).SubReason)
+			rec.RequireOneAttempt()
+		})
+	}
+}
+
+// A value from the query never reaches a stored label.
+func TestCompleteRemoteLogin_UnregisteredProviderErrorIsNotStored(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-unregistered", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=made_up&state="+url.QueryEscape(loginState(t, authURL)), nil)
+	_, err = fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+	require.Error(t, err)
+
+	require.Equal(t, "unregistered", rowFor(t, rec, mcpconnectionattempts.CodeSignInProviderError).SubReason)
+}
+
+func rowFor(t *testing.T, rec *mcpconnectionattemptstest.Recording, what mcpconnectionattempts.Code) mcpconnectionattempts.Row {
+	t.Helper()
+	for _, row := range rec.Rows() {
+		if row.Reason == what.String() {
+			return row
+		}
+	}
+	require.Failf(t, "not recorded", "%s in %+v", what, rec.Rows())
+	return mcpconnectionattempts.Row{}
+}
+
+// A sign-in with its own destination is the whole attempt, so success ends it Connected.
+func TestCompleteRemoteLogin_SignInWithAFinalDestinationEndsConnected(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-final", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.FinalRedirectURI = "https://app.example.com/done"
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppRecoveryLink))
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	complete(t, ctx, fx, "code=fake-code&state="+url.QueryEscape(loginState(t, authURL)))
+	require.NoError(t, spy.handlerErr)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
+	rec.RequireOneAttempt()
+}
+
+// A second invalid_target is the provider's refusal. Anything else on the retry is not.
+func TestCompleteRemoteLogin_RetryFailuresKeepTheirOwnCode(t *testing.T) {
+	t.Parallel()
+
+	begin := func(t *testing.T, tag string) (context.Context, resourceDanceFixture, *mcpconnectionattemptstest.Recording, string) {
+		t.Helper()
+		var spy upstreamSpy
+		ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", tag, &spy)
+		rec := mcpconnectionattemptstest.New(t)
+		t.Cleanup(rec.RequireNoUnclassifiedExit)
+		remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+		parent := fx.parent
+		parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+		authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+		require.NoError(t, err)
+		return ctx, fx, rec, loginState(t, authURL)
+	}
+	callback := func(ctx context.Context, fx resourceDanceFixture, query string) error {
+		req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+query, nil)
+		_, err := fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+		return err //nolint:wrapcheck // compared by the caller
+	}
+
+	t.Run("a second refusal is the provider's", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-retry-refused")
+		result := complete(t, ctx, fx, "error=invalid_target&state="+url.QueryEscape(login))
+		require.Error(t, callback(ctx, fx, "error=invalid_target&state="+url.QueryEscape(loginState(t, result.RedirectURL))))
+		require.Equal(t, oautherr.CodeInvalidTarget, rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).SubReason)
+	})
+	t.Run("a removed connection is not a refusal", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-retry-removed")
+		_, err := repo.New(fx.ti.conn).DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: fx.clients[0].ID, ProjectID: uuid.NullUUID{UUID: fx.parent.ProjectID, Valid: true}})
+		require.NoError(t, err)
+		require.Error(t, callback(ctx, fx, "error=invalid_target&state="+url.QueryEscape(login)))
+		rowFor(t, rec, mcpconnectionattempts.CodeConnectionChanged)
+	})
+}
+
+// Callback refusals before and at the provider read as what actually went wrong.
+func TestCompleteRemoteLogin_LocalSetupAndProviderRefusals(t *testing.T) {
+	t.Parallel()
+
+	begin := func(t *testing.T, tag string, setup func(ctx context.Context, fx resourceDanceFixture)) (context.Context, resourceDanceFixture, *mcpconnectionattemptstest.Recording, string) {
+		t.Helper()
+		var spy upstreamSpy
+		ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", tag, &spy)
+		rec := mcpconnectionattemptstest.New(t)
+		t.Cleanup(rec.RequireNoUnclassifiedExit)
+		remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+		if setup != nil {
+			setup(ctx, fx)
+		}
+		parent := fx.parent
+		parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+		authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+		require.NoError(t, err)
+		return ctx, fx, rec, loginState(t, authURL)
+	}
+	callback := func(ctx context.Context, fx resourceDanceFixture, query string) error {
+		req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+query, nil)
+		_, err := fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+		return err //nolint:wrapcheck // compared by the caller
+	}
+	exec := func(t *testing.T, ctx context.Context, fx resourceDanceFixture, sql string, args ...any) {
+		t.Helper()
+		_, err := fx.ti.conn.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: deliberate fixture corruption to distinguish local configuration failures
+		require.NoError(t, err)
+	}
+
+	t.Run("client secret missing is our setup, not the provider's refusal", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-no-secret", nil)
+		exec(t, ctx, fx, "UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_post', client_secret_encrypted = NULL WHERE id = $1", fx.clients[0].ID)
+		require.Error(t, callback(ctx, fx, "code=c&state="+url.QueryEscape(login)))
+		rowFor(t, rec, mcpconnectionattempts.CodeCredentialMisconfigured)
+	})
+	t.Run("assertion audience setting is our setup", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-bad-audience", nil)
+		exec(t, ctx, fx, "UPDATE remote_session_clients SET token_endpoint_auth_method = 'private_key_jwt', token_endpoint_auth_audience_format = 'bogus' WHERE id = $1", fx.clients[0].ID)
+		require.Error(t, callback(ctx, fx, "code=c&state="+url.QueryEscape(login)))
+		rowFor(t, rec, mcpconnectionattempts.CodeCredentialMisconfigured)
+	})
+	t.Run("invalid_request from the provider is its error", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-invalid-request", nil)
+		require.Error(t, callback(ctx, fx, "error=invalid_request&state="+url.QueryEscape(login)))
+		require.Equal(t, "invalid_request", rowFor(t, rec, mcpconnectionattempts.CodeSignInProviderError).SubReason)
+	})
+	t.Run("an unnamed 4xx from the token endpoint is the provider's error", func(t *testing.T) {
+		t.Parallel()
+		refuses := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "no", http.StatusBadRequest)
+		}))
+		t.Cleanup(refuses.Close)
+		ctx, fx, rec, login := begin(t, "attempt-bare-400", func(_ context.Context, fx resourceDanceFixture) {
+			fx.clients[0].TokenEndpoint = refuses.URL + "/token"
+		})
+		require.Error(t, callback(ctx, fx, "code=c&state="+url.QueryEscape(login)))
+		rowFor(t, rec, mcpconnectionattempts.CodeSignInProviderError)
+	})
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		code   mcpconnectionattempts.Code
+		outage bool
+	}{
+		{"denied-under-503", http.StatusServiceUnavailable, `{"error":"access_denied"}`, mcpconnectionattempts.CodeProviderDenied, false},
+		{"invalid-request-under-503", http.StatusServiceUnavailable, `{"error":"invalid_request"}`, mcpconnectionattempts.CodeSignInProviderError, false},
+		{"invalid-client-under-429", http.StatusTooManyRequests, `{"error":"invalid_client"}`, mcpconnectionattempts.CodeProviderOAuthInvalidClient, false},
+		{"server-error-under-400", http.StatusBadRequest, `{"error":"server_error"}`, mcpconnectionattempts.CodeProviderServerError, true},
+		{"unavailable-under-429", http.StatusTooManyRequests, `{"error":"temporarily_unavailable"}`, mcpconnectionattempts.CodeProviderUnavailable, true},
+		{"unnamed-429", http.StatusTooManyRequests, `{}`, mcpconnectionattempts.CodeProviderRateLimited, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			refuses := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(refuses.Close)
+			ctx, fx, rec, login := begin(t, "attempt-"+tc.name, func(_ context.Context, fx resourceDanceFixture) {
+				fx.clients[0].TokenEndpoint = refuses.URL + "/token"
+			})
+			err := callback(ctx, fx, "code=c&state="+url.QueryEscape(login))
+			require.Error(t, err)
+			if tc.outage {
+				require.ErrorIs(t, err, remotesessions.ErrProviderOutageExternal)
+			} else {
+				require.NotErrorIs(t, err, remotesessions.ErrProviderOutageExternal)
+			}
+			rowFor(t, rec, tc.code)
+		})
+	}
 }
