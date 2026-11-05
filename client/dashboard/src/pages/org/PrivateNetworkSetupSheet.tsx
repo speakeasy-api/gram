@@ -7,12 +7,19 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { handleAPIError } from "@/lib/errors";
 import { invalidateAllNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { toast } from "sonner";
@@ -25,8 +32,21 @@ const DEFAULT_HOSTNAME = "speakeasy";
 // Mirrors the server's rule: a lowercase DNS label of at most 63 characters.
 const HOSTNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-function tailscalePolicySnippet(hostname: string): string {
-  return `"tagOwners": {
+// ACCESS_GROUP is the example group the restricted snippet introduces.
+const ACCESS_GROUP = "group:speakeasy-users";
+
+function tailscalePolicySnippet(
+  hostname: string,
+  accessGroup?: string,
+): string {
+  const groups = accessGroup
+    ? `"groups": {
+  "${accessGroup}": ["alice@example.com"]
+},
+`
+    : "";
+  const source = accessGroup ?? "autogroup:member";
+  return `${groups}"tagOwners": {
   "tag:speakeasy": ["autogroup:admin"]
 },
 "autoApprovers": {
@@ -36,7 +56,7 @@ function tailscalePolicySnippet(hostname: string): string {
 },
 "grants": [
   {
-    "src": ["autogroup:member"],
+    "src": ["${source}"],
     "dst": ["svc:${hostname}"],
     "ip": ["tcp:443"]
   }
@@ -55,6 +75,7 @@ export function PrivateNetworkSetupSheet({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [identityRequired, setIdentityRequired] = useState(false);
+  const [groupSnippetOpen, setGroupSnippetOpen] = useState(false);
 
   const resetCredentials = () => {
     setClientId("");
@@ -156,10 +177,36 @@ export function PrivateNetworkSetupSheet({
               <code>{tailscalePolicySnippet(serviceLabel)}</code>
             </pre>
             <Text small muted>
-              Keep the tag dedicated to Speakeasy. Replace{" "}
-              <code>autogroup:member</code> with the group that should reach
-              your private MCP servers.
+              Keep the tag dedicated to Speakeasy. This grant lets every member
+              of your tailnet reach your private MCP servers.
             </Text>
+            <Collapsible
+              open={groupSnippetOpen}
+              onOpenChange={setGroupSnippetOpen}
+            >
+              <CollapsibleTrigger className="text-muted-foreground hover:text-default flex items-center gap-1 text-sm">
+                <Icon
+                  name="chevron-right"
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    groupSnippetOpen && "rotate-90",
+                  )}
+                />
+                Limit access to a group
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <Text small muted>
+                  Use this policy instead to let only the people in{" "}
+                  <code>{ACCESS_GROUP}</code> reach the service. Replace the
+                  example address with their logins.
+                </Text>
+                <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
+                  <code>
+                    {tailscalePolicySnippet(serviceLabel, ACCESS_GROUP)}
+                  </code>
+                </pre>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
           <div className="space-y-2">
