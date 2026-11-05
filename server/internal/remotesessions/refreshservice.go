@@ -271,6 +271,35 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 	return clientUpstreamResource(rows), nil
 }
 
+// fallbackResourceForGrant derives the resource for a grant stored with none.
+// Where the organization it was consented in enforces typed auth clients, the
+// servers that offer its client decide; a client with no offer, and any client
+// elsewhere, falls back to its attached servers.
+func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
+	if err != nil {
+		return "", fmt.Errorf("get grant organization: %w", err)
+	}
+	rows, err := q.ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: []uuid.UUID{sess.RemoteSessionClientID},
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers offering client: %w", err)
+	}
+	offering := make([]remotesessions_repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Offered {
+			offering = append(offering, remotesessions_repo.ListOrganizationMcpServersForClientRow{ID: row.ID, ProjectID: row.ProjectID, ProjectSlug: row.ProjectSlug, Name: row.Name, Slug: row.Slug, Url: row.Resource})
+		}
+	}
+	if len(offering) > 0 {
+		return clientUpstreamResource(offering), nil
+	}
+	return s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+}
+
 // ResourceForClientAtUpstream derives the RFC 8707 resource for a client
 // connected through upstream, weighed against the other clients bound to the
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
@@ -905,7 +934,7 @@ func (s *RefreshService) refresh(
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
 		var err error
-		resource, err = s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+		resource, err = s.fallbackResourceForGrant(ctx, sess)
 		if err != nil {
 			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
 		}
