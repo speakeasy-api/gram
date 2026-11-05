@@ -36,7 +36,7 @@ const (
 
 	// maxMemoryDigestBatchesPerLevel bounds one run's work per level. Each
 	// batch writes up to 40 digests; the first run after an org enables
-	// the flag needs about 90 day digests per active project, and later
+	// the Business Memory Extraction gate needs about 90 day digests per active project, and later
 	// runs need one batch. Anything left over is picked up the next night.
 	maxMemoryDigestBatchesPerLevel = 25
 )

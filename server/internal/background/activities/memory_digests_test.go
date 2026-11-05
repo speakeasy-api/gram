@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -159,6 +160,23 @@ func (p digestProject) digests(t *testing.T, conn *pgxpool.Pool, level string) [
 	return rows
 }
 
+// recallDigestIDs lists the digests team memory reads would return for the
+// project, which leaves stale ones out before the job deletes them.
+func (p digestProject) recallDigestIDs(t *testing.T, conn *pgxpool.Pool) []uuid.UUID {
+	t.Helper()
+
+	rows, err := repo.New(conn).ListRecallDigests(t.Context(), repo.ListRecallDigestsParams{
+		ProjectID: p.projectID, OrganizationID: p.orgID,
+		Since: pgtype.Date{Time: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
+}
+
 func digestDay(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
@@ -241,6 +259,14 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 		ID:                 kept1,
 	})
 	require.NoError(t, err)
+	// Reads hide the stale digest at once, before the job deletes it.
+	staleDay := enabled.digests(t, conn, "day")[0].ID
+	require.NotContains(t, enabled.recallDigestIDs(t, conn), staleDay)
+	_, err = repo.New(conn).GetDigest(ctx, repo.GetDigestParams{ID: staleDay, ProjectID: enabled.projectID, OrganizationID: enabled.orgID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	byID, err := repo.New(conn).ListDigestsByID(ctx, repo.ListDigestsByIDParams{Ids: []uuid.UUID{staleDay}, ProjectID: enabled.projectID, OrganizationID: enabled.orgID})
+	require.NoError(t, err)
+	require.Empty(t, byID)
 	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
 	require.NoError(t, err)
@@ -301,6 +327,8 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	// A deleted child orphans its week and month: both are rebuilt from the
 	// remaining children.
 	require.NoError(t, memorydigesttest.New(conn).DeleteDigestFixture(ctx, dayIDs[0]))
+	// Until the job runs, reads already hide the orphaned week and month.
+	require.Equal(t, dayIDs[1:], p.recallDigestIDs(t, conn))
 	later := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
 	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: later})

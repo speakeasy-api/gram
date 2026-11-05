@@ -44,7 +44,7 @@ const (
 
 	// MemoryDigestLookback is how far back the job looks for periods
 	// without a digest. It covers the 90-day summary backfill an org gets
-	// when the flag turns on, plus margin for the month that straddles it.
+	// when the Business Memory Extraction gate turns on, plus margin for the month that straddles it.
 	MemoryDigestLookback = 100 * 24 * time.Hour
 
 	// memoryDigestBatchSize is how many digests one activity writes. At
@@ -183,8 +183,8 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 // so the job rebuilds them: day digests that folded a chat or memo no longer
 // eligible, then week digests that folded a deleted day, then month digests
 // that folded a deleted week. One pass removes the whole chain. It covers
-// every organization, flag or not, so removal from memory never depends on
-// rollout. The workflow runs it once per run, before any level is built. A
+// every organization, gate on or off, so removal from memory never depends on
+// the gate. The workflow runs it once per run, before any level is built. A
 // period older than the lookback is deleted but not rebuilt; its sources then
 // fall back to search.
 func (m *MemoryDigests) Invalidate(ctx context.Context) error {
@@ -218,8 +218,8 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 	if level == memorydigest.LevelDay {
 		rows, err := m.repo.ListDayDigestCandidates(ctx, repo.ListDayDigestCandidatesParams{
 			OrganizationIds: orgIDs,
-			Since:           pgtype.Timestamptz{Time: since, Valid: true, InfinityModifier: pgtype.Finite},
-			Until:           pgtype.Timestamptz{Time: level.PeriodStart(now), Valid: true, InfinityModifier: pgtype.Finite},
+			Since:           conv.ToPGTimestamptz(since),
+			Until:           conv.ToPGTimestamptz(level.PeriodStart(now)),
 			RowLimit:        limit,
 		})
 		if err != nil {
@@ -261,7 +261,7 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 // dashboard. It fails closed: an org whose setting cannot be read is left
 // out of this run and retried on the next.
 func (m *MemoryDigests) enabledOrganizations(ctx context.Context, now time.Time) ([]string, error) {
-	orgIDs, err := m.repo.ListMemoryOrganizations(ctx, pgtype.Timestamptz{Time: now.Add(-MemoryDigestLookback), Valid: true, InfinityModifier: pgtype.Finite})
+	orgIDs, err := m.repo.ListMemoryOrganizations(ctx, conv.ToPGTimestamptz(now.Add(-MemoryDigestLookback)))
 	if err != nil {
 		return nil, fmt.Errorf("list team memory organizations: %w", err)
 	}
@@ -371,8 +371,8 @@ func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, 
 	chats, err := m.repo.ListDayDigestChats(ctx, repo.ListDayDigestChatsParams{
 		ProjectID:      c.projectID,
 		OrganizationID: c.organizationID,
-		PeriodStart:    pgtype.Timestamptz{Time: start, Valid: true, InfinityModifier: pgtype.Finite},
-		PeriodEnd:      pgtype.Timestamptz{Time: end, Valid: true, InfinityModifier: pgtype.Finite},
+		PeriodStart:    conv.ToPGTimestamptz(start),
+		PeriodEnd:      conv.ToPGTimestamptz(end),
 		RowLimit:       maxDayDigestChats,
 	})
 	if err != nil {
@@ -381,8 +381,8 @@ func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, 
 	memos, err := m.repo.ListDayDigestMemos(ctx, repo.ListDayDigestMemosParams{
 		ProjectID:      c.projectID,
 		OrganizationID: c.organizationID,
-		PeriodStart:    pgtype.Timestamptz{Time: start, Valid: true, InfinityModifier: pgtype.Finite},
-		PeriodEnd:      pgtype.Timestamptz{Time: end, Valid: true, InfinityModifier: pgtype.Finite},
+		PeriodStart:    conv.ToPGTimestamptz(start),
+		PeriodEnd:      conv.ToPGTimestamptz(end),
 		RowLimit:       maxDayDigestMemos,
 	})
 	if err != nil {
