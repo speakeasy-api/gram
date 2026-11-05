@@ -4,7 +4,7 @@
 // Invented names throughout. This repository is public, so no fixture ever
 // carries a real organization, project or person.
 
-import type { AuditLog } from "@gram/admin-client/models/components/auditlog";
+import type { AdminAuditLog as AuditLog } from "@gram/admin-client/models/components/adminauditlog";
 
 import type {
   AdminOrganization,

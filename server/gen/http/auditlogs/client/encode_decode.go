@@ -529,7 +529,6 @@ func DecodeListFacetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // *auditlogs.AuditLog from a value of type *AuditLogResponseBody.
 func unmarshalAuditLogResponseBodyToAuditlogsAuditLog(v *AuditLogResponseBody) *auditlogs.AuditLog {
 	res := &auditlogs.AuditLog{
-		IsInternal:         v.IsInternal,
 		ID:                 *v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,

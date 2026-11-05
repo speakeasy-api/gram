@@ -46,10 +46,6 @@ const ServiceName = "auditlogs"
 var MethodNames = [2]string{"list", "listFacets"}
 
 type AuditLog struct {
-	// Internal staff-only audit activity; persisted but never published to the
-	// outbox. Always present in responses; optional in the schema so clients built
-	// against it still read responses from servers that predate it.
-	IsInternal       *bool
 	ID               string
 	ProjectID        *string
 	ProjectSlug      *string

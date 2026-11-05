@@ -90386,9 +90386,6 @@ components:
           format: date-time
         id:
           type: string
-        is_internal:
-          type: boolean
-          description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
         metadata:
           type: object
           additionalProperties: true

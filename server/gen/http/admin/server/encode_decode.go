@@ -22593,10 +22593,10 @@ func marshalAdminAdminMcpServerToAdminMcpServerResponseBody(v *admin.AdminMcpSer
 	return res
 }
 
-// marshalAdminAuditLogToAuditLogResponseBody builds a value of type
-// *AuditLogResponseBody from a value of type *admin.AuditLog.
-func marshalAdminAuditLogToAuditLogResponseBody(v *admin.AuditLog) *AuditLogResponseBody {
-	res := &AuditLogResponseBody{
+// marshalAdminAdminAuditLogToAdminAuditLogResponseBody builds a value of type
+// *AdminAuditLogResponseBody from a value of type *admin.AdminAuditLog.
+func marshalAdminAdminAuditLogToAdminAuditLogResponseBody(v *admin.AdminAuditLog) *AdminAuditLogResponseBody {
+	res := &AdminAuditLogResponseBody{
 		IsInternal:         v.IsInternal,
 		ID:                 v.ID,
 		ProjectID:          v.ProjectID,

@@ -1188,7 +1188,7 @@ type ListProjectMcpServersResponseBody struct {
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
 	// List of organization activity.
-	Logs []*AuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
+	Logs []*AdminAuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -23149,8 +23149,8 @@ type AdminMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
-// AuditLogResponseBody is used to define fields on response body types.
-type AuditLogResponseBody struct {
+// AdminAuditLogResponseBody is used to define fields on response body types.
+type AdminAuditLogResponseBody struct {
 	// Internal staff-only audit activity; persisted but never published to the
 	// outbox. Always present in responses; optional in the schema so clients built
 	// against it still read responses from servers that predate it.
@@ -25014,16 +25014,16 @@ func NewListOrganizationActivityResponseBody(res *admin.AdminListOrganizationAct
 		NextCursor: res.NextCursor,
 	}
 	if res.Logs != nil {
-		body.Logs = make([]*AuditLogResponseBody, len(res.Logs))
+		body.Logs = make([]*AdminAuditLogResponseBody, len(res.Logs))
 		for i, val := range res.Logs {
 			if val == nil {
 				body.Logs[i] = nil
 				continue
 			}
-			body.Logs[i] = marshalAdminAuditLogToAuditLogResponseBody(val)
+			body.Logs[i] = marshalAdminAdminAuditLogToAdminAuditLogResponseBody(val)
 		}
 	} else {
-		body.Logs = []*AuditLogResponseBody{}
+		body.Logs = []*AdminAuditLogResponseBody{}
 	}
 	return body
 }

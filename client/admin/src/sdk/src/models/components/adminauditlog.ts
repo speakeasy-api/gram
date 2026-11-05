@@ -21,7 +21,7 @@ export const Category = {
  */
 export type Category = ClosedEnum<typeof Category>;
 
-export type AuditLog = {
+export type AdminAuditLog = {
   /**
    * The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
    */
@@ -65,7 +65,10 @@ export const Category$inboundSchema: z.ZodMiniEnum<typeof Category> = z.enum(
 );
 
 /** @internal */
-export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
+export const AdminAuditLog$inboundSchema: z.ZodMiniType<
+  AdminAuditLog,
+  unknown
+> = z.pipe(
   z.object({
     acting_client_id: z.optional(z.string()),
     acting_surface: z.string(),
@@ -113,12 +116,12 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   }),
 );
 
-export function auditLogFromJSON(
+export function adminAuditLogFromJSON(
   jsonString: string,
-): SafeParseResult<AuditLog, SDKValidationError> {
+): SafeParseResult<AdminAuditLog, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AuditLog$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AuditLog' from JSON`,
+    (x) => AdminAuditLog$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminAuditLog' from JSON`,
   );
 }

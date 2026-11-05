@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { organizationQuery } from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { organizationActivityQuery } from "@/lib/gramAdminClient";
-import type { AuditLog } from "@gram/admin-client/models/components/auditlog";
+import type { AdminAuditLog as AuditLog } from "@gram/admin-client/models/components/adminauditlog";
 
 const TRIAL_ACTIONS = new Set([
   "organization:enterprise_trial_armed",

@@ -96054,6 +96054,66 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminAuditLog:
+            type: object
+            properties:
+                acting_client_id:
+                    type: string
+                    description: The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+                acting_surface:
+                    type: string
+                    description: 'How the change was made: ''dashboard'', ''api_key'', ''platform_mcp'', ''project_assistant'', or ''unknown'' when no surface was identifiable. Always present.'
+                action:
+                    type: string
+                actor_display_name:
+                    type: string
+                actor_id:
+                    type: string
+                actor_slug:
+                    type: string
+                actor_type:
+                    type: string
+                after_snapshot: {}
+                before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
+                created_at:
+                    type: string
+                    description: The creation date of the audit log.
+                    format: date-time
+                id:
+                    type: string
+                is_internal:
+                    type: boolean
+                    description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+                metadata:
+                    type: object
+                    additionalProperties: true
+                project_id:
+                    type: string
+                project_slug:
+                    type: string
+                subject_display_name:
+                    type: string
+                subject_id:
+                    type: string
+                subject_slug:
+                    type: string
+                subject_type:
+                    type: string
+            required:
+                - id
+                - actor_id
+                - actor_type
+                - action
+                - subject_id
+                - subject_type
+                - acting_surface
+                - created_at
         AdminBackfillMCPAuthGrantsResult:
             type: object
             properties:
@@ -96659,7 +96719,7 @@ components:
                 logs:
                     type: array
                     items:
-                        $ref: '#/components/schemas/AuditLog'
+                        $ref: '#/components/schemas/AdminAuditLog'
                     description: List of organization activity.
                 next_cursor:
                     type: string
@@ -101331,9 +101391,6 @@ components:
                     format: date-time
                 id:
                     type: string
-                is_internal:
-                    type: boolean
-                    description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
                 metadata:
                     type: object
                     additionalProperties: true

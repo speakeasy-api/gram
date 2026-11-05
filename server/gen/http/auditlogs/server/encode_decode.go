@@ -523,7 +523,6 @@ func EncodeListFacetsError(encoder func(context.Context, http.ResponseWriter) go
 // *AuditLogResponseBody from a value of type *auditlogs.AuditLog.
 func marshalAuditlogsAuditLogToAuditLogResponseBody(v *auditlogs.AuditLog) *AuditLogResponseBody {
 	res := &AuditLogResponseBody{
-		IsInternal:         v.IsInternal,
 		ID:                 v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,

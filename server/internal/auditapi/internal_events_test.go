@@ -82,8 +82,6 @@ func TestAuditService_List_ExcludesCatalogPromotionEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1, "catalogue curation must not appear in the customer feed")
 	require.Equal(t, customerLog.String(), result.Logs[0].ID)
-	require.NotNil(t, result.Logs[0].IsInternal)
-	require.False(t, *result.Logs[0].IsInternal)
 
 	for _, action := range catalogPromotionActions {
 		payload := listPayload()

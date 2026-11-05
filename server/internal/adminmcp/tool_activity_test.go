@@ -36,7 +36,7 @@ func TestOrganizationActivityExactTargetAndSafeProjection(t *testing.T) {
 	t.Parallel()
 	reads := testActivityReads()
 	name, secret, cursor := "Staff member", "private audit payload", "next-page"
-	reads.result.Logs = []*gen.AuditLog{{
+	reads.result.Logs = []*gen.AdminAuditLog{{
 		ID: "event-1", Action: "organization:updated", ActorType: "user", ActorDisplayName: &name,
 		ActorID: "private-actor", SubjectID: "private-subject", SubjectType: "organization",
 		ActingSurface: "dashboard", ActingClientID: &secret, BeforeSnapshot: json.RawMessage(`{"credential":"private audit payload"}`),
@@ -92,7 +92,7 @@ func TestOrganizationActivityFailsClosed(t *testing.T) {
 	_, body, _ = callStaffReadTool(t, &recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}}, "list_organization_activity", args)
 	require.Contains(t, body, `"isError":true`)
 
-	for _, logs := range [][]*gen.AuditLog{make([]*gen.AuditLog, maxOrganizationActivityPage+1), {nil}} {
+	for _, logs := range [][]*gen.AdminAuditLog{make([]*gen.AdminAuditLog, maxOrganizationActivityPage+1), {nil}} {
 		reads = testActivityReads()
 		reads.result.Logs = logs
 		_, body, _ = callStaffReadTool(t, reads, "list_organization_activity", args)
@@ -115,9 +115,9 @@ func TestOrganizationActivityFailsClosed(t *testing.T) {
 func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
 	t.Parallel()
 	reads := testActivityReads()
-	reads.result.Logs = make([]*gen.AuditLog, maxOrganizationActivityPage)
+	reads.result.Logs = make([]*gen.AdminAuditLog, maxOrganizationActivityPage)
 	for i := range reads.result.Logs {
-		reads.result.Logs[i] = &gen.AuditLog{ID: "event"}
+		reads.result.Logs[i] = &gen.AdminAuditLog{ID: "event"}
 	}
 	status, _, data := callStaffReadTool(t, reads, "list_organization_activity", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
@@ -134,7 +134,7 @@ func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
 func TestOrganizationActivityInternalClassification(t *testing.T) {
 	t.Parallel()
 	reads := testActivityReads()
-	reads.result.Logs = []*gen.AuditLog{{ID: "ordinary", IsInternal: new(false)}, {ID: "internal", IsInternal: new(true)}}
+	reads.result.Logs = []*gen.AdminAuditLog{{ID: "ordinary", IsInternal: new(false)}, {ID: "internal", IsInternal: new(true)}}
 	status, body, data := callStaffReadTool(t, reads, "list_organization_activity", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, `"isError":true`)

@@ -151,6 +151,7 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
@@ -258,7 +259,6 @@ trackedFiles:
   src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
-  src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}

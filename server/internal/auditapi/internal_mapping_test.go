@@ -15,13 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInternalClassificationResponse(t *testing.T) {
+func TestPublicResponseOmitsInternalClassification(t *testing.T) {
 	t.Parallel()
 	for _, internal := range []bool{false, true} {
 		log, err := toAuditLog(repo.ListAuditLogsRow{IsInternal: internal}, audit.CategoryConfiguration)
 		require.NoError(t, err)
-		require.NotNil(t, log.IsInternal)
-		require.Equal(t, internal, *log.IsInternal)
 		recorder := httptest.NewRecorder()
 		result := &gen.ListAuditLogsResult{Logs: []*gen.AuditLog{log}, NextCursor: nil}
 		require.NoError(t, auditHTTP.EncodeListResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))
@@ -31,7 +29,6 @@ func TestInternalClassificationResponse(t *testing.T) {
 		}
 		require.NoError(t, json.NewDecoder(recorder.Body).Decode(&body))
 		require.Len(t, body.Logs, 1)
-		require.Contains(t, body.Logs[0], "is_internal")
-		require.Equal(t, internal, body.Logs[0]["is_internal"])
+		require.NotContains(t, body.Logs[0], "is_internal")
 	}
 }

@@ -61,7 +61,6 @@ afterEach(() => {
 });
 const log = (extra: Partial<AuditLog> = {}): AuditLog => ({
   id: "event",
-  isInternal: false,
   action: "user_session:revoke",
   actingSurface: "dashboard",
   category: "configuration",

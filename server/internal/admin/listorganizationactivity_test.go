@@ -118,7 +118,7 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 6)
 
-	var full, system *gen.AuditLog
+	var full, system *gen.AdminAuditLog
 	for _, log := range result.Logs {
 		if log.ID == wanted.String() {
 			full = log
@@ -645,7 +645,7 @@ func TestInternalClassificationResponse(t *testing.T) {
 		require.NotNil(t, log.IsInternal)
 		require.Equal(t, internal, *log.IsInternal)
 		recorder := httptest.NewRecorder()
-		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AuditLog{log}, NextCursor: nil}
+		result := &gen.AdminListOrganizationActivityResult{Logs: []*gen.AdminAuditLog{log}, NextCursor: nil}
 		require.NoError(t, adminHTTP.EncodeListOrganizationActivityResponse(goahttp.ResponseEncoder)(t.Context(), recorder, result))
 		require.Equal(t, http.StatusOK, recorder.Code)
 		var body struct {
