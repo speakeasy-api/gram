@@ -29,10 +29,24 @@ const (
 	NetworkIngressErrorKubernetes          = "kubernetes_api"
 	// Teardown is blocked because the provider refused the saved credentials.
 	NetworkIngressErrorProviderCredentialsRejected = "provider_credentials_rejected" // #nosec G101 -- bounded status code, not credential material.
+	// The provider accepted the credentials but they lack a scope, or may not
+	// act on the tag or service.
+	NetworkIngressErrorProviderForbidden = "provider_forbidden"
+	// The provider throttled the call; it is retried.
+	NetworkIngressErrorProviderRateLimited = "provider_rate_limited"
+	// The provider API was unreachable or failed on its side; it is retried.
+	NetworkIngressErrorProviderAPIUnavailable = "provider_api_unavailable"
+	// The hosts are connected but the customer's tailnet has not approved
+	// them to host the service, so clients cannot reach it.
+	NetworkIngressErrorProviderServiceNotApproved = "provider_service_not_approved"
 )
 
 var (
 	ErrNetworkIngressUnsupportedProvider = errors.New("unsupported network ingress provider")
+
+	// ErrNetworkIngressProviderUnavailable means the provider that hosts this
+	// ingress is known but not deployed or enabled in this environment yet.
+	ErrNetworkIngressProviderUnavailable = errors.New("network ingress provider unavailable")
 	ErrNetworkIngressInvalidDesiredState = errors.New("invalid network ingress desired state")
 	ErrNetworkIngressReplacementPending  = errors.New("network ingress immutable replacement pending")
 
@@ -42,6 +56,18 @@ var (
 	// ErrNetworkIngressProviderCredentialsRejected means the provider refused
 	// the saved credentials, so teardown cannot progress until they work again.
 	ErrNetworkIngressProviderCredentialsRejected = errors.New("network ingress provider rejected credentials")
+
+	// ErrNetworkIngressProviderForbidden means the credentials work but lack a
+	// permission. It also matches ErrNetworkIngressProviderCredentialsRejected,
+	// since teardown is blocked the same way.
+	ErrNetworkIngressProviderForbidden = fmt.Errorf("%w: missing permission", ErrNetworkIngressProviderCredentialsRejected)
+
+	// ErrNetworkIngressProviderRateLimited means the provider API throttled the call.
+	ErrNetworkIngressProviderRateLimited = errors.New("network ingress provider rate limited")
+
+	// ErrNetworkIngressProviderAPIUnavailable means the provider API was
+	// unreachable or failed on its side.
+	ErrNetworkIngressProviderAPIUnavailable = errors.New("network ingress provider api unavailable")
 )
 
 // NetworkIngressResourceNames is the provider-neutral, persisted identity of
@@ -149,7 +175,11 @@ func ParseNetworkIngressResourceNames(encoded []byte) (NetworkIngressResourceNam
 // decrypted provider-opaque bytes and must remain in-memory only. Only the
 // selected provider adapter may decode their contents.
 type NetworkIngressDesired struct {
-	ID             uuid.UUID                   `json:"id"`
+	ID uuid.UUID `json:"id"`
+
+	// OrganizationID owns the ingress. Providers that keep per-organization
+	// state (the tailnet gateway) require it; the operator provider ignores it.
+	OrganizationID string                      `json:"organization_id"`
 	Provider       string                      `json:"provider"`
 	Hostname       string                      `json:"hostname"`
 	Credentials    []byte                      `json:"-"`
@@ -188,6 +218,13 @@ type NetworkIngressProvisioner interface {
 	// Delete returns nil only once all persisted resources are confirmed absent.
 	// ErrNetworkIngressDeletionPending is retryable while Kubernetes completes deletion.
 	Delete(context.Context, NetworkIngressResourceNames) error
+}
+
+// NetworkIngressCredentialedDeleter is implemented by providers whose teardown
+// must call the customer's provider API, such as deleting tailnet devices.
+// The executor prefers it over Delete whenever the saved credentials decrypt.
+type NetworkIngressCredentialedDeleter interface {
+	DeleteWithCredentials(context.Context, NetworkIngressResourceNames, []byte) error
 }
 
 type NetworkIngressProvisionerRegistry struct {

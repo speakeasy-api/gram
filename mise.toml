@@ -179,6 +179,8 @@ TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
 TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
+## Health and readiness port of the opt-in local tailnet gateway daemon.
+GRAM_TAILNET_GATEWAY_CONTROL_PORT = "8093"
 ## Caller identity assertions. `mise run zero:tunnel-identity` writes the
 ## signing key pair (GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS) into
 ## mise.local.toml; the local tunnel gateway is the issuer.

@@ -60,6 +60,9 @@ case "$usage_name" in
   tunnel-gateway)
     mise run check:http --url "http://localhost:$TUNNEL_GATEWAY_PUBLIC_PORT/healthz"
     ;;
+  tailnet-gateway)
+    mise run check:http --url "http://$(probe_address "${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-localhost:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}")/readyz"
+    ;;
   *)
     echo "error: unknown daemon name: $usage_name" >&2
     exit 1

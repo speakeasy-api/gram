@@ -1,0 +1,81 @@
+# Tailnet gateway
+
+`gram tailnet-gateway` hosts every enabled private network ingress on its
+customer's tailnet using [tsnet](https://tailscale.com/kb/1244/tsnet). It
+replaces the Tailscale Kubernetes operator, its privileged proxy pods and the
+per-ingress attestor pods.
+
+## How it works
+
+- The gateway runs as a StatefulSet. The pod ordinal is the **slot**: pod `n`
+  is tailnet node `speakeasy-gw-<n>` for every customer. The StatefulSet
+  controller normally runs one pod per ordinal, so there is no lease and no
+  fencing. A force-deleted or partitioned pod can briefly overlap with its
+  replacement; Tailscale allows one live session per node key, which bounds
+  that overlap.
+- The reconciler (`gram network-ingress-worker`) creates one
+  `network_ingress_nodes` row per slot, defines the Tailscale Service
+  `svc:<label>` through the Tailscale API and mints a one-shot, preauthorized,
+  tagged auth key for every slot that has no persisted state. The customer's
+  OAuth client never leaves the control plane.
+- Every 15s each pod lists enabled ingresses for its shard. For each it starts
+  a `tsnet.Server` whose `ipn.StateStore` is backed by
+  `network_ingress_node_states` (encrypted with the application key). Restarts
+  reconnect as the same device, so customers never see registration churn.
+- The node advertises the service with `ListenService`. Requests arrive over
+  tsnet's loopback proxy; the gateway resolves the peer with `WhoIs`, replaces
+  every `Tailscale-*` header with the resolved identity and forwards to the
+  private listener with the pod's projected service-account token, exactly as
+  the attestor did.
+- Each pod heartbeats its slot rows; the reconciler reports the ingress online
+  when any slot has a fresh `online` heartbeat.
+- A slot is `online` only when its node is connected **and** the tailnet has
+  approved it to host `svc:<label>`, which control signals through the
+  node's `service-host` capability. Advertising alone is not enough: a node
+  whose service is unapproved, missing or misnamed connects without error but
+  gets no traffic. Such a slot reports `awaiting_approval`, and the ingress
+  shows `provider_service_not_approved` until the customer approves the host
+  or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
+  approving or revoking a host takes effect without a restart.
+
+## Which ingresses use it
+
+The `network_ingresses.runtime` column decides:
+
+- `gateway`: hosted only by this gateway.
+- `NULL` (or anything else): hosted only by the Tailscale Kubernetes operator,
+  as before. Nothing in this package moves an ingress between the two.
+
+Every new ingress is created with `gateway`. Ingresses created before the
+gateway existed stay on the operator.
+`GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
+are deployed; until it is set, gateway ingresses wait as
+`provider_configuration_unavailable` instead of falling back to the operator.
+
+## Running locally
+
+The daemon needs a real tailnet, so it is opt-in. Provision an ingress through
+the dashboard with the `tag:speakeasy` policy, then set in `mise.local.toml`:
+
+```toml
+GRAM_TAILNET_GATEWAY_UPSTREAM_URL = "https://localhost:<private-listener-port>"
+GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE = "<absolute path to the listener CA>"
+GRAM_TAILNET_GATEWAY_TOKEN_PATH = "<absolute path to a file holding the attestation token>"
+```
+
+and start it with `pitchfork start tailnet-gateway`. Readiness is served on
+`http://localhost:$GRAM_TAILNET_GATEWAY_CONTROL_PORT/readyz`.
+
+The pod needs outbound HTTPS to `controlplane.tailscale.com`,
+`login.tailscale.com` and the DERP relays (`*.tailscale.com:443`). UDP 41641
+egress is optional; without it the node relays through DERP.
+
+## Verifying end to end
+
+1. From a device on the tailnet, `curl https://<label>.<tailnet>.ts.net/mcp/<slug>`.
+2. Confirm the private listener logs the Tailscale identity and that
+   `identity_required` rejects a tagged device.
+3. Restart the daemon and confirm the admin console shows the same device, not
+   a new registration.
+4. Run a second instance with `GRAM_TAILNET_GATEWAY_ORDINAL=1` and confirm both
+   nodes host the service.

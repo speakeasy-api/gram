@@ -16,11 +16,11 @@ import (
 // "createIngress" endpoint HTTP request body.
 type CreateIngressRequestBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Lowercase DNS label
-	Hostname          string `form:"hostname" json:"hostname" xml:"hostname"`
-	OauthClientID     string `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
-	OauthClientSecret string `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
-	IdentityRequired  *bool  `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
+	// Lowercase DNS label; defaults to speakeasy
+	Hostname          *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	OauthClientID     string  `form:"oauth_client_id" json:"oauth_client_id" xml:"oauth_client_id"`
+	OauthClientSecret string  `form:"oauth_client_secret" json:"oauth_client_secret" xml:"oauth_client_secret"`
+	IdentityRequired  *bool   `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
 }
 
 // UpdateIngressRequestBody is the type of the "networkIngress" service

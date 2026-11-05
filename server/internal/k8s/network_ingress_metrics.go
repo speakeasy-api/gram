@@ -95,7 +95,31 @@ func ObserveNetworkIngressProvisioner(provider string, provisioner NetworkIngres
 	if logger != nil {
 		logger = logger.With(attr.SlogComponent("network_ingress_provisioner"))
 	}
-	return &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	observed := &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	if deleter, ok := provisioner.(NetworkIngressCredentialedDeleter); ok {
+		return &observedCredentialedNetworkIngressProvisioner{observedNetworkIngressProvisioner: observed, deleter: deleter}
+	}
+	return observed
+}
+
+// observedCredentialedNetworkIngressProvisioner wraps providers whose teardown
+// needs credentials, so the executor's interface check keeps its meaning.
+type observedCredentialedNetworkIngressProvisioner struct {
+	*observedNetworkIngressProvisioner
+	deleter NetworkIngressCredentialedDeleter
+}
+
+var _ NetworkIngressCredentialedDeleter = (*observedCredentialedNetworkIngressProvisioner)(nil)
+
+func (p *observedCredentialedNetworkIngressProvisioner) DeleteWithCredentials(ctx context.Context, resources NetworkIngressResourceNames, credentials []byte) (err error) {
+	started := time.Now()
+	defer func() {
+		p.record(ctx, networkIngressOperationDelete, NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, err, time.Since(started))
+	}()
+	if err = p.deleter.DeleteWithCredentials(ctx, resources, credentials); err != nil {
+		return fmt.Errorf("delete network ingress resources: %w", err)
+	}
+	return nil
 }
 
 func (p *observedNetworkIngressProvisioner) Apply(ctx context.Context, desired NetworkIngressDesired) (observation NetworkIngressObservation, err error) {
@@ -170,8 +194,14 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 
 func classifyNetworkIngressError(err error, observationCode string) string {
 	switch {
+	case errors.Is(err, ErrNetworkIngressProviderForbidden):
+		return NetworkIngressErrorProviderForbidden
 	case errors.Is(err, ErrNetworkIngressProviderCredentialsRejected):
 		return NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, ErrNetworkIngressProviderRateLimited):
+		return NetworkIngressErrorProviderRateLimited
+	case errors.Is(err, ErrNetworkIngressProviderAPIUnavailable):
+		return NetworkIngressErrorProviderAPIUnavailable
 	case errors.Is(err, ErrNetworkIngressInvalidDesiredState):
 		return NetworkIngressErrorInvalidDesiredState
 	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
@@ -192,7 +222,9 @@ func classifyNetworkIngressError(err error, observationCode string) string {
 	switch observationCode {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
-		NetworkIngressErrorProviderCredentialsRejected:
+		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved:
 		return observationCode
 	default:
 		return networkIngressErrorCodeInternal
@@ -234,7 +266,11 @@ func clampNetworkIngressErrorCode(value string) string {
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,
-		NetworkIngressErrorKubernetes:
+		NetworkIngressErrorKubernetes,
+		NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited,
+		NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved:
 		return value
 	default:
 		return networkIngressErrorCodeInternal

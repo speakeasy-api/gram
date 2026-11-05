@@ -40,6 +40,11 @@ import (
 
 const ProviderTailscale = "tailscale"
 
+// RuntimeGateway is the network_ingresses.runtime value for an ingress hosted
+// by the tsnet tailnet gateway. Any other value, including NULL, means the
+// Tailscale Kubernetes operator hosts it.
+const RuntimeGateway = "gateway"
+
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Service struct {
@@ -186,7 +191,8 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if payload.Provider != ProviderTailscale {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported network ingress provider")
 	}
-	if err := validateHostname(payload.Hostname); err != nil {
+	hostname := conv.PtrValOr(payload.Hostname, DefaultHostname)
+	if err := validateHostname(hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
 	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
@@ -238,9 +244,12 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
-		Hostname: payload.Hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
+		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
+		// Every new connection is hosted by the tailnet gateway; ingresses
+		// created before it existed stay on the operator.
+		Runtime: conv.ToPGText(RuntimeGateway),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

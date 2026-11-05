@@ -4,6 +4,7 @@ import (
 	_ "crypto/sha256"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -11,9 +12,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
 var runtimeQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
+
+// maxGatewaySlots bounds node identities per ingress. Each slot is a device
+// on the customer's tailnet, so the cap keeps their device list tidy.
+const maxGatewaySlots = 16
+
+// DefaultHostname is the Tailscale Service label used when a create request
+// omits one; new ingresses are reachable at speakeasy.<tailnet>.ts.net.
+const DefaultHostname = "speakeasy"
 
 // RuntimeConfig separates optional lifecycle configuration from permission to
 // apply provider changes. Its zero value disables lifecycle delivery and mutation.
@@ -41,6 +51,34 @@ type RuntimeConfig struct {
 
 	// TokenAudience must match the private listener's projected token audience.
 	TokenAudience string
+
+	// Gateway configures the tsnet tailnet gateway provider.
+	Gateway GatewayRuntimeConfig
+
+	// OperatorProviderEnabled keeps the Tailscale Kubernetes operator provider
+	// registered so existing operator-managed ingresses can be observed and
+	// torn down. New ingresses use the gateway whenever it is enabled.
+	OperatorProviderEnabled bool
+}
+
+// GatewayRuntimeConfig configures the tailnet gateway provider.
+type GatewayRuntimeConfig struct {
+	// Enabled registers the gateway provider; new ingresses are hosted by it.
+	Enabled bool
+
+	// Tag is the ACL tag minted auth keys carry; it must match the gateway pods.
+	Tag string
+
+	// Slots is how many node identities (gateway pod ordinals) host each ingress.
+	Slots int32
+
+	// APIURL overrides the Tailscale API base URL; empty means the public API.
+	APIURL string
+}
+
+// Ready reports whether the gateway provider can mint keys and define services.
+func (c GatewayRuntimeConfig) Ready() bool {
+	return c.Enabled && c.Tag != "" && c.Slots > 0
 }
 
 // Validate rejects invalid supplied values without requiring apply-only settings.
@@ -90,6 +128,24 @@ func (c RuntimeConfig) Validate() error {
 			return fmt.Errorf("invalid private ingress Tailscale tag")
 		}
 	}
+	if c.Gateway.Tag != "" {
+		tag, ok := strings.CutPrefix(c.Gateway.Tag, "tag:")
+		if !ok || tag == "" || len(validation.IsDNS1123Label(tag)) > 0 {
+			return fmt.Errorf("invalid private ingress gateway tag")
+		}
+	}
+	if c.Gateway.Slots < 0 || c.Gateway.Slots > maxGatewaySlots {
+		return fmt.Errorf("private ingress gateway slots must be between 1 and %d, or zero when unconfigured", maxGatewaySlots)
+	}
+	if c.Gateway.APIURL != "" {
+		parsed, err := url.Parse(c.Gateway.APIURL)
+		if err != nil || parsed.Host == "" {
+			return fmt.Errorf("invalid private ingress Tailscale API URL")
+		}
+		if err := tailscaleapi.RequireTLS(parsed); err != nil {
+			return fmt.Errorf("invalid private ingress Tailscale API URL: %w", err)
+		}
+	}
 	if c.IngressClass != "" && c.IngressClass != "tailscale" {
 		return fmt.Errorf("private ingress class must be tailscale")
 	}
@@ -130,8 +186,19 @@ func ValidateAttestorImageReference(value string) error {
 // Callers must independently verify clients and admission integration readiness.
 // Observe and Delete must not depend on this result.
 func (c RuntimeConfig) MutationReady() bool {
-	return c.ProviderMutationsEnabled && c.Validate() == nil &&
-		c.ReconcileTaskQueue != "" && c.Tailscale.OperatorNamespace != "" &&
+	if !c.ProviderMutationsEnabled || c.Validate() != nil || c.ReconcileTaskQueue == "" {
+		return false
+	}
+	if c.Gateway.Enabled {
+		return c.Gateway.Ready()
+	}
+	return c.OperatorApplyReady()
+}
+
+// OperatorApplyReady reports whether the Tailscale operator provider has every
+// setting it needs to create resources.
+func (c RuntimeConfig) OperatorApplyReady() bool {
+	return c.Tailscale.OperatorNamespace != "" &&
 		c.Tailscale.WorkerNamespace != "" && c.Tailscale.BackendNamespace != "" && len(c.Tailscale.BackendPodLabels) > 0 &&
 		c.Tailscale.ProxyTag != "" && c.Tailscale.ServiceTag != "" &&
 		c.Tailscale.AttestorCASecret != "" && c.Tailscale.KubernetesAPICIDR != "" &&

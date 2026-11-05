@@ -147,7 +147,7 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 func (ti *testInstance) create(t *testing.T, ctx context.Context) *gen.NetworkIngress {
 	t.Helper()
 	result, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{
-		Provider: networkingress.ProviderTailscale, Hostname: "private-mcp", OauthClientID: "client-id", OauthClientSecret: "client-secret",
+		Provider: networkingress.ProviderTailscale, Hostname: new("private-mcp"), OauthClientID: "client-id", OauthClientSecret: "client-secret",
 	})
 	require.NoError(t, err)
 	return result

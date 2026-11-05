@@ -382,6 +382,7 @@ linters:
         - '^github.com/urfave/cli/v2\.Command$'
         - '^github.com/urfave/cli/v2\..*Flag$'
         - '^gopkg.in/yaml.v3\.Node$'
+        - '^tailscale\.com/tsnet\.Server$'
         - '^github.com/redis/go-redis/v9\.Options$'
         - '^github.com/testcontainers/testcontainers-go\.GenericContainerRequest$'
         - '^github.com/testcontainers/testcontainers-go\.ContainerRequest$'
