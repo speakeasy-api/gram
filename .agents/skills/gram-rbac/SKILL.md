@@ -169,7 +169,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 3. Choose the narrowest scope for the operation: `*:read` for GET/list, `*:write` for mutations, `*:connect` for runtime usage. Scope expansions mean write callers are still permitted to read.
 4. Use `RequireAny` instead of `Require` when a single handler legitimately satisfies multiple equivalent scopes.
 5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.Scope<Name>, resourceID))`. Construct grants with `authz.NewGrant` (or `authz.NewGrantWithSelector` for non-trivial selectors) — never set `Grant.Selector` by hand.
-6. A new authz call site changes the frozen consumer inventory, so `TestFoundationInventory` fails until you refresh it with `go test ./internal/authz -run TestFoundationInventory -update-foundation-inventory`. A consumer in a package with no owner rule also needs one in `server/internal/authz/foundation_owners_test.go`. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
+6. A new authz call site changes the frozen consumer inventory, so `TestFoundationInventory` fails until you refresh it from `server/` with `go test ./internal/authz -run TestFoundationInventory -update-foundation-inventory`. A consumer in a package with no owner rule also needs one in `server/internal/authz/foundation_owners_test.go`. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
 
 ### How to add a new scope to an existing resource type
 
@@ -185,7 +185,7 @@ Use this when the resource type is already represented (e.g. adding a new verb o
 8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
 9. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
 10. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
-11. Refresh the frozen scope baselines, which a new scope changes on purpose: `go test ./internal/authz -run TestScopeTablesGolden -update-scope-tables` and `go test ./internal/agents/runtimepolicy -run TestRuntimeScopeDefinitionsGolden -update-runtime-scopes`. Review the golden diff, and refresh the consumer inventory as in step 6 of the handler checklist. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
+11. Refresh the frozen scope baselines, which a new scope changes on purpose. From `server/`, run `go test ./internal/authz -run TestScopeTablesGolden -update-scope-tables` and `go test ./internal/agents/runtimepolicy -run TestRuntimeScopeDefinitionsGolden -update-runtime-scopes`. Review the golden diff, and refresh the consumer inventory as in step 6 of the handler checklist. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
 12. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to add a new resource type

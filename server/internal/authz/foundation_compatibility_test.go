@@ -495,7 +495,8 @@ func TestFoundationCompatibilityCorpusCoversContract(t *testing.T) {
 		"engine_free_helpers",
 	}
 	// Every operation runFoundationCase handles needs at least one fixture,
-	// so no branch of it goes unexercised.
+	// so no branch of it goes unexercised. Keep this list in sync with the
+	// switch in runFoundationCase when adding an operation.
 	operations := []string{
 		"require", "require_any", "require_any_unblocked", "evaluate", "filter", "find_matched",
 		"mandatory", "mandatory_server_admission",
