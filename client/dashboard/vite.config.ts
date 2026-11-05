@@ -18,6 +18,19 @@ import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
 import { blankPreviewRuntimeValues } from "./src/lib/preview-runtime-values.ts";
 import { withoutLocalDevSlot } from "./dev-slot-plugin.ts";
 
+// The address the Vite dev server listens on. It follows GRAM_BIND_IP so it
+// binds the same address as the other local daemons: loopback by default, the
+// devbox's Tailscale IP under zero:tailscale, and every interface when the
+// variable is empty, as mise.toml documents. Unset means Vite runs outside
+// mise. mise.toml brackets IPv6 literals for URLs, but Node's listen() rejects
+// the brackets. Keep in sync with client/{admin,dashboard}/vite.config.ts.
+function getHost(): string | true {
+  const bindIp = process.env["GRAM_BIND_IP"];
+  if (bindIp === undefined) return "localhost";
+  if (bindIp === "") return true;
+  return bindIp.replace(/^\[(.*)\]$/, "$1");
+}
+
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
 // contains a top-level `await import(...)` (check before adding). Grouping
 // pulls the package's shared internals into the group chunk, so the awaited
@@ -387,7 +400,7 @@ export default defineConfig(async (env) => {
       include: ["monaco-editor"],
     },
     server: {
-      host: true,
+      host: getHost(),
       allowedHosts: [...allowedHosts],
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
