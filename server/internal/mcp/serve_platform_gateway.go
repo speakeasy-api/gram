@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
@@ -104,6 +105,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	}
 	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
+		fromRequest:         mcpconnectionattempts.FromRequest(nil),
 		skippedUpstreams:    skipped,
 		request:             nil,
 		projectID:           uuid.Nil,

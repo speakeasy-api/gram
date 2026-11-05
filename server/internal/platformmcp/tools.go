@@ -559,7 +559,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
-			Title:       "Send Feedback About This Platform",
+			Title:       "Submit Platform Feedback",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
 			Annotations: feedbackAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
@@ -585,7 +585,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"search_mcp_catalog", "Search Reviewed MCP Servers", "Search the reviewed MCP servers available to add. This is not switched on for your organization yet."},
+		{"search_mcp_catalog", "Search the MCP Catalog", "Search the reviewed MCP servers available to add. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
@@ -599,7 +599,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
-		Title:       "Inspect an MCP Server",
+		Title:       "Preview an MCP Server Before Adding It",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
@@ -608,7 +608,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
-		Title:       "Add a Reviewed MCP Server to a Project",
+		Title:       "Add a Catalog MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
 		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog_registration"))
@@ -670,7 +670,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 		annotations *mcp.ToolAnnotations
 	}{
 		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet.", readOnlyOpenWorldAnnotations()},
-		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
+		{"get_mcp_repair_plan", "Find What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
 	} {
 		// Same project scope as the live registration of each tool.
 		projectScope := ProjectScopeExplicit

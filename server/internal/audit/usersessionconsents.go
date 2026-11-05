@@ -30,6 +30,7 @@ type LogUserSessionConsentRevokeEvent struct {
 func (l *Logger) LogUserSessionConsentRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionConsentRevokeEvent) error {
 	action := ActionUserSessionConsentRevoke
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

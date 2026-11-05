@@ -645,6 +645,14 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	for key, rule := range rules {
 		name := names[key.principalURN]
 		if name.displayName == "" {
+			// A deleted agent can never act again, so its rule decides
+			// nothing and is not listed. A rule naming this resource then
+			// drops out of the next save, which replaces this resource's
+			// rules; organization-wide rows are left to the surface that
+			// owns them.
+			if strings.HasPrefix(key.principalURN, string(urn.PrincipalTypeAgent)+":") {
+				continue
+			}
 			name = describeUnknownPrincipal(key.principalURN)
 		}
 		entries = append(entries, &gen.ResourceAudienceEntry{
@@ -926,8 +934,6 @@ func describeUnknownPrincipal(principalURN string) audienceName {
 		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
 	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
 		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
-	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeAgent)+":"):
-		return audienceName{kind: "agent", displayName: "Deleted agent", description: nil, memberCount: nil}
 	default:
 		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
 	}

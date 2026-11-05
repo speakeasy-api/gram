@@ -40,10 +40,14 @@ func TestFederatedFailureSafeCauses(t *testing.T) {
 		{errors.New("secret token response"), oops.CodeUnavailable},
 		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedSigning), oops.CodeUnexpected},
 		{fmt.Errorf("secret: %w", remotesessions.ErrFederatedUnavailable), oops.CodeUnavailable},
+		{errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning), oops.CodeUnavailable},
 	} {
 		code, cause := federatedFailure(test.cause)
 		require.Equal(t, test.code, code)
 		require.NotContains(t, cause.Error(), "secret")
+		if errors.Is(test.cause, remotesessions.ErrFederatedSigning) {
+			require.ErrorIs(t, cause, remotesessions.ErrFederatedSigning)
+		}
 	}
 }
 
