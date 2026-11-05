@@ -35,11 +35,9 @@ func testServerClientChoices(t *testing.T, spec Spec) {
 		report, err := selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")
-		require.Equal(t, 8, report.Pairs[selectionbackfill.OutcomeSelected], "every seeded sign-in's reachable servers")
+		require.Equal(t, 20, report.Pairs[selectionbackfill.OutcomeSelected], "every active seeded sign-in's reachable servers")
 		require.Empty(t, report.Gaps, "no seeded credential may be asked to reconnect")
-		for outcome, n := range report.Pairs {
-			require.Equal(t, selectionbackfill.OutcomeSelected, outcome, "%d pairs are %s: the seed must record every choice", n, outcome)
-		}
+		require.Len(t, report.Pairs, 1, "the seed must record every choice: %v", report.Pairs)
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")
 		require.NotEmpty(t, report.Pairs, "the seed must leave server choices to check")
 		require.Equal(t, report.Credentials, report.FullyCovered)

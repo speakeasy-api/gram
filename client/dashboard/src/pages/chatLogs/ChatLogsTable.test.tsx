@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
+import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
 
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -116,12 +117,30 @@ describe("ChatLogsTable", () => {
     vi.restoreAllMocks();
   });
 
-  it("copies the raw chat id without a label prefix", () => {
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
+  it("shows unknown cost, not $0, for a session whose agent reports no cost", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          { ...makeChat("chat-codex"), totalCost: 0, totalTokens: 900 },
+          { ...makeChat("chat-claude"), totalCost: 0.1234, totalTokens: 900 },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getAllByLabelText(UNKNOWN_COST_EXPLANATION)).toHaveLength(1);
+    expect(screen.getByText("$0.1234")).toBeTruthy();
+    expect(screen.queryByText("$0.0000")).toBeNull();
+  });
+
+  it("shows duration and message count under the start time, not the chat id", () => {
     const chatId = "chat_01HXQ1P84WV3S9J7Z52DKVE7NE";
 
     renderTable(
@@ -138,9 +157,14 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTitle("Copy Chat ID"));
-
-    expect(writeText).toHaveBeenCalledWith(chatId);
+    // The id and its copy control live in the detail drawer, leaving the
+    // title room to wrap.
+    expect(screen.queryByRole("button", { name: /copy chat id/i })).toBeNull();
+    expect(screen.queryByText(chatId)).toBeNull();
+    expect(screen.queryByText(chatId.slice(0, 8))).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /Messages/ })).toBeNull();
+    expect(screen.getByTitle("Messages").textContent).toBe("4");
+    expect(screen.getByTitle("Duration").textContent).toBe("3m");
   });
 
   it("shows created and last activity timestamps", () => {

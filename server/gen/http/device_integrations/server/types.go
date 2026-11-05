@@ -214,14 +214,14 @@ type GetCoverageResponseBody struct {
 	// set as a whole supports only the weaker claim that assigned users ran the
 	// agent somewhere.
 	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
-	// Devices with an agent heartbeat within the window. What that attests depends
-	// on the matching mode and, per device, on whether the match was by serial or
-	// by email — compare against agent_active_device_attested.
+	// Devices with an agent heartbeat or state report within the window. What that
+	// attests depends on the matching mode and, per device, on whether the match
+	// was by serial or by email — compare against agent_active_device_attested.
 	AgentActive int64 `form:"agent_active" json:"agent_active" xml:"agent_active"`
-	// How many of agent_active are backed by that machine's OWN heartbeat (serial
-	// match). Under user-level matching this is 0; under device-level matching a
-	// value below agent_active means some devices fell back to the assigned-user
-	// email, which is the weaker claim.
+	// How many of agent_active are backed by that machine's OWN heartbeat or state
+	// report (serial match). Under user-level matching this is 0; under
+	// device-level matching a value below agent_active means some devices fell
+	// back to the assigned-user email, which is the weaker claim.
 	AgentActiveDeviceAttested int64 `form:"agent_active_device_attested" json:"agent_active_device_attested" xml:"agent_active_device_attested"`
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64 `form:"agent_stale" json:"agent_stale" xml:"agent_stale"`
@@ -242,6 +242,84 @@ type GetCoverageResponseBody struct {
 	// Agent users with no matching device in any connected MDM inventory — shadow
 	// devices or fleets outside MDM.
 	UnmanagedAgentUsers int64 `form:"unmanaged_agent_users" json:"unmanaged_agent_users" xml:"unmanaged_agent_users"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64 `form:"policy_attested" json:"policy_attested" xml:"policy_attested"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64 `form:"policy_outdated" json:"policy_outdated" xml:"policy_outdated"`
+	// agent_active devices with no state report within the window, typically an
+	// agent that predates reporting.
+	PolicyUnreported int64 `form:"policy_unreported" json:"policy_unreported" xml:"policy_unreported"`
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement, because the reporting agent's build was blocked when it
+	// reported.
+	EnforcementHalted int64 `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
+}
+
+// ListFleetDevicesResponseBody is the type of the "deviceIntegrations" service
+// "listFleetDevices" endpoint HTTP response body.
+type ListFleetDevicesResponseBody struct {
+	// Devices, newest first.
+	Devices []*FleetDeviceResponseBody `form:"devices" json:"devices" xml:"devices"`
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetFleetCoverageResponseBody is the type of the "deviceIntegrations" service
+// "getFleetCoverage" endpoint HTTP response body.
+type GetFleetCoverageResponseBody struct {
+	// Organization the coverage describes.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Freshness window: an agent counts as active when its heartbeat or state
+	// report is within this many minutes.
+	ActiveWindowMinutes int `form:"active_window_minutes" json:"active_window_minutes" xml:"active_window_minutes"`
+	// True when the organization has a connected MDM integration (the one named by
+	// provider, when set). Without one, the gap buckets are always 0 because
+	// nothing lists the devices that lack the agent.
+	MdmConnected bool `form:"mdm_connected" json:"mdm_connected" xml:"mdm_connected"`
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
+	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
+	// Devices with an agent heartbeat or state report within the window,
+	// agent-only machines included.
+	AgentActive int64 `form:"agent_active" json:"agent_active" xml:"agent_active"`
+	// How many of agent_active are backed by that machine's own heartbeat or state
+	// report.
+	AgentActiveDeviceAttested int64 `form:"agent_active_device_attested" json:"agent_active_device_attested" xml:"agent_active_device_attested"`
+	// Devices with a known agent that went quiet.
+	AgentStale int64 `form:"agent_stale" json:"agent_stale" xml:"agent_stale"`
+	// MDM devices whose assigned user runs the agent, but not on this machine.
+	// Device-level matching only.
+	AgentOtherDevice int64 `form:"agent_other_device" json:"agent_other_device" xml:"agent_other_device"`
+	// MDM devices whose assigned email resolves to an org member with no agent at
+	// all.
+	NoAgent int64 `form:"no_agent" json:"no_agent" xml:"no_agent"`
+	// MDM devices with no assigned-user email.
+	NoEmail int64 `form:"no_email" json:"no_email" xml:"no_email"`
+	// MDM devices whose assigned email matches neither an agent user nor an org
+	// member.
+	UnresolvedEmail int64 `form:"unresolved_email" json:"unresolved_email" xml:"unresolved_email"`
+	// MDM devices absent from the latest completed inventory snapshot.
+	Missing int64 `form:"missing" json:"missing" xml:"missing"`
+	// Machines running the agent that no connected MDM inventory holds. Always 0
+	// when provider is set.
+	AgentOnlyDevices int64 `form:"agent_only_devices" json:"agent_only_devices" xml:"agent_only_devices"`
+	// Every device counted here, missing and agent-only ones included.
+	TotalDevices int64 `form:"total_devices" json:"total_devices" xml:"total_devices"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64 `form:"policy_attested" json:"policy_attested" xml:"policy_attested"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64 `form:"policy_outdated" json:"policy_outdated" xml:"policy_outdated"`
+	// agent_active devices with no state report within the window.
+	PolicyUnreported int64 `form:"policy_unreported" json:"policy_unreported" xml:"policy_unreported"`
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement.
+	EnforcementHalted int64 `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
 }
 
 // ListProvidersUnauthorizedResponseBody is the type of the
@@ -2117,6 +2195,386 @@ type GetCoverageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListFleetDevicesUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListFleetDevicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "forbidden" error.
+type ListFleetDevicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "bad_request" error.
+type ListFleetDevicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "not_found"
+// error.
+type ListFleetDevicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesConflictResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "conflict"
+// error.
+type ListFleetDevicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListFleetDevicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesInvalidResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "invalid"
+// error.
+type ListFleetDevicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListFleetDevicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unexpected" error.
+type ListFleetDevicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListFleetDevicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetFleetCoverageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "forbidden" error.
+type GetFleetCoverageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "bad_request" error.
+type GetFleetCoverageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "not_found"
+// error.
+type GetFleetCoverageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageConflictResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "conflict"
+// error.
+type GetFleetCoverageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetFleetCoverageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageInvalidResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "invalid"
+// error.
+type GetFleetCoverageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetFleetCoverageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unexpected" error.
+type GetFleetCoverageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetFleetCoverageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeviceIntegrationProviderResponseBody is used to define fields on response
 // body types.
 type DeviceIntegrationProviderResponseBody struct {
@@ -2211,9 +2669,9 @@ type ManagedDeviceResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
-	// The device-agent heartbeat that classified this device: the machine's own
-	// under device-level matching, otherwise its assigned user's. Omitted when no
-	// agent has ever synced.
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report: the machine's own under device-level matching, otherwise its
+	// assigned user's. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
 	// Coverage classification for the device. What agent_active attests depends on
 	// the org's matching mode and on whether this device matched by serial or by
@@ -2221,8 +2679,155 @@ type ManagedDeviceResponseBody struct {
 	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
-	FirstSeenAt  string  `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
-	LastSeenAt   string  `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState  *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	FirstSeenAt string                               `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	LastSeenAt  string                               `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+}
+
+// ManagedDeviceAgentStateResponseBody is used to define fields on response
+// body types.
+type ManagedDeviceAgentStateResponseBody struct {
+	// When the control plane received the report.
+	ReportedAt string `form:"reported_at" json:"reported_at" xml:"reported_at"`
+	// device when this machine's own agent sent the report, matched by serial.
+	// user when the assigned user's agent sent it, which may run on another
+	// machine.
+	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
+	// Etag of the policy the agent last applied.
+	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
+	// When the agent first applied that etag.
+	AppliedAt *string `form:"applied_at,omitempty" json:"applied_at,omitempty" xml:"applied_at,omitempty"`
+	// True when the kill switch has halted policy enforcement.
+	EnforcementHalted bool `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
+	// True when the agent build is in blocked_versions.
+	CurrentBlocked bool `form:"current_blocked" json:"current_blocked" xml:"current_blocked"`
+	// Version of the speakeasyd daemon.
+	SpeakeasydVersion *string `form:"speakeasyd_version,omitempty" json:"speakeasyd_version,omitempty" xml:"speakeasyd_version,omitempty"`
+	// Version of the speakeasy CLI.
+	SpeakeasyVersion *string `form:"speakeasy_version,omitempty" json:"speakeasy_version,omitempty" xml:"speakeasy_version,omitempty"`
+	// Version of the menu bar app.
+	SpeakeasyUIVersion *string `form:"speakeasy_ui_version,omitempty" json:"speakeasy_ui_version,omitempty" xml:"speakeasy_ui_version,omitempty"`
+	// Operating system, e.g. darwin.
+	Os *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	// CPU architecture, e.g. arm64.
+	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// Each managed tool's outcome from the agent's last reconcile.
+	Tools []*ManagedDeviceToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// Start of the window tools[].drift_corrections counts over. Omitted when no
+	// tool measures drift.
+	DriftCountingSince *string `form:"drift_counting_since,omitempty" json:"drift_counting_since,omitempty" xml:"drift_counting_since,omitempty"`
+	// Resolved update mode: automatic, notify, or disabled.
+	AutoUpdate *string `form:"auto_update,omitempty" json:"auto_update,omitempty" xml:"auto_update,omitempty"`
+	// Update channel the agent follows, e.g. stable.
+	UpdateChannel *string `form:"update_channel,omitempty" json:"update_channel,omitempty" xml:"update_channel,omitempty"`
+	// Version the organization pinned the fleet to, when set.
+	PinnedTarget *string `form:"pinned_target,omitempty" json:"pinned_target,omitempty" xml:"pinned_target,omitempty"`
+	// The agent's most recent self-rollback after a failed update.
+	LastRollback *ManagedDeviceRollbackResponseBody `form:"last_rollback,omitempty" json:"last_rollback,omitempty" xml:"last_rollback,omitempty"`
+}
+
+// ManagedDeviceToolResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceToolResponseBody struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string `form:"tool" json:"tool" xml:"tool"`
+	// Enforcement layer: user, managed, off, or unknown.
+	Layer string `form:"layer" json:"layer" xml:"layer"`
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error,
+	// unmanaged, or unknown.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// Why a pending tool is not enforcing yet: privileged_writer_not_ready,
+	// plugin_bundle_not_cloned, or unknown.
+	PendingReason *string `form:"pending_reason,omitempty" json:"pending_reason,omitempty" xml:"pending_reason,omitempty"`
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string `form:"error_kind,omitempty" json:"error_kind,omitempty" xml:"error_kind,omitempty"`
+	// True when the tool loads the agent's changes only after it restarts.
+	RestartRequired bool `form:"restart_required" json:"restart_required" xml:"restart_required"`
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired bool `form:"action_required" json:"action_required" xml:"action_required"`
+	// Times the agent restored what it owns in this tool since
+	// drift_counting_since. Omitted when not measured.
+	DriftCorrections *int `form:"drift_corrections,omitempty" json:"drift_corrections,omitempty" xml:"drift_corrections,omitempty"`
+}
+
+// ManagedDeviceRollbackResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceRollbackResponseBody struct {
+	// When the rollback happened.
+	At string `form:"at" json:"at" xml:"at"`
+	// Version the agent rolled back from.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Version the agent rolled back to.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// FleetDeviceResponseBody is used to define fields on response body types.
+type FleetDeviceResponseBody struct {
+	// Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an
+	// agent-only machine.
+	ID string `form:"id" json:"id" xml:"id"`
+	// True when a connected MDM's inventory holds this device. False for a machine
+	// only its agent reports.
+	InInventory bool `form:"in_inventory" json:"in_inventory" xml:"in_inventory"`
+	// Provider the device was synced from. Omitted for an agent-only machine.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The MDM's identifier for the device. Omitted for an agent-only machine.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// Hardware serial number, from the MDM or the agent. Omitted when neither
+	// reported one.
+	SerialNumber *string `form:"serial_number,omitempty" json:"serial_number,omitempty" xml:"serial_number,omitempty"`
+	// Device hostname, from the MDM or the agent.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Operating system name as the MDM reports it. Omitted for an agent-only
+	// machine; agent_state.os carries the agent's.
+	OsName *string `form:"os_name,omitempty" json:"os_name,omitempty" xml:"os_name,omitempty"`
+	// Operating system version as the MDM reports it. Omitted for an agent-only
+	// machine.
+	OsVersion *string `form:"os_version,omitempty" json:"os_version,omitempty" xml:"os_version,omitempty"`
+	// The MDM's assigned user, or for an agent-only machine the user its agent
+	// runs as.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Resolved Speakeasy user for user_email. Omitted when it does not resolve to
+	// an org member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Last device check-in as reported by the MDM.
+	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report. Omitted when no agent has ever synced.
+	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
+	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
+	// When the device went absent from the MDM inventory. Omitted while present,
+	// and for an agent-only machine.
+	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	// When the MDM or the agent first reported this device.
+	FirstSeenAt string `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	// When the MDM or the agent last reported this device.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
 }
 
 // NewListProvidersResponseBody builds the HTTP response body from the result
@@ -2396,6 +3001,59 @@ func NewGetCoverageResponseBody(res *deviceintegrations.DeviceIntegrationCoverag
 		Missing:                   res.Missing,
 		TotalDevices:              res.TotalDevices,
 		UnmanagedAgentUsers:       res.UnmanagedAgentUsers,
+		PolicyAttested:            res.PolicyAttested,
+		PolicyOutdated:            res.PolicyOutdated,
+		PolicyUnreported:          res.PolicyUnreported,
+		EnforcementHalted:         res.EnforcementHalted,
+	}
+	return body
+}
+
+// NewListFleetDevicesResponseBody builds the HTTP response body from the
+// result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesResponseBody(res *deviceintegrations.ListFleetDevicesResult) *ListFleetDevicesResponseBody {
+	body := &ListFleetDevicesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Devices != nil {
+		body.Devices = make([]*FleetDeviceResponseBody, len(res.Devices))
+		for i, val := range res.Devices {
+			if val == nil {
+				body.Devices[i] = nil
+				continue
+			}
+			body.Devices[i] = marshalDeviceintegrationsFleetDeviceToFleetDeviceResponseBody(val)
+		}
+	} else {
+		body.Devices = []*FleetDeviceResponseBody{}
+	}
+	return body
+}
+
+// NewGetFleetCoverageResponseBody builds the HTTP response body from the
+// result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageResponseBody(res *deviceintegrations.FleetCoverage) *GetFleetCoverageResponseBody {
+	body := &GetFleetCoverageResponseBody{
+		OrganizationID:            res.OrganizationID,
+		ActiveWindowMinutes:       res.ActiveWindowMinutes,
+		MdmConnected:              res.MdmConnected,
+		Attestation:               res.Attestation,
+		AgentActive:               res.AgentActive,
+		AgentActiveDeviceAttested: res.AgentActiveDeviceAttested,
+		AgentStale:                res.AgentStale,
+		AgentOtherDevice:          res.AgentOtherDevice,
+		NoAgent:                   res.NoAgent,
+		NoEmail:                   res.NoEmail,
+		UnresolvedEmail:           res.UnresolvedEmail,
+		Missing:                   res.Missing,
+		AgentOnlyDevices:          res.AgentOnlyDevices,
+		TotalDevices:              res.TotalDevices,
+		PolicyAttested:            res.PolicyAttested,
+		PolicyOutdated:            res.PolicyOutdated,
+		PolicyUnreported:          res.PolicyUnreported,
+		EnforcementHalted:         res.EnforcementHalted,
 	}
 	return body
 }
@@ -3856,6 +4514,306 @@ func NewGetCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetCoverageG
 	return body
 }
 
+// NewListFleetDevicesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesUnauthorizedResponseBody(res *goa.ServiceError) *ListFleetDevicesUnauthorizedResponseBody {
+	body := &ListFleetDevicesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesForbiddenResponseBody(res *goa.ServiceError) *ListFleetDevicesForbiddenResponseBody {
+	body := &ListFleetDevicesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesBadRequestResponseBody(res *goa.ServiceError) *ListFleetDevicesBadRequestResponseBody {
+	body := &ListFleetDevicesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesNotFoundResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesNotFoundResponseBody(res *goa.ServiceError) *ListFleetDevicesNotFoundResponseBody {
+	body := &ListFleetDevicesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesConflictResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesConflictResponseBody(res *goa.ServiceError) *ListFleetDevicesConflictResponseBody {
+	body := &ListFleetDevicesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListFleetDevicesUnsupportedMediaResponseBody {
+	body := &ListFleetDevicesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesInvalidResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesInvalidResponseBody(res *goa.ServiceError) *ListFleetDevicesInvalidResponseBody {
+	body := &ListFleetDevicesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesInvariantViolationResponseBody(res *goa.ServiceError) *ListFleetDevicesInvariantViolationResponseBody {
+	body := &ListFleetDevicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesUnexpectedResponseBody(res *goa.ServiceError) *ListFleetDevicesUnexpectedResponseBody {
+	body := &ListFleetDevicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesGatewayErrorResponseBody(res *goa.ServiceError) *ListFleetDevicesGatewayErrorResponseBody {
+	body := &ListFleetDevicesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageUnauthorizedResponseBody(res *goa.ServiceError) *GetFleetCoverageUnauthorizedResponseBody {
+	body := &GetFleetCoverageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageForbiddenResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageForbiddenResponseBody(res *goa.ServiceError) *GetFleetCoverageForbiddenResponseBody {
+	body := &GetFleetCoverageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageBadRequestResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageBadRequestResponseBody(res *goa.ServiceError) *GetFleetCoverageBadRequestResponseBody {
+	body := &GetFleetCoverageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageNotFoundResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageNotFoundResponseBody(res *goa.ServiceError) *GetFleetCoverageNotFoundResponseBody {
+	body := &GetFleetCoverageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageConflictResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageConflictResponseBody(res *goa.ServiceError) *GetFleetCoverageConflictResponseBody {
+	body := &GetFleetCoverageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetFleetCoverageUnsupportedMediaResponseBody {
+	body := &GetFleetCoverageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageInvalidResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageInvalidResponseBody(res *goa.ServiceError) *GetFleetCoverageInvalidResponseBody {
+	body := &GetFleetCoverageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageInvariantViolationResponseBody(res *goa.ServiceError) *GetFleetCoverageInvariantViolationResponseBody {
+	body := &GetFleetCoverageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageUnexpectedResponseBody(res *goa.ServiceError) *GetFleetCoverageUnexpectedResponseBody {
+	body := &GetFleetCoverageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetFleetCoverageGatewayErrorResponseBody {
+	body := &GetFleetCoverageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListProvidersPayload builds a deviceIntegrations service listProviders
 // endpoint payload.
 func NewListProvidersPayload(apikeyToken *string, sessionToken *string) *deviceintegrations.ListProvidersPayload {
@@ -3970,10 +4928,11 @@ func NewRetrySchedulePayload(body *RetryScheduleRequestBody, apikeyToken *string
 
 // NewListManagedDevicesPayload builds a deviceIntegrations service
 // listManagedDevices endpoint payload.
-func NewListManagedDevicesPayload(provider *string, coverageBucket *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
+func NewListManagedDevicesPayload(provider *string, coverageBucket *string, policyState *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
 	v := &deviceintegrations.ListManagedDevicesPayload{}
 	v.Provider = provider
 	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
 	v.UserIds = userIds
 	v.UserEmails = userEmails
 	v.Cursor = cursor
@@ -3988,6 +4947,35 @@ func NewListManagedDevicesPayload(provider *string, coverageBucket *string, user
 // endpoint payload.
 func NewGetCoveragePayload(provider *string, apikeyToken *string, sessionToken *string) *deviceintegrations.GetCoveragePayload {
 	v := &deviceintegrations.GetCoveragePayload{}
+	v.Provider = provider
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListFleetDevicesPayload builds a deviceIntegrations service
+// listFleetDevices endpoint payload.
+func NewListFleetDevicesPayload(provider *string, inInventory *bool, coverageBucket *string, policyState *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListFleetDevicesPayload {
+	v := &deviceintegrations.ListFleetDevicesPayload{}
+	v.Provider = provider
+	v.InInventory = inInventory
+	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
+	v.UserIds = userIds
+	v.UserEmails = userEmails
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetFleetCoveragePayload builds a deviceIntegrations service
+// getFleetCoverage endpoint payload.
+func NewGetFleetCoveragePayload(provider *string, apikeyToken *string, sessionToken *string) *deviceintegrations.GetFleetCoveragePayload {
+	v := &deviceintegrations.GetFleetCoveragePayload{}
 	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

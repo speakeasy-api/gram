@@ -1,0 +1,190 @@
+import { describe, expect, it } from "vitest";
+import {
+  connectionLifetime,
+  connectionLifetimeLabel,
+  lifetimeEndingSoon,
+  soonestLifetime,
+} from "./connection-lifetime";
+
+const now = Date.parse("2026-10-23T12:00:00Z");
+const hours = (n: number) => new Date(now + n * 3_600_000);
+
+describe("connectionLifetime", () => {
+  it("retains an earlier access expiry when authorization has also ended", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(-3),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-3) });
+  });
+  it("does not invent access validity from a future authorization deadline", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: "invalid" as unknown as Date,
+          authorizationExpiresAt: hours(1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "unknown" });
+  });
+  it("rejects ended authorization even when access expiry is unreadable", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: "invalid" as unknown as Date,
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
+  it("ends a refreshable connection at authorization rather than an older access token", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(-3),
+          refreshExpiresAt: hours(24),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
+  it("ends authorization even when access and refresh tokens remain valid", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          refreshExpiresAt: hours(24),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
+  it("bounds an otherwise non-expiring refresh grant by authorization", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          authorizationExpiresAt: hours(12),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "refreshes-until", at: hours(12), soon: true });
+  });
+  it("keeps an earlier access deadline than authorization", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          authorizationExpiresAt: hours(12),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "expires", at: hours(1), soon: true });
+  });
+  it("reads a refresh token with no expiry as having no end", () => {
+    const lifetime = connectionLifetime(
+      { accessExpiresAt: hours(1), hasRefreshToken: true },
+      now,
+    );
+    expect(lifetime).toEqual({ kind: "refreshes" });
+    expect(connectionLifetimeLabel(lifetime, now)).toBe("Never expires");
+  });
+
+  it("ends a refreshing connection at its refresh token's expiry", () => {
+    const lifetime = connectionLifetime(
+      {
+        accessExpiresAt: hours(1),
+        refreshExpiresAt: hours(24 * 30),
+        hasRefreshToken: true,
+      },
+      now,
+    );
+    expect(lifetime).toEqual({
+      kind: "refreshes-until",
+      at: hours(24 * 30),
+      soon: false,
+    });
+    expect(connectionLifetimeLabel(lifetime, now)).toMatch(/^Expires /);
+  });
+
+  it("ends a connection without a refresh token at its access expiry", () => {
+    const lifetime = connectionLifetime(
+      { accessExpiresAt: hours(5), hasRefreshToken: false },
+      now,
+    );
+    expect(lifetime).toEqual({ kind: "expires", at: hours(5), soon: true });
+    expect(lifetimeEndingSoon(lifetime)).toBe(true);
+    expect(connectionLifetimeLabel(lifetime, now)).toMatch(
+      /^Expires .* \(in about 5 hours\)$/,
+    );
+  });
+
+  it("falls back to the access token once the refresh token has lapsed", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(2),
+          refreshExpiresAt: hours(-1),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "expires", at: hours(2), soon: true });
+  });
+
+  it("reports a connection whose last token has expired as ended", () => {
+    const lifetime = connectionLifetime(
+      {
+        accessExpiresAt: hours(-3),
+        refreshExpiresAt: hours(-2),
+        hasRefreshToken: true,
+      },
+      now,
+    );
+    expect(lifetime).toEqual({ kind: "ended", at: hours(-3) });
+    expect(lifetimeEndingSoon(lifetime)).toBe(false);
+    expect(connectionLifetimeLabel(lifetime, now)).toBe(
+      "Ended about 3 hours ago",
+    );
+  });
+
+  it("says nothing about an end it cannot read", () => {
+    const lifetime = connectionLifetime(
+      {
+        accessExpiresAt: "not a date" as unknown as Date,
+        hasRefreshToken: false,
+      },
+      now,
+    );
+    expect(lifetime).toEqual({ kind: "unknown" });
+    expect(connectionLifetimeLabel(lifetime, now)).toBe("Expiry not recorded");
+  });
+});
+
+describe("soonestLifetime", () => {
+  it("picks the earliest deadline and ranks no deadline last", () => {
+    expect(
+      soonestLifetime([
+        { kind: "refreshes" },
+        { kind: "expires", at: hours(48), soon: false },
+        { kind: "refreshes-until", at: hours(10), soon: true },
+      ]),
+    ).toEqual({ kind: "refreshes-until", at: hours(10), soon: true });
+    expect(soonestLifetime([])).toBeUndefined();
+  });
+});

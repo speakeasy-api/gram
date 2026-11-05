@@ -100,7 +100,9 @@ describe("ResourceLink", () => {
       ]),
     );
     const link = screen.getByRole("link", { name: /CRM/ });
-    expect(link.getAttribute("href")).toBe("/acme/projects/default/mcp/crm");
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/default/toolsets/crm",
+    );
   });
 
   it("links mcp_servers grants by slug", () => {
@@ -116,9 +118,7 @@ describe("ResourceLink", () => {
       ]),
     );
     const link = screen.getByRole("link", { name: /Remote/ });
-    expect(link.getAttribute("href")).toBe(
-      "/acme/projects/default/mcp/x/remote",
-    );
+    expect(link.getAttribute("href")).toBe("/acme/projects/default/mcp/remote");
   });
 
   it("links slugless mcp_servers grants by row id", () => {
@@ -133,7 +133,7 @@ describe("ResourceLink", () => {
     );
     const link = screen.getByRole("link", { name: /Tunnel/ });
     expect(link.getAttribute("href")).toBe(
-      "/acme/projects/default/mcp/x/server-2",
+      "/acme/projects/default/mcp/server-2",
     );
   });
 

@@ -196,7 +196,7 @@ ORDER BY mcp_server_id;
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
 
--- name: SeedHeaderAuthClientFixture :exec
+-- name: SeedLinkedHeaderAuthClientFixture :exec
 -- A static-credential auth client in the project, linked to one server.
 WITH client AS (
     INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name)
@@ -213,3 +213,61 @@ INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES (@id, @project_id
 -- name: SeedUnproxiedMCPServerRowFixture :exec
 INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
 VALUES (@id, @project_id, @slug, @unproxied_mcp_server_id, @user_session_issuer_id, 'private');
+
+-- name: SeedHeaderAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES (@organization_id, @project_id, 'static_credential', 'backfill', 'headers')
+RETURNING id;
+
+-- name: NameAuthClientOnSelectionFixture :exec
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id
+  AND sel.credential_id = @credential_id
+  AND sel.mcp_server_id = @mcp_server_id
+  AND sel.deleted IS FALSE;
+
+-- name: SeedOAuthAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+SELECT @organization_id, @project_id, @client_type, 'admin', 'oauth', c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id
+RETURNING id;
+
+-- name: LinkAuthClientFixture :execrows
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT @project_id, @organization_id, @mcp_server_id, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id;
+
+-- name: GetSelectionAuthClientFixture :one
+SELECT auth_client_id, no_auth
+FROM upstream_client_selections
+WHERE credential_kind = @credential_kind
+  AND credential_id = @credential_id
+  AND mcp_server_id = @mcp_server_id
+  AND deleted IS FALSE;
+
+-- name: SeedServerHeaderFixture :one
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value, value_from_request_header)
+SELECT s.remote_mcp_server_id, @name, @is_secret, sqlc.narg('value'), sqlc.narg('value_from_request_header')
+FROM mcp_servers AS s
+WHERE s.id = @mcp_server_id
+RETURNING id;
+
+-- name: ForwardServerHeaderFixture :exec
+UPDATE remote_mcp_server_headers
+SET value = NULL, is_secret = FALSE, value_from_request_header = @value_from_request_header
+WHERE id = @id;
+
+-- name: CopyServerHeadersFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+SELECT @auth_client_id, @organization_id, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+FROM mcp_servers AS s
+JOIN remote_mcp_server_headers AS h
+  ON h.remote_mcp_server_id = s.remote_mcp_server_id
+ AND h.deleted IS FALSE
+WHERE s.id = @mcp_server_id;

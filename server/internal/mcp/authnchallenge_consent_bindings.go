@@ -10,6 +10,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -86,11 +88,17 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 		if err != nil {
 			return fmt.Errorf("manage consent connection: %w", err)
 		}
+		agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: endpoint.OrganizationID, ID: selected.AgentID})
+		if err != nil {
+			return fmt.Errorf("load attachment permissions: %w", err)
+		}
+		canManage := agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
 		result = struct {
-			Candidates []*types.RemoteSession               `json:"candidates"`
-			Bindings   []*gen.PrincipalRemoteSessionBinding `json:"bindings"`
-			NextCursor *string                              `json:"nextCursor,omitempty"`
-		}{Candidates: candidates.Items, Bindings: bindings.Items, NextCursor: candidates.NextCursor}
+			CanManageConnections bool                                 `json:"canManageConnections"`
+			Candidates           []*types.RemoteSession               `json:"candidates"`
+			Bindings             []*gen.PrincipalRemoteSessionBinding `json:"bindings"`
+			NextCursor           *string                              `json:"nextCursor,omitempty"`
+		}{CanManageConnections: canManage, Candidates: candidates.Items, Bindings: bindings.Items, NextCursor: candidates.NextCursor}
 	case "agent_attach":
 		result, err = s.consentBindings.AttachBinding(ctx, &gen.AttachBindingPayload{SessionToken: nil, ProjectSlugInput: nil, PrincipalID: principal, UserSessionIssuerID: issuer, RemoteSessionID: r.PostForm.Get("remote_session_id")})
 		if err != nil {

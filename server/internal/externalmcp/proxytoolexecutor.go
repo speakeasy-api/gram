@@ -165,6 +165,7 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 		Headers:          headers,
 		DisableRetries:   false,
 		MaxResponseBytes: 0,
+		MaxMessageBytes:  0,
 	})
 	if err != nil {
 		return nil, err

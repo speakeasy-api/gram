@@ -78,7 +78,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	published, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsPackage)
 	require.NoError(t, err)
 	require.Contains(t, published, ".cursor-plugin/plugin.json")
-	require.Contains(t, published, ".codex-plugin/plugin.json")
+	require.NotContains(t, published, ".codex-plugin/plugin.json")
 	require.Contains(t, published, ".mcp.json")
 	for path, content := range published {
 		require.NotContains(t, string(content), cfg.APIKey, path)
@@ -124,9 +124,9 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	require.Equal(t, "./agent-plugins/tools", sharedCopilot.Plugins[0].Source)
 	require.Empty(t, legacyCopilot.Plugins)
 
-	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg, true)
+	sharedFingerprint, err := publishMCPFingerprints([]PluginInfo{compatible}, nil, cfg, true)
 	require.NoError(t, err)
-	legacyFingerprint, err := MCPFingerprints([]PluginInfo{incompatible}, cfg, true)
+	legacyFingerprint, err := publishMCPFingerprints([]PluginInfo{incompatible}, nil, cfg, true)
 	require.NoError(t, err)
 	require.NotEqual(t, sharedFingerprint["tools"], legacyFingerprint["tools"])
 	// The shared fingerprint follows the Copilot manifest, so flipping a plugin's

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestServePublic_ResourcesTemplatesList_ReturnsEmptyList(t *testing.T) {
@@ -20,8 +19,7 @@ func TestServePublic_ResourcesTemplatesList_ReturnsEmptyList(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "res-tmpl-list-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "res-tmpl-list-"+uuid.NewString()[:8])
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -68,8 +66,7 @@ func TestServePublic_PromptsList_PublicUnauthenticatedIsCacheablePublicly(t *tes
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "prompts-scope-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "prompts-scope-"+uuid.NewString()[:8])
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -95,8 +92,7 @@ func TestServePublic_ResourcesList_PublicUnauthenticatedIsCacheablePublicly(t *t
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "resources-scope-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "resources-scope-"+uuid.NewString()[:8])
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",

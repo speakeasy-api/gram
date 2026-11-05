@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   serverScoping: false,
   selectedServerId: "server_one",
   selectedIssuerId: undefined as string | undefined,
+  selectedKind: "Toolset",
+  selectedAuthClientId: undefined as string | undefined,
+  listChoices: vi.fn(),
   list: vi.fn(),
   create: vi.fn(),
   revoke: vi.fn(),
@@ -53,7 +56,12 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
   useSession: () => ({ user: { id: mocks.user } }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: mocks,
+    authClients: { listMcpServerChoices: mocks.listChoices },
+  }),
+}));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
   useListAPIKeys: (request: unknown, security: unknown, options: object) =>
     useQuery({
@@ -153,7 +161,8 @@ vi.mock("./AgentKeyServers", () => ({
               name: "Server one",
               projectId: "project_one",
               projectSlug: "project-one",
-              kind: "Toolset",
+              kind: mocks.selectedKind,
+              authClientId: mocks.selectedAuthClientId,
               endpoints: ["https://example.test/mcp/server-one"],
             },
           ])
@@ -291,6 +300,9 @@ beforeEach(() => {
   mocks.serverScoping = false;
   mocks.selectedServerId = "server_one";
   mocks.selectedIssuerId = undefined;
+  mocks.selectedKind = "Toolset";
+  mocks.selectedAuthClientId = undefined;
+  mocks.listChoices.mockResolvedValue({ choices: [] });
   mocks.org = "org_example";
   mocks.user = "user_example";
   mocks.projects = [
@@ -521,7 +533,9 @@ describe("Agent API keys", () => {
       { sessionHeaderGramSession: "" },
     );
   });
-  it("blocks header navigation during submission and the deferred post-issue refetch", async () => {
+  it("blocks header navigation during credential discovery, submission and the deferred post-issue refetch", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
     let finishCreate!: (value: typeof key & { key: string }) => void;
     let finishRefetch!: (value: { keys: (typeof key)[] }) => void;
     mocks.create.mockImplementationOnce(
@@ -539,7 +553,25 @@ describe("Agent API keys", () => {
         }),
     );
     fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
     submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    for (const name of ["Cancel", "Back", "Servers", "Accounts", "Access"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveProperty("disabled", true);
+      fireEvent.click(button);
+    }
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+    finishChoices({ choices: [] });
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(
       screen.getByRole("button", { name: "Back to agent" }),
@@ -596,6 +628,25 @@ describe("Agent API keys", () => {
       expect(screen.queryByText("secret_example_once")).toBeNull();
     },
   );
+  it("does not issue a key after switching agents during credential discovery", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
+    const { change } = setup();
+    await openCreate();
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    change({ ...agent, id: "agent_other" });
+    finishChoices({ choices: [] });
+    await screen.findByText("Example key");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("does not reveal an in-flight creation after switching agents", async () => {
     let resolve!: (value: unknown) => void;
     mocks.create.mockImplementation(
@@ -718,6 +769,46 @@ describe("Agent API keys", () => {
     expect(screen.getByRole("alert").textContent).toMatch(
       /reserved|255 Unicode characters/,
     );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("sends the credential chosen for a server that offers several", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.selectedAuthClientId = "client_b";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    await createWithGrant();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.authClientChoices,
+    ).toEqual([{ mcpServerId: "server_one", authClientId: "client_b" }]);
+  });
+  it("stays on the servers step until a credential is chosen", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose fixture server" }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Choose which credential the key uses on Server one.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Choose fixture server" }),
+    ).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("submits a trimmed name at the Unicode codepoint limit", async () => {

@@ -51,6 +51,10 @@ func TestSelectTurnUser(t *testing.T) {
 		{name: "mapped Slack", source: sourceKindSlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, mapped: "sender", owner: "owner", want: "sender"},
 		{name: "unmapped Slack", source: sourceKindSlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, owner: "owner", want: "owner"},
 		{name: "mapping unavailable", source: sourceKindSlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, lookupErr: errors.New("unavailable"), owner: "owner", want: "owner"},
+		{name: "mapped Speakeasy Slack app", source: sourceKindSpeakeasySlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, mapped: "sender", owner: "owner", want: "sender"},
+		{name: "unmapped Speakeasy Slack app never acts as owner", source: sourceKindSpeakeasySlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, owner: "owner", wantErr: true},
+		{name: "Speakeasy Slack app mapping unavailable", source: sourceKindSpeakeasySlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, lookupErr: errors.New("unavailable"), owner: "owner", wantErr: true},
+		{name: "Speakeasy Slack app without sender", source: sourceKindSpeakeasySlack, payload: `{}`, owner: "owner", wantErr: true},
 		{name: "dashboard sender", source: sourceKindDashboard, payload: `{"user_id":"sender"}`, owner: "owner", want: "sender"},
 		{name: "ordinary trigger", source: sourceKindCron, payload: `{}`, owner: "owner", want: "owner"},
 		{name: "wake requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, owner: "owner", want: "requester"},
@@ -106,6 +110,18 @@ func TestTurnUserIDLegacyAssistantRunsWithoutCreator(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, identity.UserID)
 	require.False(t, identity.AgentBacked)
+}
+
+func TestTurnIdentityLegacySpeakeasySlackRefusesUnlinkedSender(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_speakeasy_slack")
+	require.NoError(t, err)
+	project, assistantID, _, _ := insertAssistantFixture(t, db)
+	core := newProvisioningCore(t, db)
+	assistant := assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test", CreatedByUserID: "owner"}
+	_, err = core.resolveTurnIdentity(t.Context(), assistant, assistantThreadRecord{SourceKind: sourceKindSpeakeasySlack}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"team_id":"T1","user_id":"U1"}`)})
+	require.ErrorIs(t, err, ErrTurnIdentity)
+	require.ErrorIs(t, err, ErrSlackSenderUnlinked)
 }
 
 func TestTurnUserIDAgentBackedRequiresMembershipAndProjectAccess(t *testing.T) {
@@ -208,4 +224,27 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "user-1", identity.UserID, "an ingress payload must not select the turn user")
 	require.False(t, identity.HumanKnown, "the owner fallback is not a known human")
+}
+
+func TestTurnEventSourcePrefersStampedSource(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		thread  string
+		payload string
+		want    string
+	}{
+		{name: "stamped", thread: sourceKindSlack, payload: `{"_gram_source_kind":"speakeasy_slack"}`, want: sourceKindSpeakeasySlack},
+		{name: "unstamped", thread: sourceKindSlack, payload: `{"text":"hi"}`, want: sourceKindSlack},
+		{name: "non-object", thread: sourceKindSpeakeasySlack, payload: `"hi"`, want: sourceKindSpeakeasySlack},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := turnEventSource(tc.thread, []byte(tc.payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+	_, err := turnEventSource(sourceKindSlack, []byte(`{"_gram_source_kind":1}`))
+	require.Error(t, err)
 }

@@ -17,6 +17,7 @@ import (
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -144,6 +145,9 @@ type AccessRoleMutationService struct {
 	backend    AccessRoleMutationBackend
 	receipts   *AccessRoleMutationReceiptStore
 	versionKey []byte
+	// audit records shared-credential rule changes; nil leaves
+	// set_mcp_role_auth_client_access unavailable.
+	audit *audit.Logger
 }
 
 func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provider, budget OperationBudget, keyMaterial string, backend AccessRoleMutationBackend) (*AccessRoleMutationService, error) {
@@ -153,7 +157,7 @@ func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provid
 	key := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessRoleMutationService{
 		reads: reads, flags: flags, budget: budget, backend: backend,
-		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:],
+		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:], audit: nil,
 	}, nil
 }
 
@@ -431,7 +435,7 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 		if rule.Disposition != "" {
 			selector[authz.SelectorKeyDisposition] = rule.Disposition
 		}
-		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil}
+		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}
 		if value := selector[authz.SelectorKeyProjectID]; value != "" {
 			generated.ProjectID = &value
 		}

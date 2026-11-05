@@ -2736,6 +2736,7 @@ func marshalTypesWorkloadIssuerToWorkloadIssuerResponseBody(v *types.WorkloadIss
 		Issuer:                 v.Issuer,
 		JwksURI:                v.JwksURI,
 		Description:            v.Description,
+		AllowAssertionReuse:    v.AllowAssertionReuse,
 		AllowWildcardAdmission: v.AllowWildcardAdmission,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
@@ -2854,6 +2855,40 @@ func marshalWorkloadidentitiesWorkloadPlatformVariableToWorkloadPlatformVariable
 // type *workloadidentities.WorkloadPlatformSubject.
 func marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectResponseBody(v *workloadidentities.WorkloadPlatformSubject) *WorkloadPlatformSubjectResponseBody {
 	res := &WorkloadPlatformSubjectResponseBody{
+		Template: v.Template,
+		Wildcard: v.Wildcard,
+		Label:    v.Label,
+	}
+	{
+		var zero string
+		if res.Label == zero {
+			res.Label = ""
+		}
+	}
+	if v.Alternatives != nil {
+		res.Alternatives = make([]*WorkloadPlatformSubjectAlternativeResponseBody, len(v.Alternatives))
+		for i, val := range v.Alternatives {
+			if val == nil {
+				res.Alternatives[i] = nil
+				continue
+			}
+			res.Alternatives[i] = marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody
+// builds a value of type *WorkloadPlatformSubjectAlternativeResponseBody from
+// a value of type *workloadidentities.WorkloadPlatformSubjectAlternative.
+func marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(v *workloadidentities.WorkloadPlatformSubjectAlternative) *WorkloadPlatformSubjectAlternativeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &WorkloadPlatformSubjectAlternativeResponseBody{
+		Key:      v.Key,
+		Label:    v.Label,
 		Template: v.Template,
 		Wildcard: v.Wildcard,
 	}

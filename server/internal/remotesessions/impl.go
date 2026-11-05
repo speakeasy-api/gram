@@ -56,21 +56,22 @@ import (
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
-	enc          *encryption.Client
-	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
-	tunnels      *tunnelrouting.HTTPClient
-	auditLogger  *audit.Logger
-	identity     *IdentityCommitter
-	refresher    *RefreshService
-	revoker      *UpstreamRevoker
-	jwksResolver *jwks.Resolver
+	connectionTester ServerConnectionTester
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	sessions         *sessions.Manager
+	authz            *authz.Engine
+	enc              *encryption.Client
+	environments     *environments.EnvironmentEntries
+	policy           *guardian.Policy
+	tunnels          *tunnelrouting.HTTPClient
+	auditLogger      *audit.Logger
+	identity         *IdentityCommitter
+	refresher        *RefreshService
+	revoker          *UpstreamRevoker
+	jwksResolver     *jwks.Resolver
 	// rotator backs the administrator's rotate action with the same
 	// re-registration the authorize path runs automatically.
 	rotator *ClientRotator
@@ -89,7 +90,8 @@ type Service struct {
 	// not become so: a set is always backed by a customer-provisioned KMS key,
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
-	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID, bool) error
+	bindingRefresh    *BindingRefreshAttempts
 
 	// featureFlags gates rollouts; nil reads every flag as off.
 	featureFlags feature.Provider
@@ -124,7 +126,9 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
 
 	return &Service{
+		connectionTester:  nil,
 		bindingAuthorizer: nil,
+		bindingRefresh:    nil,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		logger:            logger,
 		db:                db,

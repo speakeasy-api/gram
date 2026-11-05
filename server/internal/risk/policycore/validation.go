@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -201,7 +202,10 @@ func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
 	if err := ValidateMCPScopeSources(scope, sources); err != nil {
 		return err
 	}
-	if scope == nil || action == "flag" || action == "block" {
+	if action == ActionRequireApproval && scope == nil {
+		return fmt.Errorf("action %q needs an MCP scope naming the servers or tools that require approval", action)
+	}
+	if scope == nil || action == "flag" || action == "block" || action == ActionRequireApproval {
 		return nil
 	}
 	return fmt.Errorf("action %q cannot be used by an MCP-scoped policy; use flag or block", action)
@@ -209,11 +213,45 @@ func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
 
 func ValidateAction(action string) error {
 	switch action {
-	case "flag", "block", "warn", "quarantine":
+	case "flag", "block", "warn", "quarantine", ActionRequireApproval:
 		return nil
 	default:
-		return fmt.Errorf("action must be one of: flag, warn, block, quarantine")
+		return fmt.Errorf("action must be one of: flag, warn, block, quarantine, %s", ActionRequireApproval)
 	}
+}
+
+// ValidateApprovalPolicy checks the fields a require_approval policy depends
+// on: it holds calls by MCP scope alone, so it takes no detectors and must name
+// at least one approver. Every other action must leave approvalConfig unset.
+func ValidateApprovalPolicy(action, policyType string, sources, customRuleIDs []string, approvalConfig *ApprovalConfig) error {
+	if action != ActionRequireApproval {
+		if approvalConfig != nil {
+			return fmt.Errorf("approval_config is only valid when action is %s", ActionRequireApproval)
+		}
+		return nil
+	}
+	if policyType != "" && policyType != "standard" {
+		return fmt.Errorf("action %s needs policy_type standard", ActionRequireApproval)
+	}
+	if len(sources) > 0 || len(customRuleIDs) > 0 {
+		return fmt.Errorf("action %s holds calls by MCP scope alone and takes no detection sources or custom rules", ActionRequireApproval)
+	}
+	if approvalConfig == nil || len(approvalConfig.Approvers) == 0 {
+		return fmt.Errorf("action %s needs approval_config with at least one approver", ActionRequireApproval)
+	}
+	for _, approver := range approvalConfig.Approvers {
+		principal, err := urn.ParsePrincipal(approver)
+		if err != nil {
+			return fmt.Errorf("approver %q is not a principal URN: %w", approver, err)
+		}
+		if principal.Type != urn.PrincipalTypeUser && principal.Type != urn.PrincipalTypeRole {
+			return fmt.Errorf("approver %q must be a user or role", approver)
+		}
+		if principal.ID == "" || principal.ID == "all" {
+			return fmt.Errorf("approver %q must name a specific user or role", approver)
+		}
+	}
+	return nil
 }
 
 func ValidateSources(sources []string) error {

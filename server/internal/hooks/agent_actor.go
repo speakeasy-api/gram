@@ -9,6 +9,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -103,6 +104,29 @@ func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 		return fmt.Errorf("authorize agent hooks ingest: %w", err)
 	}
 	return nil
+}
+
+// authorizeHooksProject resolves the Gram-Project a hooks ingestion request
+// names and decides whether the caller may send hooks there. An agent actor,
+// directly or as a workload, needs org:hooks_ingest bounded to that project
+// and not project:read, so its project resolves without the project:read gate
+// and requireAgentHooksIngest decides. Tenant scoping and a key's own project
+// binding still apply. Every other caller keeps the project:read gate.
+func (s *Service) authorizeHooksProject(ctx context.Context, projectSlug string, scheme *security.APIKeyScheme) (context.Context, error) {
+	resolveProject := s.auth.Authorize
+	if isAgentActor(ctx) {
+		resolveProject = s.auth.AuthorizeWithHandlerProjectAccess
+	}
+	authorized, err := resolveProject(ctx, projectSlug, scheme)
+	if err != nil {
+		return authorized, fmt.Errorf("authorize hooks project: %w", err)
+	}
+	// The hooks grant may be bounded to one project, so it is checked only
+	// once the project slug has resolved.
+	if err := s.requireAgentHooksIngest(authorized); err != nil {
+		return authorized, err
+	}
+	return authorized, nil
 }
 
 // agentSessionView keeps only the surface fields of a cached session, and only

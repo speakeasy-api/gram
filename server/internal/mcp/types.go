@@ -84,6 +84,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	}
 
 	return &mcpInputs{
+		request:          nil,
 		projectID:        m.ProjectID,
 		organizationID:   "",
 		toolset:          m.Toolset,
@@ -120,5 +121,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
+		skillsOverMCP:            nil,
 	}
 }

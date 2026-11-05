@@ -47,6 +47,11 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 	if assertion == "" {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	}
+	// A session for every server on the issuer targets no one server, so a
+	// per-server choice cannot be honored here; refuse it rather than ignore it.
+	if len(r.PostForm[tokenParamUpstreamAuthClient]) > 0 {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, tokenParamUpstreamAuthClient+" is accepted only on a token request for one MCP server")
+	}
 
 	shared := issuer.authorizationServer
 	urls, err := shared.urls()
@@ -93,6 +98,10 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		credential: credential,
 		projectID:  projectID,
 		endpoint:   nil,
+		// A session for every server on the issuer targets no one server, so
+		// its choices are decided when they are recorded.
+		choosesUpstream:      false,
+		requestedAuthClients: nil,
 		session: workloadSessionIssuance(workloadSessionTarget{
 			userSessionIssuerID: shared.issuerID,
 			projectID:           shared.projectID,

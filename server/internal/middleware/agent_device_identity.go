@@ -47,12 +47,12 @@ func agentDeviceIdentityAttrs(r *http.Request) []slog.Attr {
 	// one taken over the stored heartbeats: casing is collapsed, and an
 	// SMBIOS placeholder serial — which many distinct machines report
 	// identically — is dropped rather than counted as a device.
-	reportedSerial := sanitizeDeviceHeader(r.Header.Get(deviceidentity.HeaderSerial))
+	reportedSerial := SanitizeDeviceValue(r.Header.Get(deviceidentity.HeaderSerial))
 	if serial := deviceidentity.NormalizeSerial(conv.PtrEmpty(reportedSerial)); serial != "" {
 		attrs = append(attrs, attr.SlogAgentDeviceSerial(serial))
 	}
 
-	if hostname := sanitizeDeviceHeader(r.Header.Get(deviceidentity.HeaderHostname)); hostname != "" {
+	if hostname := SanitizeDeviceValue(r.Header.Get(deviceidentity.HeaderHostname)); hostname != "" {
 		attrs = append(attrs, attr.SlogAgentDeviceHostname(hostname))
 	}
 
@@ -62,7 +62,7 @@ func agentDeviceIdentityAttrs(r *http.Request) []slog.Attr {
 	// when the agent declared a kind, because an absent header is the
 	// deployed majority and logging endpoint for it would drown the
 	// distinction the field exists to draw.
-	if environment := sanitizeDeviceHeader(r.Header.Get(deviceidentity.HeaderEnvironment)); environment != "" {
+	if environment := SanitizeDeviceValue(r.Header.Get(deviceidentity.HeaderEnvironment)); environment != "" {
 		attrs = append(attrs, attr.SlogAgentDeviceEnvironment(deviceidentity.NormalizeEnvironment(&environment)))
 	}
 

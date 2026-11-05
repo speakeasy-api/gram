@@ -2,6 +2,7 @@ package mcpservers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -39,4 +40,24 @@ func computeServerSlug(name string, id uuid.UUID) (string, error) {
 // prefix before creating the server rather than describing the derivation.
 func ServerSlugPrefix(name string) string {
 	return conv.ToSlug(name)
+}
+
+// Static dashboard /mcp segments; mirrors RESERVED_MCP_SEGMENTS in client/dashboard/src/lib/sources.ts.
+var dashboardReservedSegments = map[string]struct{}{
+	"add":                  {},
+	"catalog":              {},
+	"deployments":          {},
+	"sources":              {},
+	"organization-gateway": {},
+	"gateway":              {},
+	"x":                    {},
+}
+
+// DashboardRouteParam is the /mcp/<server> segment: the slug, or the id when the slug is empty or reserved.
+func DashboardRouteParam(slug string, id uuid.UUID) string {
+	slug = strings.TrimSpace(slug)
+	if _, reserved := dashboardReservedSegments[slug]; slug == "" || reserved {
+		return id.String()
+	}
+	return slug
 }

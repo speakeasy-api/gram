@@ -37,16 +37,11 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { detail: { href: (id: string) => `/guardrails/${id}` } },
-  }),
 }));
 
 vi.mock("./use-detector-mode", () => ({
@@ -181,7 +176,9 @@ describe("PolicyStartChooser Shadow AI use case", () => {
 
     fireEvent.click(row);
 
-    expect(mocks.navigate).toHaveBeenCalledWith("/guardrails/policy-sm");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/org/projects/project/risk-policies/policy-sm",
+    );
     expect(mocks.setKind).not.toHaveBeenCalled();
   });
 

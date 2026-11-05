@@ -1005,6 +1005,7 @@ func DecodeCheckMcpEndpointSlugAvailabilityRequest(mux goahttp.Muxer, decoder fu
 		var (
 			slug             string
 			customDomainID   *string
+			mcpServerID      *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -1026,6 +1027,13 @@ func DecodeCheckMcpEndpointSlugAvailabilityRequest(mux goahttp.Muxer, decoder fu
 		if customDomainID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("custom_domain_id", *customDomainID, goa.FormatUUID))
 		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1041,7 +1049,7 @@ func DecodeCheckMcpEndpointSlugAvailabilityRequest(mux goahttp.Muxer, decoder fu
 		if err != nil {
 			return payload, err
 		}
-		payload = NewCheckMcpEndpointSlugAvailabilityPayload(slug, customDomainID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewCheckMcpEndpointSlugAvailabilityPayload(slug, customDomainID, mcpServerID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -89,7 +89,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 			})
 		})
 	}
-	addTool(reg, signalManifest("find_signals", "Find Reusable Signals", "Find reusable signals by name or slug in an explicit project before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSignalsOutput, error) {
+	addTool(reg, signalManifest("find_signals", "Find Signals", "Find reusable signals by name or slug in an explicit project before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSignalsOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (findSignalsOutput, error) {
 			var out findSignalsOutput
 
@@ -151,7 +151,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 			return out, nil
 		})
 	})
-	addTool(reg, signalManifest("get_sensor", "Inspect Sensor Configuration", "Read one exact project sensor, its ordered expanded signals, matching expression, configuration readiness, project configuration version and dashboard path. Requires signals_intelligence and project:read.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input getSensorInput) (*mcp.CallToolResult, signalAuthoringOutput, error) {
+	addTool(reg, signalManifest("get_sensor", "Get a Sensor's Settings", "Read one exact project sensor, its ordered expanded signals, matching expression, configuration readiness, project configuration version and dashboard path. Requires signals_intelligence and project:read.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input getSensorInput) (*mcp.CallToolResult, signalAuthoringOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (signalAuthoringOutput, error) {
 			ctx, project, state, err := service.scope(ctx, principal, input.ProjectID, false)
 			if err != nil {
@@ -167,7 +167,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 			return signalAuthoringOutput{}, oops.C(oops.CodeNotFound)
 		})
 	})
-	addTool(reg, signalManifest("preview_sensor_match", "Preview Sensor Matching", "Validate a boolean CEL predicate and evaluate up to 20 caller-supplied role examples without retrieving messages or running inference. Returns matched, not_matched, evaluation_error, or cost_limit per example. The message context currently exposes only role; absence is unbound, not an empty role. Configuration predicates do not broaden ingestion: conversation evaluation currently accepts only user/assistant creation events. Requires signals_intelligence and project:read.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input previewSensorMatchInput) (*mcp.CallToolResult, previewSensorMatchOutput, error) {
+	addTool(reg, signalManifest("preview_sensor_match", "Preview What a Sensor Matches", "Validate a boolean CEL predicate and evaluate up to 20 caller-supplied role examples without retrieving messages or running inference. Returns matched, not_matched, evaluation_error, or cost_limit per example. The message context currently exposes only role; absence is unbound, not an empty role. Configuration predicates do not broaden ingestion: conversation evaluation currently accepts only user/assistant creation events. Requires signals_intelligence and project:read.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input previewSensorMatchInput) (*mcp.CallToolResult, previewSensorMatchOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (previewSensorMatchOutput, error) {
 			var out previewSensorMatchOutput
 

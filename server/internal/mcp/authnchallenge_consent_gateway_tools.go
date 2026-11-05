@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -46,7 +47,8 @@ type consentMemberOutcome struct {
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
-		CompletedAt: time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
+		DirectAuthClient: nil,
+		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, reservation); err != nil {
 		return "", fmt.Errorf("%w: reserve gateway capture: %w", errConsentInventoryUnavailable, err)
@@ -140,8 +142,11 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
-		projectID:    endpoint.ProjectID,
-		metaServerID: endpoint.MetaMcpServerID.UUID,
+		fromRequest:      mcpconnectionattempts.FromRequest(r),
+		skippedUpstreams: nil,
+		request:          nil,
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent gateways reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: organizationGateway,
@@ -153,8 +158,12 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		connectRoot:         "",
 		chainUpstream:       nil,
 		catalog:             nil,
-		catalogMode:         "",
+		consentDiagnostics:  nil,
+		catalogRecoveryOnly: false,
+		catalogRef:          nil,
+		authentication:      nil,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -165,6 +174,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
+		skillsOverMCP:       nil,
+		servedCredentials:   nil,
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
@@ -180,17 +191,36 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
 	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
+	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
+	}
+	view.auth = memberAuth
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
 			continue
 		}
+		if memberAuth != nil {
+			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
+			s.applyMemberAuthClient(ctx, member, res, resolveErr)
+			// As at runtime, a resolved client was checked against the member,
+			// which authorizes its registration without a sign-in link.
+			member.typedAuthClient = member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
+			continue
+		}
 		clientID, chosen := picks[member.serverID]
-		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
+		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
-	gate.memberChoices = &memberChoices{selector: nil, subject: subject, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if member.typedAuthClient {
+			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+			})
+		}
+		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {
@@ -205,9 +235,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	unavailableMembers := []unavailableMember{}
 	captured := map[string]*memberCatalog{}
-	inventory, err := s.collectGatewayTools(ctx, logger, gate, members, &unavailableMembers, captured)
+	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -251,7 +280,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", cardIDs: nil}).StatusLabel()})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}).StatusLabel()})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

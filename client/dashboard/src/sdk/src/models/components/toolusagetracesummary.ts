@@ -81,6 +81,19 @@ export type ToolUsageTraceSummaryUserKind = OpenEnum<
 >;
 
 /**
+ * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+ */
+export const ViaMetaMcpServerKind = {
+  Project: "project",
+  Organization: "organization",
+  Agent: "agent",
+} as const;
+/**
+ * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+ */
+export type ViaMetaMcpServerKind = OpenEnum<typeof ViaMetaMcpServerKind>;
+
+/**
  * A single target-aware tool usage trace row
  */
 export type ToolUsageTraceSummary = {
@@ -88,6 +101,14 @@ export type ToolUsageTraceSummary = {
    * AI account classification ('team' or 'personal'); empty/absent when unclassified
    */
   accountType?: string | undefined;
+  /**
+   * Auth client that signed an agent's gateway call in to its upstream server
+   */
+  authClientId?: string | undefined;
+  /**
+   * Type of the auth client that signed an agent's gateway call in to its upstream server, such as remote_session for a person's connection or service_account for a shared credential; absent for calls recorded before it was tracked
+   */
+  authClientType?: string | undefined;
   /**
    * Email of the authorizer when they resolve to a known user
    */
@@ -112,6 +133,14 @@ export type ToolUsageTraceSummary = {
    * MCP client version when the client reported one alongside its name
    */
   clientVersion?: string | undefined;
+  /**
+   * Display name, or email, of the connection owner when they resolve to a known user
+   */
+  connectionOwnerLabel?: string | undefined;
+  /**
+   * Person whose own connection signed an agent's gateway call in; absent for a shared credential
+   */
+  connectionOwnerUserId?: string | undefined;
   /**
    * Telemetry event source
    */
@@ -189,13 +218,25 @@ export type ToolUsageTraceSummary = {
    */
   userLabel: string;
   /**
+   * Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted
+   */
+  viaMetaMcpServerAgentId?: string | undefined;
+  /**
    * Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
    */
   viaMetaMcpServerId?: string | undefined;
   /**
+   * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+   */
+  viaMetaMcpServerKind?: ViaMetaMcpServerKind | undefined;
+  /**
    * Display name of the dispatching gateway; a deleted gateway keeps its last name
    */
   viaMetaMcpServerName?: string | undefined;
+  /**
+   * Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization
+   */
+  viaMetaMcpServerProjectSlug?: string | undefined;
 };
 
 /** @internal */
@@ -223,18 +264,28 @@ export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(ToolUsageTraceSummaryUserKind);
 
 /** @internal */
+export const ViaMetaMcpServerKind$inboundSchema: z.ZodMiniType<
+  ViaMetaMcpServerKind,
+  unknown
+> = openEnums.inboundSchema(ViaMetaMcpServerKind);
+
+/** @internal */
 export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   ToolUsageTraceSummary,
   unknown
 > = z.pipe(
   z.object({
     account_type: z.optional(z.string()),
+    auth_client_id: z.optional(z.string()),
+    auth_client_type: z.optional(z.string()),
     authorizer_label: z.optional(z.string()),
     authorizer_user_id: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     client_key: z.string(),
     client_label: z.string(),
     client_version: z.optional(z.string()),
+    connection_owner_label: z.optional(z.string()),
+    connection_owner_user_id: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
@@ -254,18 +305,25 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     user_key: z.string(),
     user_kind: ToolUsageTraceSummaryUserKind$inboundSchema,
     user_label: z.string(),
+    via_meta_mcp_server_agent_id: z.optional(z.string()),
     via_meta_mcp_server_id: z.optional(z.string()),
+    via_meta_mcp_server_kind: z.optional(ViaMetaMcpServerKind$inboundSchema),
     via_meta_mcp_server_name: z.optional(z.string()),
+    via_meta_mcp_server_project_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "auth_client_id": "authClientId",
+      "auth_client_type": "authClientType",
       "authorizer_label": "authorizerLabel",
       "authorizer_user_id": "authorizerUserId",
       "block_reason": "blockReason",
       "client_key": "clientKey",
       "client_label": "clientLabel",
       "client_version": "clientVersion",
+      "connection_owner_label": "connectionOwnerLabel",
+      "connection_owner_user_id": "connectionOwnerUserId",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",
@@ -284,8 +342,11 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "user_key": "userKey",
       "user_kind": "userKind",
       "user_label": "userLabel",
+      "via_meta_mcp_server_agent_id": "viaMetaMcpServerAgentId",
       "via_meta_mcp_server_id": "viaMetaMcpServerId",
+      "via_meta_mcp_server_kind": "viaMetaMcpServerKind",
       "via_meta_mcp_server_name": "viaMetaMcpServerName",
+      "via_meta_mcp_server_project_slug": "viaMetaMcpServerProjectSlug",
     });
   }),
 );

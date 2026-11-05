@@ -137,6 +137,11 @@ func (s *seeder) policyCD() uuid.UUID { return s.fixed("0000-4000-a000-00000000f
 func (s *seeder) policyTB() uuid.UUID { return s.fixed("0000-4000-a000-00000000f008") }
 func (s *seeder) policyQ() uuid.UUID  { return s.fixed("0000-4000-a000-00000000f009") }
 func (s *seeder) policyMA() uuid.UUID { return s.fixed("0000-4000-a000-00000000f010") }
+func (s *seeder) policyAP() uuid.UUID { return s.fixed(approvalPolicyFixedID) }
+
+// approvalPolicyFixedID is the tool approval policy's fixed id suffix, shared
+// with the local fixture that adds the developer as an approver.
+const approvalPolicyFixedID = "0000-4000-a000-00000000f011"
 
 func (s *seeder) exclFixture() uuid.UUID    { return s.fixed("0000-4000-a000-00000000ec01") }
 func (s *seeder) exclTestcard() uuid.UUID   { return s.fixed("0000-4000-a000-00000000ec02") }

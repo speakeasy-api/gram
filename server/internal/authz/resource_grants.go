@@ -119,6 +119,9 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	if err := resource.Validate(); err != nil {
 		return err
 	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
+		return err
+	}
 
 	if err := resource.ValidateAudience(); err != nil {
 		return err
@@ -188,6 +191,9 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 			if err := ValidateSelector(resource.Scope, selector); err != nil {
 				return fmt.Errorf("invalid selector for scope %q: %w", resource.Scope, err)
 			}
+			if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, selector); err != nil {
+				return err
+			}
 			selectorBytes, err := selector.MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal grant selector: %w", err)
@@ -223,6 +229,9 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 // Replace replaces allow grants for one resource-scoped permission.
 func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	selector := resource.selector()
@@ -261,6 +270,9 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 // grants for the same resource.
 func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	if err := resource.ValidatePrincipals(); err != nil {

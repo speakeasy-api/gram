@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
@@ -45,6 +46,8 @@ import {
   standsInForToolset,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServerButton";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import type { Toolset } from "@/lib/toolTypes";
 
 function ServerControlRow({
@@ -172,8 +175,10 @@ export function DangerZoneSection({
       error instanceof Error ? error.message : "Failed to update MCP server",
     );
   };
+  const followRenamedServer = useFollowRenamedServer();
   const updateVisibility = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (updated, variables) => {
+      followRenamedServer(updated);
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
@@ -359,6 +364,7 @@ export function DangerZoneSection({
         </Dialog.Content>
       </Dialog>
       <ServerAvailabilityDialog
+        mcpServer={mcpServer}
         targetVisibility={pendingAvailability}
         isLoading={isUpdatingVisibility}
         onClose={() => setPendingAvailability(null)}
@@ -369,18 +375,32 @@ export function DangerZoneSection({
 }
 
 function ServerAvailabilityDialog({
+  mcpServer,
   targetVisibility,
   isLoading,
   onClose,
   onConfirm,
 }: {
+  mcpServer: McpServer;
   targetVisibility: McpServerVisibility | null;
   isLoading: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   const isOpen = targetVisibility != null;
-  const enabling = targetVisibility !== "disabled";
+  // Keep the last target through the close animation so the dialog doesn't
+  // switch to its enable layout while it fades out.
+  const [lastTarget, setLastTarget] = useState(targetVisibility);
+  if (targetVisibility != null && targetVisibility !== lastTarget) {
+    setLastTarget(targetVisibility);
+  }
+  const enabling = (targetVisibility ?? lastTarget) !== "disabled";
+  // Only disabling cuts clients off; enabling needs no usage check.
+  const usage = useServerUsageConfirmation({
+    mcpServerId: mcpServer.id,
+    serverName: mcpServer.name,
+    open: isOpen && !enabling,
+  });
   let title = "Disable MCP server?";
   let message =
     "You are about to disable this MCP server. Users will no longer be able to connect to it. Continue?";
@@ -393,18 +413,21 @@ function ServerAvailabilityDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-md">
+      <Dialog.Content className={enabling ? "max-w-md" : "max-w-2xl!"}>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{message}</Dialog.Description>
         </Dialog.Header>
+        {!enabling && (
+          <ServerUsageConfirmation state={usage} disabled={isLoading} />
+        )}
         <Dialog.Footer>
           <Button variant="secondary" disabled={isLoading} onClick={onClose}>
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button
             variant={enabling ? "primary" : "destructive-primary"}
-            disabled={isLoading}
+            disabled={isLoading || (!enabling && !usage.canConfirm)}
             onClick={onConfirm}
           >
             {isLoading && (
@@ -449,7 +472,14 @@ function DeleteMcpServerDialogContent({
     },
   });
 
+  const usage = useServerUsageConfirmation({
+    mcpServerId: mcpServer.id,
+    serverName: mcpServer.name,
+    open: true,
+  });
+
   const handleConfirm = () => {
+    if (!usage.canConfirm) return;
     remove.mutate({ request: { id: mcpServer.id } });
   };
 
@@ -493,6 +523,7 @@ function DeleteMcpServerDialogContent({
             No endpoints are currently associated with this MCP server.
           </Text>
         )}
+        <ServerUsageConfirmation state={usage} disabled={remove.isPending} />
         {remove.isError && (
           <Alert variant="error" dismissible={false}>
             {remove.error.message}
@@ -501,7 +532,7 @@ function DeleteMcpServerDialogContent({
         <Stack direction="horizontal" gap={2}>
           <Button
             variant="destructive-primary"
-            disabled={remove.isPending}
+            disabled={remove.isPending || !usage.canConfirm}
             onClick={handleConfirm}
           >
             {deleteButtonContent}

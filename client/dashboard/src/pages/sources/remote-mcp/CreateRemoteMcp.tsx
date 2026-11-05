@@ -165,7 +165,7 @@ function CreateRemoteMcpForm() {
           url: url.trim(),
         });
         toast.success("MCP server added");
-        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
         return;
       }
 
@@ -177,8 +177,6 @@ function CreateRemoteMcpForm() {
             selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
               ? undefined
               : selectedIssuer,
-          organizationOwnedUserSessionIssuer:
-            selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
           identityMode,
           agentAuthorization:
             identityMode === "agent"
@@ -202,7 +200,7 @@ function CreateRemoteMcpForm() {
           `MCP server added but kept disabled. ${identityConfiguration.message}`,
         );
         void navigate(
-          `${routes.mcp.x.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
+          `${routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
         );
         return;
       }
@@ -214,9 +212,9 @@ function CreateRemoteMcpForm() {
       if (flow.gatewayId) {
         await flow.complete(mcpServer.id);
       } else if (guardrailFailed) {
-        routes.mcp.x.guardrails.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.guardrails.goTo(mcpServerRouteParam(mcpServer));
       } else {
-        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
       }
     } catch (error) {
       const message =

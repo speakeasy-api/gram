@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -209,6 +211,42 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+// The publish a distribution runs is an automatic one, which keeps a plugin
+// whose auto sync is off as it was last published. Sharing a server into such
+// a plugin, or taking it back out, reports that the change waits for a manual
+// sync even though that publish succeeded.
+func TestDistributionServiceReportsAPluginWhoseAutoSyncIsOff(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_paused_plugin")
+	require.NoError(t, err)
+
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held", pgtype.Bool{Bool: false, Valid: true})
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Live Tools", "live", pgtype.Bool{})
+	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+		fresh: map[string]*bool{"held": new(false), "live": new(true)}, paused: map[string]bool{"held": true},
+	})
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)
+
+	held, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, held.AttachmentLive)
+	require.Equal(t, publicationStateCurrent, held.PublicationState, "the automatic publish itself succeeded")
+	require.True(t, held.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(held, false), "get it only after its project is synced by hand")
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: held.Version})
+	require.NoError(t, err)
+	require.True(t, removed.AwaitingManualSync)
+
+	live, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "live", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.False(t, live.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(live, false), "the people it is shared with will get it")
+}
+
 func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 	t.Parallel()
 
@@ -315,7 +353,7 @@ func TestDistributionServicePreservesAttachmentWhenPublicationFails(t *testing.T
 	require.True(t, distributed.AttachmentLive)
 	require.Equal(t, publicationStateRepairRequired, distributed.PublicationState)
 
-	current, err := service.Current(ctx, principal, project.Slug, "")
+	current, err := service.Current(ctx, principal, project.Slug, uuid.Nil, "")
 	require.NoError(t, err)
 	require.True(t, current.AttachmentLive, "publication must never roll back a committed attachment")
 	require.Equal(t, publicationStateRepairRequired, current.PublicationState)
@@ -452,7 +490,7 @@ func descriptorByName(t *testing.T, reg *Registrar, name string) Descriptor {
 func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
 	t.Parallel()
 
-	result, ok := distributionToolError(ErrDistributionInvalid)
+	result, ok := distributionToolError(ErrDistributionInvalid, "")
 	require.True(t, ok, "an invalid distribution target must not escape as a bare error string")
 	require.NotNil(t, result)
 	require.True(t, result.IsError)
@@ -463,4 +501,245 @@ func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(text.Text), &decoded))
 	require.Equal(t, "no_distribution_target", decoded.Code)
 	require.NotEmpty(t, decoded.Message)
+}
+
+// seedRegisteredMCP adds one MCP server to the project through setup and
+// returns its registration, without touching the onboarding workflow.
+func seedRegisteredMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, reference string) platformrepo.PlatformMcpCatalogRegistration {
+	t.Helper()
+
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	request := registrationRequest(project, reference, reference+"-key")
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+	require.NoError(t, err)
+	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://"+reference+".invalid/mcp")
+	require.NoError(t, err)
+	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	})
+	require.NoError(t, err)
+	require.True(t, registration.McpServerID.Valid)
+	return registration
+}
+
+// A chat that adds two servers leaves the workflow pointing at the last one.
+// Naming the first must share the first, and a refusal must say which server
+// it is about, rather than acting on whatever the session last selected.
+func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_named_server")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	ready := seedRegisteredMCP(t, ctx, conn, principal, project, "ready-fixture")
+	unchecked := seedRegisteredMCP(t, ctx, conn, principal, project, "unchecked-fixture")
+
+	onboarding := NewOnboardingService(conn)
+	_, err = onboarding.Start(ctx, principal.OrganizationID, principal.UserID)
+	require.NoError(t, err)
+	_, err = onboarding.BindRegistration(ctx, principal.OrganizationID, principal.UserID, project.ID, unchecked.ID)
+	require.NoError(t, err)
+	defaultPlugin, err := pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{ProjectID: project.ID, RegistrationID: ready.ID, ProviderAuthorizationFingerprint: "fixture-readiness"}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
+	require.NoError(t, err)
+
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerDistributionTools(reg, onboarding, service, nil)
+	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
+	callCtx := ContextWithPrincipal(ctx, principal)
+	call := func(mcpID string) json.RawMessage {
+		return json.RawMessage(`{"project_slug":"` + project.Slug + `","mcp_id":"` + mcpID + `","plugin":"` + defaultPlugin.ID.String() + `"}`)
+	}
+
+	output, err := distribute.Invoke(callCtx, call(ready.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	shared, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a distribution, got %T", output)
+	require.True(t, shared.Attached)
+	require.Equal(t, ready.McpServerID.UUID.String(), shared.MCPID)
+	require.NotEmpty(t, shared.MCPServer)
+	require.Contains(t, shared.Message, shared.MCPServer)
+
+	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+		PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: ready.McpServerID,
+	})
+	require.NoError(t, err, "the named server must be the one shared")
+	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+		PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: unchecked.McpServerID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the session's selection must not be shared")
+
+	_, err = distribute.Invoke(callCtx, call(unchecked.McpServerID.UUID.String()))
+	notReady := decodeDistributionRefusal(t, err)
+	require.Equal(t, "not_ready", notReady.Code)
+	require.NotEmpty(t, notReady.MCPServer)
+	require.Contains(t, notReady.Message, notReady.MCPServer)
+
+	for _, mcpID := range []string{uuid.NewString(), "", "not-a-uuid"} {
+		_, err = distribute.Invoke(callCtx, call(mcpID))
+		require.Equal(t, "mcp_not_found", decodeDistributionRefusal(t, err).Code, "mcp_id %q", mcpID)
+	}
+
+	remove := descriptorByName(t, reg, "remove_mcp_from_plugin")
+	output, err = remove.Invoke(callCtx, call(ready.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	removed, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a removal, got %T", output)
+	require.False(t, removed.Attached)
+	require.Equal(t, shared.MCPServer, removed.MCPServer)
+}
+
+// decodeDistributionRefusal reads the refusal JSON that Invoke surfaces as the
+// error of a refused tool call.
+func decodeDistributionRefusal(t *testing.T, err error) distributionErrorResult {
+	t.Helper()
+	require.Error(t, err)
+	var decoded distributionErrorResult
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &decoded))
+	return decoded
+}
+
+// readinessByRegistrationAdapter is the deterministic fixture adapter, except
+// that it reports the notReady registration as needing configuration and counts
+// every probe.
+type readinessByRegistrationAdapter struct {
+	deterministicProviderAdapter
+	notReady uuid.UUID
+	probes   *atomic.Int32
+}
+
+func (a readinessByRegistrationAdapter) ProbeReadiness(ctx context.Context, request ProviderReadinessProbeRequest) (ProviderReadinessProbeResult, error) {
+	a.probes.Add(1)
+	result, err := a.deterministicProviderAdapter.ProbeReadiness(ctx, request)
+	if err == nil && request.RegistrationID == a.notReady {
+		result.State = ReadinessNeedsConfiguration
+		result.EvidenceCode = "upstream_identity_provider_not_configured"
+	}
+	return result, err
+}
+
+// A server with no stored readiness check is checked when it is shared, so a
+// working server is shared without a separate readiness call and one that is
+// not working is refused by name.
+func TestDistributeToolChecksTheNamedServerWhenNoCheckIsStored(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_call_time_probe")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	working := seedRegisteredMCP(t, ctx, conn, principal, project, "working-fixture")
+	broken := seedRegisteredMCP(t, ctx, conn, principal, project, "broken-fixture")
+	plugins := pluginsrepo.New(conn)
+	defaultPlugin, err := plugins.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	attachment := func(mcpServerID uuid.NullUUID) error {
+		_, err := plugins.GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+			PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: mcpServerID,
+		})
+		return err
+	}
+
+	probes := &atomic.Int32{}
+	adapter := readinessByRegistrationAdapter{deterministicProviderAdapter: deterministicProviderAdapter{providerKey: "fixture"}, notReady: broken.ID, probes: probes}
+	gate := &testRegistrationGate{enabled: true}
+	readiness := NewReadinessService(store, gate, NewProviderAdapters([]ProviderAdapter{adapter}), allowOperationLimiter{}, allowBudget())
+	registrations := NewRegistrationService(nil, gate, store).WithReadiness(readiness)
+
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerDistributionTools(reg, NewOnboardingService(conn), service, registrations)
+	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
+	callCtx := ContextWithPrincipal(ctx, principal)
+	call := func(mcpID string) json.RawMessage {
+		return json.RawMessage(`{"project_slug":"` + project.Slug + `","mcp_id":"` + mcpID + `","plugin":"` + defaultPlugin.ID.String() + `"}`)
+	}
+
+	output, err := distribute.Invoke(callCtx, call(working.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	shared, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a distribution, got %T", output)
+	require.True(t, shared.Attached)
+	require.Equal(t, int32(1), probes.Load(), "a server with no stored check must be checked once")
+	require.NoError(t, attachment(working.McpServerID), "the checked server must be shared")
+
+	_, err = distribute.Invoke(callCtx, call(broken.McpServerID.UUID.String()))
+	refusal := decodeDistributionRefusal(t, err)
+	require.Equal(t, "not_ready", refusal.Code)
+	require.NotEmpty(t, refusal.MCPServer)
+	require.Equal(t, int32(2), probes.Load())
+	require.ErrorIs(t, attachment(broken.McpServerID), pgx.ErrNoRows, "a server that is not working must not be shared")
+}
+
+func TestDistributionServiceClearsManualSyncWaitWhenPausedPluginIsCurrent(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_current_paused_plugin")
+	require.NoError(t, err)
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held")
+	fresh := new(false)
+	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+		fresh: map[string]*bool{"held": fresh}, paused: map[string]bool{"held": true},
+	})
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)
+	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, distributed.AwaitingManualSync)
+	*fresh = true // A completed manual sync makes the held package current.
+	current, err := service.Current(ctx, principal, project.Slug, uuid.Nil, "held")
+	require.NoError(t, err)
+	require.False(t, current.AwaitingManualSync)
+	idempotent, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.False(t, idempotent.AwaitingManualSync)
+	inventory.WithPublicationEvidence(stubPluginPublicationEvidence{err: errors.New("evidence unavailable")})
+	current, err = service.Current(ctx, principal, project.Slug, uuid.Nil, "held")
+	require.NoError(t, err)
+	require.False(t, current.AwaitingManualSync, "unavailable evidence cannot establish that a manual sync is required")
+	require.Equal(t, publicationStatePending, current.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(current, false), "has not finished updating yet")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
+	plugin, err := inventory.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "held"})
+	require.NoError(t, err)
+	require.NotNil(t, plugin.PublicationEvidence)
+	require.True(t, plugin.PublicationEvidence.Unavailable)
+
+	idempotent, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.False(t, idempotent.AwaitingManualSync)
+	require.Equal(t, publicationStatePending, idempotent.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(idempotent, false), "has not finished updating yet")
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: idempotent.Version})
+	require.NoError(t, err)
+	require.False(t, removed.AwaitingManualSync)
+	require.Equal(t, publicationStatePending, removed.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(removed, true), "has not finished updating yet")
+	replayedRemoval, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: removed.Version})
+	require.NoError(t, err)
+	require.Equal(t, publicationStatePending, replayedRemoval.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(replayedRemoval, true), "has not finished updating yet")
+
+	failed := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return errors.New("publication failed") }, inventory).WithManualSyncEvidence(inventory)
+	retry, err := failed.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: removed.Version})
+	require.NoError(t, err)
+	require.False(t, retry.AwaitingManualSync)
+	require.Equal(t, publicationStateRepairRequired, retry.PublicationState, "unknown evidence must preserve a known publication failure")
 }

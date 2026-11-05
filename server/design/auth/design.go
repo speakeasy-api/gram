@@ -30,7 +30,7 @@ var _ = Service("auth", func() {
 		Payload(func() {
 			Attribute("code", String, "The auth code for authentication from the speakeasy system")
 			Attribute("state", String, "The opaque state string optionally provided during initialization.")
-			Required("code")
+			Attribute("error", String, "The identity provider error, when sign-in was not completed.")
 		})
 
 		Result(func() {
@@ -43,6 +43,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.callback")
 			Param("code")
+			Param("error")
 			Param("state")
 
 			Response(StatusTemporaryRedirect, func() {

@@ -2,8 +2,9 @@
 -- plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 
 -- name: CreatePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, description)
-VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
+-- A NULL auto_sync_enabled means the plugin's changes publish automatically.
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'))
 RETURNING *;
 
 -- name: CreateDefaultPlugin :one
@@ -86,6 +87,26 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetPluginForUpdate :one
+-- GetPlugin that also locks the row for the rest of the transaction.
+SELECT *
+FROM plugins
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockPluginPackageContentShared :exec
+-- Taken by every change that requests a publication of the project's plugin
+-- packages; shared, so those changes only ever wait on LockPluginPackageContent.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' || @project_id::text, 0));
+
+-- name: LockPluginPackageContent :exec
+-- Waits out every in-flight package-affecting change in the project and holds
+-- off new ones until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || @project_id::text, 0));
+
 -- name: GetPluginWithCounts :one
 SELECT
   sqlc.embed(p),
@@ -159,16 +180,29 @@ WHERE project_id = @project_id
 ORDER BY slug ASC;
 
 -- name: UpdatePlugin :one
+-- A NULL auto_sync_enabled argument keeps the plugin's current setting.
 UPDATE plugins
 SET name = @name,
     slug = @slug,
     description = sqlc.narg('description'),
+    auto_sync_enabled = COALESCE(sqlc.narg('auto_sync_enabled')::boolean, auto_sync_enabled),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListAutoSyncPausedPluginSlugs :many
+-- Slugs of the project's plugins whose auto sync is off. An automatic publish
+-- keeps each of them as it was last published; only a manual sync publishes
+-- their pending changes.
+SELECT slug
+FROM plugins
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND auto_sync_enabled IS FALSE
+ORDER BY slug ASC;
 
 -- name: SoftDeletePluginServers :exec
 -- Soft-deletes all servers belonging to a plugin.
@@ -520,17 +554,20 @@ ORDER BY t.id, ec.variable_name ASC, ec.header_display_name ASC;
 
 -- name: ListPluginsWithMcpServersForProject :many
 -- Plugin generation for mcp_server-keyed entries. A canonical wrapper with no
--- usable endpoint uses its toolset's address. Each other server resolves to
+-- usable endpoint is returned with needs_alias, and the caller resolves its
+-- toolset's legacy alias through legacyalias, dropping it when it has none. Each other server resolves to
 -- a single usable endpoint: custom-domain endpoints win over platform
 -- endpoints, then oldest created_at.
 -- Resolving the host inside the selection keeps endpoint choice and URL-host
 -- construction in lockstep, so a dangling custom-domain endpoint is never
 -- picked and emitted as a (wrong) platform URL. A server backed by an
 -- unproxied MCP server never has an mcp_endpoints row, so it's resolved via
--- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
--- usable endpoint nor an unproxied backing are dropped unless their stored
--- network mode needs fail-closed validation. Private-only endpoints are picked
--- only from the ingress-pinned namespace; absence blocks publication in Go.
+-- unproxied_mcp_servers, exposing the vendor's own URL. A built-in server
+-- (builtin_backend) is served by Speakeasy itself at its endpoint. Servers
+-- with neither a usable endpoint nor an unproxied backing are dropped unless
+-- their stored network mode needs fail-closed validation. Private-only
+-- endpoints are picked only from the ingress-pinned namespace; absence blocks
+-- publication in Go.
 -- env_toolset_id is set only for a toolset's canonical wrapper, whose
 -- environment comes from the toolset.
 SELECT
@@ -538,6 +575,7 @@ SELECT
   p.name AS plugin_name,
   p.slug AS plugin_slug,
   p.description AS plugin_description,
+  p.organization_id AS plugin_organization_id,
   ps.id AS server_id,
   ps.display_name AS server_display_name,
   ps.policy AS server_policy,
@@ -548,8 +586,8 @@ SELECT
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
-  addr.mcp_slug AS address_slug,
-  addr_cd.domain AS address_custom_domain,
+  -- legacyalias: drop with AIM-670.
+  (s.id = s.toolset_id AND ep.slug IS NULL AND mts.id IS NOT NULL)::bool AS needs_alias,
   ump.url AS unproxied_url,
   s.network_access_mode,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
@@ -587,19 +625,19 @@ LEFT JOIN LATERAL (
 LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse')
 LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
-LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND mts.mcp_enabled IS TRUE
-LEFT JOIN toolsets addr ON addr.id = (CASE WHEN s.id = s.toolset_id AND ep.slug IS NULL THEN mts.id END) AND addr.project_id = p.project_id AND addr.mcp_slug IS NOT NULL
-LEFT JOIN custom_domains addr_cd ON addr_cd.id = addr.custom_domain_id AND addr_cd.organization_id = p.organization_id AND addr_cd.activated IS TRUE AND addr_cd.verified IS TRUE AND addr_cd.deleted IS FALSE
+LEFT JOIN mcp_servers mcw ON mcw.id = s.toolset_id AND mcw.toolset_id = s.toolset_id AND mcw.project_id = p.project_id AND mcw.deleted IS FALSE
+LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND (mcw.id IS NULL OR mcw.visibility <> 'disabled')
 LEFT JOIN toolsets envt ON envt.id = (CASE WHEN s.id = s.toolset_id THEN mts.id END) AND envt.project_id = p.project_id
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
   AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
-  AND (ep.slug IS NOT NULL OR addr.id IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
+  AND (ep.slug IS NOT NULL OR (s.id = s.toolset_id AND mts.id IS NOT NULL) OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (
     (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
     OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
     OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
     OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
+    OR s.builtin_backend IS NOT NULL
   )
 ORDER BY p.slug, ps.sort_order ASC;
 
@@ -685,8 +723,8 @@ WITH intended AS (
 		SELECT 1 FROM tunneled_mcp_server_headers tmh
 		WHERE tmh.tunneled_mcp_server_id = tms.id AND tmh.deleted IS FALSE AND tmh.value_from_request_header IS NOT NULL
 	  ) THEN 'tunneled_backing_requires_user_header'
-      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mts.mcp_enabled IS FALSE) THEN 'toolset_backing_unresolved'
-	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mts.mcp_is_public IS FALSE THEN 'toolset_backing_auth_mismatch'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mcw.visibility = 'disabled') THEN 'toolset_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mcw.visibility <> 'public' THEN 'toolset_backing_auth_mismatch'
       -- Hosted entries read headers from the one metadata row published output uses.
       WHEN ps.mcp_server_id IS NOT NULL AND s.id = s.toolset_id AND EXISTS (
         SELECT 1
@@ -745,6 +783,7 @@ WITH intended AS (
   LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id
   LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id
   LEFT JOIN toolsets mts ON mts.id = s.toolset_id
+  LEFT JOIN mcp_servers mcw ON mcw.id = s.toolset_id AND mcw.toolset_id = s.toolset_id AND mcw.project_id = p.project_id AND mcw.deleted IS FALSE
   WHERE p.project_id = @project_id
     AND p.deleted IS FALSE
 	AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
@@ -1369,3 +1408,105 @@ WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
   AND project.id = p.project_id AND project.organization_id = @organization_id
   AND project.deleted IS FALSE
 RETURNING ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted;
+
+-- name: CountLiveMCPEndpointsForMetaMCPServerFixture :one
+SELECT count(*) FROM mcp_endpoints WHERE meta_mcp_server_id = @meta_mcp_server_id::uuid AND deleted IS FALSE;
+
+-- name: ActivateCustomDomainWithNameFixture :execrows
+-- Test fixture: makes a domain addressable without exercising domain provisioning.
+UPDATE custom_domains SET domain = @domain, verified = TRUE, activated = TRUE WHERE id = @id;
+
+-- name: ActivateCustomDomainFixture :exec
+-- Test fixture: makes a domain addressable without exercising domain provisioning.
+UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = @id;
+
+-- name: SetMCPEndpointDomainRootFixture :execrows
+-- Test fixture: gateway root endpoints are not supported by the public root setter yet.
+UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = @id;
+
+-- name: DeletePluginAssignmentFixture :exec
+DELETE FROM plugin_assignments WHERE plugin_id = @plugin_id AND principal_urn = @principal_urn;
+
+-- name: SetMetaMCPServerUserSessionIssuerFixture :execrows
+-- Test fixture: a NULL issuer models a gateway whose required issuer disappeared after attachment.
+UPDATE meta_mcp_servers SET user_session_issuer_id = sqlc.narg(user_session_issuer_id) WHERE id = @id;
+
+-- name: ClearPublishedMCPFingerprintsFixture :exec
+-- Test fixture: models a pre-fingerprint publication without changing the last-published timestamp.
+UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = @project_id;
+
+-- name: SoftDeleteToolsetVersionFixture :exec
+-- Test fixture: no production API soft-deletes an individual historical version.
+UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = @toolset_id AND version = @version;
+
+-- name: LockPluginForAssignments :one
+-- Locks one exact live plugin. Dashboard and Platform MCP assignment writes
+-- share this lock so concurrent replacements are serialized.
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListOrganizationMarketplaceProjectsPage :many
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND c.project_id > @cursor
+ORDER BY c.project_id ASC
+LIMIT @page_limit;
+
+-- name: ProjectHasMarketplaceConnection :one
+SELECT EXISTS (
+  SELECT 1
+  FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id
+  WHERE c.project_id = @project_id
+    AND p.organization_id = @organization_id
+    AND p.deleted IS FALSE
+);
+
+-- name: GatewayDistributedToPrincipal :one
+-- Whether a live plugin in the project attaches the gateway and is assigned
+-- to the principal.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id AND pa.principal_urn = @principal_urn
+  WHERE ps.meta_mcp_server_id = @gateway_id AND ps.deleted IS FALSE
+);
+
+-- name: GetPluginGatewayNetworkAccessMode :one
+SELECT g.network_access_mode
+FROM meta_mcp_servers g
+JOIN plugins p ON p.organization_id = g.organization_id AND p.project_id = g.project_id AND p.deleted IS FALSE
+WHERE p.id = @plugin_id
+  AND g.id = @gateway_id
+  AND g.organization_id = @organization_id
+  AND g.project_id = @project_id
+  AND g.deleted IS FALSE;
+
+-- name: ListPluginGatewayNetworkAccessModes :many
+SELECT g.network_access_mode
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.organization_id = p.organization_id AND g.project_id = p.project_id AND g.deleted IS FALSE
+WHERE ps.plugin_id = @plugin_id
+  AND ps.deleted IS FALSE
+  AND g.visibility <> 'disabled';
+
+-- name: ListCompletePluginAudience :many
+SELECT assignment.principal_urn
+FROM plugin_assignments AS assignment
+JOIN plugins AS plugin
+  ON plugin.id = assignment.plugin_id
+ AND plugin.organization_id = assignment.organization_id
+ AND plugin.deleted IS FALSE
+WHERE assignment.plugin_id = @plugin_id
+  AND assignment.organization_id = @organization_id
+  AND plugin.project_id = @project_id
+ORDER BY assignment.principal_urn;

@@ -13,6 +13,7 @@ const (
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
 	subjectTypeAccessMember                subjectType = "access_member"
 	subjectTypeAccessRole                  subjectType = "access_role"
+	subjectTypeAccessGrant                 subjectType = "access_grant"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"
 	subjectTypeAgent                       subjectType = "agent"
 	subjectTypeAssistant                   subjectType = "assistant"
@@ -22,6 +23,7 @@ const (
 	subjectTypeAwsIamCredential            subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                   subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata             subjectType = "billing_metadata"
+	subjectTypeCatalogPromotion            subjectType = "catalog_promotion"
 	subjectTypeChatAnalysisSettings        subjectType = "chat_analysis_settings"
 	subjectTypeChatSession                 subjectType = "chat_session"
 	subjectTypeCustomDomain                subjectType = "custom_domain"
@@ -40,6 +42,7 @@ const (
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
 	subjectTypeInternalSessionIssuer       subjectType = "internal_session_issuer"
+	subjectTypeIssuanceSelectionProfile    subjectType = "issuance_selection_profile"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
@@ -92,7 +95,28 @@ const (
 	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
+// SubjectTypeWorkloadAdmission is the workload admission subject type, for the
+// security log, which records these entries outside this package.
+const SubjectTypeWorkloadAdmission = string(subjectTypeWorkloadAdmission)
+
 type Action string
+
+// Category says which log an entry belongs to.
+//
+// Configuration entries are changes to the platform's configuration made by an
+// organization's members or by the Speakeasy team. This package records them
+// in audit_logs, and the audit log page shows them by default. Security entries
+// record machine access and other security-relevant activity that is not a
+// configuration decision, such as a runtime admitting its own workload identity
+// on every start. The securityevent package records them in
+// security_audit_logs. Both are delivered as webhooks, carrying their category,
+// and both are visible to staff.
+type Category string
+
+const (
+	CategoryConfiguration Category = "configuration"
+	CategorySecurity      Category = "security"
+)
 
 func marshalAuditPayload(value any) ([]byte, error) {
 	if value == nil {

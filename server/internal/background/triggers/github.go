@@ -213,7 +213,7 @@ func newGitHubDefinition() Definition {
 		},
 		SupportedEventTypes: supportedGitHubEventTypes,
 		Authenticate:        nil,
-		PreVerify:           nil,
+		Handshake:           nil,
 		Ingest:              githubIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {

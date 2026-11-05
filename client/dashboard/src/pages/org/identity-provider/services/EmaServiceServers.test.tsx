@@ -5,17 +5,8 @@ import type { EMAServiceServer } from "@gram/client/models/components/emaservice
 import { EmaServiceServers } from "./EmaServiceServers";
 import type { ServiceRow } from "./useEmaServices";
 
-vi.mock("@/routes", () => ({
-  useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
-    mcp: {
-      x: {
-        settings: {
-          href: (server: string) =>
-            `/example/projects/${projectSlug}/mcp/x/${server}/settings`,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: undefined }),
 }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingSection",
@@ -82,12 +73,10 @@ describe("Servers on a service page", () => {
     );
     expect(
       screen.getByRole("link", { name: "Tracker" }).getAttribute("href"),
-    ).toBe(
-      "/example/projects/default/mcp/x/tracker/settings#identity-chaining",
-    );
+    ).toBe("/example/projects/default/mcp/tracker/settings#identity-chaining");
     expect(
       screen.getByRole("link", { name: "Wiki" }).getAttribute("href"),
-    ).toBe("/example/projects/docs/mcp/x/wiki/settings#identity-chaining");
+    ).toBe("/example/projects/docs/mcp/wiki/settings#identity-chaining");
     expect(screen.getByRole("link", { name: "broken" })).toBeTruthy();
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();

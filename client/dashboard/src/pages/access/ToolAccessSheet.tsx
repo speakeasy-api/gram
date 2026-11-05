@@ -525,7 +525,7 @@ function ConnectPrompt({
       action={
         <Button variant="secondary" size="sm" asChild>
           <Link
-            to={routes.mcp.x.settings.href(
+            to={routes.mcp.details.settings.href(
               mcpServerRouteParam({
                 id: entry.server.id,
                 slug: entry.server.slug,

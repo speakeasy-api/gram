@@ -221,7 +221,15 @@ SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
+    user_session_issuer_id = CASE
+        WHEN @clear_user_session_issuer::boolean THEN NULL
+        ELSE COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id)
+    END,
+    -- Detaching the issuer clears the derived remote issuer, which no resync can reach.
+    remote_session_issuer_id = CASE
+        WHEN @clear_user_session_issuer::boolean THEN NULL
+        ELSE remote_session_issuer_id
+    END,
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
@@ -275,6 +283,36 @@ RETURNING *;
 -- READ COMMITTED would otherwise straddle another transaction's commit and
 -- record a transition that never happened.
 SELECT pg_advisory_xact_lock(hashtextextended(@mcp_server_id::text, 0));
+
+-- name: AddMissingMCPServerToolMetadata :many
+-- Records tools the catalog has no live entry for, leaving existing entries
+-- untouched. Used when the proxy discovers tools from the upstream, where
+-- concurrent requests routinely race to record the same tool, so a conflict
+-- means another request got there first rather than a stale caller. RETURNING
+-- yields only the rows actually inserted. See SetMCPServerToolMetadata for why
+-- the payload is unpacked with ->> rather than jsonb_to_recordset.
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    @project_id,
+    @mcp_server_id,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements(@tools::jsonb) AS elem
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
 
 -- name: SetMCPServerToolMetadata :many
 -- Authoritative write of an MCP server's tool metadata collection: every tool in
@@ -658,6 +696,23 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
 
+-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+-- Projects of the organization with a live MCP server on one of the named
+-- organization-level user session issuers. Their servers share the issuer's
+-- client bindings, so a binding change on it is resynced in each of them.
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = @organization_id::text
+  AND usi.deleted IS FALSE
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id;
+
 -- name: DeleteAssistantMCPServersByMCPServer :exec
 DELETE FROM assistant_mcp_servers
 WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
@@ -912,3 +967,110 @@ LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
  AND t.project_id = m.project_id AND t.deleted IS FALSE
 WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;
+
+-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = @auth_client_id AND organization_id = @organization_id AND NOT deleted;
+
+-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = @user_session_issuer_id
+WHERE remote_session_client_id = @remote_session_client_id AND project_id = @project_id;
+
+-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE mcp_servers.id = @id
+  AND mcp_servers.project_id = @project_id
+  AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE);
+
+-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE
+FROM remote_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockLiveTunneledMCPSource :one
+SELECT TRUE
+FROM tunneled_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: CountUserSessionIssuerServingServers :one
+-- MCP servers and gateways that authenticate against the issuer, across the
+-- organization. More than one means the issuer is a shared sign-in.
+SELECT (
+  (SELECT count(*) FROM mcp_servers AS ms
+   JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+   WHERE ms.user_session_issuer_id = @user_session_issuer_id::uuid AND ms.deleted IS FALSE)
+  +
+  (SELECT count(*) FROM meta_mcp_servers AS g
+   WHERE g.user_session_issuer_id = @user_session_issuer_id::uuid
+     AND g.organization_id = @organization_id::text AND g.deleted IS FALSE)
+)::bigint AS server_count;
+
+-- name: SummarizeMCPServerUsage :one
+-- Active sessions able to reach one MCP server: issued by its issuer and either
+-- issuer-scoped (resource IS NULL) or bound to one of its addresses. Custom
+-- domain addresses match by full URL; platform addresses match by path, since
+-- the platform answers under several hosts.
+SELECT count(*)::bigint AS connection_count,
+       count(DISTINCT s.subject_urn)::bigint AS subject_count,
+       count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+       max(s.last_used_at)::timestamptz AS last_used_at
+FROM user_sessions AS s
+WHERE s.organization_id = @organization_id::text
+  AND s.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND (s.resource IS NULL
+       OR s.resource = ANY(@resources::text[])
+       OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY(@platform_paths::text[]));
+
+-- name: ListMCPServerUsageSubjects :many
+-- Per-subject view of SummarizeMCPServerUsage, most recently used first.
+WITH grouped AS (
+  SELECT s.subject_urn::text AS subject_urn,
+         count(*)::bigint AS connection_count,
+         count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+         max(s.last_used_at)::timestamptz AS last_used_at,
+         array_remove(array_agg(DISTINCT c.client_name), NULL)::text[] AS client_names
+  FROM user_sessions AS s
+  LEFT JOIN user_session_clients AS c
+    ON c.id = s.user_session_client_id
+    AND c.organization_id = s.organization_id
+    AND c.user_session_issuer_id = s.user_session_issuer_id
+    AND c.deleted IS FALSE
+  WHERE s.organization_id = @organization_id::text
+    AND s.user_session_issuer_id = @user_session_issuer_id::uuid
+    AND s.deleted IS FALSE
+    AND s.refresh_expires_at > clock_timestamp()
+    AND (s.resource IS NULL
+         OR s.resource = ANY(@resources::text[])
+         OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY(@platform_paths::text[]))
+  GROUP BY s.subject_urn
+)
+SELECT g.subject_urn, g.connection_count, g.issuer_scoped_count, g.last_used_at, g.client_names,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       u.photo_url AS user_photo_url,
+       k.name AS api_key_name,
+       agent.name AS agent_name
+FROM grouped AS g
+LEFT JOIN users AS u
+  ON g.subject_urn LIKE 'user:%'
+  AND u.id = split_part(g.subject_urn, ':', 2)
+  AND u.deleted_at IS NULL
+LEFT JOIN api_keys AS k
+  ON k.id = CASE WHEN g.subject_urn LIKE 'apikey:%' THEN split_part(g.subject_urn, ':', 2)::uuid END
+  AND k.organization_id = @organization_id::text
+LEFT JOIN agents AS agent
+  ON g.subject_urn = 'agent:' || agent.id::text
+  AND agent.organization_id = @organization_id::text AND agent.deleted IS FALSE
+ORDER BY g.last_used_at DESC NULLS LAST, g.subject_urn
+LIMIT @row_limit::int;

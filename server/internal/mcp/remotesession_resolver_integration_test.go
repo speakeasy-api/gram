@@ -114,7 +114,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 }
 
 type issuerGatedExternalMCPFixture struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset             hostedToolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
 	ToolName            string
@@ -153,13 +153,8 @@ func createIssuerGatedExternalMCPFixture(
 	require.NoError(t, err)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, userIssuer.ID)
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,

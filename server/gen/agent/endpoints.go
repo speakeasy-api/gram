@@ -17,6 +17,9 @@ import (
 // Endpoints wraps the "agent" service endpoints.
 type Endpoints struct {
 	GetPlugins           goa.Endpoint
+	GetMyConnections     goa.Endpoint
+	HideMcpServer        goa.Endpoint
+	UnhideMcpServer      goa.Endpoint
 	ListSyncedUsers      goa.Endpoint
 	GetConfiguration     goa.Endpoint
 	UpdateConfiguration  goa.Endpoint
@@ -26,6 +29,8 @@ type Endpoints struct {
 	GetSessionMeta       goa.Endpoint
 	ReportSessionMoved   goa.Endpoint
 	ReportAIScan         goa.Endpoint
+	ReportState          goa.Endpoint
+	ReportCrash          goa.Endpoint
 	CreateSessionHandoff goa.Endpoint
 }
 
@@ -35,6 +40,9 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		GetPlugins:           NewGetPluginsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		GetMyConnections:     NewGetMyConnectionsEndpoint(s, a.APIKeyAuth),
+		HideMcpServer:        NewHideMcpServerEndpoint(s, a.APIKeyAuth),
+		UnhideMcpServer:      NewUnhideMcpServerEndpoint(s, a.APIKeyAuth),
 		ListSyncedUsers:      NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
 		GetConfiguration:     NewGetConfigurationEndpoint(s, a.APIKeyAuth),
 		UpdateConfiguration:  NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
@@ -44,6 +52,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSessionMeta:       NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
 		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
+		ReportState:          NewReportStateEndpoint(s, a.APIKeyAuth),
+		ReportCrash:          NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -51,6 +61,9 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "agent" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPlugins = m(e.GetPlugins)
+	e.GetMyConnections = m(e.GetMyConnections)
+	e.HideMcpServer = m(e.HideMcpServer)
+	e.UnhideMcpServer = m(e.UnhideMcpServer)
 	e.ListSyncedUsers = m(e.ListSyncedUsers)
 	e.GetConfiguration = m(e.GetConfiguration)
 	e.UpdateConfiguration = m(e.UpdateConfiguration)
@@ -60,6 +73,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSessionMeta = m(e.GetSessionMeta)
 	e.ReportSessionMoved = m(e.ReportSessionMoved)
 	e.ReportAIScan = m(e.ReportAIScan)
+	e.ReportState = m(e.ReportState)
+	e.ReportCrash = m(e.ReportCrash)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
 }
 
@@ -95,6 +110,75 @@ func NewGetPluginsEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKey
 			return nil, err
 		}
 		return s.GetPlugins(ctx, p)
+	}
+}
+
+// NewGetMyConnectionsEndpoint returns an endpoint function that calls the
+// method "getMyConnections" of service "agent".
+func NewGetMyConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMyConnectionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMyConnections(ctx, p)
+	}
+}
+
+// NewHideMcpServerEndpoint returns an endpoint function that calls the method
+// "hideMcpServer" of service "agent".
+func NewHideMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*HideMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.HideMcpServer(ctx, p)
+	}
+}
+
+// NewUnhideMcpServerEndpoint returns an endpoint function that calls the
+// method "unhideMcpServer" of service "agent".
+func NewUnhideMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnhideMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.UnhideMcpServer(ctx, p)
 	}
 }
 
@@ -302,6 +386,64 @@ func NewReportAIScanEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.ReportAIScan(ctx, p)
+	}
+}
+
+// NewReportStateEndpoint returns an endpoint function that calls the method
+// "reportState" of service "agent".
+func NewReportStateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportStatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ReportState(ctx, p)
+	}
+}
+
+// NewReportCrashEndpoint returns an endpoint function that calls the method
+// "reportCrash" of service "agent".
+func NewReportCrashEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportCrashPayload)
+		var err error
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
+		}
+		ctx, err = authJWTFn(ctx, token, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"agent_user"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ReportCrash(ctx, p)
 	}
 }
 

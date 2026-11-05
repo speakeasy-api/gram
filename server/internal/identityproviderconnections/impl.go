@@ -660,9 +660,6 @@ func (s *Service) attachOktaRows(ctx context.Context, logger *slog.Logger, authC
 		ListingMode:                  listingMode,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, oops.E(oops.CodeConflict, err, "this Okta org is already connected to another organization")
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create okta connection details").LogError(ctx, logger)
 	}
 
@@ -1239,10 +1236,6 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 		OrganizationID:               rows.Connection.OrganizationID,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "okta_identity_provider_connections_issuer_url_key" {
-			return nil, oops.E(oops.CodeConflict, nil, "this Okta org is already connected to another organization")
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "record verification details").LogError(ctx, logger)
 	}
 	return &connectionRows{Connection: connection, Okta: oktaRow, Managed: rows.Managed}, nil

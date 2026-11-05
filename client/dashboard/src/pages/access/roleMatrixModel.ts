@@ -529,6 +529,11 @@ const PLATFORM_AREAS: {
     description: "Skills shared in a project",
   },
   {
+    resourceType: "inference",
+    label: "Inference",
+    description: "Run inference in selected projects",
+  },
+  {
     resourceType: "assistant",
     label: "Assistants",
     description: "Assistants in a project",
@@ -556,6 +561,10 @@ const PLATFORM_AREAS: {
  * server's description.
  */
 const EXTRA_COPY: Record<string, { label: string; description: string }> = {
+  "inference:execute": {
+    label: "Run inference",
+    description: "Call the inference API in the selected projects",
+  },
   "org:device_agent_sync": {
     label: "Device agent sync",
     description: "Agents fetch the plugins assigned to them",

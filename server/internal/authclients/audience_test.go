@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -63,6 +64,55 @@ func TestSetAuthClientAudienceWritesUseAndBlocked(t *testing.T) {
 	cleared, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{ID: clientID.String(), ExpectedVersion: saved.Version, Entries: nil})
 	require.NoError(t, err)
 	require.Empty(t, ownRules(cleared))
+}
+
+// A rule naming a deleted agent is left out of the audience, so the page
+// never sends it back, and the next save removes its grant.
+func TestSetAuthClientAudienceHidesAndRemovesRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	public := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Public)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Shared")
+	associate(t, ctx, ti.conn, ti.organizationID, public, clientID)
+	member := callerPrincipal(t, ctx)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.organizationID,
+		OwnerUserID:    member.ID,
+		Name:           "Retired assistant",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	current, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	_, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+		ID:              clientID.String(),
+		ExpectedVersion: current.Version,
+		Entries:         []*gen.AuthClientAudienceRule{{PrincipalUrn: agentPrincipal.String(), Level: authclients.LevelBlocked}},
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{OrganizationID: ti.organizationID, ID: agent.ID})
+	require.NoError(t, err)
+
+	listed, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	require.Empty(t, ownRules(listed), "deleted agent's rule should be hidden")
+
+	saved, err := ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{
+		ID:              clientID.String(),
+		ExpectedVersion: listed.Version,
+		Entries:         []*gen.AuthClientAudienceRule{{PrincipalUrn: urn.PrincipalWildcard, Level: authclients.LevelUse}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{authz.AllUsersPrincipal().String() + "|" + authclients.LevelUse}, ownRules(saved))
+
+	grants, err := authz.LoadGrants(ctx, ti.conn, ti.organizationID, []urn.Principal{agentPrincipal})
+	require.NoError(t, err)
+	require.Empty(t, grants)
 }
 
 func TestSetAuthClientAudienceKeepsUntouchedProvisionedGrants(t *testing.T) {
@@ -256,4 +306,24 @@ func TestAuthClientAudienceShowsProjectRulesOnlyWhereTheClientIsOffered(t *testi
 	require.NoError(t, err)
 	require.Len(t, got.Entries, 1)
 	require.Equal(t, ti.projectID.String(), *got.Entries[0].ProjectID)
+}
+
+func TestSetPrincipalLevelRejectsPrincipalsThatCannotHoldRules(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Shared")
+	actor := callerPrincipal(t, ctx)
+
+	for _, principal := range []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeAPIKey, uuid.NewString()),
+		urn.NewPrincipal(urn.PrincipalTypeRole, "missing-role"),
+	} {
+		_, err := authclients.SetPrincipalLevel(ctx, ti.conn, audit.NewLogger(), ti.organizationID, actor, clientID, principal, authclients.LevelUse)
+		require.ErrorIs(t, err, authclients.ErrPrincipalInvalid, principal.String())
+	}
+
+	saved, err := authclients.SetPrincipalLevel(ctx, ti.conn, audit.NewLogger(), ti.organizationID, actor, clientID, actor, authclients.LevelBlocked)
+	require.NoError(t, err)
+	require.Equal(t, []string{actor.String() + "|" + authclients.LevelBlocked}, ownRules(saved))
 }

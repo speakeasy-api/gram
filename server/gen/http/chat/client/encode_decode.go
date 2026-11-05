@@ -70,6 +70,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.AssistantID != nil {
 			values.Add("assistant_id", *p.AssistantID)
 		}
+		if p.AgentID != nil {
+			values.Add("agent_id", *p.AgentID)
+		}
 		if p.SourceKind != nil {
 			values.Add("source_kind", *p.SourceKind)
 		}

@@ -78,6 +78,55 @@ vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
   },
 }));
 
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) =>
+    options?.enabled === false
+      ? {
+          data: undefined,
+          isFetching: false,
+          isPending: true,
+          isError: false,
+          fetchStatus: "idle",
+        }
+      : {
+          data: {
+            serverName: "Example server",
+            signInRequired: true,
+            sharedSignIn: true,
+            activeConnectionCount: 3,
+            activeSubjectCount: 2,
+            sharedConnectionCount: 1,
+            subjects: [
+              {
+                subjectUrn: "user:alice",
+                subjectType: "user",
+                displayName: "Alice",
+                connectionCount: 2,
+                clientNames: ["Cursor"],
+                sharedSignIn: false,
+              },
+              {
+                subjectUrn: "user:bob",
+                subjectType: "user",
+                email: "bob@example.com",
+                connectionCount: 1,
+                clientNames: [],
+                sharedSignIn: true,
+              },
+            ],
+            subjectsTruncated: false,
+          },
+          isFetching: false,
+          isPending: false,
+          isError: false,
+          fetchStatus: "idle",
+        },
+}));
+
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
   invalidateAllUserSessionIssuer: vi.fn(),
 }));
@@ -107,8 +156,12 @@ function issuer(id: string): UserSessionIssuer {
 
 const link = vi.fn<(userSessionIssuerId: string) => Promise<void>>();
 
-function renderField(currentIssuerId: string | null): void {
+function renderField(
+  currentIssuerId: string | null,
+  mcpServerId?: string,
+): void {
   const target: AuthTarget = {
+    mcpServerId,
     kind: "standard",
     slug: "server",
     projectId: "project-1",
@@ -230,5 +283,28 @@ describe("UserSessionIssuerField", () => {
         .getByRole("button", { name: "Change issuer" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("lists who is connected to an MCP server and waits for its name", async () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    renderField("current", "mcp-server-1");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen.getByText(/3 active connections from 2 callers/),
+    ).toBeDefined();
+    expect(screen.getByText("Alice")).toBeDefined();
+    expect(screen.getByText("bob@example.com")).toBeDefined();
+    // The row badge, and the note explaining it.
+    expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
+    const confirm = screen.getByRole("button", { name: "Change issuer" });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+      target: { value: "Example server" },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 });

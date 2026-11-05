@@ -1,3 +1,4 @@
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
@@ -20,6 +21,19 @@ export function togglePolicyEnabledVariables(
   };
 }
 
+/** What turning a policy on or off changes: an approval policy holds tool
+ *  calls, every other policy scans messages. */
+function toggledMessage(policy: RiskPolicy): string {
+  if (policy.action === "require_approval") {
+    return policy.enabled
+      ? "Policy enabled. Calls to its tools wait for approval."
+      : "Policy disabled. Calls to its tools are no longer held.";
+  }
+  return policy.enabled
+    ? "Policy enabled. New messages will be scanned."
+    : "Policy disabled. New messages will not be scanned.";
+}
+
 export function useTogglePolicyEnabled(): ReturnType<
   typeof useRiskPoliciesUpdateMutation
 > {
@@ -29,11 +43,7 @@ export function useTogglePolicyEnabled(): ReturnType<
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskOverview(queryClient);
-      toast.success(
-        policy.enabled
-          ? "Policy enabled. New messages will be scanned."
-          : "Policy disabled. New messages will not be scanned.",
-      );
+      toast.success(toggledMessage(policy));
     },
     onError: (err) =>
       toast.error(

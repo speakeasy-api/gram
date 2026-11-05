@@ -1,8 +1,18 @@
+import { AgentPermissionEditor } from "@/pages/agents/AgentPermissionEditor";
+import { Button } from "@/components/ui/Button";
+import { useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
-import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
+import {
+  AGENT_CREDENTIAL_BLOCK_SCOPE,
+  AGENT_POLICY_SCOPES,
+  agentPolicyUnrestrictedLabel,
+  isAgentPolicyConstraint,
+  isAgentPolicySelectorUnrestricted,
+} from "@/pages/agents/agent-policy-grants";
+import { ANY_RESOURCE } from "@/pages/agents/agent-api-key-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
@@ -19,14 +29,28 @@ function agentSelectorNarrowing(
   projectName?: string,
 ): string {
   const parts: string[] = [];
-  if (selector.projectId)
+  if (isAgentPolicyConstraint(selector.projectId))
     parts.push(`Project: ${projectName || selector.projectId}`);
-  if (selector.tool) parts.push(`Tool: ${selector.tool}`);
-  if (selector.disposition) parts.push(`Disposition: ${selector.disposition}`);
-  if (selector.serverIdentity)
+  if (isAgentPolicyConstraint(selector.tool))
+    parts.push(`Tool: ${selector.tool}`);
+  if (isAgentPolicyConstraint(selector.disposition))
+    parts.push(`Disposition: ${selector.disposition}`);
+  if (isAgentPolicyConstraint(selector.serverIdentity))
     parts.push(`Server identity: ${selector.serverIdentity}`);
-  if (selector.serverUrl) parts.push(`Server URL: ${selector.serverUrl}`);
+  if (isAgentPolicyConstraint(selector.serverUrl))
+    parts.push(`Server URL: ${selector.serverUrl}`);
   return parts.join(" · ");
+}
+
+/**
+ * What a grant on every resource of its kind reaches. An org grant still
+ * narrowed, e.g. to a project, is not the whole organization.
+ */
+function wildcardGrantLabel(selector: AgentPolicySelector): string {
+  if (!isAgentPolicySelectorUnrestricted(selector)) {
+    return agentPolicyUnrestrictedLabel(undefined);
+  }
+  return agentPolicyUnrestrictedLabel(selector.resourceKind);
 }
 
 export function AgentIdentityPermissions({
@@ -36,6 +60,7 @@ export function AgentIdentityPermissions({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
+  const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
   const grants = useQuery({
@@ -48,13 +73,18 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
-  const rows = canRead ? (grants.data ?? []) : [];
+  // Credential restrictions are listed and edited in their own panel.
+  const rows = canRead
+    ? (grants.data ?? []).filter(
+        (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+      )
+    : [];
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
   const maps = useResourceLinkMaps(
     rows.some(
       ({ selector }) =>
-        selector.resourceKind === "mcp" && selector.resourceId !== "*",
+        selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
     ),
   );
   let content: JSX.Element;
@@ -114,8 +144,8 @@ export function AgentIdentityPermissions({
                       key={grant.id}
                       className="flex flex-wrap items-center gap-x-2 gap-y-1"
                     >
-                      {selector.resourceId === "*" ? (
-                        <Text small>All resources</Text>
+                      {selector.resourceId === ANY_RESOURCE ? (
+                        <Text small>{wildcardGrantLabel(selector)}</Text>
                       ) : (
                         <ResourceLink
                           challenge={{
@@ -145,6 +175,17 @@ export function AgentIdentityPermissions({
   return (
     <IdentityPanel
       title="Agent permissions"
+      action={
+        canRead && grants.data && !grants.isError ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setEditing(true)}
+          >
+            Edit permissions
+          </Button>
+        ) : undefined
+      }
       loading={canRead && grants.isLoading}
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}
@@ -152,6 +193,13 @@ export function AgentIdentityPermissions({
       footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
     >
       {content}
+      {editing && canRead && grants.data && (
+        <AgentPermissionEditor
+          agent={agent}
+          grants={grants.data}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </IdentityPanel>
   );
 }

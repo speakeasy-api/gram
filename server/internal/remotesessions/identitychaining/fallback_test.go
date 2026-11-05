@@ -48,7 +48,7 @@ func (s *scriptedTry) try(ctx context.Context, _ *slog.Logger, p remotesessions.
 }
 
 func newScriptedTry() *scriptedTry {
-	return &scriptedTry{mu: sync.Mutex{}, outcomes: map[remotesessions.EMAProviderKind][]Outcome{}, hang: map[remotesessions.EMAProviderKind]bool{}, calls: map[remotesessions.EMAProviderKind]int{}}
+	return &scriptedTry{mu: sync.Mutex{}, outcomes: make(map[remotesessions.EMAProviderKind][]Outcome), hang: make(map[remotesessions.EMAProviderKind]bool), calls: make(map[remotesessions.EMAProviderKind]int)}
 }
 
 func meteredChainer(t *testing.T) (*Chainer, *sdkmetric.ManualReader) {

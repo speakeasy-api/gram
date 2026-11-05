@@ -1,7 +1,9 @@
 package deployments_test
 
 import (
+	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"math"
@@ -18,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	deprepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -849,6 +852,153 @@ func TestCreateDeployment_WithFunctions_InvalidManifest(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.Empty(t, functionTools, "expected zero function tools due to invalid manifest JSON")
+}
+
+// padManifest appends trailing JSON whitespace to the manifest fixture at path
+// until it is exactly size bytes, so it stays valid and compresses to almost
+// nothing.
+func padManifest(t *testing.T, path string, size int) []byte {
+	t.Helper()
+
+	manifest := testenv.ReadFixture(t, path)
+	require.Less(t, len(manifest), size, "fixture already exceeds the requested size")
+
+	return append(manifest, bytes.Repeat([]byte(" "), size-len(manifest))...)
+}
+
+func createFunctionsDeploymentForManifest(t *testing.T, ctx context.Context, ti *testInstance, manifest []byte, idempotencyKey string) *gen.CreateDeploymentResult {
+	t.Helper()
+
+	fres := uploadFunctionsWithManifestBytes(t, ctx, ti.assets, manifest, "nodejs:24")
+	return createFunctionsDeploymentForAsset(t, ctx, ti, fres.Asset.ID, idempotencyKey)
+}
+
+func createFunctionsDeploymentForAsset(t *testing.T, ctx context.Context, ti *testInstance, assetID, idempotencyKey string) *gen.CreateDeploymentResult {
+	t.Helper()
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  idempotencyKey,
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: assetID,
+				Name:    "sized-manifest-functions",
+				Slug:    "sized-manifest-functions",
+				Runtime: "nodejs:24",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	return dep
+}
+
+func TestCreateDeployment_WithFunctions_ManifestOverSizeLimit(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	manifest := padManifest(t, "fixtures/manifest-todo.json", functions.MaxManifestBytes+1)
+	dep := createFunctionsDeploymentForManifest(t, ctx, ti, manifest, "test-manifest-over-size-limit")
+
+	require.Equal(t, "failed", dep.Deployment.Status, "deployment should fail when manifest exceeds the size limit")
+
+	functionTools, err := testrepo.New(ti.conn).ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Empty(t, functionTools, "expected zero function tools for an oversized manifest")
+
+	logs, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{
+		DeploymentID:     dep.Deployment.ID,
+		Cursor:           nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "get deployment logs")
+
+	var sizeErrors int
+	for _, event := range logs.Events {
+		if strings.Contains(event.Message, "manifest.json exceeds the maximum size") {
+			sizeErrors++
+		}
+	}
+	require.Equal(t, 1, sizeErrors, "oversized manifest should be rejected once without retries")
+}
+
+func TestCreateDeployment_WithFunctions_ManifestAtSizeLimit(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	manifest := padManifest(t, "fixtures/manifest-todo.json", functions.MaxManifestBytes)
+	dep := createFunctionsDeploymentForManifest(t, ctx, ti, manifest, "test-manifest-at-size-limit")
+
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment should complete when manifest is exactly at the size limit")
+
+	functionTools, err := testrepo.New(ti.conn).ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 4, "expected all tools from the padded manifest")
+}
+
+func TestCreateDeployment_WithFunctions_CorruptDeflateDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "invalid block type", data: []byte{0x07}},
+		{name: "truncated stored block", data: []byte{0x01}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
+			var buf bytes.Buffer
+			writer := zip.NewWriter(&buf)
+			entry, err := writer.CreateRaw(&zip.FileHeader{
+				Name:               "manifest.json",
+				Method:             zip.Deflate,
+				CompressedSize64:   uint64(len(tc.data)),
+				UncompressedSize64: 1,
+			})
+			require.NoError(t, err)
+			_, err = entry.Write(tc.data)
+			require.NoError(t, err)
+			_, err = writer.Create("functions.js")
+			require.NoError(t, err)
+			require.NoError(t, writer.Close())
+
+			asset, err := ti.assets.UploadFunctions(ctx, &agen.UploadFunctionsForm{
+				ContentType:   "application/zip",
+				ContentLength: int64(buf.Len()),
+			}, io.NopCloser(bytes.NewReader(buf.Bytes())))
+			require.NoError(t, err)
+			dep := createFunctionsDeploymentForAsset(t, ctx, ti, asset.Asset.ID, "corrupt-deflate")
+			require.Equal(t, "failed", dep.Deployment.Status)
+
+			logs, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{DeploymentID: dep.Deployment.ID})
+			require.NoError(t, err)
+			var corruptErrors int
+			for _, event := range logs.Events {
+				if strings.Contains(event.Message, "manifest.json is corrupt") {
+					corruptErrors++
+				}
+			}
+			require.Equal(t, 1, corruptErrors, "corrupt manifest should fail without retrying")
+		})
+	}
 }
 
 func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {

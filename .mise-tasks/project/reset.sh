@@ -153,11 +153,6 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)
   AND deleted IS FALSE;
 
-UPDATE organization_mcp_collection_server_attachments
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)
-  AND deleted IS FALSE;
-
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)

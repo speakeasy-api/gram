@@ -8,13 +8,19 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerToolsetSummary } from "@gram/client/models/components/mcpservertoolsetsummary.js";
 import type { useRoutes } from "@/routes";
 
-export type McpServerKind = "hosted" | "remote" | "tunneled" | "unproxied";
+export type McpServerKind =
+  | "hosted"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "built_in";
 
 export const MCP_SERVER_KIND_LABEL: Record<McpServerKind, string> = {
   hosted: "Hosted",
   remote: "Remote",
   tunneled: "Tunneled",
   unproxied: "Unproxied",
+  built_in: "Built-in",
 };
 
 export interface ListedMcpServer {
@@ -24,6 +30,7 @@ export interface ListedMcpServer {
 
 /** How Speakeasy reaches the server; undefined for a row with no backend. */
 function mcpServerKind(server: McpServer): McpServerKind | undefined {
+  if (server.builtinBackend) return "built_in";
   if (server.unproxiedMcpServerId) return "unproxied";
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";
@@ -88,10 +95,10 @@ export function mcpServerHref(
 ): string {
   const param = mcpServerRouteParam(server);
   if (oauthStatus !== "required-unconfigured") {
-    return routes.mcp.x.overview.href(param);
+    return routes.mcp.details.overview.href(param);
   }
   // A hosted server's sign-in setup is a section of its settings.
   return standInToolset(server)
-    ? `${routes.mcp.x.settings.href(param)}#authentication`
-    : routes.mcp.x.settings.href(param);
+    ? `${routes.mcp.details.settings.href(param)}#authentication`
+    : routes.mcp.details.settings.href(param);
 }

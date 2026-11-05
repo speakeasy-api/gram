@@ -28,6 +28,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,7 +71,7 @@ import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
-import { chatOwnerLabel } from "@/lib/chat-owner";
+import { chatActor, chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import { formatChatSource, formatPlatform } from "@/lib/formatPlatform";
 import {
@@ -104,8 +105,12 @@ import {
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
+  isCostUnknown,
+  totalTokensFor,
+  UNKNOWN_COST_EXPLANATION,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { UnknownCost } from "./UnknownCost";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
@@ -170,15 +175,6 @@ function findingKey(r: RiskResult): string {
 
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
-}
-
-function totalTokensFor(chat: {
-  totalTokens?: number;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-}): number {
-  if (chat.totalTokens && chat.totalTokens > 0) return chat.totalTokens;
-  return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
 // ChatDetailErrorFallback is the defensive backstop for unexpected
@@ -277,10 +273,13 @@ function SessionSummary({
   compact = false,
 }: {
   chat: {
+    userId?: string;
     externalUserId?: string;
     assistantId?: string;
     assistantName?: string;
     assistantAgentId?: string;
+    agentId?: string;
+    agentName?: string;
     accountType?: string;
     accountEmail?: string;
     source?: string;
@@ -308,11 +307,13 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
   const {
     costPerUnit: workUnitsCostPerUnit,
     tokensPerUnit: workUnitsTokensPerUnit,
   } = workUnitsEfficiency(chat);
   const accountEmail = personalAccountEmail(chat);
+  const actor = chatActor(chat, accountEmail);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
@@ -337,7 +338,14 @@ function SessionSummary({
                   {formatUsageCost(chat.totalCost!)}
                 </span>
               )}
-              {hasCost && tokens > 0 && (
+              {/* A bare dash, not the tooltip one: it sits inside the popover
+                  trigger, and the popover says why the cost is missing. */}
+              {costUnknown && (
+                <span className="tabular-nums" aria-label="Unknown cost">
+                  —
+                </span>
+              )}
+              {(hasCost || costUnknown) && tokens > 0 && (
                 <span aria-hidden className="text-muted-foreground/40">
                   |
                 </span>
@@ -360,15 +368,15 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            {chat.assistantName ? (
-              <>
-                <MetaRow label="Agent">
-                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
-                </MetaRow>
-                <MetaRow label="On behalf of">{userLabel}</MetaRow>
-              </>
-            ) : (
-              <MetaRow label="User">{userLabel}</MetaRow>
+            {actor.agent && (
+              <MetaRow label="Agent">
+                <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
+              </MetaRow>
+            )}
+            {actor.person && (
+              <MetaRow label={actor.agent ? "On behalf of" : "User"}>
+                {userLabel}
+              </MetaRow>
             )}
             {accountEmail && (
               <MetaRow label="Account">
@@ -409,8 +417,17 @@ function SessionSummary({
               <MetaRow label="Tool calls">{toolCount}</MetaRow>
             )}
             <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+              <TotalCostValue
+                cost={chat.totalCost}
+                hasCost={hasCost}
+                costUnknown={costUnknown}
+              />
             </MetaRow>
+            {costUnknown && (
+              <p className="text-muted-foreground py-1.5 text-xs">
+                {UNKNOWN_COST_EXPLANATION}
+              </p>
+            )}
             {chat.totalInputTokens !== undefined && (
               <MetaRow label="Input tokens">
                 {chat.totalInputTokens.toLocaleString()}
@@ -454,13 +471,36 @@ function HeaderMetadataBadge({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The session's total cost in its details: the figure, a dash when its agent
+ * does not report cost (the explanation follows the row), or "unknown" when
+ * no usage arrived at all.
+ */
+function TotalCostValue({
+  cost,
+  hasCost,
+  costUnknown,
+}: {
+  cost: number | undefined;
+  hasCost: boolean;
+  costUnknown: boolean;
+}): JSX.Element {
+  if (hasCost && cost !== undefined) return <>{formatUsageCost(cost)}</>;
+  if (costUnknown) {
+    return (
+      <span className="tabular-nums" aria-label="Unknown cost">
+        —
+      </span>
+    );
+  }
+  return <>unknown</>;
+}
+
 function ChatDetailMetadataBadges({
-  chatId,
   chat,
   messageCount,
   toolCount,
 }: {
-  chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"];
   messageCount: number;
   /** Undefined when the caller cannot read this project's tool logs. */
@@ -468,10 +508,10 @@ function ChatDetailMetadataBadges({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
       <HeaderMetadataBadge>
         {messageCount.toLocaleString()} messages
       </HeaderMetadataBadge>
@@ -507,6 +547,11 @@ function ChatDetailMetadataBadges({
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {costUnknown && (
+        <HeaderMetadataBadge>
+          <UnknownCost />
         </HeaderMetadataBadge>
       )}
       {tokens > 0 && (
@@ -756,10 +801,15 @@ function ChatDetailHeader({
   onSetView: (view: ViewMode) => void;
   onClose: () => void;
 }) {
+  const actor = chatActor(chat, personalAccountEmail(chat));
   return (
     <div className="border-b px-4 py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="text-muted-foreground -my-1 flex min-w-0 items-center gap-1 text-xs">
+            <span className="truncate font-mono">{chatId}</span>
+            <CopyButton text={chatId} size="xs" tooltip="Copy chat ID" />
+          </div>
           <SheetTitle className="truncate text-base">
             {chat.title || getTraceId(chatId)}
           </SheetTitle>
@@ -774,18 +824,14 @@ function ChatDetailHeader({
                 </span>
               </span>
               <span className="text-muted-foreground inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm">
-                {chat.assistantName ? (
-                  <>
-                    <AssistantActorLink
-                      chat={chat}
-                      className="text-foreground [&_a]:pb-0.5"
-                    />
-                    <span>on behalf of</span>
-                    <span className="text-foreground min-w-0 break-words">
-                      {userLabel}
-                    </span>
-                  </>
-                ) : (
+                {actor.agent && (
+                  <AssistantActorLink
+                    chat={chat}
+                    className="text-foreground [&_a]:pb-0.5"
+                  />
+                )}
+                {actor.agent && actor.person && <span>on behalf of</span>}
+                {actor.person && (
                   <span className="text-foreground min-w-0 break-words">
                     {userLabel}
                   </span>
@@ -793,17 +839,13 @@ function ChatDetailHeader({
               </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
-                  chatId={chatId}
                   chat={chat}
                   messageCount={messageCount}
                   toolCount={toolCount}
                 />
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <HeaderMetadataBadge>
-                    {getTraceId(chatId)}
-                  </HeaderMetadataBadge>
-                  {chat.slackChannelId && (
+                chat.slackChannelId && (
+                  <div className="flex flex-wrap items-center gap-2">
                     <HeaderMetadataBadge>
                       <SlackChannelLink
                         channelId={chat.slackChannelId}
@@ -811,8 +853,8 @@ function ChatDetailHeader({
                         teamId={chat.slackTeamId}
                       />
                     </HeaderMetadataBadge>
-                  )}
-                </div>
+                  </div>
+                )
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
@@ -1279,6 +1321,7 @@ function ChatDetailPanel({
       !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
     capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
+  const openClawSession = capturedSource === "openclaw";
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
     const title =
@@ -1641,7 +1684,14 @@ function ChatDetailPanel({
     }
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
-  const userLabelOverride = chat && !readableTag ? userLabel : undefined;
+  // An agent session that reports nobody has no owner for its user turns to
+  // name. Without the override they fall back to the transcript's neutral
+  // "User" instead of an "anonymous" person.
+  const ownerNamed = chat
+    ? chatActor(chat, personalAccountEmail(chat)).person
+    : false;
+  const userLabelOverride =
+    chat && !readableTag && ownerNamed ? userLabel : undefined;
   // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
@@ -1667,6 +1717,7 @@ function ChatDetailPanel({
       userLabel: chat?.externalUserId,
       userLabelOverride,
       ownerIdentifier: readableTag ? null : ownerIdentifier,
+      openClawSession,
     }),
     [
       riskResultsByMessage,
@@ -1680,6 +1731,7 @@ function ChatDetailPanel({
       userLabelOverride,
       ownerIdentifier,
       readableTag,
+      openClawSession,
     ],
   );
 
@@ -1920,6 +1972,7 @@ function ChatDetailPanel({
                 claudeTurnByPromptId={claudeTurnByPromptId}
                 userLabel={chat?.externalUserId}
                 userLabelOverride={userLabelOverride}
+                openClawSession={openClawSession}
                 isLoading={chatLoading || loadingAllMessages}
               />
             </div>

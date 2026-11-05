@@ -54,6 +54,21 @@ func EncodeListClientSessionsRequest(encoder func(*http.Request) goahttp.Encoder
 		}
 		values := req.URL.Query()
 		values.Add("client_id", p.ClientID)
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
+		if p.CreatedAfter != nil {
+			values.Add("created_after", *p.CreatedAfter)
+		}
+		if p.CreatedBefore != nil {
+			values.Add("created_before", *p.CreatedBefore)
+		}
+		if p.Sort != nil {
+			values.Add("sort", *p.Sort)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -970,20 +985,22 @@ func DecodeRevokeAllClientSessionsResponse(decoder func(*http.Response) goahttp.
 // type *types.RemoteSession from a value of type *RemoteSessionResponseBody.
 func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResponseBody) *types.RemoteSession {
 	res := &types.RemoteSession{
-		ID:                    *v.ID,
-		SubjectUrn:            *v.SubjectUrn,
-		SubjectDisplayName:    v.SubjectDisplayName,
-		SubjectEmail:          v.SubjectEmail,
-		UpstreamEmail:         v.UpstreamEmail,
-		UpstreamDisplayName:   v.UpstreamDisplayName,
-		IdentitySource:        v.IdentitySource,
-		UserSessionIssuerID:   *v.UserSessionIssuerID,
-		RemoteSessionClientID: *v.RemoteSessionClientID,
-		AccessExpiresAt:       *v.AccessExpiresAt,
-		RefreshExpiresAt:      v.RefreshExpiresAt,
-		HasRefreshToken:       *v.HasRefreshToken,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+		ID:                     *v.ID,
+		SubjectUrn:             *v.SubjectUrn,
+		SubjectDisplayName:     v.SubjectDisplayName,
+		SubjectEmail:           v.SubjectEmail,
+		UpstreamEmail:          v.UpstreamEmail,
+		UpstreamDisplayName:    v.UpstreamDisplayName,
+		IdentitySource:         v.IdentitySource,
+		UserSessionIssuerID:    *v.UserSessionIssuerID,
+		RemoteSessionClientID:  *v.RemoteSessionClientID,
+		AccessExpiresAt:        *v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
+		HasRefreshToken:        *v.HasRefreshToken,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
 	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {

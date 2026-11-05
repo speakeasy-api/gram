@@ -3383,6 +3383,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		OrganizationID:                  v.OrganizationID,
 		RemoteSessionIssuerID:           v.RemoteSessionIssuerID,
 		ClientID:                        v.ClientID,
+		DisplayName:                     v.DisplayName,
 		ClientIDMetadataURI:             v.ClientIDMetadataURI,
 		ClientIDIssuedAt:                v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,

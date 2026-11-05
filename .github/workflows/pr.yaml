@@ -28,6 +28,10 @@ jobs:
       contents: "read"
       pull-requests: read # paths-filter lists the pull request files
     outputs:
+      # False on pushes to main. Main only moves to commits its merge queue
+      # already ran this workflow on, so jobs that only verify the code skip
+      # there; jobs that publish artifacts or warm main-scoped caches still run.
+      verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
       cli: ${{ steps.gates.outputs.cli }}
@@ -362,6 +366,8 @@ jobs:
           filters: ${{ matrix.filters }}
           preview-tag: ${{ needs.changes.outputs.preview-tag }}
 
+  # Also runs on pushes to main: it is the only main-branch writer of the pkl
+  # cache that pull request runs restore.
   format-check:
     name: Check formatting with hk
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -555,6 +561,9 @@ jobs:
 
   assistant-runtime-image:
     name: assistant-runtime-image
+    # The image is content-addressed by agents/ (the server embeds the same
+    # hash and pulls the runtime image by it), so an unchanged runtime is
+    # re-tagged rather than rebuilt, the same way code-runner-image works.
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
@@ -572,93 +581,41 @@ jobs:
       # This job runs GitHub-hosted, so keep its cache keys out of the
       # Blacksmith-backed CI namespace (see .mise-tasks/github/pre-cache.mts).
       CACHE_NAMESPACE: github-v1
+      IMAGE: gcr.io/linen-analyst-344721/${{ github.repository_owner }}/gram-assistant-runtime
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Mise
-        # Caches restored here also feed the image this job publishes. On
-        # main they can only come from main's own runs: GitHub scopes caches
-        # that PR runs write to the PR's ref, so a PR cannot poison them.
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-github-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Install musl toolchain
-        run: |
-          sudo apt-get update -qq -o Acquire::Languages=none
-          sudo apt-get install -y -qq --no-install-recommends musl-tools
-
-      - name: Setup Rust
-        # Same cache scoping as Setup Mise above.
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
-        with:
-          target: ${{ env.RUNNER_TARGET }}
-          rust-src-dir: agents/runner
-          # Release-artifact build; the action's -D warnings default would
-          # diverge from the in-image fallback build.
-          rustflags: ""
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build assistant runner
-        run: |
-          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
-          mkdir -p ${RUNNER_BINARY_DIR}
-          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
-
-      - name: Smoke test assistant runner binary
-        run: |
-          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
-            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
-          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
-
-      - name: Generate preview tag
-        id: assistant-preview-tag
+      - name: Compute image tags
+        id: tags
         shell: bash
         env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
-            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "enabled=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Compute runtime image content hash
-        id: assistant-runtime-hash
-        shell: bash
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          hash=$(mise run hash:assistant-runtime-image)
-          if [ -z "$hash" ]; then
-            echo "runtime image hash is empty" >&2
-            exit 1
+          # Same value as `mise run hash:assistant-runtime-image`.
+          hash=$(git rev-parse HEAD:agents | cut -c1-12)
+          tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
+          elif [[ "$REF_NAME" == "main" ]]; then
+            tags+=("main")
           fi
-          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          {
+            echo "hash=$hash"
+            echo "aliases=${tags[*]}"
+            echo "push<<EOF"
+            echo "${IMAGE}:${hash}"
+            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Setup Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - id: assistantGcrAuth
+      - id: gcrAuth
         name: "Authenticate to Google Cloud"
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -668,7 +625,7 @@ jobs:
 
       - name: Login to GCR
         env:
-          GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
+          GCR_TOKEN: ${{ steps.gcrAuth.outputs.access_token }}
         run: |
           max_attempts=3
           for ((i=1; i<=max_attempts; i++)); do
@@ -685,22 +642,89 @@ jobs:
           echo "All login attempts failed"
           exit 1
 
-      - name: Extract assistant runtime metadata for GCR
-        id: assistantMetaGcr
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      - name: Setup Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Find an existing image
+        id: existing
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the existing image
+        if: steps.existing.outputs.found == 'true'
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+          ALIASES: ${{ steps.tags.outputs.aliases }}
+        run: |
+          set -euo pipefail
+          args=()
+          for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
-          images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-github-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Install musl toolchain
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          sudo apt-get update -qq -o Acquire::Languages=none
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        if: steps.existing.outputs.found != 'true'
+        # Same cache scoping as Setup Mise above.
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
+          mkdir -p ${RUNNER_BINARY_DIR}
+          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
+
+      - name: Log in to Docker Hub
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push assistant runtime image to GCR
+        if: steps.existing.outputs.found != 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -712,8 +736,125 @@ jobs:
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.assistantMetaGcr.outputs.tags }}
-          labels: ${{ steps.assistantMetaGcr.outputs.labels }}
+          tags: ${{ steps.tags.outputs.push }}
+
+  code-runner-image:
+    name: code-runner-image
+    # The image is content-addressed by agents/code-runner (the Dockerfile pins
+    # Monty), so an unchanged runner is re-tagged rather than rebuilt. Every
+    # commit therefore gets a runner image under the same preview and sha tags
+    # as the server, which previews and releases resolve without a lookup.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
+    needs: [changes]
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
+    env:
+      IMAGE: gcr.io/linen-analyst-344721/${{ github.repository_owner }}/gram-code-runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Same value as `mise run hash:code-runner-image`.
+          hash=$(git rev-parse HEAD:agents/code-runner | cut -c1-12)
+          tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
+          elif [[ "$REF_NAME" == "main" ]]; then
+            tags+=("main")
+          fi
+          {
+            echo "hash=$hash"
+            echo "aliases=${tags[*]}"
+            echo "push<<EOF"
+            echo "${IMAGE}:${hash}"
+            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: gcrAuth
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.gcrAuth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+
+      - name: Setup Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Find an existing image
+        id: existing
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the existing image
+        if: steps.existing.outputs.found == 'true'
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+          ALIASES: ${{ steps.tags.outputs.aliases }}
+        run: |
+          set -euo pipefail
+          args=()
+          for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
+
+      - name: Log in to Docker Hub
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push code runner image
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./agents/code-runner/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.push }}
+          cache-from: type=gha,scope=code-runner
+          cache-to: type=gha,mode=max,scope=code-runner
 
   otel-collector:
     name: otel-collector
@@ -1265,7 +1406,7 @@ jobs:
     name: server-checks
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 16
     services:
@@ -1342,7 +1483,7 @@ jobs:
     permissions:
       contents: read
     needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.infra == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1396,6 +1537,8 @@ jobs:
         run: mise run test:infra
 
       - name: Run code generators
+        env:
+          BUF_TOKEN: ${{ secrets.FORGEBOT_BUF_TOKEN }}
         run: mise run gen:infra
 
       - name: Check for dirty files
@@ -1404,6 +1547,8 @@ jobs:
       - name: Minimize uv cache
         run: uv cache prune --ci
 
+  # Also runs on pushes to main: with infra-build-lint skipped there, it is the
+  # only main-branch writer of the uv cache that pull request runs restore.
   pystreams-build-lint:
     name: Lint and test the pystreams package
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1452,7 +1597,7 @@ jobs:
     name: cli-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.cli == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.cli == 'true'
     env:
       GOMAXPROCS: 4
     services:
@@ -1514,7 +1659,7 @@ jobs:
     name: hooks-build-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.hooks == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.hooks == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1549,7 +1694,7 @@ jobs:
     name: glint-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.glint == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.glint == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1581,7 +1726,7 @@ jobs:
     name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.plog == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.plog == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1628,7 +1773,7 @@ jobs:
     name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     strategy:
       # Every shard should report, otherwise a single failure hides the state of
       # the rest of the suite.
@@ -1700,7 +1845,7 @@ jobs:
         # failing runs can be ranked too. Re-running a job replaces its shard's
         # artifact. Read with 'gotestsum tool slowest --jsonfile
         # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
-        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        # reports of recent merge queue runs into ci/cmd/shard/timings.txt.
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1733,7 +1878,7 @@ jobs:
     name: demo-seed-safety
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 8
       TESTCONTAINERS_RYUK_DISABLED: true
@@ -1773,54 +1918,11 @@ jobs:
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+    outputs:
+      reused: ${{ steps.existing.outputs.found }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      - name: Install dependencies
-        run: aube install --frozen-lockfile
-
-      - name: Build
-        env:
-          NODE_ENV: production
-        run: mise exec --env viteprod -- aube run build
-
-      # Published for upload-dashboard-assets so the CDN bucket receives the
-      # exact assets this image ships with (a rebuild there could hash
-      # differently, e.g. GRAM_GIT_SHA is only set in this job).
-      - name: Upload built assets artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dashboard-assets
-          path: client/dashboard/dist/assets
-          retention-days: 2
-
-      - name: Upload source maps to DataDog
-        env:
-          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -1847,6 +1949,76 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
+
+      # The merge queue run for this commit already built both images and
+      # uploaded their assets and source maps, so a push to main skips the
+      # build and only tags the queue images (see the build-push action).
+      - name: Find the merge queue images
+        id: existing
+        env:
+          IMAGES: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+        run: |
+          found=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            found=true
+            for image in $IMAGES; do
+              docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}" >/dev/null 2>&1 || found=false
+            done
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Cache aube store
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      - name: Install dependencies
+        if: steps.existing.outputs.found != 'true'
+        run: aube install --frozen-lockfile
+
+      - name: Build
+        if: steps.existing.outputs.found != 'true'
+        env:
+          NODE_ENV: production
+        run: mise exec --env viteprod -- aube run build
+
+      # Published for upload-dashboard-assets so the CDN bucket receives the
+      # exact assets this image ships with (a rebuild there could hash
+      # differently, e.g. GRAM_GIT_SHA is only set in this job).
+      - name: Upload built assets artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-assets
+          path: client/dashboard/dist/assets
+          retention-days: 2
+
+      - name: Upload source maps to DataDog
+        if: steps.existing.outputs.found != 'true'
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
+
       # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
@@ -1889,7 +2061,7 @@ jobs:
           cache-key: gram/dashboard-image
 
       - name: Prune aube store
-        if: success()
+        if: success() && steps.existing.outputs.found != 'true'
         run: aube store prune
 
   upload-dashboard-assets:
@@ -1916,8 +2088,11 @@ jobs:
         include:
           - environment: dev
           - environment: prod
+    # When docker-build-client reused the merge queue images, the queue run
+    # already uploaded their assets to both buckets.
     steps:
       - name: Download built assets artifact
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dashboard-assets
@@ -1925,6 +2100,7 @@ jobs:
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         # Each secret is named outright: indexing secrets[...] with a matrix
         # value would load the whole secrets context into the runner. Of each
@@ -1934,6 +2110,7 @@ jobs:
           service_account: ${{ matrix.environment == 'dev' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_DEV || '' }}${{ matrix.environment == 'prod' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_PROD || '' }}
 
       - name: Upload assets to bucket
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
         with:
           path: dist/assets
@@ -1958,6 +2135,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2026,6 +2204,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2078,7 +2257,7 @@ jobs:
     name: Check SDK is up-to-date
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.sdk-gen == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.sdk-gen == 'true'
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -2272,39 +2451,6 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Download melange packages artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: functions-packages
-          path: functions/packages
-
-      - name: Build apko image (${{ matrix.runtime }})
-        id: apko
-        env:
-          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
-          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
-          MATRIX_RUNTIME: ${{ matrix.runtime }}
-        run: |
-          KEY_DIR=$(mktemp -d)
-          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
-          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
-
-          mise run build:functions-image \
-            --melange-public-key "$KEY_FILE" \
-            --apko-config ${MATRIX_APKO_CONFIG} \
-            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
-            --tarball-name ${MATRIX_RUNTIME} \
-            --out oci/${MATRIX_RUNTIME}
-
-      - name: Run safety checks
-        run: |
-          mise run test:apko-functions \
-            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
-            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
-        env:
-          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
-          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
-
       - name: "[DEV] Create fly app"
         id: flyCreateDev
         if: github.event.pull_request.user.login != 'dependabot[bot]'
@@ -2337,6 +2483,70 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # The merge queue run for this commit already built and pushed this
+      # runtime's image to both registries, so a push to main skips the build
+      # and only tags those images.
+      - name: Find the merge queue images
+        id: existing
+        if: github.event_name == 'push'
+        env:
+          FLY_API_TOKEN_DEV: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_API_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_APP_REGISTRY_DEV: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+          FLY_APP_REGISTRY_PROD: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          found=true
+          for env in dev prod; do
+            if [[ "$env" == dev ]]; then
+              token=$FLY_API_TOKEN_DEV registry=$FLY_APP_REGISTRY_DEV
+            else
+              token=$FLY_API_TOKEN_PROD registry=$FLY_APP_REGISTRY_PROD
+            fi
+            export DOCKER_CONFIG="${RUNNER_TEMP}/docker-${env}"
+            mkdir -p "$DOCKER_CONFIG"
+            FLY_API_TOKEN=$token fly auth docker
+            docker buildx imagetools inspect "${registry}:${GITHUB_SHA}-${MATRIX_RUNTIME}" >/dev/null 2>&1 || found=false
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Download melange packages artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: functions-packages
+          path: functions/packages
+
+      - name: Build apko image (${{ matrix.runtime }})
+        id: apko
+        if: steps.existing.outputs.found != 'true'
+        env:
+          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          KEY_DIR=$(mktemp -d)
+          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
+          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
+
+          mise run build:functions-image \
+            --melange-public-key "$KEY_FILE" \
+            --apko-config ${MATRIX_APKO_CONFIG} \
+            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
+            --tarball-name ${MATRIX_RUNTIME} \
+            --out oci/${MATRIX_RUNTIME}
+
+      - name: Run safety checks
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run test:apko-functions \
+            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
+            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
+        env:
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
+
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -2359,7 +2569,7 @@ jobs:
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: steps.existing.outputs.found != 'true' && github.event.pull_request.user.login != 'dependabot[bot]'
         working-directory: functions
         run: |
           set -x
@@ -2384,17 +2594,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
@@ -2408,17 +2629,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
@@ -2433,7 +2665,7 @@ jobs:
     name: ts-framework-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tsframework == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tsframework == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -2489,6 +2721,8 @@ jobs:
   impeccable:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     # The scan itself takes ~3s; this only guards against a hung npx install.
     # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
     timeout-minutes: 12
@@ -2565,6 +2799,7 @@ jobs:
       - functions-build-host
       - functions-image
       - assistant-runtime-image
+      - code-runner-image
       - otel-collector
       - ts-framework-test
       - impeccable
@@ -2599,7 +2834,6 @@ jobs:
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [server-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
@@ -2629,6 +2863,7 @@ jobs:
         docker-build-client,
         docker-build-pystreams,
         assistant-runtime-image,
+        code-runner-image,
         preview-image-tags,
         upload-dashboard-assets,
       ]
@@ -2636,6 +2871,8 @@ jobs:
       pull-requests: write # adds the preview label
     # Only on PR creation, so a manually removed label stays removed. Waits
     # for every preview image tag, or the preview polls for missing images.
+    # The code runner image is tagged for every eligible PR commit, so it is
+    # never skipped here and must succeed.
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
@@ -2652,6 +2889,7 @@ jobs:
        needs.docker-build-pystreams.result == 'success') &&
       (needs.changes.outputs.server != 'true' ||
        needs.assistant-runtime-image.result == 'success') &&
+      needs.code-runner-image.result == 'success' &&
       ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
        needs.upload-dashboard-assets.result == 'success') &&
       contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
@@ -2671,6 +2909,7 @@ jobs:
         ci-gate,
         docker-build-server,
         assistant-runtime-image,
+        code-runner-image,
         svix-sync-webhooks,
       ]
     # ci-gate's transitive needs include path-filtered jobs, and a skipped job
@@ -2684,6 +2923,7 @@ jobs:
       needs.ci-gate.result == 'success' &&
       needs.docker-build-server.result == 'success' &&
       needs.assistant-runtime-image.result == 'success' &&
+      needs.code-runner-image.result == 'success' &&
       needs.svix-sync-webhooks.result == 'success' &&
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -2712,7 +2952,7 @@ jobs:
     name: Tunnel agent
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tunnel == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tunnel == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1

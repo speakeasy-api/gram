@@ -573,7 +573,7 @@ describe("McpServerHealth", () => {
     respond = () => ({
       server: SERVER,
       correlation: { url_slug: "crm-9c1e" },
-      legacy_auth: "oauth_proxy",
+      legacy_auth: "gram_private",
       tool_calls: { type: "logging:disabled" },
     });
     await open();

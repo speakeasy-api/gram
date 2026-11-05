@@ -170,13 +170,35 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Whether the selection is the view's default. Views default differently (one
+ * scoped to an identity starts from every type), so each passes its own
+ * defaults: the page-wide `TOOL_USAGE_DEFAULT_TYPES` or a scoped list.
+ */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
+  defaultTypes: ObserveTypeFilterValue[],
 ): boolean {
   return (
-    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
-    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+    selectedTypes.length === defaultTypes.length &&
+    defaultTypes.every((type) => selectedTypes.includes(type))
   );
+}
+
+/** Every tool type but local tools, for an identity view that hides them. */
+export const TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS: ObserveTypeFilterValue[] =
+  TOOL_USAGE_VALID_TYPES.filter((type) => type !== "local_tool");
+
+/**
+ * The type selection a view scoped to one identity starts from. It shows
+ * every type unless the page hides local tools. Both lists are module
+ * constants, so the reference stays stable across renders.
+ */
+export function scopedToolUsageDefaultTypes(
+  includeLocalTools: boolean,
+): ObserveTypeFilterValue[] {
+  if (includeLocalTools) return TOOL_USAGE_VALID_TYPES;
+  return TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS;
 }
 
 export function toTargetTypes(

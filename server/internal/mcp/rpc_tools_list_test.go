@@ -206,8 +206,7 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-empty-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-empty-"+uuid.NewString()[:8])
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), "", nil)
 	require.NoError(t, err)
@@ -215,6 +214,16 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 
 	resp := parseToolsListResponse(t, w.Body.Bytes())
 	require.Empty(t, resp.Result.Tools)
+
+	// Clients such as Codex CLI reject a null tools array, which a
+	// skills-only server with no tools would otherwise send.
+	var raw struct {
+		Result struct {
+			Tools json.RawMessage `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	require.JSONEq(t, `[]`, string(raw.Result.Tools))
 }
 
 func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
@@ -225,8 +234,7 @@ func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-all-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-all-"+uuid.NewString()[:8])
 
 	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_alpha", "tool_beta")
 
@@ -249,8 +257,7 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-rbac-pub-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "list-rbac-pub-"+uuid.NewString()[:8])
 
 	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "pub_tool_a", "pub_tool_b")
 

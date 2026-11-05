@@ -61,6 +61,10 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 			staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
+		if r.PostForm.Get(oauthwire.ParamGrantType) == "" {
+			staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+			return
+		}
 		presented, credentialError := staffClientCredentials(r)
 		if credentialError != "" {
 			status := http.StatusBadRequest

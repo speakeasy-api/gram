@@ -10,6 +10,11 @@ import {
   MCPServerStatusDropdown,
 } from "./MCPServerDetails";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
   guardRequest: vi.fn(),

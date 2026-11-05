@@ -1,3 +1,4 @@
+import { WorkloadIssuerPolicy } from "./WorkloadIssuerPolicy";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -47,6 +48,12 @@ export function AgentFederatedAccess({
   });
 
   const mine = identities.admissions;
+  const firstAdmissionByIssuer = new Map<string, string>();
+  for (const admission of mine) {
+    if (!firstAdmissionByIssuer.has(admission.workloadIssuerId)) {
+      firstAdmissionByIssuer.set(admission.workloadIssuerId, admission.id);
+    }
+  }
 
   return (
     <>
@@ -59,13 +66,14 @@ export function AgentFederatedAccess({
         footer={
           mine.length === 0
             ? undefined
-            : "Each platform signs its own tokens. Speakeasy trades them for a session as this agent."
+            : "Each platform signs its own short-lived tokens, so no key is minted. Speakeasy trades them for a session as this agent."
         }
       >
         {mine.length === 0 ? (
           <IdentityPanelEmpty>
-            No platform signs in as this agent. Agents reached this way carry no
-            key of their own.
+            No platform signs in as this agent. A platform that already mints
+            tokens for its workloads can sign in as it, with no key to mint or
+            store.
           </IdentityPanelEmpty>
         ) : (
           mine.map((admission) => (
@@ -91,17 +99,28 @@ export function AgentFederatedAccess({
                   : undefined
               }
               trailing={
-                <RequireScope scope="workload:write" level="component">
-                  <Button
-                    variant="destructive-secondary"
-                    size="sm"
-                    disabled={withdraw.isPending}
-                    aria-label={`Remove ${admission.issuerName || admission.issuer} access`}
-                    onClick={() => setRemoving(admission)}
-                  >
-                    <Button.Text>Remove</Button.Text>
-                  </Button>
-                </RequireScope>
+                <div className="flex items-center gap-2">
+                  {identities.issuers
+                    .filter(
+                      (issuer) =>
+                        issuer.id === admission.workloadIssuerId &&
+                        firstAdmissionByIssuer.get(issuer.id) === admission.id,
+                    )
+                    .map((issuer) => (
+                      <WorkloadIssuerPolicy key={issuer.id} issuer={issuer} />
+                    ))}
+                  <RequireScope scope="workload:write" level="component">
+                    <Button
+                      variant="destructive-secondary"
+                      size="sm"
+                      disabled={withdraw.isPending}
+                      aria-label={`Remove ${admission.issuerName || admission.issuer} access`}
+                      onClick={() => setRemoving(admission)}
+                    >
+                      <Button.Text>Remove</Button.Text>
+                    </Button>
+                  </RequireScope>
+                </div>
               }
             />
           ))

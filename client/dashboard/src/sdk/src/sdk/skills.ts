@@ -11,9 +11,11 @@ import { skillsDismissSuggestion } from "../funcs/skillsDismissSuggestion.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsGetShared } from "../funcs/skillsGetShared.js";
+import { skillsLink } from "../funcs/skillsLink.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListFeedback } from "../funcs/skillsListFeedback.js";
+import { skillsListLinks } from "../funcs/skillsListLinks.js";
 import { skillsListSuggestionFeedback } from "../funcs/skillsListSuggestionFeedback.js";
 import { skillsListSuggestions } from "../funcs/skillsListSuggestions.js";
 import { skillsListTags } from "../funcs/skillsListTags.js";
@@ -23,6 +25,7 @@ import { skillsRestoreVersion } from "../funcs/skillsRestoreVersion.js";
 import { skillsShare } from "../funcs/skillsShare.js";
 import { skillsTriggerSuggestion } from "../funcs/skillsTriggerSuggestion.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
+import { skillsUnlink } from "../funcs/skillsUnlink.js";
 import { skillsUnshare } from "../funcs/skillsUnshare.js";
 import { skillsUpdate } from "../funcs/skillsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -35,6 +38,7 @@ import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
 import { SkillEditSuggestion } from "../models/components/skilleditsuggestion.js";
+import { SkillLink } from "../models/components/skilllink.js";
 import { SkillShareLink } from "../models/components/skillsharelink.js";
 import {
   AddSkillVersionRequest,
@@ -73,6 +77,10 @@ import {
   GetSkillSecurity,
 } from "../models/operations/getskill.js";
 import {
+  LinkSkillRequest,
+  LinkSkillSecurity,
+} from "../models/operations/linkskill.js";
+import {
   ListSkillDistributionsRequest,
   ListSkillDistributionsResponse,
   ListSkillDistributionsSecurity,
@@ -82,6 +90,11 @@ import {
   ListSkillFeedbackResponse,
   ListSkillFeedbackSecurity,
 } from "../models/operations/listskillfeedback.js";
+import {
+  ListSkillLinksRequest,
+  ListSkillLinksResponse,
+  ListSkillLinksSecurity,
+} from "../models/operations/listskilllinks.js";
 import {
   ListSkillsRequest,
   ListSkillsResponse,
@@ -126,6 +139,10 @@ import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
 } from "../models/operations/undistributeskill.js";
+import {
+  UnlinkSkillRequest,
+  UnlinkSkillSecurity,
+} from "../models/operations/unlinkskill.js";
 import {
   UnshareSkillRequest,
   UnshareSkillSecurity,
@@ -308,6 +325,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * link skills
+   *
+   * @remarks
+   * Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+   */
+  async link(
+    request: LinkSkillRequest,
+    security?: LinkSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillLink> {
+    return unwrapAsync(skillsLink(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * list skills
    *
    * @remarks
@@ -357,6 +393,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillFeedbackResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListFeedback(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listLinks skills
+   *
+   * @remarks
+   * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+   */
+  async listLinks(
+    request?: ListSkillLinksRequest | undefined,
+    security?: ListSkillLinksSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListSkillLinksResponse, { cursor: string }>> {
+    return unwrapResultIterator(skillsListLinks(
       this,
       request,
       security,
@@ -530,6 +585,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUndistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unlink skills
+   *
+   * @remarks
+   * Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+   */
+  async unlink(
+    request: UnlinkSkillRequest,
+    security?: UnlinkSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsUnlink(
       this,
       request,
       security,

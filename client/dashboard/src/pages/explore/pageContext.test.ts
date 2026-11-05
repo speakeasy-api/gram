@@ -58,6 +58,20 @@ const preset = (value: "1d" | "30d" | "4h") => ({
 });
 
 describe("applyPageContext", () => {
+  it("queries the whole selected calendar day using its persisted exclusive boundary", () => {
+    const from = new Date("2026-11-01T05:00:00Z");
+    const calendarEnd = new Date("2026-11-02T06:00:00Z");
+    const { spec: paged } = applyPageContext(spec(), toolCalls, {
+      window: {
+        preset: null,
+        customRange: { from, to: from },
+        calendarEnd,
+        customLabel: null,
+      },
+    });
+    expect(queryBodyFromSpec(paged)).toMatchObject({ from, to: calendarEnd });
+  });
+
   it("leaves a widget alone on no page", () => {
     const own = spec();
     expect(applyPageContext(own, toolCalls, undefined)).toEqual({

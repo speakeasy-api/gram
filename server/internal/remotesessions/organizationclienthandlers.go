@@ -3,8 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,8 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -688,7 +691,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another issuer; reload and retry").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -707,11 +710,18 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	newClientID, err := correctedClientID(existing.RemoteSessionClient, payload.ClientID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return nil, err
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientID:                        newClientID,
+		DisplayName:                     updatedDisplayName(payload.DisplayName),
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
@@ -726,6 +736,16 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// Sessions obtained through the old client_id hold tokens the issuer bound
+	// to it, so they cannot be refreshed under the corrected one.
+	var revokedSessions []repo.SoftDeleteRemoteSessionsByClientIDRow
+	if newClientID.Valid {
+		revokedSessions, err = txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke remote sessions of the corrected client").LogError(ctx, logger)
+		}
 	}
 
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
@@ -768,6 +788,9 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Best effort and post-commit, as on delete.
+	s.revoker.RevokeAllIssuedToDetached(ctx, revokedCredentials(revokedSessions), issuingClientAuth(existing.RemoteSessionClient))
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
@@ -812,7 +835,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -824,6 +847,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		ActorDisplayName:         authCtx.Email,
 		ConfirmUpstreamRejection: false,
 		OrganizationID:           authCtx.ActiveOrganizationID,
+		RegistrationScope:        nil,
 	})
 	if err != nil {
 		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
@@ -887,6 +911,23 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+	}
 	if _, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -895,6 +936,9 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock organization admin remote session client for deletion").LogError(ctx, logger)
+	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
 	}
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, clientID)
 	if err != nil {
@@ -916,7 +960,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return err
 	}
 
@@ -945,6 +989,11 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		OrganizationID:        authCtx.ActiveOrganizationID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
+	}
+	// Those servers no longer reach this registration, so the links through
+	// which they offered its typed client are retired in the same transaction.
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDelete(ctx, dbtx, audit.LogRemoteSessionClientDeleteEvent{
@@ -1002,6 +1051,23 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	txRepo := repo.New(dbtx)
 
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+	}
+
 	// Establish org ownership of the client before detaching the MCP server.
 	clientRow, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
@@ -1044,6 +1110,9 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return lifecycleLockError(err)
 	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
 
 	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
@@ -1069,6 +1138,11 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
 	}
+	// Same transaction as the binding removal: a server that stops reaching
+	// the registration stops offering the client derived from it.
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the detached client's servers").LogError(ctx, logger)
+	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -1089,4 +1163,51 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 
 	return nil
+}
+
+// serversLosingClientAssociations is every live MCP server that has an
+// association with the client the caller is about to remove, with the project
+// it sits in. Read before the removal and before the writer scope lock,
+// because the pruning statements report only a count and the scope has to
+// name the projects it covers.
+//
+// Tombstoned associations are included: a server whose association an earlier
+// removal retired may still carry the link derived from it, and deciding it
+// again is how that is repaired rather than left for the offline backfill.
+// recheckClientAssociationScope confirms the servers discovered before the
+// scope was taken are still the servers this removal will prune. Associating a
+// server with a client takes a key-share lock on the client row, so once the
+// caller holds that row exclusively the set can no longer change; what this
+// catches is one that committed in the window between the discovery and that
+// lock. Pruning it without re-deciding it would leave the typed link behind,
+// so the caller is told to retry on the fresh set instead.
+func recheckClientAssociationScope(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID, discovered []uuid.UUID) *oops.ShareableError {
+	current, _, err := serversLosingClientAssociations(ctx, dbtx, organizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the client")
+	}
+	if !slices.Equal(discovered, current) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being removed; reload and retry")
+	}
+	return nil
+}
+
+func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        conv.ToPGText(organizationID),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("list servers losing client associations: %w", err)
+	}
+	var servers, projects []uuid.UUID
+	seen := map[uuid.UUID]bool{}
+	for _, row := range rows {
+		servers = append(servers, row.McpServerID)
+		if !seen[row.ProjectID] {
+			seen[row.ProjectID] = true
+			projects = append(projects, row.ProjectID)
+		}
+	}
+	return servers, projects, nil
 }

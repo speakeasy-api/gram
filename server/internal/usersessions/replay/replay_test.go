@@ -3,12 +3,17 @@ package replay
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"io"
+	"net"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // The core property: an identifier is claimable exactly once.
@@ -60,6 +65,78 @@ func TestReserve_ConcurrentPresentationsOneWinner(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, winners, "exactly one of %d simultaneous presentations may win", callers)
+}
+
+func TestRelease_IdentifierCanBeReservedAgain(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+	key := testKey(t, "jti-released")
+
+	holdUntil := time.Now().Add(time.Minute)
+	claimed, err := guard.ReserveOwned(t.Context(), key, holdUntil, "first")
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	require.NoError(t, guard.Release(t.Context(), key, "someone-else"))
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "second")
+	require.NoError(t, err)
+	require.False(t, claimed, "only the owner can release")
+
+	require.NoError(t, guard.Release(t.Context(), key, "first"))
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "second")
+	require.NoError(t, err)
+	require.True(t, claimed, "a released identifier is unspent")
+
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "third")
+	require.NoError(t, err)
+	require.False(t, claimed, "and single use applies again")
+}
+
+// A reply lost after the store made the claim, so that a retry loses to itself.
+func TestReserveOwned_RetryAfterLostReplyCountsAsClaimed(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+	key := testKey(t, "jti-lost-reply")
+	holdUntil := time.Now().Add(time.Minute)
+
+	claimed, err := guard.ReserveOwned(t.Context(), key, holdUntil, "owner")
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "owner")
+	require.NoError(t, err)
+	require.True(t, claimed)
+}
+
+// A Redis connection that closes mid-reply is an outage, not a broken store.
+func TestReserveOwned_ClosedConnectionIsAnOutage(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, aerr := listener.Accept()
+			if aerr != nil {
+				return
+			}
+			// Read the command first, or the close is a reset instead of an EOF.
+			_, _ = conn.Read(make([]byte, 4096))
+			_ = conn.Close()
+		}
+	}()
+	client := redis.NewClient(&redis.Options{Addr: listener.Addr().String(), MaxRetries: -1, Protocol: 2, DisableIdentity: true})
+	t.Cleanup(func() { _ = client.Close() })
+	guard, err := NewRedisGuard(client, "closed-conn", time.Hour)
+	require.NoError(t, err)
+
+	_, err = guard.ReserveOwned(t.Context(), testKey(t, "jti-closed"), time.Now().Add(time.Minute), "owner")
+	require.Error(t, err)
+	require.ErrorIs(t, err, io.EOF)
+	require.True(t, oops.IsInfrastructureFailure(err), "error: %v", err)
 }
 
 // Distinct identifiers do not interfere, so a client making concurrent

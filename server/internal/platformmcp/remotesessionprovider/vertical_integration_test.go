@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
@@ -227,10 +231,67 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	require.Equal(t, platformmcp.ReadinessNeedsGramAuthorization, revoked.State)
 }
 
+func TestReviewedRemoteSessionProviderSetupCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := verticalSliceInfra.CloneTestDatabase(t, "platform_mcp_provider_cancellation")
+	require.NoError(t, err)
+	upstream := newReviewedUpstream(t)
+	principal, project := seedPlatformRegistration(t, ctx, conn)
+	store, err := platformmcp.NewRegistrationStore(conn)
+	require.NoError(t, err)
+	registration := registerReviewedMCP(t, ctx, conn, store, principal, project, upstream.URL+"/mcp")
+	manager := newChallengeManager(t, conn, testOAuthFixturePolicy(t, upstream))
+	remoteIssuerID := seedReviewedRemoteIssuer(t, ctx, conn, project.ID, upstream.URL)
+	remoteClientID := seedReviewedRemoteClient(t, ctx, conn, project.ID, principal.OrganizationID, registration.UserSessionIssuerID.UUID, remoteIssuerID)
+	adapter := remotesessionprovider.New(testProbeFixturePolicy(t, upstream), manager, remotesessionprovider.Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      remoteIssuerID,
+		StreamableHTTPURL:          upstream.URL + "/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+		TestOnlyAllowedCIDRBlocks:  []string{fixtureCIDR(t, upstream.URL)},
+	})
+	adapters := platformmcp.NewProviderAdapters([]platformmcp.ProviderAdapter{adapter})
+	binding := platformmcp.SetupHandoffBinding{
+		ProjectID: project.ID, RegistrationID: registration.ID,
+		ProviderKey: "fixture", CatalogReference: "reviewed-fixture", Intent: "provider_setup",
+	}
+	handoff, err := store.IssueSetupHandoff(ctx, principal, binding, time.Now().UTC())
+	require.NoError(t, err)
+	setup, err := store.BeginProviderSetup(ctx, principal, binding, handoff.Value, adapters)
+	require.NoError(t, err)
+
+	callbackURL := visitProviderAuthorization(t, upstream, setup.AuthorizationURL)
+	query := callbackURL.Query()
+	query.Del("code")
+	query.Set("error", oautherr.CodeAccessDenied)
+	callbackURL.RawQuery = query.Encode()
+	callback := httptest.NewRecorder()
+	handler := oops.BrowserErrHandle(testenv.NewLogger(t), manager.HandleRemoteLoginCallback)
+	handler.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, callbackURL.RequestURI(), nil))
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, callback, http.StatusForbidden).Code)
+	require.Contains(t, callback.Body.String(), "Sign-in was canceled")
+	require.Empty(t, callback.Header().Get("Location"))
+	require.Zero(t, upstream.tokenRequests.Load(), "cancellation never exchanges a code")
+	_, err = remotesessionsrepo.New(conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{
+		SubjectUrn: urn.NewUserSubject(principal.UserID), RemoteSessionClientID: remoteClientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	replay := httptest.NewRecorder()
+	handler.ServeHTTP(replay, httptest.NewRequest(http.MethodGet, callbackURL.RequestURI(), nil))
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, replay, http.StatusUnauthorized).Code)
+	require.Contains(t, replay.Body.String(), "expired or was already used")
+	require.Empty(t, replay.Header().Get("Location"))
+	require.Zero(t, upstream.tokenRequests.Load())
+}
+
 type reviewedUpstream struct {
 	*httptest.Server
 	rejectProbeAuthorization atomic.Bool
 	standaloneSSERequests    atomic.Int64
+	tokenRequests            atomic.Int64
 	mode                     atomic.Int32
 }
 
@@ -261,6 +322,7 @@ func newReviewedUpstream(t *testing.T) *reviewedUpstream {
 			redirectURI.RawQuery = query.Encode()
 			http.Redirect(w, r, redirectURI.String(), http.StatusFound)
 		case "/token":
+			upstream.tokenRequests.Add(1)
 			if err := r.ParseForm(); err != nil {
 				t.Errorf("parse reviewed provider token request: %v", err)
 				http.Error(w, "invalid token request", http.StatusBadRequest)

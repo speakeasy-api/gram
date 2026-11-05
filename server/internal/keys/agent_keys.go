@@ -25,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -76,6 +78,9 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 	}
 	created, err := s.createPreparedAgentKey(ctx, tx, human, prepared)
 	if err != nil {
+		return nil, err
+	}
+	if err := recordAgentKeyAuthClientChoices(ctx, tx, human, created.ID, payload.AuthClientChoices); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -187,6 +192,15 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	if err != nil {
 		return nil, err
 	}
+	// The replacement keeps the credentials the rotated key was set up with.
+	if _, err := upstreamclientsrepo.New(tx).CopyCredentialChoices(ctx, upstreamclientsrepo.CopyCredentialChoicesParams{
+		ToCredentialID:   created.ID,
+		CredentialKind:   upstreamclients.CredentialKindAPIKey,
+		FromCredentialID: oldKey.ID,
+		OrganizationID:   human.Auth.ActiveOrganizationID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "copy agent API key credential choices").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save agent API key rotation").LogError(ctx, s.logger)
 	}
@@ -272,49 +286,80 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 }
 
 func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, policy runtimepolicy.DelegatedPolicy) (agentmanagement.HumanContext, error) {
+	bounds, err := s.loadAgentKeyBounds(ctx, tx, agentID)
+	if err != nil {
+		return agentmanagement.HumanContext{}, err
+	}
+	if err := s.requireWithinAgentKeyBounds(ctx, bounds, policy); err != nil {
+		return agentmanagement.HumanContext{}, err
+	}
+	return bounds.human, nil
+}
+
+// agentKeyBounds are the live policies an agent key's delegation must stay
+// inside: the agent's, its owner's and the caller's.
+type agentKeyBounds struct {
+	human      agentmanagement.HumanContext
+	agent      []authz.Grant
+	owner      []authz.Grant
+	authorizer []authz.Grant
+}
+
+func (s *Service) loadAgentKeyBounds(ctx context.Context, tx pgx.Tx, agentID uuid.UUID) (agentKeyBounds, error) {
 	human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
-		return agentmanagement.HumanContext{}, fmt.Errorf("authorize agent API key issuance: %w", err)
+		return agentKeyBounds{}, fmt.Errorf("authorize agent API key issuance: %w", err)
 	}
 	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return agentKeyBounds{}, oops.C(oops.CodeForbidden)
 	}
 
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, human.Auth.ActiveOrganizationID, agentPrincipal)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
 	}
 	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, agent.OwnerUserID)
 	if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return agentKeyBounds{}, oops.C(oops.CodeForbidden)
 	}
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "resolve live agent owner").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "resolve live agent owner").LogError(ctx, s.logger)
 	}
 	ownerPolicy, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, ownerPrincipals)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
+		return agentKeyBounds{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
 
 	// Reuse the live caller policy loaded by RequireAgentOwnerForUpdate in
 	// this transaction; management authority alone cannot delegate access.
-	authorizerPolicy := human.LiveGrants()
+	return agentKeyBounds{human: human, agent: agentPolicy, owner: ownerPolicy, authorizer: human.LiveGrants()}, nil
+}
 
+func (s *Service) requireWithinAgentKeyBounds(ctx context.Context, bounds agentKeyBounds, policy runtimepolicy.DelegatedPolicy) error {
 	// A broad selector must not hide a narrower exclusion in any parent policy.
 	// The key acts for the issuing user, so restrictions on other users'
 	// connections do not overlap it.
-	contained, err := runtimepolicy.DelegationContainedFor(human.Auth.UserID, policy, agentPolicy, ownerPolicy, authorizerPolicy)
+	contained, err := runtimepolicy.DelegationContainedFor(bounds.human.Auth.UserID, policy, bounds.agent, bounds.owner, bounds.authorizer)
 	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
 	}
 	if !contained {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
+		return oops.C(oops.CodeForbidden)
 	}
-	return human, nil
+	return nil
 }
 
 func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, prepared preparedAgentKey) (repo.ApiKey, error) {
+	// Issuance and rotation both copy the policy into the key, so both wait
+	// for the upstream_client write gate.
+	for _, grants := range [][]runtimepolicy.DelegatedPolicyGrant{prepared.policy.Requested, prepared.policy.Effective} {
+		for _, grant := range grants {
+			if err := authz.RequireUpstreamSelectorWrites(ctx, human.Auth.ActiveOrganizationID, grant.Selector); err != nil {
+				return repo.ApiKey{}, fmt.Errorf("check upstream_client write gate: %w", err)
+			}
+		}
+	}
 	created, err := repo.New(tx).CreateAgentAPIKey(ctx, repo.CreateAgentAPIKeyParams{
 		OrganizationID:         human.Auth.ActiveOrganizationID,
 		CreatedByUserID:        human.Auth.UserID,
@@ -431,6 +476,7 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyDisposition: selector.Disposition, authz.SelectorKeyTool: selector.Tool, authz.SelectorKeyProjectID: selector.ProjectID,
 		authz.SelectorKeyServerURL: selector.ServerURL, authz.SelectorKeyServerIdentity: selector.ServerIdentity,
 		authz.SelectorKeyClientType: selector.ClientType, authz.SelectorKeyConnectionOwner: selector.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient: selector.UpstreamClient,
 	} {
 		if value != nil {
 			result[key] = *value
@@ -450,6 +496,7 @@ func selectorModel(selector authz.Selector) *gen.AgentPolicySelector {
 		ServerIdentity:  mapStringPtr(selector, authz.SelectorKeyServerIdentity),
 		ClientType:      mapStringPtr(selector, authz.SelectorKeyClientType),
 		ConnectionOwner: mapStringPtr(selector, authz.SelectorKeyConnectionOwner),
+		UpstreamClient:  mapStringPtr(selector, authz.SelectorKeyUpstreamClient),
 	}
 	return model
 }

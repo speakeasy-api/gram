@@ -12,12 +12,12 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { SkillDistributionVersionBadge } from "./skill-badges";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
@@ -118,7 +118,9 @@ export function SkillDistributionsSection({
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <VersionTrackingBadge distribution={distribution} />
+                <SkillDistributionVersionBadge
+                  pinnedVersionId={distribution.pinnedVersionId}
+                />
                 <RequirePluginWrite>
                   <Button
                     type="button"
@@ -156,19 +158,4 @@ export function SkillDistributionsSection({
       )}
     </div>
   );
-}
-
-function VersionTrackingBadge({
-  distribution,
-}: {
-  distribution: PluginSkillDistribution;
-}): JSX.Element {
-  if (distribution.pinnedVersionId) {
-    return (
-      <Badge variant="neutral" title={distribution.pinnedVersionId}>
-        Pinned
-      </Badge>
-    );
-  }
-  return <Badge variant="information">Latest</Badge>;
 }

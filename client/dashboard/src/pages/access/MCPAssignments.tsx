@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { AssignmentServerIcon } from "./AssignmentServerIcon";
+import {
+  AssignmentProject,
+  AssignmentServerIcon,
+} from "./AssignmentServerIcon";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
@@ -279,7 +283,7 @@ export function MCPAssignments({
         <div role="alert" className="space-y-3">
           <Text>
             Couldn’t load the complete assignment review. Check your access and
-            retry before enabling the gateway.
+            retry.
           </Text>
           <Button variant="secondary" onClick={refresh}>
             <Button.Text>Retry</Button.Text>
@@ -382,16 +386,21 @@ function RoleServerIcons({ servers }: { servers: RoleServer[] }): JSX.Element {
                 />
               </span>
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent className="flex items-center gap-1.5">
               {server.name}
-              {server.projectSlug !== "default" &&
-                ` · ${server.projectSlug}`} ·{" "}
+              {server.projectSlug !== "default" && (
+                <>
+                  <span>·</span>
+                  <AssignmentProject server={server} />
+                </>
+              )}
+              <span>·</span>
               {serverAccessLabel(row)}
             </TooltipContent>
           </Tooltip>
         ))}
         {servers.length > 8 && (
-          <span className="bg-muted relative flex h-8 shrink-0 items-center justify-center px-2 text-xs whitespace-nowrap">
+          <span className="bg-muted border-card relative flex h-8 shrink-0 items-center justify-center rounded-full border-2 px-2.5 text-xs whitespace-nowrap">
             +{servers.length - 8} more
           </span>
         )}
@@ -531,14 +540,15 @@ function RoleServerAssignment({
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
         <Link
           className="break-words text-sm font-medium hover:underline"
-          to={routes.mcp.x.overview.href(server.slug)}
+          to={routes.mcp.details.overview.href(mcpServerRouteParam(server))}
         >
           {server.name || "Unnamed server"}
         </Link>
         {server.projectSlug !== "default" && (
-          <Text small muted>
-            {server.projectSlug}
-          </Text>
+          <AssignmentProject
+            server={server}
+            className="text-muted-foreground text-sm"
+          />
         )}
       </div>
       {restrictions.length > 0 ? (
@@ -954,14 +964,16 @@ function UserAccess({
               ) : access.isPending ? (
                 <SkeletonTable />
               ) : access.data?.length ? (
-                matchingServers
-                  .slice(0, serverLimit)
-                  .map((assignment) => (
+                // One block, so the section's vertical spacing sits around
+                // the list rather than above every row.
+                <div>
+                  {matchingServers.slice(0, serverLimit).map((assignment) => (
                     <ServerAssignment
                       key={assignment.server.id}
                       {...assignment}
                     />
-                  ))
+                  ))}
+                </div>
               ) : (
                 <Text>No MCP connection access.</Text>
               )}

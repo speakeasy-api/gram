@@ -12,7 +12,10 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -215,13 +218,20 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 	return newCommitSHA, nil
 }
 
-// GetRepoFiles returns every file on the given branch as a path->content map,
-// using the Git Trees API (recursive) plus one blob fetch per file. Returns
+// repoFileFetchConcurrency bounds the parallel blob fetches in GetRepoFiles.
+// A publish is otherwise one sequential round trip per file, and GitHub's
+// secondary rate limits penalize bursts of concurrent requests, so keep this
+// modest.
+const repoFileFetchConcurrency = 8
+
+// GetRepoFiles returns the files on the given branch as a path->content map,
+// using the Git Trees API (recursive) plus one blob fetch per file. When
+// include is non-nil only paths it accepts are fetched and returned. Returns
 // ErrRepoNotFound if the repo or branch does not exist yet. The publish path
 // uses this to carry an unchanged plugin component (hooks or MCP) verbatim from
 // the existing repo into a fresh push, so publishing one component leaves the
 // other's files — including their embedded API keys — untouched.
-func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	treeURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees", branch)
 	treeURL += "?recursive=1"
 	resp, err := c.doAPI(ctx, installationID, http.MethodGet, treeURL, nil)
@@ -256,16 +266,29 @@ func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, 
 		return nil, fmt.Errorf("get tree: response truncated (repo too large)")
 	}
 
-	files := make(map[string][]byte, len(tree.Entries))
+	var (
+		mu    sync.Mutex
+		files = make(map[string][]byte, len(tree.Entries))
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(repoFileFetchConcurrency)
 	for _, entry := range tree.Entries {
-		if entry.Type != "blob" {
+		if entry.Type != "blob" || (include != nil && !include(entry.Path)) {
 			continue
 		}
-		content, err := c.getBlob(ctx, installationID, owner, repo, entry.SHA)
-		if err != nil {
-			return nil, fmt.Errorf("get blob %s: %w", entry.Path, err)
-		}
-		files[entry.Path] = content
+		g.Go(func() error {
+			content, err := c.getBlob(gctx, installationID, owner, repo, entry.SHA)
+			if err != nil {
+				return fmt.Errorf("get blob %s: %w", entry.Path, err)
+			}
+			mu.Lock()
+			files[entry.Path] = content
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("get repo files: %w", err)
 	}
 
 	return files, nil

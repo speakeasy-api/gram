@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { organizationUrlPreview } from "./organizationUrl";
+import {
+  organizationSuggestionsFromHostname,
+  organizationUrlPreview,
+} from "./organizationUrl";
+
+describe("organization suggestions", () => {
+  it.each([
+    ["example.com", "example", "example"],
+    ["www.example.com", "example", "example"],
+    ["a.b.example.co.uk", "example", "example"],
+    ["tenant.github.io", "tenant", "tenant"],
+    ["xn--bcher-kva.de", "xn--bcher-kva", "xn-bcher-kva"],
+  ])("suggests a name and slug for %s", (hostname, name, slug) => {
+    expect(organizationSuggestionsFromHostname(hostname)).toEqual({
+      name,
+      slug,
+    });
+  });
+
+  it("leaves a too-short slug for the operator to fill", () => {
+    expect(organizationSuggestionsFromHostname("a.co")).toEqual({
+      name: "a",
+      slug: "",
+    });
+  });
+
+  it("keeps an empty hostname neutral", () => {
+    expect(organizationSuggestionsFromHostname("")).toEqual({
+      name: "",
+      slug: "",
+    });
+  });
+});
 
 describe("organization URL preview", () => {
   it.each([

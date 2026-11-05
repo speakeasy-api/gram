@@ -41,7 +41,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 	})
 	addTool(reg, &mcp.Tool{
 		Name:        "get_risk_policy",
-		Title:       "Get Risk Policy",
+		Title:       "Get a Risk Policy",
 		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
@@ -66,7 +66,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 
 const (
 	riskAnalysisStatusToolName  = "get_risk_analysis_status"
-	riskAnalysisStatusToolTitle = "Get Watchdog Analysis Status"
+	riskAnalysisStatusToolTitle = "Check Watchdog Analysis Status"
 	// riskAnalysisStatusToolStub is the description served when the analysis
 	// run state cannot be described in this deployment.
 	riskAnalysisStatusToolStub = "Report when the Watchdog analysis last ran for a project. Analysis status is unavailable in this deployment."
@@ -112,7 +112,7 @@ func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCa
 		schema                   *jsonschema.Schema
 	}{
 		{"list_risk_policies", "List Risk Policies", "List risk policy summaries. Risk reads are unavailable in this deployment.", riskListSchema(false)},
-		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
+		{"get_risk_policy", "Get a Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
 		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
@@ -214,14 +214,14 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create a Risk Policy", Description: createPolicyDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update a Risk Policy", Description: updatePolicyDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create a Risk Exclusion", Description: createExclusionDescription, Annotations: writeAnnotations(false, true, false), InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update a Risk Exclusion", Description: updateExclusionDescription, Annotations: writeAnnotations(true, true, false), InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
 	// Dismissing hides findings from the active list, so clients should
 	// treat mark as destructive; restoring only re-surfaces them.
-	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
-	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
+	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings as False Positives", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
+	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings as False Positives", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
 }
 
 const (
@@ -519,11 +519,11 @@ func riskPolicyMCPScopeSchema() *jsonschema.Schema {
 		"tool_annotations": annotations,
 		"servers":          servers,
 	}, nil)
-	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions, and cannot use the shadow_mcp or account_identity sources."
+	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions here, and cannot use the shadow_mcp or account_identity sources. Tool approval policies (require_approval) are also scoped but are read-only through these tools."
 	return schema
 }
 func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	const mcpNote = "MCP-scoped policies support flag and block only."
+	const mcpNote = "MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools."
 	schema := describedCatalogEnumSchema(catalog, catalog.Actions, "What happens when the policy fires; default flag. "+mcpNote+" One of:", func(value string) string { return policycatalog.ActionDescriptions[value] })
 	if schema.Description == "" {
 		schema.Description = "Policy action. " + mcpNote

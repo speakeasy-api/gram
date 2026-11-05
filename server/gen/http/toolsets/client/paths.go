@@ -47,11 +47,6 @@ func ListToolSchemaStaticValuesToolsetsPath() string {
 	return "/rpc/toolsets.listToolSchemaStaticValues"
 }
 
-// CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
-func CheckMCPSlugAvailabilityToolsetsPath() string {
-	return "/rpc/toolsets.checkMCPSlugAvailability"
-}
-
 // CloneToolsetToolsetsPath returns the URL path to the toolsets service cloneToolset HTTP endpoint.
 func CloneToolsetToolsetsPath() string {
 	return "/rpc/toolsets.clone"

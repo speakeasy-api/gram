@@ -1,4 +1,8 @@
 import { syncInProgress } from "./syncView";
+import {
+  APPROVAL_DM_SCOPE,
+  workspacesNeedingReinstall,
+} from "./approvalReadiness";
 import { Link, useSearchParams } from "react-router";
 import { SlackDirectory } from "./SlackDirectory";
 import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
@@ -9,6 +13,8 @@ import { Hash, Plus, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
@@ -20,9 +26,18 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
 import { useBeginSlackDirectoryConnectionMutation } from "@gram/client/react-query/beginSlackDirectoryConnection.js";
 import { useDisconnectSlackDirectoryConnectionMutation } from "@gram/client/react-query/disconnectSlackDirectoryConnection.js";
+import { useSetSlackDirectoryDefaultProjectMutation } from "@gram/client/react-query/setSlackDirectoryDefaultProject.js";
 import {
   invalidateAllSlackDirectoryConnections,
   useSlackDirectoryConnections,
@@ -68,6 +83,80 @@ function statusLabel(status: SlackDirectoryConnection["status"]): string {
   return "Needs authorization";
 }
 
+const NO_DEFAULT_PROJECT = "none";
+
+// Picks the project whose managed assistant answers @Speakeasy mentions and
+// DMs in one workspace. A project can answer in at most one workspace, so
+// projects already chosen elsewhere are shown but disabled.
+function DefaultProjectSelect({
+  connection,
+  connections,
+  disabled,
+  onChange,
+}: {
+  connection: SlackDirectoryConnection;
+  connections: SlackDirectoryConnection[];
+  disabled: boolean;
+  onChange: (projectId: string | undefined) => void;
+}): JSX.Element {
+  const organization = useOrganization();
+  const projects = [...(organization.projects ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const current = connection.defaultProjectId ?? NO_DEFAULT_PROJECT;
+  const unavailable =
+    current !== NO_DEFAULT_PROJECT &&
+    !projects.some((project) => project.id === current);
+  const fieldId = `slack-default-project-${connection.id}`;
+  return (
+    <div className="space-y-1 pt-2">
+      <Label htmlFor={fieldId}>Default project</Label>
+      <p className="text-muted-foreground text-xs">
+        Project whose assistant answers @Speakeasy mentions and DMs in this
+        workspace.
+      </p>
+      <Select
+        value={current}
+        disabled={disabled}
+        onValueChange={(value) => {
+          if (value === current) return;
+          onChange(value === NO_DEFAULT_PROJECT ? undefined : value);
+        }}
+      >
+        <SelectTrigger id={fieldId} size="sm" className="min-w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_DEFAULT_PROJECT}>None</SelectItem>
+          {projects.map((project) => {
+            const elsewhere = connections.find(
+              (other) =>
+                other.id !== connection.id &&
+                other.defaultProjectId === project.id,
+            );
+            return (
+              <SelectItem
+                key={project.id}
+                value={project.id}
+                disabled={elsewhere !== undefined}
+              >
+                {elsewhere
+                  ? `${project.name} (answers in ${elsewhere.workspaceName || elsewhere.workspaceId})`
+                  : project.name}
+              </SelectItem>
+            );
+          })}
+          {unavailable && (
+            <SelectItem value={current} disabled>
+              Unavailable project
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function SlackWorkspaces(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -110,18 +199,39 @@ function SlackWorkspacesContent(): JSX.Element {
       void invalidateAllSlackDirectoryConnections(queryClient);
     },
   });
+  const setDefaultProject = useSetSlackDirectoryDefaultProjectMutation({
+    onError: () => {
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+    onSuccess: () => {
+      toast.success("Default project updated");
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+  });
   // Disconnected workspaces keep their history but leave the UI; connecting again restores them.
   const connections = (query.data?.connections ?? []).filter(
     (connection) => connection.status !== "disconnected",
   );
   const configured = query.data?.authorizationConfigured === true;
+  // Approval DMs are behind the tool approvals rollout, so only orgs that can
+  // use them are asked to reinstall.
+  const toolApprovals =
+    useFeatureFlag(FEATURE_FLAGS.toolApprovals).status === "enabled";
+  const needsReinstall = toolApprovals
+    ? workspacesNeedingReinstall(connections)
+    : [];
   // Connecting a workspace that is already listed reauthorizes it in place.
-  const start = () => {
+  // Passing its connection preselects that workspace in Slack.
+  const start = (connectionId?: string) => {
     if (isDemo) return;
     setRedirectError(null);
     begin.mutate(
       {
-        request: { beginSlackDirectoryConnectionRequestBody: {} },
+        request: {
+          beginSlackDirectoryConnectionRequestBody: connectionId
+            ? { connectionId }
+            : {},
+        },
         security: SESSION_SECURITY,
       },
       {
@@ -186,7 +296,9 @@ function SlackWorkspacesContent(): JSX.Element {
           {notice}
         </Alert>
       )}
-      <ApiErrorAlert error={query.error ?? begin.error} />
+      <ApiErrorAlert
+        error={setDefaultProject.error ?? begin.error ?? query.error}
+      />
       {redirectError && <Alert variant="error">{redirectError}</Alert>}
       {query.isError && (
         <Button
@@ -202,6 +314,31 @@ function SlackWorkspacesContent(): JSX.Element {
         <Alert variant="info" dismissible={false}>
           Slack workspaces are read-only in the demo organization. Switch to
           your organization to connect a workspace.
+        </Alert>
+      )}
+      {needsReinstall.length > 0 && !isDemo && (
+        <Alert variant="warning" dismissible={false}>
+          <div className="space-y-3">
+            <p>
+              Reinstall the Slack app so approvers get tool approval requests as
+              Slack messages. These workspaces granted access before Speakeasy
+              could send messages ({APPROVAL_DM_SCOPE}). Until you reinstall,
+              approvers decide in Speakeasy.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {needsReinstall.map((connection) => (
+                <Button
+                  key={connection.id}
+                  variant="secondary"
+                  size="sm"
+                  disabled={!configured || begin.isPending}
+                  onClick={() => start(connection.id)}
+                >
+                  {`Reinstall in ${connection.workspaceName || connection.workspaceId}`}
+                </Button>
+              ))}
+            </div>
+          </div>
         </Alert>
       )}
       {query.data && !configured && !isDemo && (
@@ -260,6 +397,22 @@ function SlackWorkspacesContent(): JSX.Element {
                       {connectionError(connection.lastErrorCode)}
                     </p>
                   )}
+                  <DefaultProjectSelect
+                    connection={connection}
+                    connections={connections}
+                    disabled={isDemo || setDefaultProject.isPending}
+                    onChange={(projectId) => {
+                      setDefaultProject.mutate({
+                        request: {
+                          setSlackDirectoryDefaultProjectRequestBody: {
+                            id: connection.id,
+                            ...(projectId ? { projectId } : {}),
+                          },
+                        },
+                        security: SESSION_SECURITY,
+                      });
+                    }}
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -291,7 +444,8 @@ function SlackWorkspacesContent(): JSX.Element {
       )}
       <p className="text-muted-foreground max-w-2xl text-sm">
         Slack access is limited to reading workspace members and their email
-        addresses.
+        addresses, and to sending tool approval requests to approvers as direct
+        messages.
       </p>
       <ConfirmDialog
         open={selected !== null}

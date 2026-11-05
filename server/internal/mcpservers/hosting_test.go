@@ -24,7 +24,7 @@ func TestListMcpServers_ToolsetHostingServer(t *testing.T) {
 	newToolset := func(slug string) toolsetsrepo.Toolset {
 		toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID,
-			Name: slug, Slug: slug, McpEnabled: true,
+			Name: slug, Slug: slug,
 		})
 		require.NoError(t, err)
 		return toolset

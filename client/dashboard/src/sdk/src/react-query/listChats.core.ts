@@ -57,6 +57,7 @@ export function buildListChatsQuery(
       userId: request?.userId,
       source: request?.source,
       assistantId: request?.assistantId,
+      agentId: request?.agentId,
       sourceKind: request?.sourceKind,
       excludeSourceKind: request?.excludeSourceKind,
       hasRisk: request?.hasRisk,
@@ -102,6 +103,7 @@ export function queryKeyListChats(
     userId?: string | undefined;
     source?: string | undefined;
     assistantId?: string | undefined;
+    agentId?: string | undefined;
     sourceKind?: string | undefined;
     excludeSourceKind?: string | undefined;
     hasRisk?: HasRisk | undefined;

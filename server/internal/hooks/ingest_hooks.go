@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -227,6 +228,15 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if isInstallCheck(payload) {
+		// The install script's self-test has already proved what it checks:
+		// the plugin ran and the key may send hooks. It is not agent activity,
+		// so no policy runs and nothing is recorded.
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor{UserID: "", Email: ""},
+		}, nil
+	}
 	if payload.Session != nil {
 		if sessionID, changed := scopedSessionPtr(ctx, payload.Session.ID); changed {
 			session := *payload.Session
@@ -256,6 +266,20 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
 		ctx = withHookDuplicate(ctx)
+	}
+
+	if isDeliveryFailureReport(payload) {
+		// A sender's report on its own delivery is not agent activity: no
+		// enforcement, skill, MCP, or transcript state is touched. The org
+		// settings still ride on the response so a reconnecting sender's
+		// cached copy refreshes on this exchange like any other.
+		if !s.isHookDuplicate(ctx) {
+			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
@@ -567,11 +591,17 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
 	}
-	// The assistant surface is derived from the observation provider, and only
-	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// The assistant and MCP surfaces are derived from the observation provider,
+	// and only server-side assistant runs and hosted MCP reads may claim them.
+	// Reserve those values so a client hook cannot forge assistant-attributed
+	// skill activity or an MCP load.
+	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
+	}
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
+		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -579,12 +609,12 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return nil
+	return validateDeliveryFailurePayload(payload)
 }
 
-func isReservedAssistantAdapter(adapter string) bool {
+func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false
@@ -1298,10 +1328,11 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
+	// Only tool events carry a tool name. Prompt, lifecycle, and other
+	// non-tool rows keep gram.tool.name empty (gram.hook.event still names
+	// the event), because tool-call analytics count hook rows by a non-empty
+	// tool name.
 	toolName := canonicalTelemetryToolName(payload)
-	if toolName == "" {
-		toolName = hookEventName
-	}
 
 	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
@@ -1345,12 +1376,10 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -2128,21 +2157,31 @@ const maxEventBackdate = 14 * 24 * time.Hour
 // enforcement evaluation) agrees on one time for one event; a skewed device
 // clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
-	now := time.Now()
+	raw := ""
 	if payload != nil && payload.Event != nil {
-		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
-			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-				if t.After(now) {
-					return now
-				}
-				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
-					return floor
-				}
-				return t
-			}
-		}
+		raw = conv.PtrValOr(payload.Event.OccurredAt, "")
 	}
-	return now
+	return clampEventTime(raw, time.Now())
+}
+
+// clampEventTime parses a sender-supplied RFC3339 time and clamps it to
+// [now-maxEventBackdate, now]; an empty or unparseable value is now.
+func clampEventTime(raw string, now time.Time) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return now
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return now
+	}
+	if t.After(now) {
+		return now
+	}
+	if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+		return floor
+	}
+	return t
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {
@@ -2181,6 +2220,85 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 		return "Skill"
 	}
 	return canonicalToolName(payload)
+}
+
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
 }
 
 func canonicalToolCallID(payload *gen.IngestPayload) string {
@@ -2276,8 +2394,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
-// Apart from a channel label the result is a stand-in that title generation
-// later replaces.
+// Apart from a channel label or a cron job name the result is a stand-in that
+// title generation later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2293,6 +2411,9 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 				title = "Claude Tag coordination"
 			}
 		}
+	}
+	if cronTitle, ok := chat.CronJobTitle(title); ok {
+		return cronTitle
 	}
 	return chat.DerivedTitle(title)
 }

@@ -7,6 +7,7 @@ type CandidateKind =
   | "page"
   | "recent"
   | "mcp_server"
+  | "gateway"
   | "catalog"
   | "plugin"
   | "marketplace"

@@ -32,6 +32,7 @@ type LogUserSessionClientRevokeEvent struct {
 func (l *Logger) LogUserSessionClientRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionClientRevokeEvent) error {
 	action := ActionUserSessionClientRevoke
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -76,6 +77,7 @@ type LogUserSessionClientCIMDRefreshEvent struct {
 func (l *Logger) LogUserSessionClientCIMDRefresh(ctx context.Context, dbtx repo.DBTX, event LogUserSessionClientCIMDRefreshEvent) error {
 	action := ActionUserSessionClientCIMDRefresh
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

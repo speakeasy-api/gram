@@ -61,11 +61,14 @@ export function computePanelState(
     : projectFiltered
       ? resourceType
       : "server";
-  const allLabel = projectFiltered
-    ? "All assistants"
-    : isProjectScopedResourceType(resourceType)
+  const allLabel =
+    resourceType === "inference"
       ? "All projects"
-      : "All servers";
+      : projectFiltered
+        ? "All assistants"
+        : isProjectScopedResourceType(resourceType)
+          ? "All projects"
+          : "All servers";
 
   // Unrestricted
   if (selectors === null) {
@@ -76,6 +79,13 @@ export function computePanelState(
   }
 
   // Empty — user switched mode but hasn't selected anything yet
+  if (selectors.length === 0 && resourceType === "inference") {
+    return {
+      activePanel: "projects",
+      selectedProjectIds: [],
+      label: "Select...",
+    };
+  }
   if (selectors.length === 0) {
     return {
       activePanel: "servers",

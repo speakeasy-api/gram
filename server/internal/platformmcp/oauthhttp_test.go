@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
@@ -146,6 +147,10 @@ type testOrganizationSelector struct {
 	organizations []OrganizationOption
 }
 
+// twoTestOrganizations keeps the organization picker in a flow whose identity
+// provider reports no organization.
+var twoTestOrganizations = []OrganizationOption{{ID: "org-1", Name: "Organization one", WorkOSID: "org_workos_1"}, {ID: "org-2", Name: "Organization two", WorkOSID: "org_workos_2"}}
+
 func (s testOrganizationSelector) EligibleOrganizations(context.Context, string) ([]OrganizationOption, error) {
 	return s.organizations, nil
 }
@@ -245,7 +250,7 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
-	service.organizations = testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}}
+	service.organizations = testOrganizationSelector{organizations: twoTestOrganizations}
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
@@ -289,6 +294,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
+	service.organizations = testOrganizationSelector{organizations: twoTestOrganizations}
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
@@ -321,6 +327,8 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 
 	connectURL, err := url.Parse(selected.Header().Get("Location"))
 	require.NoError(t, err)
+	require.NotEqual(t, state, connectURL.Query().Get("state"), "the consent step continues under a fresh state")
+	state = connectURL.Query().Get("state")
 	connect := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(connect, httptest.NewRequest(http.MethodGet, connectURL.String(), nil))
 	require.Equal(t, http.StatusOK, connect.Code)
@@ -338,7 +346,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
 
 	approve := httptest.NewRecorder()
-	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}
+	approveForm := url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {"org-1"}, "action": {"approve"}}
 	approveRequest := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(approveForm.Encode()))
 	approveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	service.ConnectHandler().ServeHTTP(approve, approveRequest)
@@ -396,7 +404,7 @@ func TestOAuthHTTPConnectPostRedirectsTransientGateError(t *testing.T) {
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
 
-	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "action": {"approve"}}
+	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "organization_id": {challenge.OrganizationID}, "action": {"approve"}}
 	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
@@ -692,7 +700,8 @@ func TestOAuthHTTPAuthorizeClientLookupErrors(t *testing.T) {
 			response := httptest.NewRecorder()
 			service.AuthorizeHandler().ServeHTTP(response, request)
 			require.Equal(t, tc.status, response.Code, response.Body.String())
-			require.Contains(t, response.Body.String(), `"error":"`+tc.code+`"`)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, tc.status)
+			require.Equal(t, tc.code, body.Code)
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			require.Empty(t, response.Header().Get("Location"))
 			require.NotContains(t, response.Body.String(), "database unavailable")

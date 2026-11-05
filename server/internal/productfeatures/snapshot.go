@@ -8,6 +8,8 @@ import (
 
 // ProductFeaturesSnapshot is the complete product-feature state for an organization.
 type ProductFeaturesSnapshot struct {
+	// ProviderSetupEnabled reports staff approval for the provider setup rollout.
+	ProviderSetupEnabled                    bool
 	LogsEnabled                             bool
 	ToolIoLogsEnabled                       bool
 	SessionCaptureEnabled                   bool
@@ -28,6 +30,7 @@ type ProductFeaturesSnapshot struct {
 	NetworkIngressEnabled                   bool
 	SignalsIntelligenceEnabled              bool
 	OrganizationGatewayDisabled             bool
+	CodeModeEnabled                         bool
 	DeviceAgent                             bool
 }
 
@@ -87,6 +90,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 	}
 
 	snapshot := ProductFeaturesSnapshot{
+		ProviderSetupEnabled:                    isEnabled(FeatureProviderSetup),
 		LogsEnabled:                             isEnabled(FeatureLogs),
 		ToolIoLogsEnabled:                       isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:                   isEnabled(FeatureSessionCapture),
@@ -107,6 +111,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		SignalsIntelligenceEnabled:              isEnabled(FeatureSignalsIntelligence),
 		OrganizationGatewayDisabled:             isEnabled(FeatureOrganizationGatewayDisabled),
+		CodeModeEnabled:                         isEnabled(FeatureCodeMode),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

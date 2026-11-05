@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ import { AgentFederatedAccess } from "./AgentFederatedAccess";
 
 const mocks = vi.hoisted(() => ({
   admissions: [] as WorkloadAdmission[],
+  issuers: [] as WorkloadIssuer[],
   isPending: false,
   isError: false,
   withdraw: vi.fn(),
@@ -17,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   useWorkloadIdentities: () => ({
-    data: { issuers: [], admissions: mocks.admissions },
+    data: { issuers: mocks.issuers, admissions: mocks.admissions },
     isPending: mocks.isPending,
     isError: mocks.isError,
     refetch: mocks.refetch,
@@ -28,6 +30,12 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
   useWithdrawWorkloadSubjectMutation: () => ({
     mutate: mocks.withdraw,
     isPending: mocks.isWithdrawing,
+  }),
+}));
+vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
+  useUpdateWorkloadIssuerMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -79,6 +87,7 @@ function renderPanel() {
 afterEach(() => {
   cleanup();
   mocks.admissions = [];
+  mocks.issuers = [];
   mocks.isPending = false;
   mocks.isError = false;
   mocks.isWithdrawing = false;
@@ -176,3 +185,50 @@ it.each([
     }
   },
 );
+
+it("renders one policy control per issuer while preserving every subject row", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_1",
+    name: "Example cluster",
+    issuer: "https://issuer.example",
+    jwksUri: "https://issuer.example/jwks",
+    description: "",
+    tags: [],
+    allowAssertionReuse: false,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [
+    issuer,
+    { ...issuer, id: "iss_2", name: "Other cluster" },
+    { ...issuer, id: "iss_unused", name: "Unused cluster" },
+  ];
+  mocks.admissions = [
+    admission({ id: "adm_1", matchKind: "exact", subject: "workload-one" }),
+    admission({ id: "adm_2", matchKind: "exact", subject: "workload-two" }),
+    admission({
+      id: "adm_3",
+      workloadIssuerId: "iss_2",
+      issuerName: "Other cluster",
+    }),
+  ];
+  renderPanel();
+  expect(
+    screen.getAllByRole("button", {
+      name: "Edit Example cluster issuer policy",
+    }),
+  ).toHaveLength(1);
+  expect(
+    screen.getAllByRole("button", { name: "Edit Other cluster issuer policy" }),
+  ).toHaveLength(1);
+  expect(
+    screen.queryByRole("button", { name: "Edit Unused cluster issuer policy" }),
+  ).toBeNull();
+  expect(screen.getAllByText("Assertion reuse off (jti/uti)")).toHaveLength(2);
+  expect(
+    screen.getAllByRole("button", { name: /Remove .* access/ }),
+  ).toHaveLength(3);
+});

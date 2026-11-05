@@ -149,16 +149,16 @@ func (errFlags) FlagPayload(context.Context, feature.Flag, string, map[string]st
 }
 
 func allScopes() []string {
-	return []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
+	return []string{"okta.apps.read"}
 }
 
 func oktaFixtures() map[string]okta.Fixtures {
 	apps := []okta.App{{ID: "0oaresourceapp000001", Label: "Notion MCP", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: testTime(), LastUpdated: testTime()}}
 	return map[string]okta.Fixtures{
 		"https://unproven.okta.com": {},
-		fullOrgURL:                  {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
-		degradedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}},
-		rejectedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: allScopes()},
+		fullOrgURL:                  {Apps: apps, AppUsers: nil, AppGroups: nil, GrantedScopes: allScopes()},
+		degradedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.users.read"}},
+		rejectedOrgURL:              {Apps: apps, AppUsers: nil, AppGroups: nil, GrantedScopes: allScopes()},
 	}
 }
 

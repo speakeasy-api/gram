@@ -186,7 +186,11 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		change.bound = append(change.bound, impactClient{id: row.ID, projectID: row.ProjectID, providerID: row.RemoteSessionIssuerID, providerDeleted: row.ProviderDeleted})
 	}
 
-	if err := s.planIdentityChange(ctx, q, projectID, orgID, !userIssuer.ProjectID.Valid, payload.Change, providerID, clientID, &change); err != nil {
+	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
+	}
+	if err := s.planIdentityChange(ctx, q, projectID, orgID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
@@ -292,7 +296,7 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 // matching write would: the commit's ReplaceBound, a plain attach, or detaching
 // every client the caller's project sees. It applies the writes' org-wide
 // binding refusal.
-func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
+func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel, orgAdmin bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
@@ -301,7 +305,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	}
 	if kind == identityChangeDetach {
 		for _, client := range visible {
-			if err := refuseOrgWideBinding(userIssuerOrgLevel, client.ProjectID); err != nil {
+			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err
 			}
 			change.removed[client.ID] = true
@@ -341,7 +345,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		}
 	}
 	if !alreadyBound {
-		if err := refuseOrgWideBinding(userIssuerOrgLevel, added.projectID); err != nil {
+		if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, added.projectID); err != nil {
 			return err
 		}
 		change.added = &added
@@ -353,7 +357,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 			return err
 		}
 		for _, client := range replaced {
-			if err := refuseOrgWideBinding(userIssuerOrgLevel, client.ProjectID); err != nil {
+			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err
 			}
 			change.removed[client.ID] = true

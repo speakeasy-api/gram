@@ -50,6 +50,7 @@ export function buildCheckMcpEndpointSlugAvailabilityQuery(
     queryKey: queryKeyCheckMcpEndpointSlugAvailability({
       slug: request.slug,
       customDomainId: request.customDomainId,
+      mcpServerId: request.mcpServerId,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
@@ -82,6 +83,7 @@ export function queryKeyCheckMcpEndpointSlugAvailability(
   parameters: {
     slug: string;
     customDomainId?: string | undefined;
+    mcpServerId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

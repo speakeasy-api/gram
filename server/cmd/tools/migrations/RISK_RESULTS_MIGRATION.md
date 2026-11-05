@@ -210,8 +210,8 @@ will not join.
 
 ## Gap-fill before an organization cutover
 
-Run the gap-fill and policy-filter sweep before enabling
-`risk-findings-clickhouse-cutover`. Use one half-open time window for every
+Run the gap-fill and policy-filter sweep before an organization reads its
+findings only from ClickHouse. Use one half-open time window for every
 step. The gap-fill lookup checks ClickHouse in batches bounded by organization,
 project, the batch's UTC partition days, and source. It first matches the
 deterministic migration id, then matches a different live id by anchor, policy
@@ -288,8 +288,8 @@ may have been added, re-run without the cursor; matching is idempotent.
    `SUM(GREATEST(COALESCE(jsonb_array_length(spans), 1), 1))`. In ClickHouse,
    resolve the latest copy per id and compare `uniqExact(id)` grouped by
    `source`. State copies do not change `uniqExact(id)`.
-8. Enable `risk-findings-clickhouse-cutover` only after the validation passes
-   and the residual acceptance criteria in step 6 are satisfied.
+8. Treat the organization as cut over only after the validation passes and
+   the residual acceptance criteria in step 6 are satisfied.
 
 Rows matched under a live ClickHouse id keep that id. Missing Postgres
 exclusion or dismissal state is appended as a suppression copy of the latest

@@ -47,15 +47,17 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	}, decodeKeys(t, memberAccess))
 
 	access := GetMCPAccessOutput{
-		ProjectID: uuid.NewString(),
-		MCP:       MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
-		Roles:     []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
-		ExpiresAt: "2026-09-04T12:10:00Z",
+		ProjectID:             uuid.NewString(),
+		MCP:                   MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
+		Roles:                 []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
+		SharedAuthClientRoles: []MCPRoleSharedAuthClients{{Name: "Operators", Reference: "opaque-role", AuthClients: []MCPRoleAuthClientAccess{{AuthClientID: uuid.NewString(), Name: "Token", ClientType: "static_credential", Access: "allowed"}}, UnevaluatedGrants: false}},
+		ExpiresAt:             "2026-09-04T12:10:00Z",
 	}
 	keys := decodeKeys(t, access)
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
 		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at", "matching_plugins", "plugin_id", "name", "slug",
+		"shared_auth_client_roles", "name", "reference", "auth_clients", "auth_client_id", "name", "client_type", "access", "unevaluated_grants",
 	}, keys)
 	for _, output := range []any{access, memberAccess} {
 		encoded, err := json.Marshal(output)

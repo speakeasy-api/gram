@@ -50,7 +50,9 @@ RETURNING *;
 -- expires_at is enforced here rather than in Go so every credential shape --
 -- agent principal keys and scoped keys given a grace expiry by a rotation --
 -- stops authenticating at the same moment.
-SELECT api_keys.*, users.email
+SELECT api_keys.*, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
@@ -245,6 +247,21 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND subject_urn = @subject_urn
   AND deleted IS FALSE
+RETURNING *;
+
+-- name: ExtendAgentAPIKeyDelegatedGrants :one
+-- Matches the policy the caller read, so a concurrent change to the same key
+-- is never overwritten with a policy built from the older one.
+UPDATE api_keys
+SET delegated_grants = @delegated_grants::jsonb,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND subject_urn = @subject_urn
+  AND created_by_user_id = @created_by_user_id
+  AND delegated_grants = @previous_delegated_grants::jsonb
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
 RETURNING *;
 
 -- name: DeleteAPIKeyByProject :one

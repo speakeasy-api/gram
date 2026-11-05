@@ -30,8 +30,7 @@ func Test_writeOAuthServerMetadataResponse_Static(t *testing.T) {
 			GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
 			CodeChallengeMethodsSupported: []string{"S256"},
 		},
-		Raw:      nil,
-		ProxyURL: "",
+		Raw: nil,
 	}
 
 	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)
@@ -54,10 +53,9 @@ func Test_writeOAuthServerMetadataResponse_Raw(t *testing.T) {
 
 	raw := json.RawMessage(`{"issuer":"https://example.test/raw"}`)
 	result := &wellknown.OAuthServerMetadataResult{
-		Kind:     wellknown.OAuthServerMetadataResultKindRaw,
-		Static:   nil,
-		Raw:      raw,
-		ProxyURL: "",
+		Kind:   wellknown.OAuthServerMetadataResultKindRaw,
+		Static: nil,
+		Raw:    raw,
 	}
 
 	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)
@@ -82,10 +80,9 @@ func Test_writeOAuthServerMetadataResponse_UnknownKind_DoesNotWriteResponse(t *t
 	w := httptest.NewRecorder()
 
 	result := &wellknown.OAuthServerMetadataResult{
-		Kind:     wellknown.OAuthServerMetadataResultKind("bogus"),
-		Static:   nil,
-		Raw:      nil,
-		ProxyURL: "",
+		Kind:   wellknown.OAuthServerMetadataResultKind("bogus"),
+		Static: nil,
+		Raw:    nil,
 	}
 
 	err := writeOAuthServerMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/foo", nil), result)

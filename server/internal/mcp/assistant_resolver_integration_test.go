@@ -129,8 +129,8 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
 		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
 		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityAssistant),
-		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceLegacyNoServer),
-	)], "production legacy tools/call dispatch must report low coverage and assistant provenance without inferring an acting user")
+		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceCanonicalServer),
+	)], "production legacy tools/call dispatch must report the canonical server and assistant provenance without inferring an acting user")
 }
 
 func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) {

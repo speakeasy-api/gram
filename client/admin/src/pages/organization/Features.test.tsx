@@ -34,6 +34,7 @@ const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
+  codeModeEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
   deviceAgent: false,
@@ -58,6 +59,7 @@ const FEATURES: ProductFeatures = {
 const FEATURES_RESPONSE = {
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
+  code_mode_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   device_agent: false,
@@ -94,6 +96,11 @@ const TOGGLE_FEATURES = [
     featureName: "customer_managed_encryption_keys",
     enabledKey: "customerManagedEncryptionKeysEnabled",
     label: "Customer-Managed Encryption Keys",
+  },
+  {
+    featureName: "code_mode",
+    enabledKey: "codeModeEnabled",
+    label: "Gateway Code Mode",
   },
   {
     featureName: "custom_model_keys",
@@ -182,6 +189,14 @@ beforeEach(() => {
     const request = input as Request;
     if (request.method === "GET") return jsonResponse(FEATURES_RESPONSE);
 
+    if (new URL(request.url).pathname === "/admin/organization.providerSetup") {
+      const body = await request.clone().json();
+      return jsonResponse({
+        ...FEATURES_RESPONSE,
+        provider_setup_enabled: body.enabled,
+      });
+    }
+
     const body = (await request.clone().json()) as {
       enabled: boolean;
       feature_name: string;
@@ -211,16 +226,60 @@ async function renderFeatures(queryClient?: QueryClient): Promise<void> {
 }
 
 describe("Features", () => {
+  it("enables and disables provider setup using its staff rollout endpoint", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    for (const enabled of [true, false]) {
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(toggle.getAttribute("aria-checked")).toBe(String(enabled)),
+      );
+      await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+      const request = mocks.featureFetch.mock.calls
+        .map(([request]) => request as Request)
+        .filter((request) => request.method === "POST")
+        .at(-1)!;
+      expect(new URL(request.url).pathname).toBe(
+        "/admin/organization.providerSetup",
+      );
+      expect(await request.clone().json()).toEqual({
+        organization_id: ORG.id,
+        enabled,
+      });
+    }
+  });
+
+  it("keeps the saved provider setup state and displays failed writes", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    mocks.featureFetch.mockImplementation(async (request: Request) =>
+      request.method === "POST"
+        ? serviceError("Rollout unavailable", 403)
+        : jsonResponse(FEATURES_RESPONSE),
+    );
+    fireEvent.click(toggle);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Rollout unavailable",
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+  });
+
   it("renders exactly the typed direct toggles", async () => {
     await renderFeatures();
 
     const switches = await screen.findAllByRole("switch");
-    expect(switches).toHaveLength(TOGGLE_FEATURES.length);
+    expect(switches).toHaveLength(TOGGLE_FEATURES.length + 1);
     expect(
       TOGGLE_FEATURES.map(({ label }) =>
         screen.getByRole("switch", { name: `Toggle ${label}` }),
       ),
-    ).toEqual(switches);
+    ).toEqual(switches.slice(1));
     expect(
       Object.values(OMITTED_FEATURES).filter(
         (classification) => classification === "omitted",

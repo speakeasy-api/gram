@@ -199,6 +199,7 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 		"/mcp/petstore",              // toolset-backed and meta-MCP-backed
 		"/platform/mcp/gram-billing", // platform toolsets
 		"/platform-mcp",              // Speakeasy's own platform MCP server
+		"/approvals-mcp",             // the Approvals MCP server
 		// The per-agent gateway, addressed by agent id rather than slug.
 		"/agent-mcp/0e3b6b1a-0000-4000-8000-000000000001",
 	} {

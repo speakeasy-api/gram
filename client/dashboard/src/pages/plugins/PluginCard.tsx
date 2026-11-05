@@ -28,6 +28,7 @@ import { usePluginPackageDownload } from "./downloadPluginPackage";
 import { usePluginQueryScope } from "./usePluginQueryScope";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
+import { pluginUpToDate } from "./plugin-sync-state";
 
 export function PluginCard({
   plugin,
@@ -166,9 +167,14 @@ export function PluginCard({
                     <Badge.Text>Default</Badge.Text>
                   </Badge>
                 )}
-                {publishStatus?.upToDate === false && (
+                {pluginUpToDate(publishStatus, plugin.slug) === false && (
                   <Badge variant="warning">
                     <Badge.Text>Needs syncing</Badge.Text>
+                  </Badge>
+                )}
+                {plugin.autoSyncEnabled === false && (
+                  <Badge variant="neutral">
+                    <Badge.Text>Auto sync off</Badge.Text>
                   </Badge>
                 )}
               </div>

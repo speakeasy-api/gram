@@ -377,6 +377,7 @@ function WizardBody({
   const input: WizardInput = {
     discovered,
     initialPath,
+    toolsetId: toolset.id,
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,

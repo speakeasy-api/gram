@@ -1,4 +1,5 @@
 import { RiskSetupEmptyState } from "@/components/setup-empty-state";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
@@ -210,7 +211,8 @@ export default function RiskEvents(): JSX.Element {
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
   const { from, to } = useMemo(() => {
     const d = values.date;
-    if (d.customRange) return d.customRange;
+    const customRange = customDateRangeBounds(d);
+    if (customRange) return customRange;
     if (d.preset) return getPresetRange(d.preset);
     return { from: undefined, to: undefined };
   }, [values.date]);

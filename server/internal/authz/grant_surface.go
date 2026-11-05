@@ -50,6 +50,7 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeRiskPolicyBlock:         GrantSurfaceRiskPolicy,
 	ScopeChatRead:                GrantSurfaceAccess,
 	ScopeChatWrite:               GrantSurfaceAccess,
+	ScopeInferenceExecute:        GrantSurfaceAccess,
 	ScopeLogRead:                 GrantSurfaceAccess,
 	ScopeAgentRead:               GrantSurfaceAccess,
 	ScopeAgentWrite:              GrantSurfaceAccess,

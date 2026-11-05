@@ -26,13 +26,13 @@ type SearchGramDocsToolOutput struct {
 	TrustedLinks []string `json:"trusted_links,omitempty"`
 }
 
-const searchGramDocsDescription = "Search the reviewed Speakeasy setup guides and return up to five cited excerpts. Constraints: the guides are a pinned, reviewed set — this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the gram:// URI of the full guide; read that for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
+const searchSpeakeasyDocsDescription = "Search the reviewed Speakeasy setup guides and return up to five cited excerpts. Constraints: the guides are a pinned, reviewed set — this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the speakeasy:// URI of the full guide; read that for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
 
 func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{
-		Name:        "search_gram_docs",
+		Name:        "search_speakeasy_docs",
 		Title:       "Search Setup Guides",
-		Description: searchGramDocsDescription,
+		Description: searchSpeakeasyDocsDescription,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationMember,
@@ -122,7 +122,7 @@ func excerptLinkDescription(excerpt DocsExcerpt) string {
 
 func registerUnavailableSearchDocsTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
-		Name:        "search_gram_docs",
+		Name:        "search_speakeasy_docs",
 		Title:       "Search Setup Guides",
 		Description: "Search the reviewed Speakeasy setup guides. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),

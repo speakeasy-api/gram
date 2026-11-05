@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Auth client type filter (mcp:auth scopes only).
+ * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
  */
 export const AgentPolicySelectorClientType = {
   RemoteSession: "remote_session",
@@ -22,7 +22,7 @@ export const AgentPolicySelectorClientType = {
   Wildcard: "*",
 } as const;
 /**
- * Auth client type filter (mcp:auth scopes only).
+ * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
  */
 export type AgentPolicySelectorClientType = OpenEnum<
   typeof AgentPolicySelectorClientType
@@ -56,6 +56,7 @@ export const AgentPolicySelectorResourceKind = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   McpAuthClient: "mcp_auth_client",
   Wildcard: "*",
@@ -72,11 +73,11 @@ export type AgentPolicySelectorResourceKind = OpenEnum<
  */
 export type AgentPolicySelector = {
   /**
-   * Auth client type filter (mcp:auth scopes only).
+   * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
    */
   clientType?: AgentPolicySelectorClientType | undefined;
   /**
-   * Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.
+   * Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.
    */
   connectionOwner?: string | undefined;
   /**
@@ -84,7 +85,7 @@ export type AgentPolicySelector = {
    */
   disposition?: AgentPolicySelectorDisposition | undefined;
   /**
-   * Project filter (MCP, environment, assistant, and mcp:auth scopes).
+   * Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
    */
   projectId?: string | undefined;
   /**
@@ -107,6 +108,10 @@ export type AgentPolicySelector = {
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
+  /**
+   * Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+   */
+  upstreamClient?: string | undefined;
 };
 
 /** @internal */
@@ -157,6 +162,7 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
     server_identity: z.optional(z.string()),
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstream_client: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -167,6 +173,7 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
       "resource_kind": "resourceKind",
       "server_identity": "serverIdentity",
       "server_url": "serverUrl",
+      "upstream_client": "upstreamClient",
     });
   }),
 );
@@ -181,6 +188,7 @@ export type AgentPolicySelector$Outbound = {
   server_identity?: string | undefined;
   server_url?: string | undefined;
   tool?: string | undefined;
+  upstream_client?: string | undefined;
 };
 
 /** @internal */
@@ -198,6 +206,7 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
     serverIdentity: z.optional(z.string()),
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstreamClient: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -208,6 +217,7 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
       resourceKind: "resource_kind",
       serverIdentity: "server_identity",
       serverUrl: "server_url",
+      upstreamClient: "upstream_client",
     });
   }),
 );

@@ -25,14 +25,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type agentConsentFixture struct {
-	toolset toolsetsrepo.Toolset
+	toolset hostedToolset
 	client  usersessionsrepo.UserSessionClient
 	stateID string
 	csrf    string
@@ -288,6 +289,51 @@ func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing
 	after, err := accessrepo.New(ti.conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: fx.orgID, PrincipalUrns: []string{urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()}})
 	require.NoError(t, err)
 	require.ElementsMatch(t, before, after, "consent must not grant or rewrite agent policy")
+}
+
+// A provider outage while approving for an agent is the provider's, not a problem on our side.
+func TestConsentAgentApprovalDuringProviderOutageNamesTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
+	agent := createConsentAgent(t, ctx, ti, fx, "Approved agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], provider.URL, []uuid.UUID{fx.client.UserSessionIssuerID})
+	access, err := ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn: urn.NewUserSubject(fx.userID), UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionClientID: clientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{},
+	})
+	require.NoError(t, err)
+
+	session, err := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject(fx.userID), RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(ti.conn).AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{PrincipalID: agent.ID, SubjectUrn: urn.NewUserSubject(fx.userID).String(), ProjectID: *authCtx.ProjectID, OrganizationID: fx.orgID, UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionID: session.ID})
+	require.NoError(t, err)
+
+	_, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
+	require.Error(t, err)
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(page, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	require.Equal(t, http.StatusServiceUnavailable, page.Code, page.Body.String())
+	require.Contains(t, page.Body.String(), "available right now")
+	require.NotContains(t, page.Body.String(), "problem on our side")
+	upstream, err := url.Parse(provider.URL)
+	require.NoError(t, err)
+	require.Contains(t, page.Body.String(), upstream.Hostname(), "names the provider")
 }
 
 func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {

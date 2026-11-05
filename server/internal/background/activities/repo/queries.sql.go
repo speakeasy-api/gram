@@ -937,10 +937,11 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    (COUNT(CASE WHEN w.id IS NULL AND t.mcp_enabled = true THEN 1 END)
-      + COUNT(CASE WHEN w.visibility <> 'disabled' THEN 1 END))::bigint as total_enabled_servers,
+    -- A hosted server counts by its canonical wrapper's visibility; a toolset without one is not hosted.
+    COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    -- Matches GetEnabledServerCount.
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
@@ -1443,7 +1444,13 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
+  -- Only a toolset whose canonical wrapper serves it is hosted.
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+        AND w.visibility IN ('public', 'private')
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM openrouter_api_keys k
@@ -1995,7 +2002,13 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND t.mcp_enabled IS TRUE
+      -- Only a toolset whose canonical wrapper serves it is hosted.
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+            AND w.visibility IN ('public', 'private')
+      )
       AND NOT EXISTS (
           SELECT 1
           FROM openrouter_api_keys k

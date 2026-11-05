@@ -103,6 +103,7 @@ func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]c
 		Headers:          nil,
 		DisableRetries:   true,
 		MaxResponseBytes: maxProbeResponseBytes,
+		MaxMessageBytes:  0,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect for tool declarations: %w", err)

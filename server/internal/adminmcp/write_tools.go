@@ -278,8 +278,14 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
 		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
+		OperationSetRegistryIcons:                     &registryIconsWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
 	tools.uploads = deps.ImageUploads
+	if runtime.catalogPromotions != nil {
+		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+	}
 	for _, op := range writes.EnabledOperations() {
 		if !tools.implements(op) {
 			return fmt.Errorf("admin MCP write operation %q is not implemented", op)

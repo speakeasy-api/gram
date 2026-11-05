@@ -1,5 +1,6 @@
 import { detectPlatform } from "@tanstack/react-hotkeys";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -96,6 +97,30 @@ function palette(): HTMLElement {
 function type(term: string): void {
   fireEvent.change(within(palette()).getByRole("combobox"), {
     target: { value: term },
+  });
+}
+
+// Fake only the search interval, never route loading or Testing Library's
+// async polling. Restore the clock even when an immediate assertion fails.
+function withSearchClock(run: () => void): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    run();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+function advanceSearchClock(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+function typeAndDebounce(term: string): void {
+  withSearchClock(() => {
+    type(term);
+    advanceSearchClock(200);
   });
 }
 
@@ -199,6 +224,16 @@ afterEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("offers the MCP Registry page for staff promotion reviews", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("MCP Registry");
+    expect(
+      await within(palette()).findByRole("option", { name: /MCP Registry/ }),
+    ).toBeTruthy();
+  });
+
   it("opens on the shortcut and closes on the same press", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -231,7 +266,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
 
     const result = await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
@@ -251,7 +286,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type(ORG.id);
+    typeAndDebounce(ORG.id);
 
     expect(
       await within(palette()).findByRole("option", {
@@ -268,7 +303,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     expect(
       await within(palette()).findByRole("option", {
@@ -291,7 +326,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     await within(palette()).findByRole("option", {
       name: /^Umbrella Freight/,
@@ -307,7 +342,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     const result = await within(palette()).findByRole("option", {
       name: /^Umbrella Freight/,
@@ -321,10 +356,19 @@ describe("CommandPalette", () => {
     pressTheShortcut();
     await screen.findByRole("dialog");
 
-    type("n");
-    type("no");
-    type("nor");
-    type("northwind");
+    withSearchClock(() => {
+      type("n");
+      advanceSearchClock(50);
+      type("no");
+      advanceSearchClock(50);
+      type("nor");
+      advanceSearchClock(50);
+      type("northwind");
+      advanceSearchClock(199);
+      expect(searchedFor()).toEqual([]);
+      advanceSearchClock(1);
+      expect(searchedFor()).toEqual(["northwind"]);
+    });
 
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
@@ -340,7 +384,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });
@@ -368,7 +412,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     const handoff = await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
     });
@@ -389,7 +433,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("umbrella");
+    typeAndDebounce("umbrella");
 
     await within(palette()).findByRole("option", { name: /^Umbrella Freight/ });
     expect(
@@ -408,7 +452,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     // A letter all three records carry. Two of them are active and get a
     // handoff row; the disabled one is listed without one.
-    type("r");
+    typeAndDebounce("r");
 
     await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
@@ -439,7 +483,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     const handoff = await within(palette()).findByRole("option", {
       name: /Open in Dashboard for Northwind Logistics/,
     });
@@ -458,7 +502,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("nothing-by-this-name");
+    typeAndDebounce("nothing-by-this-name");
 
     // Its own words, not the one the group shows while a request is open: an
     // operator told "Searching..." forever reads a finished search as a hung
@@ -488,7 +532,7 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
 
     // Wait for the request to actually be in flight rather than for the
     // debounce: before it is issued the group is legitimately "Searching...",
@@ -517,18 +561,23 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });
 
-    type("umbrella");
+    withSearchClock(() => {
+      type("umbrella");
 
-    // Gone in the same commit the term changed in, rather than when the request
-    // for the new one lands.
-    expect(
-      within(palette()).queryByRole("option", { name: /^Northwind Logistics/ }),
-    ).toBeNull();
+      // Gone in the same commit the term changed in, rather than when the request
+      // for the new one lands.
+      expect(
+        within(palette()).queryByRole("option", {
+          name: /^Northwind Logistics/,
+        }),
+      ).toBeNull();
+      advanceSearchClock(200);
+    });
 
     expect(
       await within(palette()).findByRole("option", {
@@ -606,7 +655,7 @@ describe("CommandPalette", () => {
 
     pressTheShortcut();
     await screen.findByRole("dialog");
-    type("northwind");
+    typeAndDebounce("northwind");
     await within(palette()).findByRole("option", {
       name: /^Northwind Logistics/,
     });

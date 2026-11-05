@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_FILTER_VALUES } from "./exploreModel";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import {
   barValuesFromSaved,
   sameFilters,
@@ -60,6 +61,29 @@ describe("barValuesFromSaved", () => {
 });
 
 describe("savedFromContext", () => {
+  it("saves a calendar range as exact bounds that survive reload without another day added", () => {
+    const from = new Date("2026-11-01T05:00:00Z");
+    const calendarEnd = new Date("2026-11-02T06:00:00Z");
+    const saved = savedFromContext(
+      {
+        window: {
+          preset: null,
+          customRange: { from, to: from },
+          calendarEnd,
+          customLabel: null,
+        },
+      },
+      fields,
+    );
+    expect(saved.range).toEqual({ from, to: calendarEnd });
+    const reloaded = barValuesFromSaved(saved, fields);
+    expect(customDateRangeBounds(reloaded.window)).toEqual({
+      from,
+      to: calendarEnd,
+    });
+    expect(savedFromContext(reloaded, fields)).toEqual(saved);
+  });
+
   it("saves the bar's window and the values picked, leaving empty fields out", () => {
     expect(
       savedFromContext(

@@ -183,6 +183,8 @@ var registry = map[string]Definition{
 	DefinitionSlugCron:      newCronDefinition(),
 	DefinitionSlugWake:      newWakeDefinition(),
 	DefinitionSlugDashboard: newDashboardDefinition(),
+
+	DefinitionSlugSpeakeasySlack: newSpeakeasySlackDefinition(),
 }
 
 func List() []Definition {

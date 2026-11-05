@@ -14,6 +14,7 @@ import {
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
@@ -285,6 +286,33 @@ export function useIdentityChats(
       ...OFF,
       enabled: canReadOthersChats && (!!userId || !!externalUserId),
     },
+  );
+}
+
+/**
+ * Whether this viewer may list an agent's sessions: chat:read, or being able
+ * to edit the agent. The server reports edit rights per agent: its owner holds
+ * them (until the agent is waiting to be reassigned), and so does anyone
+ * granted agent:write on it. Both read the agent's sessions.
+ */
+export function useCanReadAgentChats(agent: ManagedAgent): boolean {
+  const hasChatRead = useCanReadOthersChats();
+  return hasChatRead || agent.permissions.write;
+}
+
+/** The sessions an agent produced, read only by a viewer who may list them. */
+export function useAgentChats(
+  agent: ManagedAgent,
+  from: Date,
+  to: Date,
+  limit = 5,
+): ReturnType<typeof useListChats> {
+  const { slug: gramProject } = useIdentityProject();
+  const canRead = useCanReadAgentChats(agent);
+  return useListChats(
+    { agentId: agent.id, from, to, limit, gramProject },
+    undefined,
+    { ...OFF, enabled: canRead },
   );
 }
 

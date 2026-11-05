@@ -15,8 +15,10 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useParams } from "react-router";
 import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
+import { SkillServedDigest } from "./SkillServedDigest";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import { useSkillDetailContext } from "./SkillDetailContext";
+import { useSkillsOverMcpEnabled } from "./use-skills-over-mcp";
 import {
   selectDiffVersions,
   type VersionChangeDirection,
@@ -54,6 +56,7 @@ function VersionHistory({
   selectedVersionId?: string;
 }): JSX.Element {
   const project = useProject();
+  const showServedDigest = useSkillsOverMcpEnabled();
   const versionsQuery = useSkillVersionsInfinite({ id: skillId }, undefined, {
     throwOnError: false,
   });
@@ -86,6 +89,7 @@ function VersionHistory({
   const columns = versionColumns({
     currentVersionId: currentVersion.id,
     comparable,
+    showServedDigest,
     selectedVersions,
     onToggle: (versionId) => {
       setSelectedVersions((current) => {
@@ -205,12 +209,15 @@ function versionAnchorLabel(
 function versionColumns({
   currentVersionId,
   comparable,
+  showServedDigest,
   selectedVersions,
   onToggle,
   restoreAction,
 }: {
   currentVersionId: string;
   comparable: boolean;
+  /** Add the digest agents see when they load the version over MCP. */
+  showServedDigest: boolean;
   selectedVersions: Set<string>;
   onToggle: (versionId: string) => void;
   restoreAction: (version: SkillVersion) => JSX.Element;
@@ -237,17 +244,25 @@ function versionColumns({
       header: "Version",
       width: "280px",
       render: (version) => (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-sm">
-            {version.canonicalSha256.slice(0, 8)}
-          </span>
-          {version.id === currentVersionId && (
-            <Badge variant="information">Current</Badge>
-          )}
-          {version.derivedFromVersionId && (
-            <Badge variant="neutral" title={version.derivedFromVersionId}>
-              Derived
-            </Badge>
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm">
+              {version.canonicalSha256.slice(0, 8)}
+            </span>
+            {version.id === currentVersionId && (
+              <Badge variant="information">Current</Badge>
+            )}
+            {version.derivedFromVersionId && (
+              <Badge variant="neutral" title={version.derivedFromVersionId}>
+                Derived
+              </Badge>
+            )}
+          </div>
+          {showServedDigest && version.specValid && (
+            <SkillServedDigest
+              rawSha256={version.rawSha256}
+              className="max-w-full"
+            />
           )}
         </div>
       ),

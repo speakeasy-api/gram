@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -277,6 +278,13 @@ func handleToolsCall(
 		}
 	}
 
+	// A gateway dispatch that fails before the telemetry row below is
+	// registered is logged by the gateway, under this resolved tool.
+	metaAttempt, _ := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt)
+	if metaAttempt != nil {
+		metaAttempt.descriptor = plan.Descriptor
+	}
+
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
@@ -367,15 +375,29 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	// Assistant-initiated calls leave a durable audit trail entry on dispatch,
-	// regardless of how the tool execution turns out. Ordinary user MCP
-	// traffic is not audited here.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	if plan.Kind == gateway.ToolKindPlatform {
+		if definition, ok := platformtools.FindToolDescriptor(toolURN, platformExtras...); ok {
+			ctx, toolCallEnv, _, err = platformtools.PrepareThreadContext(ctx, definition, toolCallEnv, bytes.NewReader(params.Arguments), func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+				principal, chatID, err := threadcontext.Resolve(ctx, db, authzEngine, threadID, write)
+				if err != nil {
+					return principal, chatID, fmt.Errorf("resolve platform thread: %w", err)
+				}
+				return principal, chatID, nil
+			})
+			if err != nil {
+				return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+			}
+		}
+	}
+
+	// Automatic and explicit assistant targets leave a durable dispatch audit
+	// trail without changing the identity of the caller.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, auditLogger, db, assistantToolCallAudit{
 			organizationID: toolset.OrganizationID,
 			projectID:      payload.projectID,
 			principal:      principal,
-			chatID:         payload.chatID,
+			chatID:         toolCallEnv.GramChatID,
 			toolsetSlug:    payload.toolset,
 			toolName:       params.Name,
 			toolURN:        toolURN,
@@ -405,7 +427,7 @@ func handleToolsCall(
 		organizationID:  descriptor.OrganizationID,
 		projectID:       descriptor.ProjectID,
 		sessionID:       payload.sessionID,
-		chatID:          payload.chatID,
+		chatID:          toolCallEnv.GramChatID,
 		toolName:        toolName,
 		toolURN:         toolURN.String(),
 		toolsetSlug:     payload.toolset,
@@ -435,7 +457,7 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                conv.PtrEmpty(payload.chatID),
+			ChatID:                conv.PtrEmpty(toolCallEnv.GramChatID),
 			MCPServerID:           optionalUUIDString(attributedMCPServerID),
 			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
@@ -458,8 +480,8 @@ func handleToolsCall(
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 
-		if payload.chatID != "" {
-			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		if toolCallEnv.GramChatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
 		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
@@ -490,6 +512,9 @@ func handleToolsCall(
 		}
 		telemLogger.Log(ctx, params)
 	}()
+	if metaAttempt != nil {
+		metaAttempt.logged = true
+	}
 
 	// The record is built when the call returns, so a call the scan stops still
 	// shows, and published off the response path.
@@ -509,17 +534,37 @@ func handleToolsCall(
 		ToolName:        toolName,
 		ResourceURI:     "",
 		PromptName:      "",
-		ChatID:          payload.chatID,
+		ChatID:          toolCallEnv.GramChatID,
 		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments))
 	decision := scan.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		identity := serverInfoHostedToolset
+		if payload.metaMcpServerID != "" {
+			identity = serverInfoMetaServer
+		}
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// The proxy refused a body it could not decode before contacting the
+		// tool's server, so a Code Mode program can fix it and call again.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = "invalid request body"
+		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
@@ -536,6 +581,16 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
+
+	// The proxy refused the input before contacting the tool's server, so a
+	// Code Mode program can fix its arguments and call again.
+	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = toolInputRejection(rw.body.Bytes())
+		}
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
@@ -970,4 +1025,15 @@ func filterOmittedEnvVars(
 	}
 
 	return nil
+}
+
+// toolInputRejection extracts the proxy's input refusal from its error body.
+func toolInputRejection(body []byte) string {
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refusal); err == nil && refusal.Error != "" {
+		return refusal.Error
+	}
+	return strings.TrimSpace(string(body))
 }

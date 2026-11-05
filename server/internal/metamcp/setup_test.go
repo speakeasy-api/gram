@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,9 +61,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *metamcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	codeModeEnabled *atomic.Bool
+	service         *metamcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -85,12 +87,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{})
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
+	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, codeModeSelection)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		codeModeEnabled: codeModeEnabled,
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
 	}
 }
 
@@ -220,8 +225,6 @@ func seedToolsetBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		ProjectID:      projectID,
 		Name:           slug,
 		Slug:           slug,
-		McpSlug:        conv.ToPGText(slug),
-		McpEnabled:     true,
 	})
 	require.NoError(t, err)
 

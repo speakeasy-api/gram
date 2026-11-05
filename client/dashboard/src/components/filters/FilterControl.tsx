@@ -1,3 +1,4 @@
+import { calendarDateRangeValue } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -176,6 +177,9 @@ function DateRangeControl({
       customRangeLabel={value.customLabel}
       onPresetChange={(preset) =>
         onChange({ preset, customRange: null, customLabel: null })
+      }
+      onCalendarRangeChange={(from, to) =>
+        onChange(calendarDateRangeValue(from, to))
       }
       onCustomRangeChange={(from, to, label) =>
         onChange({

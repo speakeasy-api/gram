@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -92,7 +92,7 @@ func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *r
 		return oops.E(oops.CodeUnexpected, err, "lock json web key set").LogError(ctx, logger)
 	}
 
-	return managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
+	return idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
 }
 
 // resolveCreateKeySet validates the json_web_key_set_id a create form names,
@@ -304,7 +304,7 @@ func (s *Service) mutateOrganizationClientKeySet(ctx context.Context, logger *sl
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 

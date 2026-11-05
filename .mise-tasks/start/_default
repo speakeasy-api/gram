@@ -47,6 +47,9 @@ pitchfork stop park
 pitchfork stop --group application
 pitchfork stop idle-pause
 pitchfork clean
+if [ "${GRAM_CODE_RUNTIME_PROVIDER:-disabled}" = local ]; then
+  pitchfork start code-runtime || echo "Code Mode runtime unavailable; inspect pitchfork logs code-runtime, then run mise run zero:code-mode." >&2
+fi
 pitchfork start --group default
 
 gum style \

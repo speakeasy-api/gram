@@ -7,26 +7,49 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // consentActionFormMaxBytes caps a consent card action's form body. The form
 // carries a handful of short fields; 16 KiB leaves room without letting one
 // request hold a large buffer.
 const consentActionFormMaxBytes = 16 << 10 // 16 KiB
+
+// consentActionFormErrorKey retains the first parse failure when the route
+// wrapper reads the action to choose a response format. ParseForm caches values
+// but does not repeat its error on subsequent calls.
+type consentActionFormErrorKey struct{}
+
+func parseConsentActionForm(w http.ResponseWriter, r *http.Request) error {
+	if err, ok := r.Context().Value(consentActionFormErrorKey{}).(error); ok {
+		return err
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
+	if err := r.ParseForm(); err != nil {
+		return fmt.Errorf("parse consent action form: %w", err)
+	}
+	return nil
+}
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
 func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) error {
@@ -44,21 +67,20 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 }
 
 // ServeConsentAction is the post-resolution handler.
-func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
 	if r.Method != http.MethodPost {
 		return oops.E(oops.CodeBadRequest, nil, "method not allowed").LogError(ctx, logger)
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
+	if err := parseConsentActionForm(w, r); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, logger)
 	}
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	// Plain Get: card actions are idempotent within the challenge TTL and
@@ -67,8 +89,12 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
 	}
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
+	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
+		s.recordWrongConsentBrowser(r, endpoint, challengeState)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -110,6 +136,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
 	case "identity_chaining_check":
 		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
+	case "hide_server", "show_server":
+		return s.serveConsentHideServer(w, r, endpoint, challengeState, stateID)
 	}
 
 	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
@@ -168,7 +196,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(r, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
 		if berr != nil {
 			return berr
 		}
@@ -215,6 +243,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
+			consentRefreshAttribution(r, endpoint, challengeState),
 			subject,
 			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,
@@ -223,6 +252,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		)
 		if refreshErr != nil {
 			switch {
+			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
+				logger.WarnContext(ctx, "manual refresh did not finish", attr.SlogError(refreshErr))
+				http.Redirect(w, r, backURL+"&refresh_unavailable="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+				return nil
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
@@ -243,10 +276,18 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
+		// A notice lives on the cards, which saved consent's short page doesn't show.
+		noticeURL := backURL + "&consent=required"
 		switch {
 		case errors.Is(err, errValidationRateLimited):
-			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errRemoteSessionNoUsableCredential):
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errValidationUnfinished):
+			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
 			return err
@@ -303,7 +344,7 @@ func (s *Service) clientServesHostedMember(ctx context.Context, endpoint *Resolv
 // bound is every client bound to the endpoint, self clients included, since
 // each one's upstream decides what client may claim.
 func (s *Service) buildRemoteConnectURL(
-	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -312,6 +353,11 @@ func (s *Service) buildRemoteConnectURL(
 	autoRefresh *bool,
 	focusServer string,
 ) (string, bool, error) {
+	ctx := r.Context()
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepProviderSignIn,
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
+	t.Attach(challengeState.connectionAttempt(endpoint))
+	defer t.Finish(ctx)
 	// endpoint.UpstreamResource only when no other bound client can claim
 	// it: under multi-binding it may belong to a different client's
 	// upstream, while a client shared by servers with different upstreams
@@ -325,6 +371,7 @@ func (s *Service) buildRemoteConnectURL(
 		// request the minted session will make will be.
 		memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 		if cerr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
 		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
@@ -338,9 +385,11 @@ func (s *Service) buildRemoteConnectURL(
 	if rerr == nil && !claimedByMember && endpoint.MetaMcpServerID.Valid {
 		hosted, herr := s.clientServesHostedMember(ctx, endpoint, challengeState, client)
 		if herr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, herr, "resolve gateway members for connection").LogError(ctx, logger)
 		}
 		if !hosted {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
 			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
 		}
 	}
@@ -352,12 +401,14 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
 
 	// The upstream callback returns to the consent page.
 	consentURL, err := s.remoteLoginConsentURL(endpoint, challengeState)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	// The login runs in the client's own project. An organization-level client
@@ -367,7 +418,21 @@ func (s *Service) buildRemoteConnectURL(
 	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
 		loginProjectID = resourceMember.projectID
 	}
+	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
+	if err != nil {
+		if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
+			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
+	}
+	if typedAuthorization != nil {
+		loginProjectID = typedAuthorization.ProjectID
+	}
 	parent := remotesessions.ParentChallenge{
+		TypedAuthorization:  typedAuthorization,
+		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,
 		OrganizationID:      endpoint.OrganizationID,
@@ -386,16 +451,21 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
+		Attempt:             challengeState.connectionAttempt(endpoint),
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
 	})
 	if errors.Is(berr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
 		return "", false, oops.E(oops.CodeBadRequest, berr, "This service doesn't support signing in from Speakeasy.").LogWarn(ctx, logger)
 	}
 	if berr != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}
+	t.Continue()
 	return challengeURL, hop, nil
 }
 
@@ -406,5 +476,49 @@ func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remoteses
 			return &clients[i]
 		}
 	}
+	return nil
+}
+
+// serveConsentHideServer hides or shows a gateway server the subject is admitted to.
+func (s *Service) serveConsentHideServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, stateID string) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	if !endpoint.MetaMcpServerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "only gateway servers can be hidden").LogWarn(ctx, logger)
+	}
+	subject := *challengeState.Subject
+	if subject.Kind != urn.SessionSubjectKindUser {
+		return oops.E(oops.CodeBadRequest, nil, "only a signed-in person can hide servers").LogWarn(ctx, logger)
+	}
+	serverID, err := uuid.Parse(r.PostForm.Get("server_id"))
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid server_id").LogWarn(ctx, logger)
+	}
+	members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve gateway members").LogError(ctx, logger)
+	}
+	if !slices.ContainsFunc(members, func(member metaMember) bool { return member.serverID == serverID }) {
+		return oops.E(oops.CodeBadRequest, nil, "unknown server for this gateway").LogWarn(ctx, logger)
+	}
+	if r.PostForm.Get("action") == "hide_server" {
+		err = hiddenmcpservers.Hide(ctx, s.db, endpoint.OrganizationID, subject.ID, serverID)
+	} else {
+		err = hiddenmcpservers.Unhide(ctx, s.db, endpoint.OrganizationID, subject.ID, serverID)
+	}
+	switch {
+	case errors.Is(err, hiddenmcpservers.ErrServerNotFound):
+		return oops.E(oops.CodeBadRequest, err, "unknown server for this gateway").LogWarn(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "update hidden server").LogError(ctx, logger)
+	}
+	// The page script updates the list in place; a plain form post returns
+	// to the page.
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(stateID), http.StatusSeeOther)
 	return nil
 }

@@ -44,7 +44,7 @@
               class="bg-background w-full border px-4 py-3 text-sm"
             >
               {{range .Organizations}}
-              <option value="{{.ID}}">{{.Name}}</option>
+              <option value="{{.ID}}"{{if eq .ID $.OrganizationID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
           </div>
@@ -164,7 +164,16 @@
         <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
           <div>
             <dt class="text-eyebrow">Organization</dt>
-            <dd class="mt-1 ml-0 text-sm">{{.OrganizationName}}</dd>
+            <dd class="mt-1 ml-0 flex flex-wrap items-baseline gap-x-3 text-sm">
+              <span>{{.OrganizationName}}</span>
+              {{if .ChangeOrganization}}
+              <a
+                href="select-organization?state={{.State}}"
+                class="text-xs text-muted-foreground underline underline-offset-2 interact:text-foreground"
+                >Change organization</a
+              >
+              {{end}}
+            </dd>
           </div>
           {{if .ClientIDOrigin}}
           <div>
@@ -181,6 +190,7 @@
           <form method="post" data-single-submit>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <input type="hidden" name="organization_id" value="{{.OrganizationID}}" />
             <button
               type="submit"
               name="action"

@@ -569,6 +569,9 @@ type ListChatsPayload struct {
 	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
+	// Filter to chats produced by this agent (the agent principal recorded on the
+	// session at capture)
+	AgentID *string
 	// When set with assistant_id, list only that assistant's threads whose
 	// source_kind matches this value (e.g. 'setup' for onboarding threads). Empty
 	// for no filter.

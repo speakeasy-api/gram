@@ -9,13 +9,79 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 )
 
 const (
 	MeterRequests        = "gram.remote_mcp.proxy.requests"
 	MeterRequestDuration = "gram.remote_mcp.proxy.request.duration"
 	MeterResponseBytes   = "gram.remote_mcp.proxy.response.bytes"
+	MeterStreams         = "gram.remote_mcp.proxy.streams"
+	MeterStreamDuration  = "gram.remote_mcp.proxy.stream.duration"
 )
+
+// StreamEndReason names why a relayed SSE stream ended.
+type StreamEndReason string
+
+const (
+	// StreamEndUpstreamClosed means the remote MCP server ended the stream.
+	StreamEndUpstreamClosed StreamEndReason = "upstream_closed"
+
+	// StreamEndIdleTimeout means the remote MCP server sent nothing for the
+	// proxy's streaming idle bound.
+	StreamEndIdleTimeout StreamEndReason = "idle_timeout"
+
+	// StreamEndRequestCanceled means the inbound request's context ended:
+	// the client went away, or the server cancelled in-flight requests
+	// after its shutdown deadline.
+	StreamEndRequestCanceled StreamEndReason = "request_canceled"
+
+	// StreamEndShutdown means the proxy closed the stream because the
+	// server started shutting down: a listen stream, or a POST stream whose
+	// response had already been relayed.
+	StreamEndShutdown StreamEndReason = "shutdown"
+
+	// StreamEndShutdownInterrupted means the server's shutdown interrupted a
+	// POST stream still waiting on its response, and the proxy answered the
+	// request with a JSON-RPC error instead.
+	StreamEndShutdownInterrupted StreamEndReason = "shutdown_interrupted"
+
+	// StreamEndError means relaying failed for any other reason, such as a
+	// write to the client failing or an oversized event.
+	StreamEndError StreamEndReason = "error"
+)
+
+// streamDurationBuckets spans the life of a relayed stream: POST responses
+// usually finish in seconds to minutes, while listen streams that receive
+// keepalives stay open for hours.
+var streamDurationBuckets = []float64{1, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400, 28800}
+
+// StreamEnd describes one relayed SSE stream when it ends.
+type StreamEnd struct {
+	// HTTPMethod is the inbound request's method: GET for a standalone stream,
+	// POST for a response or subscriptions/listen stream.
+	HTTPMethod string
+
+	// JSONRPCMethod is the method of the request that opened a POST stream.
+	// It is client-supplied and is clamped before it becomes a dimension.
+	JSONRPCMethod string
+
+	// Reason is why the stream ended.
+	Reason StreamEndReason
+
+	// ResponseRelayed reports whether the JSON-RPC response to the request
+	// that opened a POST stream had been relayed when the stream ended.
+	ResponseRelayed bool
+
+	// Resumable reports whether the upstream sent SSE event ids.
+	Resumable bool
+
+	// ResumeRequested reports whether the client sent Last-Event-ID.
+	ResumeRequested bool
+
+	// Duration is how long the stream was relayed.
+	Duration time.Duration
+}
 
 // Metrics owns the counters and histograms recorded for each proxied request.
 // A nil *Metrics is valid — Record becomes a no-op — so tests and callers
@@ -24,6 +90,8 @@ type Metrics struct {
 	requests        metric.Int64Counter
 	requestDuration metric.Float64Histogram
 	responseBytes   metric.Int64Histogram
+	streams         metric.Int64Counter
+	streamDuration  metric.Float64Histogram
 }
 
 // NewMetrics constructs the counter and histograms served by the proxy. Errors
@@ -69,10 +137,31 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(MeterResponseBytes), attr.SlogError(err))
 	}
 
+	streams, err := meter.Int64Counter(
+		MeterStreams,
+		metric.WithDescription("Number of SSE streams relayed from a remote MCP server, counted when each ends"),
+		metric.WithUnit("{stream}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(MeterStreams), attr.SlogError(err))
+	}
+
+	streamDuration, err := meter.Float64Histogram(
+		MeterStreamDuration,
+		metric.WithDescription("How long an SSE stream from a remote MCP server was relayed, in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(streamDurationBuckets...),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(MeterStreamDuration), attr.SlogError(err))
+	}
+
 	return &Metrics{
 		requests:        requests,
 		requestDuration: requestDuration,
 		responseBytes:   responseBytes,
+		streams:         streams,
+		streamDuration:  streamDuration,
 	}
 }
 
@@ -109,6 +198,33 @@ func (m *Metrics) Record(ctx context.Context, identity ServerIdentity, method st
 	}
 	if m.responseBytes != nil {
 		m.responseBytes.Record(ctx, responseBytes, attrsOpt)
+	}
+}
+
+// RecordStreamEnd emits one sample per instrument for a relayed SSE stream
+// that ended. The duration histogram omits the server ids the counter
+// carries, so its hour-scale buckets are not multiplied per server.
+func (m *Metrics) RecordStreamEnd(ctx context.Context, identity ServerIdentity, end StreamEnd) {
+	if m == nil {
+		return
+	}
+
+	labels := []attribute.KeyValue{
+		attr.HTTPRequestMethod(end.HTTPMethod),
+		attr.RemoteMCPProxyStreamEndReason(string(end.Reason)),
+	}
+	if m.streamDuration != nil {
+		m.streamDuration.Record(ctx, end.Duration.Seconds(), metric.WithAttributes(labels...))
+	}
+
+	if m.streams != nil {
+		labels = append(labels,
+			attr.McpMethod(mcprequests.ClampMethod(end.JSONRPCMethod)),
+			attr.RemoteMCPProxyStreamResponseRelayed(end.ResponseRelayed),
+			attr.RemoteMCPProxyStreamResumable(end.Resumable),
+			attr.RemoteMCPProxyStreamResumeRequested(end.ResumeRequested),
+		)
+		m.streams.Add(ctx, 1, metric.WithAttributes(identity.AppendAttributes(labels)...))
 	}
 }
 

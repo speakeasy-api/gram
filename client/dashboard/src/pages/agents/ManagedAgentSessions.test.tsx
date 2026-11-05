@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
@@ -14,6 +15,28 @@ const mocks = vi.hoisted(() => ({
   organizationId: "org_example",
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
+  keys: [] as Array<Record<string, unknown>>,
+  keysFailed: false,
+  refetchKeys: vi.fn(),
+  useListAPIKeys: vi.fn(),
+}));
+// Records its arguments and honors `enabled`, so the suite can tell an
+// unauthorized or unscoped key read from a real one.
+vi.mock("@gram/client/react-query/listAPIKeys", () => ({
+  useListAPIKeys: (
+    request: { agentId?: string },
+    security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    mocks.useListAPIKeys(request, security, options);
+    const enabled = options.enabled !== false;
+    return {
+      data: enabled && !mocks.keysFailed ? { keys: mocks.keys } : undefined,
+      isLoading: false,
+      isError: enabled && mocks.keysFailed,
+      refetch: mocks.refetchKeys,
+    };
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.organizationId }),
@@ -56,6 +79,8 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.organizationId = "org_example";
+  mocks.keys = [];
+  mocks.keysFailed = false;
   mocks.listSessions.mockResolvedValue({ result: { items: [session] } });
   mocks.revokeSession.mockResolvedValue(undefined);
 });
@@ -95,7 +120,36 @@ describe("Agent-scoped session integration", () => {
       permissions: { ...agent.permissions, authorize: false },
     });
     expect(mocks.listSessions).not.toHaveBeenCalled();
+    expect(mocks.useListAPIKeys).toHaveBeenCalledWith(
+      { agentId: "agent_example" },
+      expect.anything(),
+      expect.objectContaining({ enabled: false }),
+    );
     expect(screen.getByText(/do not have permission to view/)).toBeTruthy();
+  });
+  it("reads only this agent's keys, once it may", async () => {
+    setup();
+    await screen.findByText("Example client");
+    expect(mocks.useListAPIKeys).toHaveBeenCalledWith(
+      { agentId: "agent_example" },
+      expect.anything(),
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+  it("reports a failed key list instead of an empty state, and retries both reads", async () => {
+    mocks.keysFailed = true;
+    mocks.listSessions.mockResolvedValue({ result: { items: [] } });
+    setup();
+    expect(
+      await screen.findByText("Unable to load this agent's connections."),
+    ).toBeTruthy();
+    expect(screen.queryByText("No sessions yet")).toBeNull();
+    const before = mocks.listSessions.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refetchKeys).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(mocks.listSessions.mock.calls.length).toBeGreaterThan(before),
+    );
   });
   it("fetches only the selected agent's sessions with server-provided authorize permission", async () => {
     setup();
@@ -146,5 +200,62 @@ describe("Agent-scoped session integration", () => {
       }),
     );
     expect(await screen.findByText("No sessions yet")).toBeTruthy();
+  });
+  // A key and a workload sign in without a session this table can revoke, so
+  // their rows say how they signed in and link to where they are managed.
+  it("lists used keys and workload sign-ins beside sessions", async () => {
+    mocks.keys = [
+      {
+        id: "key_used",
+        name: "Runtime key",
+        keyPrefix: "gram_live_abc",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+        lastAccessedAt: new Date("2026-01-03T00:00:00Z"),
+      },
+      {
+        id: "key_unused",
+        name: "Spare key",
+        keyPrefix: "gram_live_def",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      },
+    ];
+    mocks.listSessions.mockResolvedValue({
+      result: {
+        items: [
+          {
+            ...session,
+            id: "session_workload",
+            clientName: undefined,
+            subjectKind: "workload",
+            workloadSubject: "repo:example/app:ref:refs/heads/main",
+          },
+        ],
+      },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <ManagedAgentSessions
+            agent={agent}
+            credentialsHref="/identities/agent/credentials"
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("repo:example/app:ref:refs/heads/main"),
+    ).toBeTruthy();
+    expect(screen.getByText("Runtime key")).toBeTruthy();
+    expect(screen.getByText("API key")).toBeTruthy();
+    expect(screen.getByText("Workload identity")).toBeTruthy();
+    expect(screen.queryByText("Spare key")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revoke session" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Manage key" }).getAttribute("href"),
+    ).toBe("/identities/agent/credentials");
+    expect(screen.getByRole("link", { name: "Manage access" })).toBeTruthy();
   });
 });

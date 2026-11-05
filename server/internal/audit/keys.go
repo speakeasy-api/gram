@@ -63,6 +63,7 @@ func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyC
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -112,6 +113,7 @@ func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyR
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -172,6 +174,7 @@ func (l *Logger) LogKeyPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

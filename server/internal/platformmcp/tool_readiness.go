@@ -43,7 +43,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
-		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Without a project named, it looks in the organization's default project; project_slug in the result says which project was read. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
+		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. A server with no current stored check, because it has never been checked or its last check expired, is checked once on read, counting toward the same three-per-minute limit as a forced check; if that check is refused or fails, the result reports the last stored check as stale, or the server as unchecked when it has never been checked. Without a project named, it looks in the organization's default project; project_slug in the result says which project was read. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server; managed project assistants cannot force a check and read only the last stored check.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
@@ -84,7 +84,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
-		Title:       "What to Fix on an MCP Server",
+		Title:       "Find What to Fix on an MCP Server",
 		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{

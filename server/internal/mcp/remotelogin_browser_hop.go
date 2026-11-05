@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -29,14 +29,18 @@ const remoteLoginBindPath = "/mcp/remote_login_bind"
 // callback-host cookie only once a confirmed marker exists for it. Every stop
 // is single-use.
 type remoteLoginHop struct {
-	ID                string    `json:"id"`
-	Phase             string    `json:"phase"`
-	ParentChallengeID string    `json:"parent_challenge_id"`
-	CookieID          string    `json:"cookie_id"`
-	Browser           string    `json:"browser,omitempty"`
-	ConfirmURL        string    `json:"confirm_url"`
-	AuthorizationURL  string    `json:"authorization_url"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                string `json:"id"`
+	Phase             string `json:"phase"`
+	ParentChallengeID string `json:"parent_challenge_id"`
+	CookieID          string `json:"cookie_id"`
+	Browser           string `json:"browser,omitempty"`
+	ConfirmURL        string `json:"confirm_url"`
+	AuthorizationURL  string `json:"authorization_url"`
+	// ConnectionRecovery marks a connection link's login, whose confirm stop
+	// checks its person's Speakeasy session instead of a parent challenge's
+	// callback cookie.
+	ConnectionRecovery bool      `json:"connection_recovery,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[remoteLoginHop] = (*remoteLoginHop)(nil)
@@ -87,14 +91,15 @@ func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChal
 		return "", false, fmt.Errorf("build remote login confirm URL: %w", err)
 	}
 	state := remoteLoginHop{
-		ID:                uuid.NewString(),
-		Phase:             remoteLoginHopBind,
-		ParentChallengeID: challengeState.ID,
-		CookieID:          parent.BrowserCookieID,
-		Browser:           browser,
-		ConfirmURL:        confirmURL,
-		AuthorizationURL:  authorizationURL,
-		CreatedAt:         time.Now(),
+		ConnectionRecovery: false,
+		ID:                 uuid.NewString(),
+		Phase:              remoteLoginHopBind,
+		ParentChallengeID:  challengeState.ID,
+		CookieID:           parent.BrowserCookieID,
+		Browser:            browser,
+		ConfirmURL:         confirmURL,
+		AuthorizationURL:   authorizationURL,
+		CreatedAt:          time.Now(),
 	}
 	if err := s.remoteLoginHopCache.Store(ctx, state); err != nil {
 		return "", false, fmt.Errorf("store remote login browser hop: %w", err)
@@ -112,21 +117,21 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 	}
 	stateID := r.URL.Query().Get("state")
 	if _, err := uuid.Parse(stateID); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login handoff expired"), oauthui.ReasonExpired))
 	}
 	state, err := s.remoteLoginHopCache.GetAndDelete(ctx, "remoteLoginHop:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", s.remoteLoginStateError(ctx, err))
 	}
 	remaining := time.Until(state.CreatedAt.Add(state.TTL()))
 	if state.CreatedAt.IsZero() || remaining <= 0 || state.CreatedAt.After(time.Now().Add(time.Minute)) {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login handoff expired"), oauthui.ReasonExpired))
 	}
 	var target string
 	switch state.Phase {
 	case remoteLoginHopBind:
 		if state.Browser == "" || state.CookieID == "" {
-			return oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff")
+			return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff"), oauthui.ReasonSessionChanged))
 		}
 		http.SetCookie(w, federatedBrowserCookie(state.CookieID, state.Browser, int(remaining.Seconds())))
 		state.ID = uuid.NewString()
@@ -137,8 +142,12 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 		}
 		target = state.ConfirmURL + "?" + url.Values{"state": {state.ID}}.Encode()
 	case remoteLoginHopConfirm:
-		if err := s.validateRemoteLoginHopOwner(r, state); err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser")
+		validateOwner := s.validateRemoteLoginHopOwner
+		if state.ConnectionRecovery {
+			validateOwner = s.validateConnectionRecoveryHopOwner
+		}
+		if err := validateOwner(r, state); err != nil {
+			return fmt.Errorf("validate login handoff: %w", err)
 		}
 		target = state.AuthorizationURL
 		confirmed := state
@@ -149,7 +158,7 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 			return fmt.Errorf("store remote login browser confirmation: %w", err)
 		}
 	default:
-		return oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff"), oauthui.ReasonSessionChanged))
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -162,28 +171,40 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 func (s *Service) validateRemoteLoginHopOwner(r *http.Request, state remoteLoginHop) error {
 	parent, err := s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+state.ParentChallengeID)
 	if err != nil {
-		return fmt.Errorf("load parent browser state: %w", err)
+		return fmt.Errorf("load parent browser state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
 	if parent.Browser == nil {
-		return errors.New("missing parent browser binding")
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "missing parent browser binding"), oauthui.ReasonSessionChanged))
 	}
-	return validateChallengeBrowser(r, parent, true)
+	if parent.CreatedAt.IsZero() || time.Since(parent.CreatedAt) > parent.TTL() || parent.CreatedAt.After(time.Now().Add(time.Minute)) {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login link expired"), oauthui.ReasonExpired))
+	}
+	if err := validateChallengeBrowser(r, parent, true); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser"), oauthui.ReasonSessionChanged))
+	}
+	return nil
 }
 
 // validateRemoteLoginHopBrowser checks the callback-host cookie a bind stop set,
 // and that the same browser then passed the confirm stop. A browser that
 // followed a copied bind link holds the cookie but was never confirmed.
 func (s *Service) validateRemoteLoginHopBrowser(r *http.Request, parent AuthnChallengeState, remote remotesessions.RemoteLoginState) error {
-	if parent.Browser == nil || remote.BrowserCookieID == "" || parent.CreatedAt.IsZero() || time.Since(parent.CreatedAt) > parent.TTL() || parent.CreatedAt.After(time.Now().Add(time.Minute)) {
-		return errors.New("remote login browser binding failed")
+	if parent.CreatedAt.IsZero() || time.Since(parent.CreatedAt) > parent.TTL() || parent.CreatedAt.After(time.Now().Add(time.Minute)) {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login link expired"), oauthui.ReasonExpired))
+	}
+	if parent.Browser == nil || remote.BrowserCookieID == "" {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
 	}
 	cookie, err := r.Cookie(federationCookieName(remote.BrowserCookieID))
 	if err != nil || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(remote.BrowserHash)) != 1 {
-		return errors.New("remote login browser binding failed")
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
 	}
 	confirmed, err := s.remoteLoginHopCache.Get(r.Context(), "remoteLoginHop:"+remoteLoginHopConfirmedID(remote.BrowserCookieID))
-	if err != nil || confirmed.Phase != remoteLoginHopConfirmed || confirmed.CookieID != remote.BrowserCookieID || confirmed.ParentChallengeID != remote.ParentChallengeID {
-		return errors.New("remote login browser was not confirmed")
+	if err != nil {
+		return fmt.Errorf("load remote login confirmation: %w", s.remoteLoginStateError(r.Context(), err))
+	}
+	if confirmed.Phase != remoteLoginHopConfirmed || confirmed.CookieID != remote.BrowserCookieID || confirmed.ParentChallengeID != remote.ParentChallengeID {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login browser was not confirmed"), oauthui.ReasonSessionChanged))
 	}
 	return nil
 }

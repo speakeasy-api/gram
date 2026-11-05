@@ -135,8 +135,8 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 	f := newAPIKeyFixture(t)
 	ctx := f.keyContext(t)
 	connect := MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID)
-	clientA := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: ""})
-	clientB := MCPAuthClientCheck("client_b", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: ""})
+	clientA := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: "", UpstreamClient: ""})
+	clientB := MCPAuthClientCheck("client_b", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: "", UpstreamClient: ""})
 
 	enforce, err := f.engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
@@ -334,7 +334,7 @@ func TestLegacyKeysNeverUseTheirCreatorsConnection(t *testing.T) {
 
 	f := newAPIKeyFixture(t)
 	f.grant(t, ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
-	personal := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: f.projectID, ConnectionOwner: f.creatorID})
+	personal := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: f.projectID, ConnectionOwner: f.creatorID, UpstreamClient: "upstream_a"})
 	requireMandatory(t, f.engine, f.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, personal)
 }
 

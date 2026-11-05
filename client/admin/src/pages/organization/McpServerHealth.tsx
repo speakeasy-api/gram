@@ -20,6 +20,7 @@ import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/com
 import type { AdminMcpServerToolCalls } from "@gram/admin-client/models/components/adminmcpservertoolcalls";
 import type { AdminMcpServerHealthUserSessionIssuer } from "@gram/admin-client/models/components/adminmcpserverhealthusersessionissuer";
 
+import { RegistryPromotionButton } from "@/pages/registry/RegistryPromotionSheet";
 import { CopyValue } from "@/components/CopyValue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,6 +171,7 @@ export function McpServerHealth({
 
   return (
     <HealthReport
+      organizationId={org.id}
       health={health.data}
       toolCalls={toolCallsState}
       idOrSlug={idOrSlug}
@@ -197,6 +199,7 @@ type ToolCallsState =
   | { status: "ready"; toolCalls: AdminMcpServerToolCalls };
 
 function HealthReport({
+  organizationId,
   health,
   toolCalls,
   idOrSlug,
@@ -206,6 +209,7 @@ function HealthReport({
   asOf,
   onWindowChange,
 }: {
+  organizationId: string;
   health: AdminMcpServerHealth;
   toolCalls: ToolCallsState;
   idOrSlug: string;
@@ -249,7 +253,18 @@ function HealthReport({
             <CopyValue label={`${server.name} server id`} value={server.id} />
           </p>
         </div>
-        <WindowPicker value={window} onChange={onWindowChange} />
+        <div className="flex flex-wrap items-center gap-2">
+          {server.source === "remote" && (
+            <RegistryPromotionButton
+              target={{
+                organizationId,
+                projectId: project,
+                mcpServerId: server.id,
+              }}
+            />
+          )}
+          <WindowPicker value={window} onChange={onWindowChange} />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

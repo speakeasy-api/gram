@@ -22,9 +22,13 @@ const (
 	ActionAgentPolicyGrantCreate Action = "agent:policy_grant_create"
 	ActionAgentPolicyGrantUpdate Action = "agent:policy_grant_update"
 	ActionAgentPolicyGrantDelete Action = "agent:policy_grant_delete"
-	ActionAgentOwnerLoss         Action = "agent:owner_loss"
-	ActionAgentTransfer          Action = "agent:transfer"
-	ActionAgentReassign          Action = "agent:reassign"
+	// A connection owner blocked an agent from, or unblocked it on, their own
+	// connection.
+	ActionAgentConnectionBlockCreate Action = "agent:connection_block_create"
+	ActionAgentConnectionBlockDelete Action = "agent:connection_block_delete"
+	ActionAgentOwnerLoss             Action = "agent:owner_loss"
+	ActionAgentTransfer              Action = "agent:transfer"
+	ActionAgentReassign              Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an
@@ -78,6 +82,7 @@ func (l *Logger) LogAgent(ctx context.Context, dbtx repo.DBTX, event LogAgentEve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
@@ -110,6 +115,7 @@ func (l *Logger) LogAgentPolicyGrant(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,

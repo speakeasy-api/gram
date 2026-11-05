@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestServePublic_UnsupportedVersionCountsRejectionWithoutDispatch(t *testing.T) {
@@ -21,7 +20,7 @@ func TestServePublic_UnsupportedVersionCountsRejectionWithoutDispatch(t *testing
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "unsupported-version-metric")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "unsupported-version-metric")
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, toolsListBody(), "", map[string]string{
 		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})

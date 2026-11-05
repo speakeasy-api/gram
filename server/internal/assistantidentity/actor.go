@@ -35,3 +35,28 @@ func CheckActor(ctx context.Context, db orgrepo.DBTX, engine *authz.Engine, org 
 	}
 	return nil
 }
+
+// canDelegateInference reads a user's own current authority, not a request's
+// transport grants. Missing authority leaves a new agent without inference.
+func canDelegateInference(ctx context.Context, db orgrepo.DBTX, org string, project uuid.UUID, user string) (bool, error) {
+	active, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: org, UserID: user})
+	if err != nil {
+		return false, fmt.Errorf("check inference owner membership: %w", err)
+	}
+	if !active {
+		return false, nil
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, db, org, user)
+	if err != nil {
+		return false, fmt.Errorf("resolve inference owner: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, db, org, principals)
+	if err != nil {
+		return false, fmt.Errorf("load inference owner grants: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.InferenceExecuteCheck(project.String()))
+	if err != nil {
+		return false, fmt.Errorf("check inference delegation: %w", err)
+	}
+	return allowed, nil
+}

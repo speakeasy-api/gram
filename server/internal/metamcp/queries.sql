@@ -547,12 +547,15 @@ ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;
 
 -- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
 -- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
--- matching unless a live endpoint or toolset now holds the slug in that namespace;
--- those existence checks mirror the global unique indexes, so they are not project-scoped.
+-- matching unless a live endpoint now holds the slug in that namespace (callers also
+-- drop ones a legacy toolset alias holds); the existence check mirrors the global
+-- unique index, so it is not project-scoped.
 SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
+    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
+    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -583,20 +586,29 @@ WHERE e.project_id = @project_id
           AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
           AND l.deleted IS FALSE
       )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM toolsets t
-        WHERE t.mcp_slug = e.slug
-          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
-          AND t.deleted IS FALSE
-      )
     )
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
 
--- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
--- Gateway names for telemetry labels, deleted gateways included.
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = @project_id
-ORDER BY deleted ASC, created_at DESC;
+-- name: ListMetaMCPServerLabelsForTelemetry :many
+-- Names the stored gateways among telemetry ids, deleted gateways included: a
+-- member's calls are logged in the member's project, which need not be the
+-- gateway's. Ids that are not stored gateways (agent and organization gateways
+-- stamp derived ids) simply match nothing. The project and deleted flags let a
+-- label link to the gateway's page while it still has one, and say which
+-- project the caller must be able to read to see the name.
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND ms.id = ANY(@ids::uuid[]);
+
+-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

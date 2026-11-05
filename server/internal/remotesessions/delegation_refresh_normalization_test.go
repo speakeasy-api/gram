@@ -31,6 +31,9 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 				{name: "overflow ignored", field: `"refresh_expires_in":9223372036854775807`},
 				{name: "negative ignored", field: `"refresh_expires_in":-1`},
 				{name: "zero alias ignored", field: `"refresh_expires_in":0`},
+				{name: "zero standard ignored", field: `"refresh_token_timeout":0`},
+				{name: "negative standard ignored", field: `"refresh_token_timeout":-1`},
+				{name: "zero authorization ignored", field: `"authorization_expires_in":0`},
 				{name: "retained bound expires during request", field: `"refresh_expires_in":0`, expired: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -55,7 +58,7 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 					p.metadata.JwksURI = upstream.URL + "/jwks"
 					p.client.ClientSecretEncrypted.String, err = s.enc.Encrypt([]byte("secret"))
 					require.NoError(t, err)
-					manager := &ChallengeManager{enc: s.enc, policy: policy}
+					manager := &ChallengeManager{enc: s.enc, policy: policy, logger: testenv.NewLogger(t)}
 					var original time.Time
 					login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
 					if known {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
@@ -113,7 +114,8 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	forged.Header.Set("Origin", "https://other.example.test")
 	blocked := httptest.NewRecorder()
 	handler.ServeHTTP(blocked, forged)
-	require.Equal(t, http.StatusForbidden, blocked.Code)
+	require.Equal(t, http.StatusText(http.StatusForbidden), oauthtest.RequireAuthorizationErrorPage(t, blocked, http.StatusForbidden).Code)
+	require.Contains(t, blocked.Body.String(), "staff sign-in session changed")
 
 	form.Set("csrf_token", "wrong")
 	require.Equal(t, http.StatusForbidden, post(form, "browser-session").Code)
@@ -121,7 +123,9 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	require.Equal(t, http.StatusOK, page.Code)
 	form = approvalForm(t, page.Body.String())
 	require.Equal(t, http.StatusOK, post(form, "browser-session").Code)
-	require.Equal(t, http.StatusForbidden, post(form, "browser-session").Code, "the CSRF challenge is one use")
+	replayed := post(form, "browser-session")
+	require.Equal(t, http.StatusText(http.StatusForbidden), oauthtest.RequireAuthorizationErrorPage(t, replayed, http.StatusForbidden).Code)
+	require.Contains(t, replayed.Body.String(), "This approval link expired or was already used")
 	approved, err := f.store.GetForSubject(t.Context(), p.ID, proposalTestSubject)
 	require.NoError(t, err)
 	require.Equal(t, ProposalApproved, approved.Status)
@@ -180,4 +184,42 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.Equal(t, http.StatusOK, get().Code)
 	verifier.result.OIDCSubject = "other-staff"
 	require.Equal(t, http.StatusNotFound, get().Code)
+}
+
+func TestStaffProposalExpiredLinkOnlyExplainedToOwner(t *testing.T) {
+	t.Parallel()
+	fixture := newProposalFixture(t, "admin_mcp_approval_expired")
+	proposal, _, err := fixture.store.Create(t.Context(), fixture.owner, featureProposal(fixture.orgA, "expired", true), time.Now().Add(-proposalLifetime-time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, ProposalPendingApproval, proposal.Status)
+	require.True(t, time.Now().After(proposal.ExpiresAt))
+	for _, tc := range []struct {
+		name, subject string
+		id            uuid.UUID
+		expired       bool
+	}{
+		{"owner", "staff-subject", proposal.ID, true},
+		{"other staff", "other-staff", proposal.ID, false},
+		{"missing proposal", "staff-subject", uuid.New(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: tc.subject, Email: "staff@example.test"}}
+			memory := testenv.NewMemoryCache()
+			authorization := NewStaffOAuthAuthorization(nil, nil, memory, verifier, fixture.cipher, staffAudience)
+			approval := newStaffProposalApproval(fixture.store, authorization, memory, WriteConfig{})
+			response := httptest.NewRecorder()
+			approval.Handler().ServeHTTP(response, approvalRequest(http.MethodGet, tc.id, nil, "browser-session"))
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusNotFound)
+			require.Equal(t, http.StatusText(http.StatusNotFound), body.Code)
+			require.Equal(t, "404 page not found", body.Description)
+			if tc.expired {
+				require.Contains(t, response.Body.String(), "This approval link expired or was already used")
+			} else {
+				require.NotContains(t, response.Body.String(), "This approval link expired or was already used")
+			}
+			require.NotContains(t, response.Body.String(), proposal.ProposalDigest)
+			require.NotContains(t, response.Body.String(), fixture.orgA)
+		})
+	}
 }

@@ -131,7 +131,10 @@ type testInstance struct {
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
-	features         *feature.InMemory
+	features *feature.InMemory
+
+	// productFeatures writes organization entitlements such as Code Mode.
+	productFeatures  *productfeatures.Client
 	efficacySignaler *background.ThrottledSignaler
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
@@ -206,7 +209,7 @@ func (s *migratedService) HandleConsent(w http.ResponseWriter, r *http.Request) 
 
 func (s *migratedService) ApplyIssuerGate(ctx context.Context, w http.ResponseWriter, authToken, baseURL string, endpoint *mcp.ResolvedMcpEndpoint) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
 	s.migrate(ctx)
-	return s.Service.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+	return s.Service.ApplyIssuerGate(ctx, w, nil, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
 }
 
 func (s *migratedService) HandleToolsCall(ctx context.Context, inputs *mcp.McpInputs, toolName string, arguments json.RawMessage) (*mcp.ToolCallResult, error) {
@@ -619,7 +622,7 @@ func buildTestMCPService(
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -631,6 +634,7 @@ func buildTestMCPService(
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+		AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                          false,
 	})
 
@@ -656,7 +660,7 @@ func buildTestMCPService(
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	principalCredentials := principalcredential.New(callerAssertions, conn)
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
@@ -714,7 +718,7 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -742,6 +746,7 @@ func buildTestMCPService(
 		audit:                auditLogger,
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
+		productFeatures:      featClient,
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
@@ -1001,4 +1006,21 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// enableCodeMode grants the test context's organization the Code Mode
+// entitlement, which Code Mode requires besides an available runtime.
+func enableCodeMode(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	setCodeModeEntitlement(t, ctx, ti, true)
+}
+
+// setCodeModeEntitlement writes the Code Mode entitlement for the test
+// context's organization. Every test shares one mock organization and one
+// Redis keyspace, so the cached value is visible to concurrent tests.
+func setCodeModeEntitlement(t *testing.T, ctx context.Context, ti *testInstance, enabled bool) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCodeMode, enabled))
 }

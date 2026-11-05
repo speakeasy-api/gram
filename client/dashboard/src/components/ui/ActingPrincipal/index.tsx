@@ -4,6 +4,14 @@ import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 import * as React from "react";
+import type { Principal } from "./text";
+
+// Underlined on hover, in full, so each name reads as its own way to its
+// identity page. The offset is kept small: `truncate` clips overflow, and
+// IdentityLink's default offset put the underline below the clip, so it
+// never showed at all.
+const LINK_CLASS =
+  "min-w-0 truncate no-underline underline-offset-2 hover:underline";
 
 /**
  * Who did a thing, when an agent did it for someone.
@@ -23,11 +31,10 @@ import * as React from "react";
  * particular call. Those render as the agent alone, not as "on behalf of
  * unknown", which would imply a person we failed to look up.
  */
-import type { Principal } from "./text";
-
 export function ActingPrincipal({
   agent,
   authorizer,
+  signedInWith,
   className,
   linked = false,
   projectSlug,
@@ -48,6 +55,23 @@ export function ActingPrincipal({
    * is the honest answer rather than picking one or showing none.
    */
   authorizer?: Principal | Principal[] | undefined;
+  /**
+   * How Speakeasy signed the call in upstream, when the row recorded it. It
+   * takes the authorizer's place: the person who issued the agent's key is
+   * not who a call served by a shared credential acted for, so "on behalf
+   * of" them would name the wrong person. A personal connection names its
+   * owner, and their face stands beside the words.
+   */
+  signedInWith?:
+    | {
+        /** The credential in words, such as "Alex Morgan's connection". */
+        label: string;
+        /** The raw values, shown on hover. */
+        detail?: string;
+        /** The person whose own connection served the call. */
+        person?: Principal;
+      }
+    | undefined;
   className?: string;
   /**
    * Whether each half links to its identity page.
@@ -88,7 +112,7 @@ export function ActingPrincipal({
           <IdentityLink
             identifier={{ urn: `agent:${agent.id}` }}
             projectSlug={projectSlug}
-            className="min-w-0 truncate"
+            className={LINK_CLASS}
           >
             {agent.display ?? agentLabel}
           </IdentityLink>
@@ -98,7 +122,19 @@ export function ActingPrincipal({
           </span>
         )}
       </span>
-      {first && (
+      {signedInWith ? (
+        // Same indent and arrow as the authorizer line it replaces, so the
+        // credential reads as how the agent above made the call.
+        <span
+          className="text-muted-foreground flex min-w-0 items-center gap-1.5 pl-2 text-xs"
+          title={signedInWith.detail}
+        >
+          <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
+          {signedInWith.person && <PersonFace person={signedInWith.person} />}
+          <span className="min-w-0 truncate">{signedInWith.label}</span>
+        </span>
+      ) : null}
+      {!signedInWith && first && (
         // Indented under the agent: the relation belongs to the line above
         // it rather than standing as a second subject of its own.
         //
@@ -126,7 +162,7 @@ export function ActingPrincipal({
               <IdentityLink
                 identifier={first.identity}
                 projectSlug={projectSlug}
-                className="min-w-0 truncate"
+                className={LINK_CLASS}
               >
                 {first.name || first.id}
               </IdentityLink>

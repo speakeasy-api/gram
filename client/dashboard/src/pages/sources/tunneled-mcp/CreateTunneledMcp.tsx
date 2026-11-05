@@ -124,7 +124,7 @@ export default function CreateTunneledMcp(): JSX.Element {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    routes.mcp.x.guardrails.goTo(
+                    routes.mcp.details.guardrails.goTo(
                       mcpServerRouteParam(created.mcpServer),
                     )
                   }
@@ -186,7 +186,7 @@ export default function CreateTunneledMcp(): JSX.Element {
                 <Button
                   variant="primary"
                   onClick={() =>
-                    routes.mcp.x.overview.goTo(
+                    routes.mcp.details.overview.goTo(
                       mcpServerRouteParam(created.mcpServer),
                     )
                   }
@@ -196,7 +196,7 @@ export default function CreateTunneledMcp(): JSX.Element {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    routes.mcp.x.overview.goTo(
+                    routes.mcp.details.overview.goTo(
                       tunneledMcpRouteParam(created.tunneledMcpServer),
                     )
                   }

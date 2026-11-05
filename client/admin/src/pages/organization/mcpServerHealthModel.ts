@@ -165,7 +165,6 @@ export function humanize(value: string): string {
 
 export const LEGACY_AUTH_LABELS: Record<string, string> = {
   external_oauth: "external OAuth",
-  oauth_proxy: "OAuth proxy",
   gram_private: "private",
 };
 

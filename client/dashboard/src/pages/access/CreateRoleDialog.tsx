@@ -29,6 +29,14 @@ import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import {
+  clientTypeGrantChanges,
+  clientTypeRulesFromRole,
+  clientTypeRulesKey,
+  rebaseClientTypeRules,
+  type ClientTypeRules,
+} from "./roleAuthClientTypes";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,7 +61,9 @@ import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
   isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
 } from "./types";
+import { resourceKindForScope } from "@/hooks/useRBAC";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
@@ -62,6 +72,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  rebaseFormGrants,
   roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
@@ -105,6 +116,8 @@ function getDenyPanels(
   if (resourceType && isProjectSelectableResourceType(resourceType)) {
     return allowLevel === "all" ? ["servers"] : [];
   }
+  if (resourceType === "inference")
+    return allowLevel === "all" ? ["projects"] : [];
   if (resourceType && isProjectFilteredResourceType(resourceType)) {
     if (allowLevel === "all") return ["projects", "servers"];
     return allowLevel === "project" ? ["servers"] : [];
@@ -146,6 +159,68 @@ interface CreateRoleDialogProps {
   hideAssignments?: boolean;
   /** Pre-fills the name of a new role, such as the group it is created for. */
   defaultName?: string;
+  /**
+   * Pre-selects allow grants on a new role, such as the one permission an
+   * access request asked for.
+   */
+  defaultScopes?: Scope[];
+  /**
+   * The resource the default scopes were asked for. The pre-filled rules are
+   * limited to it, so the new role grants no more than the request.
+   */
+  defaultResource?: { resourceId?: string; projectId?: string };
+}
+
+/**
+ * The selectors that limit a pre-filled grant to the requested resource, in
+ * the shape the rule editor reads: the resource by its id, or a project-wide
+ * rule for the kinds that narrow by project. Null means unrestricted, which
+ * is all a kind without resources of its own can be.
+ */
+function requestedSelectors(
+  scope: Scope,
+  resource: CreateRoleDialogProps["defaultResource"],
+): Selector[] | null {
+  const kind = resourceKindForScope(scope);
+  if (
+    !resource ||
+    !isKnownResourceType(kind) ||
+    isUnrestrictedResourceType(kind)
+  )
+    return null;
+  if (resource.resourceId) {
+    return [{ resourceKind: kind, resourceId: resource.resourceId }];
+  }
+  if (!resource.projectId) return null;
+  if (kind === "mcp" || isProjectFilteredResourceType(kind)) {
+    return [
+      { resourceKind: kind, resourceId: "*", projectId: resource.projectId },
+    ];
+  }
+  if (isProjectSelectableResourceType(kind)) {
+    return [{ resourceKind: kind, resourceId: resource.projectId }];
+  }
+  return null;
+}
+
+function grantsFor(
+  scopes: Scope[],
+  resource: CreateRoleDialogProps["defaultResource"],
+): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = Object.create(null);
+  for (const scope of scopes) {
+    result[scope] = {
+      scope,
+      rules: [
+        {
+          id: crypto.randomUUID(),
+          effect: "allow",
+          selectors: requestedSelectors(scope, resource),
+        },
+      ],
+    };
+  }
+  return result;
 }
 
 export function CreateRoleDialog({
@@ -157,6 +232,8 @@ export function CreateRoleDialog({
   presentation = "sheet",
   hideAssignments = false,
   defaultName = "",
+  defaultScopes,
+  defaultResource,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -164,7 +241,9 @@ export function CreateRoleDialog({
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
-  const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
+  const [grants, setGrants] = useState<Record<string, RoleGrant>>(() =>
+    grantsFor(defaultScopes ?? [], defaultResource),
+  );
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
@@ -174,7 +253,14 @@ export function CreateRoleDialog({
   const [showAgents, setShowAgents] = useState(false);
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
-  const [initialGrantKeys, setInitialGrantKeys] = useState("");
+  const [initialGrants, setInitialGrants] = useState<Record<string, RoleGrant>>(
+    {},
+  );
+  const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
+    clientTypeRulesFromRole(undefined),
+  );
+  const [savedClientTypeRules, setSavedClientTypeRules] =
+    useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
   const [showMembers, setShowMembers] = useState(false);
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -238,15 +324,27 @@ export function CreateRoleDialog({
     [organization.projects],
   );
 
+  // The permissions the role stores, in the form's own shape. Read once per
+  // role rather than per render: every read mints fresh rule ids, and the
+  // editor compares these against what is on screen.
+  const storedGrants = useMemo(
+    () =>
+      editingRole && scopesData
+        ? grantsFromRole(editingRole, scopesData.scopes)
+        : null,
+    [editingRole, scopesData],
+  );
+
   // ─── Initialize when editing ──────────────────────────────────
-  if (editingRole && !initialized && scopesData && membersData) {
+  if (editingRole && !initialized && storedGrants && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
-    setGrants(roleGrants);
+    setGrants(storedGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
-    setInitialGrantKeys(grantKeysStringFn(roleGrants));
+    setInitialGrants(storedGrants);
+    setClientTypeRules(clientTypeRulesFromRole(editingRole));
+    setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -257,6 +355,43 @@ export function CreateRoleDialog({
   }
   if (!editingRole && initialized) {
     setInitialized(false);
+  }
+
+  // ─── Follow the role as it is read again ──────────────────────
+  //
+  // The roles list keeps being refreshed while the editor is open, and a save
+  // works out what to take off the role from what the form holds. So anything
+  // nobody has touched here follows the role as stored: a permission or
+  // credential rule the role gained since the form was filled in shows up
+  // rather than sitting switched off, and saving an unrelated edit cannot take
+  // it away. Changes made in the editor are left as they are, and still
+  // decide what the save removes.
+  if (editingRole && initialized && storedGrants) {
+    if (grantKeysStringFn(storedGrants) !== grantKeysStringFn(initialGrants)) {
+      setGrants((current) =>
+        rebaseFormGrants({
+          current,
+          baseline: initialGrants,
+          stored: storedGrants,
+          scopes: scopesData?.scopes ?? [],
+        }),
+      );
+      setInitialGrants(storedGrants);
+    }
+    const storedClientTypes = clientTypeRulesFromRole(editingRole);
+    if (
+      clientTypeRulesKey(storedClientTypes) !==
+      clientTypeRulesKey(savedClientTypeRules)
+    ) {
+      setClientTypeRules((current) =>
+        rebaseClientTypeRules({
+          current,
+          baseline: savedClientTypeRules,
+          stored: storedClientTypes,
+        }),
+      );
+      setSavedClientTypeRules(storedClientTypes);
+    }
   }
 
   // ─── Mutations ────────────────────────────────────────────────
@@ -273,9 +408,10 @@ export function CreateRoleDialog({
   });
 
   const submitted = useRef<{
+    clientTypeRules: ClientTypeRules;
     name: string;
     description: string;
-    grantKeys: string;
+    formGrants: Record<string, RoleGrant>;
     grants: SdkRoleGrant[];
     members: Set<string>;
     agents: Set<string>;
@@ -307,7 +443,15 @@ export function CreateRoleDialog({
         !saved ||
         !scopeDefinitions ||
         roleHoldsGrants(role, saved.grants, scopeDefinitions);
-      if (!grantsStored) {
+      // Credential type rules are left out of the form's grants, so check
+      // them on their own against what the role stores.
+      const storedClientTypeRules = clientTypeRulesFromRole(role);
+      const clientTypesStored =
+        !saved ||
+        clientTypeRulesKey(storedClientTypeRules) ===
+          clientTypeRulesKey(saved.clientTypeRules);
+      const allStored = grantsStored && clientTypesStored;
+      if (!allStored) {
         toast.error(
           "Some permission changes weren't saved. Check the role and save again.",
         );
@@ -320,13 +464,14 @@ export function CreateRoleDialog({
       if (presentation === "page" && saved) {
         setInitialName(saved.name);
         setInitialDescription(saved.description);
-        if (grantsStored) setInitialGrantKeys(saved.grantKeys);
+        if (grantsStored) setInitialGrants(saved.formGrants);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        if (grantsStored) toast.success("Role saved");
+        setSavedClientTypeRules(storedClientTypeRules);
+        if (allStored) toast.success("Role saved");
         return;
       }
-      if (grantsStored) handleClose();
+      if (allStored) handleClose();
     },
   });
 
@@ -339,6 +484,9 @@ export function CreateRoleDialog({
       isMutating,
       isEditing,
       isSystemRole,
+      clientTypesChanged:
+        clientTypeRulesKey(clientTypeRules) !==
+        clientTypeRulesKey(savedClientTypeRules),
       name,
       description,
       grants,
@@ -347,7 +495,7 @@ export function CreateRoleDialog({
       initial: {
         name: initialName,
         description: initialDescription,
-        grantKeys: initialGrantKeys,
+        grantKeys: grantKeysStringFn(initialGrants),
         members: initialMembers,
         agents: initialAgents,
       },
@@ -514,15 +662,23 @@ export function CreateRoleDialog({
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(
-        grantsFromRole(editingRole, scopeDefinitions),
-        scopeDefinitions,
+      const scopeChanges = diffGrants(
+        sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+        sdkGrants,
       );
-      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      // Removals use the role's stored selectors, so only the credential
+      // types whose rule changed are rewritten.
+      const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
+      const addGrants = [...scopeChanges.addGrants, ...typeChanges.addGrants];
+      const removeGrants = [
+        ...scopeChanges.removeGrants,
+        ...typeChanges.removeGrants,
+      ];
       submitted.current = {
+        clientTypeRules,
         name,
         description,
-        grantKeys: grantKeysStringFn(grants),
+        formGrants: grants,
         grants: sdkGrants,
         members: new Set(selectedMembers),
         agents: new Set(selectedAgents),
@@ -553,7 +709,10 @@ export function CreateRoleDialog({
           createRoleForm: {
             name,
             description: description.trim() || undefined,
-            grants: sdkGrants,
+            grants: [
+              ...sdkGrants,
+              ...clientTypeGrantChanges(undefined, clientTypeRules).addGrants,
+            ],
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -573,6 +732,8 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
+    setClientTypeRules(clientTypeRulesFromRole(undefined));
+    setSavedClientTypeRules(clientTypeRulesFromRole(undefined));
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());
@@ -580,7 +741,7 @@ export function CreateRoleDialog({
     setShowAgents(false);
     setInitialName("");
     setInitialDescription("");
-    setInitialGrantKeys("");
+    setInitialGrants({});
     setShowMembers(false);
     setAssignmentConfirmed(false);
     setInitialized(false);
@@ -728,6 +889,14 @@ export function CreateRoleDialog({
               markAgentIneligible={selectedAgents.size > 0}
               onEditRule={openRuleEditor}
               onRemoveRule={removeRule}
+            />
+            <RoleAuthClientTypesField
+              value={clientTypeRules}
+              onChange={(next) => {
+                setAssignmentConfirmed(false);
+                setClientTypeRules(next);
+              }}
+              disabled={isEditing && !initialized}
             />
 
             {/* ─── Who holds the role ───────────────────────────────

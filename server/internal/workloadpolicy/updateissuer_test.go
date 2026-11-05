@@ -2,6 +2,7 @@ package workloadpolicy_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -330,29 +332,27 @@ func TestUpdateIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 
 	// An issuer in another organization.
 	otherOrg := "org_" + uuid.NewString()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: another organization's rows are not reachable through the caller's API
-		ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'other', $1)`, otherOrg)
+	err := repo.New(ti.conn).CreateOrganizationFixture(ctx, repo.CreateOrganizationFixtureParams{ID: otherOrg, Name: "other", Slug: otherOrg})
 	require.NoError(t, err)
 
-	var otherIssuer uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri)
-		VALUES ($1, 'other-ci', 'https://other.example.com', 'https://other.example.com/jwks')
-		RETURNING id
-	`, otherOrg).Scan(&otherIssuer)
+	otherIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: otherOrg,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "other-ci",
+		Issuer:         "https://other.example.com",
+		JwksUri:        "https://other.example.com/jwks",
+	})
 	require.NoError(t, err)
 
 	for _, id := range []string{otherIssuer.String(), uuid.NewString()} {
 		payload := updatePayload(id)
 		payload.Name = new("taken over")
+		payload.AllowAssertionReuse = new(true)
 		_, err = ti.service.UpdateIssuer(ctx, payload)
 		requireOopsCode(t, err, oops.CodeNotFound)
 	}
 
-	var name string
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: asserting the row the API must not have touched
-		ctx, `SELECT name FROM workload_issuers WHERE id = $1`, otherIssuer).Scan(&name)
+	name, err := repo.New(ti.conn).GetWorkloadIssuerNameFixture(ctx, otherIssuer)
 	require.NoError(t, err)
 	require.Equal(t, "other-ci", name)
 }
@@ -364,24 +364,26 @@ func TestUpdateIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	siblingProject := uuid.New()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: registering under another project is not reachable through the API
-		ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1::uuid, $2, 'sibling', 'sibling-' || left($1::uuid::text, 8))
-	`, siblingProject, ti.orgID)
+	_, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             siblingProject,
+		Name:           "sibling",
+		Slug:           "sibling-" + siblingProject.String()[:8],
+		OrganizationID: ti.orgID,
+	})
 	require.NoError(t, err)
 
-	var siblingIssuer uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, 'sibling-ci', 'https://sibling.example.com', 'https://sibling.example.com/jwks')
-		RETURNING id
-	`, ti.orgID, siblingProject).Scan(&siblingIssuer)
+	siblingIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      uuid.NullUUID{UUID: siblingProject, Valid: true},
+		Name:           "sibling-ci",
+		Issuer:         "https://sibling.example.com",
+		JwksUri:        "https://sibling.example.com/jwks",
+	})
 	require.NoError(t, err)
 
 	payload := updatePayload(siblingIssuer.String())
 	payload.Name = new("taken over")
+	payload.AllowAssertionReuse = new(true)
 	_, err = ti.service.UpdateIssuer(ctx, payload)
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -430,12 +432,14 @@ func TestUpdateIssuer_RequiresWorkloadWrite(t *testing.T) {
 	readOnly := withScopes(t, ctx, ti, authz.ScopeWorkloadRead)
 	payload := updatePayload(original.ID)
 	payload.Name = new("Claude in Slack")
+	payload.AllowAssertionReuse = new(true)
 	_, err := ti.service.UpdateIssuer(readOnly, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
+	require.False(t, onlyIssuer(t, policy).AllowAssertionReuse)
 }
 
 func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
@@ -449,6 +453,7 @@ func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
 
 	payload := updatePayload(original.ID)
 	payload.Name = new("Claude in Slack")
+	payload.AllowAssertionReuse = new(true)
 	payload.JwksURI = new("https://keys.anthropic.com/jwks.json")
 	_, err = ti.service.UpdateIssuer(ctx, payload)
 	require.NoError(t, err)
@@ -469,12 +474,14 @@ func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
 	require.Equal(t, "Claude Tag", beforeSnapshot["name"])
 	require.Equal(t, anthropicJWKS, beforeSnapshot["jwks_uri"])
 	require.Equal(t, "organization", beforeSnapshot["tier"])
+	require.Equal(t, false, beforeSnapshot["allow_assertion_reuse"])
 
 	afterSnapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "Claude in Slack", afterSnapshot["name"])
 	require.Equal(t, "https://keys.anthropic.com/jwks.json", afterSnapshot["jwks_uri"])
 	require.Equal(t, anthropicIssuer, afterSnapshot["issuer"])
+	require.Equal(t, true, afterSnapshot["allow_assertion_reuse"])
 	require.Equal(t, "Claude agents in our Slack workspace", afterSnapshot["description"])
 }
 
@@ -493,4 +500,46 @@ func TestUpdateIssuer_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
+}
+
+//nolint:paralleltest,tparallel // Ordered updates intentionally share one issuer to test omitted-field preservation.
+func TestUpdateIssuer_AssertionReuseThroughGoClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	original := registerDescribedAnthropic(t, ctx, ti)
+	require.False(t, original.AllowAssertionReuse)
+	for _, tc := range []struct {
+		name  string
+		value *bool
+		want  bool
+	}{
+		{name: "enable", value: new(true), want: true},
+		{name: "omitted preserves opt in", value: nil, want: true},
+		{name: "disable", value: new(false), want: false},
+		{name: "omitted preserves opt out", value: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := updatePayload(original.ID)
+			payload.Name = new("Projected token platform")
+			payload.AllowAssertionReuse = tc.value
+			decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.value, decoded.AllowAssertionReuse)
+			policy, err := ti.service.UpdateIssuer(ctx, decoded)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, policy).AllowAssertionReuse)
+			listed, err := ti.service.List(ctx, &gen.ListPayload{})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, listed).AllowAssertionReuse)
+		})
+	}
+}
+
+func TestWorkloadIssuer_ResponseIncludesAssertionReuseWhenDisabled(t *testing.T) {
+	t.Parallel()
+	body, err := json.Marshal(genserver.WorkloadIssuerResponseBody{AllowAssertionReuse: false})
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(body, &fields))
+	require.JSONEq(t, "false", string(fields["allow_assertion_reuse"]))
 }

@@ -2,12 +2,16 @@ package toolsets
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
+
+// ErrHostingFieldsMoved rejects toolset writes to MCP hosting fields, which belong to the MCP server and its endpoints.
+var ErrHostingFieldsMoved = errors.New("toolset MCP hosting fields are managed through mcpServers.update and mcpEndpoints")
 
 // deprecatedHostingFields lists the MCP hosting fields an updateToolset request sets.
 func deprecatedHostingFields(payload *gen.UpdateToolsetPayload) []string {

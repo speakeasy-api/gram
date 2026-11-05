@@ -20,6 +20,10 @@ const (
 type WriteOperation string
 
 const (
+	// OperationCurateRegistryPromotionCandidate changes staff review status for an unpublished candidate.
+	OperationCurateRegistryPromotionCandidate     WriteOperation = "curate_registry_promotion_candidate"
+	OperationRetryRegistryPromotionDocs           WriteOperation = "retry_registry_promotion_docs"
+	OperationPromoteRegistryCandidate             WriteOperation = "promote_registry_candidate"
 	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
 	OperationSetOrganizationWhitelist             WriteOperation = "set_organization_whitelist"
 	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
@@ -31,11 +35,15 @@ const (
 	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
+	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
+	OperationCurateRegistryPromotionCandidate,
+	OperationRetryRegistryPromotionDocs,
+	OperationPromoteRegistryCandidate,
 	OperationSetOrganizationFeature,
 	OperationSetOrganizationWhitelist,
 	OperationAssignOrganizationOnboardingPlaybook,
@@ -47,6 +55,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
 	OperationCreateRegistryEntry,
+	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
 }
 
@@ -55,7 +64,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
 		return true
 	default:
 		return false
@@ -77,7 +86,7 @@ type WriteConfig struct {
 // ParseWriteOperations reads a comma-separated operation list. Unknown names
 // are an error so a typo cannot silently leave an operation disabled or enabled.
 func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for name := range strings.SplitSeq(raw, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -96,9 +105,9 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 // keep this consent allowlist aligned with the operation registry.
 func (op WriteOperation) implemented() bool {
 	switch op {
-	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
+	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false

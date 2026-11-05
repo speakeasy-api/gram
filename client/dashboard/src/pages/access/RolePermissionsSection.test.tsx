@@ -12,10 +12,14 @@ function scope(
 ): ScopeDefinition {
   return {
     slug: slug as ScopeDefinition["slug"],
+    label: slug,
     resourceType,
+    category: resourceType as ScopeDefinition["category"],
     description: `${slug} description`,
     agentEligible: true,
     visibility: "user_visible",
+    sensitive: false,
+    subScopes: [],
   };
 }
 

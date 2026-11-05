@@ -41,11 +41,19 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   authPermissionGrantsWritten?: number | undefined;
   /**
+   * Execution-selection profile versions this run recorded.
+   */
+  executionProfileVersionsWritten?: number | undefined;
+  /**
+   * Credential choices this run named a typed auth client on.
+   */
+  selectionsMapped?: number | undefined;
+  /**
    * Credential choices recorded.
    */
   selectionsWritten: number;
   /**
-   * Servers marked as needing upstream authentication because they offer a backfilled auth client.
+   * Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.
    */
   serversMarkedRequiringUpstreamAuth?: number | undefined;
   /**
@@ -66,6 +74,8 @@ export const AdminUpstreamOAuthMigrationRun$inboundSchema: z.ZodMiniType<
     auth_clients_error: z.optional(z.string()),
     auth_clients_written: z.optional(z.int()),
     auth_permission_grants_written: z.optional(z.int()),
+    execution_profile_versions_written: z.optional(z.int()),
+    selections_mapped: z.optional(z.int()),
     selections_written: z.int(),
     servers_marked_requiring_upstream_auth: z.optional(z.int()),
     status: AdminUpstreamOAuthMigrationStatus$inboundSchema,
@@ -78,6 +88,8 @@ export const AdminUpstreamOAuthMigrationRun$inboundSchema: z.ZodMiniType<
       "auth_clients_error": "authClientsError",
       "auth_clients_written": "authClientsWritten",
       "auth_permission_grants_written": "authPermissionGrantsWritten",
+      "execution_profile_versions_written": "executionProfileVersionsWritten",
+      "selections_mapped": "selectionsMapped",
       "selections_written": "selectionsWritten",
       "servers_marked_requiring_upstream_auth":
         "serversMarkedRequiringUpstreamAuth",
