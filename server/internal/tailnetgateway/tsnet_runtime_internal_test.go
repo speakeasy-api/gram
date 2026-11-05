@@ -24,15 +24,26 @@ func TestHostsServiceReadsServiceHostCapability(t *testing.T) {
 
 	// The shape control sent on a real tailnet once the host was approved.
 	approved := self(`{"svc:private":["100.107.234.251","fd7a:115c:a1e0::6131:eafc"]}`)
-	require.True(t, hostsService(approved, "svc:private"))
-	require.False(t, hostsService(approved, "svc:other"), "approval is per service")
+	check := func(status *ipnstate.PeerStatus, service tailcfg.ServiceName) bool {
+		t.Helper()
+		ok, err := hostsService(status, service)
+		require.NoError(t, err)
+		return ok
+	}
 
-	require.False(t, hostsService(self(`{"svc:other":["100.100.1.2"]}`), "svc:private"))
-	require.False(t, hostsService(self(`{"svc:private":[]}`), "svc:private"), "a service with no addresses cannot be reached")
-	require.False(t, hostsService(self(`not json`), "svc:private"))
-	require.False(t, hostsService(&ipnstate.PeerStatus{}, "svc:private"), "no capability means not approved")
-	require.False(t, hostsService(nil, "svc:private"))
+	require.True(t, check(approved, "svc:private"))
+	require.False(t, check(approved, "svc:other"), "approval is per service")
+
+	require.False(t, check(self(`{"svc:other":["100.100.1.2"]}`), "svc:private"))
+	require.False(t, check(self(`{"svc:private":[]}`), "svc:private"), "a service with no addresses cannot be reached")
+	require.False(t, check(&ipnstate.PeerStatus{}, "svc:private"), "no capability means not approved")
+	require.False(t, check(nil, "svc:private"))
 
 	// Multiple capability values are merged; any of them may carry the service.
-	require.True(t, hostsService(self(`{"svc:other":["100.100.1.2"]}`, `{"svc:private":["100.100.1.3"]}`), "svc:private"))
+	require.True(t, check(self(`{"svc:other":["100.100.1.2"]}`, `{"svc:private":["100.100.1.3"]}`), "svc:private"))
+
+	// A malformed capability fails closed but reports why.
+	ok, err := hostsService(self(`not json`), "svc:private")
+	require.Error(t, err)
+	require.False(t, ok)
 }
