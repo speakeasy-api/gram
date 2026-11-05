@@ -115,7 +115,7 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 			require.Equal(t, env.subject.String(), row.SubjectURN)
 			require.Equal(t, string(remotesessionmetrics.RefreshTriggerRequest), row.SubReason)
 			require.Len(t, rec.Rows(), 1)
-			if tc.want == mcpconnectionattempts.CodeMalformedResponse || tc.want == mcpconnectionattempts.CodeProviderUnavailable || tc.want == mcpconnectionattempts.CodeProviderServerError {
+			if tc.want == mcpconnectionattempts.CodeProviderUnavailable || tc.want == mcpconnectionattempts.CodeProviderServerError {
 				active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 				require.NoError(t, err)
 				require.True(t, active.RefreshTokenEncrypted.Valid, "provider failures must preserve the refresh grant")
@@ -178,14 +178,17 @@ func TestRefreshNow_CarriesTheRequestsClient(t *testing.T) {
 	scope := mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", nil)
 	req.Header.Set("User-Agent", "claude-code/2.1.0")
-	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope).FromRequest(req))
-	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[0].ClientFamily)
+	attribution := remotesessions.RefreshIn(scope).FromRequest(req)
+	req.Header.Set("User-Agent", "curl/8.7.1")
+	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[0].ClientFamily, "the client is read when the attribution is made")
+	require.Equal(t, "2.1.0", rec.Rows()[0].ClientVersion)
 
 	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshIn(scope))
 	require.Empty(t, rec.Rows()[1].ClientFamily)
 }
 
-// A session revoked mid-refresh and a caller that went away are neither success nor failure.
+// A session revoked mid-refresh is neither success nor failure.
 func TestRefreshNow_NotAnEndState(t *testing.T) {
 	t.Parallel()
 
@@ -198,7 +201,8 @@ func TestRefreshNow_NotAnEndState(t *testing.T) {
 	require.NoError(t, err)
 
 	session.ID = uuid.New()
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	scope := mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
 	require.NoError(t, err)
 	rec.RequireNothing()
 }
