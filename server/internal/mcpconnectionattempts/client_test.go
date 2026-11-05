@@ -230,6 +230,8 @@ func TestStampClient_CatalogClientID(t *testing.T) {
 		{name: "consent page stays the browser", clientID: claudeCode, userAgent: "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/141.0.0.0", family: FamilyBrowser},
 		{name: "named user agent wins", clientID: claudeCode, userAgent: "Cursor/2.0.77", family: FamilyCursor, version: "2.0.77"},
 		{name: "reported name wins", clientID: claudeCode, userAgent: "Bun/1.4.4", reported: "codex-mcp-client", family: FamilyCodexCLI},
+		{name: "a generic reported name falls back to the user agent", clientID: claudeCode, userAgent: "codex-mcp-client/0.50.0", reported: "curl", family: FamilyCodexCLI, version: "0.50.0"},
+		{name: "a script borrowing claude code's client id stays a script", clientID: claudeCode, userAgent: "python-requests/2.32.0", family: FamilyScript, version: "2.32.0"},
 		{name: "registered client stays generic", clientID: "3fa85f64-5717-4562-b3fc-2c963f66afa6", userAgent: "Bun/1.4.4", family: FamilyOther},
 		{name: "unlisted metadata url stays generic", clientID: "https://client.example.com/m", userAgent: "node", family: FamilyScript},
 	} {
@@ -438,4 +440,16 @@ func FuzzNormalizers(f *testing.F) {
 		require.LessOrEqual(t, len(NormalizeProviderHost(value)), maxProviderHostBytes)
 		require.LessOrEqual(t, len(AppOf(value).String()), maxProviderHostBytes)
 	})
+}
+
+// A row with no request still belongs to the app that started the attempt.
+func TestStampClient_CatalogFamilyWithoutRequest(t *testing.T) {
+	t.Parallel()
+
+	scope := ProviderSessionScope("org-test", uuid.New(), AppOf("https://claude.ai/oauth/claude-code-client-metadata"))
+	row, err := RowAt(Begin(scope), StepProviderRefresh, ResultRefreshed, true, time.Now())
+	require.NoError(t, err)
+	(&Recorder{}).stampClient(&row)
+	require.Equal(t, FamilyClaudeCode, row.ClientFamily)
+	require.Empty(t, row.DeviceKey)
 }

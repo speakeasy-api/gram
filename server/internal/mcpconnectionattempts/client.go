@@ -61,8 +61,8 @@ var clientFamilies = []struct {
 	{FamilyBrowser, []string{"mozilla"}},
 }
 
-// productFamilies maps an aivendors product to its family. Only a product whose client_id
-// documents belong to it alone is listed: claude.ai's two documents are Claude Code and Claude.
+// productFamilies maps an aivendors product to its family. It is keyed per product, not per
+// vendor, because one vendor host (claude.ai, chatgpt.com) serves several products.
 var productFamilies = map[string]string{
 	"claude-code":        FamilyClaudeCode,
 	"claude":             FamilyClaudeAI,
@@ -72,6 +72,15 @@ var productFamilies = map[string]string{
 	"zed":                FamilyZed,
 	"notion":             FamilyNotion,
 	"github-copilot-cli": FamilyCopilot,
+}
+
+// vendorHostedRedirect lists families whose documents redirect only to the vendor's own host,
+// so a script-like User-Agent there is the vendor's backend. A localhost redirect could be any program.
+var vendorHostedRedirect = map[string]bool{FamilyClaudeAI: true, FamilyOpenAIConnector: true}
+
+// genericFamily is a family that names no client app.
+func genericFamily(family string) bool {
+	return family == "" || family == FamilyOther || family == FamilyScript
 }
 
 // documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
@@ -213,11 +222,14 @@ func (r *Recorder) stampClient(row *Row) {
 	if client.reported != nil {
 		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
 	}
-	if row.ClientFamily == "" && client.present {
-		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	if genericFamily(row.ClientFamily) && client.present {
+		if family, version := classifyUserAgent(client.userAgent); row.ClientFamily == "" || !genericFamily(family) {
+			row.ClientFamily, row.ClientVersion = family, version
+		}
 	}
 	// A catalog client_id beats a runtime User-Agent like Claude Code's Bun/1.4.4, whose version isn't the app's.
-	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther || row.ClientFamily == FamilyScript) {
+	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
+		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
 		row.ClientFamily, row.ClientVersion = client.appFamily, ""
 	}
 	if !client.present {

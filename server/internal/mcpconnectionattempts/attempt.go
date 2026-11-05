@@ -37,7 +37,7 @@ const maxProviderHostBytes = 261
 
 // App identifies the app behind an attempt. app_key is a rollup sort key that a
 // caller can reach before sign-in, so it holds a known app's host or a kind and nothing else.
-// family is the client family a catalog client_id proves, for rows whose User-Agent names no client.
+// family is the client family a catalog client_id names, for rows whose User-Agent names no client.
 type App struct{ key, family string }
 
 var (
@@ -82,8 +82,8 @@ func AppOf(clientID string) App {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	switch (App{host, ""}) {
-	case App{"", ""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground, AppOtherMetadataURL:
+	switch host {
+	case "", AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key:
 		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
