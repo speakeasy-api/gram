@@ -892,9 +892,12 @@ func TestFreshRefreshOutrankedByReconnectWritesOnlyTheRefreshRow(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
-	// Clients resolve in id order, and ids sort by creation millisecond.
-	time.Sleep(2 * time.Millisecond)
-	createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "fresh-outranked-unlinked-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
+	// Clients resolve in id order, so the lower id must be the one that refreshes.
+	refreshing := fixture.RemoteSessionClient.ID
+	other := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "fresh-outranked-unlinked-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
+	if other.String() < refreshing.String() {
+		refreshing = other
+	}
 
 	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
 	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
@@ -902,9 +905,9 @@ func TestFreshRefreshOutrankedByReconnectWritesOnlyTheRefreshRow(t *testing.T) {
 	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
 
 	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
-	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, refreshing, subject)
 	var calls atomic.Int32
-	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, refreshing, func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
