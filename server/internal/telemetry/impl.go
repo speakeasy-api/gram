@@ -214,6 +214,7 @@ func (s *Service) SearchLogs(ctx context.Context, payload *telem_gen.SearchLogsP
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		OwnScope:               params.ownScope,
 		GramProjectID:          params.projectID,
 		TimeStart:              params.timeStart,
 		TimeEnd:                params.timeEnd,
@@ -285,6 +286,7 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 
 	// Query with limit+1 to detect if there are more results
 	items, err := s.chRepo.ListToolTraces(ctx, repo.ListToolTracesParams{
+		OwnScope:         params.ownScope,
 		GramProjectID:    params.projectID,
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
@@ -1839,6 +1841,9 @@ type searchParams struct {
 	cursor         string
 	timeStart      int64
 	timeEnd        int64
+	// ownScope is set when the caller lacks the project-wide scope and reads
+	// only their own activity. nil means the caller sees the whole project.
+	ownScope *repo.OwnScope
 }
 
 // prepareTelemetrySearch authorizes the caller for requiredScope on the active
@@ -1852,7 +1857,8 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	ownScope, err := s.resolveSearchScope(ctx, authCtx, requiredScope)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1892,8 +1898,48 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 		limit:          limit,
 		sortOrder:      sortOrder,
 		cursor:         cursorVal,
+		ownScope:       ownScope,
 		timeStart:      timeStart,
 		timeEnd:        timeEnd,
+	}, nil
+}
+
+// resolveSearchScope returns nil when the caller may read the whole project.
+// A member without log:read gets an OwnScope instead of a refusal: their own
+// sessions plus agents they currently own. Non-human callers keep plain Require.
+func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
+	check := authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}
+	// Only a member reading as themselves falls back. Assistant runtime and
+	// embedded chat-session callers keep the plain check.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+	if requiredScope != authz.ScopeLogRead || authCtx.UserID == "" || authCtx.ExternalUserID != "" || isAssistantCall {
+		return nil, s.authz.Require(ctx, check)
+	}
+	// Evaluate, not Require: a member without the grant is expected, not a
+	// denial to record. It also keeps project-wide reads where RBAC is off.
+	allowed, err := s.authz.Evaluate(ctx, check)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate log read access")
+	}
+	if allowed {
+		return nil, nil
+	}
+	ownedAgents, err := s.chatRepo.ListOwnedAgentIDs(ctx, chatRepo.ListOwnedAgentIDsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve owned agents").LogError(ctx, s.logger)
+	}
+	agentIDs := make([]string, 0, len(ownedAgents))
+	for _, id := range ownedAgents {
+		agentIDs = append(agentIDs, id.String())
+	}
+	return &repo.OwnScope{
+		UserID:      authCtx.UserID,
+		UserEmail:   conv.PtrValOr(authCtx.Email, ""),
+		AgentIDs:    agentIDs,
+		IdentityOrg: s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID),
 	}, nil
 }
 
@@ -3792,6 +3838,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+		OwnScope:           params.ownScope,
 		GramProjectID:      params.projectID,
 		TimeStart:          params.timeStart,
 		TimeEnd:            params.timeEnd,
@@ -5144,6 +5191,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 	// Query with limit+1 to detect if there are more results
 	canonicalOrg := s.canonicalOrgFor(ctx, params.organizationID)
 	items, err := s.chRepo.ListHooksTraces(ctx, repo.ListHooksTracesParams{
+		OwnScope:             params.ownScope,
 		GramProjectID:        params.projectID,
 		TimeStart:            params.timeStart,
 		TimeEnd:              params.timeEnd,

@@ -125,6 +125,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 	}
 
 	rows, err := r.recentToolCalls.telemetry.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
+		OwnScope:           nil,
 		GramProjectID:      project.ID.String(),
 		TimeStart:          window.start.UnixNano(),
 		TimeEnd:            window.end.UnixNano(),
