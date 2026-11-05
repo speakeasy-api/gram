@@ -1280,7 +1280,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
 		upstreamCheck = s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti)
 		if upstreamCheck.reconnect() {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required", attr.SlogUserSessionSubjectKind(string(refreshSession.SubjectUrn.Kind)))
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", string(upstreamCheck), attr.SlogUserSessionSubjectKind(string(refreshSession.SubjectUrn.Kind)))
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, string(upstreamCheck), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 		}
@@ -1484,7 +1484,7 @@ func (s *Service) rotateRefreshToken(
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
 		var admissionErr error
 		if admittedAgentSessionID == uuid.Nil || admittedAgentSessionID != oldSession.ID {
-			admissionErr = oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+			admissionErr = agentCredentialRejected()
 		} else {
 			admittedAgentContext, admissionErr = s.authz.AdmitPrincipalCredentialWithDBTX(admittedAgentContext, dbtx)
 			if admissionErr == nil {
@@ -1654,6 +1654,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
 		return upstreamRefreshCheckFailed
 	}
+	// Identity chaining vouches for a known user, which an anonymous subject is not.
 	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return upstreamRefreshOf(reconnect)
 	}
@@ -1770,9 +1771,15 @@ func (s *Service) writeRefreshTokenReplay(
 		if s.replayLiveness != nil {
 			check = s.replayLiveness
 		}
-		if reason, ok := check(ctx, endpoint, payload.JTI); !ok {
+		if reason, ok, checkErr := check(ctx, endpoint, payload.JTI); !ok {
 			if reason == "refresh_token_replay_lookup_failed" {
+				logger.WarnContext(ctx, "failed to check refreshed session before replay", attr.SlogError(checkErr))
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 				writeErr := writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "could not check the refreshed session; retry shortly")
+				if ctx.Err() != nil {
+					tracker.Continue()
+					return writeErr
+				}
 				return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
@@ -2474,23 +2481,23 @@ func signInUserID(issuance sessionIssuance) pgtype.Text {
 // humanReplayRevoked reports whether a human refresh replay may be served:
 // its successor session is still live and its sign-in not revoked other than
 // by a single sign-out. A lookup failure refuses the replay.
-func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool) {
+func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool, error) {
 	q := usersessions_repo.New(s.db)
 	session, err := q.GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, Jti: jti})
 	if err != nil {
-		return replayLookupFailureReason(err, "refresh_token_revoked"), false
+		return replayLookupFailureReason(err, "refresh_token_revoked"), false, err
 	}
 	if !session.SignInID.Valid {
-		return "", true
+		return "", true, nil
 	}
 	row, err := q.LockSignInForGrant(ctx, usersessions_repo.LockSignInForGrantParams{ID: session.SignInID.UUID, OrganizationID: endpoint.OrganizationID})
 	if err != nil {
-		return replayLookupFailureReason(err, "sign_in_revoked"), false
+		return replayLookupFailureReason(err, "sign_in_revoked"), false, err
 	}
 	if row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)) {
-		return "sign_in_revoked", false
+		return "sign_in_revoked", false, nil
 	}
-	return "", true
+	return "", true, nil
 }
 
 // replayLookupFailureReason distinguishes a vanished authorization from a failed check.

@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -236,7 +237,7 @@ func newRefreshTokenReplayTestFixture(
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
-	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool) { return "", true }
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) { return "", true, nil }
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,
 		Ciphertext: ciphertext,
@@ -312,8 +313,8 @@ func TestRefreshReplayLookupOutage(t *testing.T) {
 	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	rec := mcpconnectionattemptstest.New(t)
 	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool) {
-		return "refresh_token_replay_lookup_failed", false
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) {
+		return "refresh_token_replay_lookup_failed", false, errors.New("database unavailable")
 	}
 	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
 	w := httptest.NewRecorder()
@@ -325,4 +326,23 @@ func TestRefreshReplayLookupOutage(t *testing.T) {
 	require.NotContains(t, w.Body.String(), "invalid_grant")
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
 	require.Len(t, rec.Rows(), 1)
+}
+
+func TestRefreshReplayLookupClientDisconnectRecordsNothing(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool, error) {
+		return "refresh_token_replay_lookup_failed", false, context.Canceled
+	}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(ctx, tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	rec.RequireNothing()
 }
