@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     gram_urn SimpleAggregateFunction(any, String) COMMENT '@access: confidential',
     -- Preserve populated names when sibling spans omit the tool name.
     tool_name SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
-    tool_source SimpleAggregateFunction(any, String) COMMENT '@access: confidential',
+    -- Preserve the MCP server when only the post-call row names it (OpenClaw).
+    tool_source SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
     event_source SimpleAggregateFunction(any, String) COMMENT '@access: confidential',
     user_email SimpleAggregateFunction(any, String) COMMENT '@access: confidential-pii',
     hook_source SimpleAggregateFunction(any, String) COMMENT '@access: confidential',
@@ -282,7 +283,7 @@ SELECT
     any(gram_function_id) AS gram_function_id,
     any(gram_urn) AS gram_urn,
     max(tool_name) AS tool_name,
-    any(tool_source) AS tool_source,
+    max(tool_source) AS tool_source,
     any(event_source) AS event_source,
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,

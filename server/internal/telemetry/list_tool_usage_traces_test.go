@@ -1126,14 +1126,11 @@ func TestListToolUsageTraces_ExcludesStoredNonToolHookEvents(t *testing.T) {
 }
 
 // OpenClaw reports the MCP server of a call only on its post-call row; the
-// pre-call row of the same trace has no source. The raw path must still
+// pre-call row of the same trace has no source. Both paths must still
 // classify the call as one shadow MCP call rather than splitting it into an
-// MCP row and a local-tool row. The summary path cannot guarantee this yet:
-// trace_summaries keeps tool_source with any(), so the MV and part merges can
-// keep the pre-call row's empty string.
-func TestListToolUsageTraces_RawPathClassifiesMCPCallWithServerOnPostRowOnly(t *testing.T) {
-	t.Parallel()
-
+// MCP row and a local-tool row. trace_summaries keeps tool_source with max(),
+// so the server survives the merge of the trace's summary rows into one.
+func TestListToolUsageTraces_ClassifiesMCPCallWithServerOnPostRowOnly(t *testing.T) { //nolint:paralleltest // OPTIMIZE mutates the ClickHouse table shared by this package's tests.
 	ctx, ti := newTestLogsService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -1169,25 +1166,35 @@ func TestListToolUsageTraces_RawPathClassifiesMCPCallWithServerOnPostRowOnly(t *
 	insertOpenClawToolCall(uuid.New().String(), now.Add(-10*time.Minute), "speakeasy__execute_tool", "speakeasy")
 	insertOpenClawToolCall(uuid.New().String(), now.Add(-5*time.Minute), "exec", "")
 
+	// Each insert lands as its own summary row. Merge them so the summary
+	// path reads the column's stored aggregate, not the read-side max().
+	require.NoError(t, ti.chConn.Exec(ctx, "OPTIMIZE TABLE trace_summaries FINAL"))
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 	rawPathQuery := ":"
-	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
-		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
-		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
-		Query: &rawPathQuery,
-		Limit: 10,
-		Sort:  "desc",
-	}, func(result *gen.ListToolUsageTracesResult) bool {
-		return len(result.Traces) == 2
-	})
+	for name, query := range map[string]*string{"summary path": nil, "raw path": &rawPathQuery} {
+		t.Run(name, func(t *testing.T) {
+			result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+				From:  from,
+				To:    to,
+				Query: query,
+				Limit: 10,
+				Sort:  "desc",
+			}, func(result *gen.ListToolUsageTracesResult) bool {
+				return len(result.Traces) == 2
+			})
 
-	traces := normalizeToolUsageTraces(result.Traces)
-	mcpCall, ok := traces["shadow_mcp_server:speakeasy:speakeasy__execute_tool"]
-	require.True(t, ok, "the MCP call must classify under its server: %v", traces)
-	require.Equal(t, "speakeasy", mcpCall.TargetLabel)
-	require.Equal(t, "success", mcpCall.HookStatus)
-	require.Equal(t, uint64(2), mcpCall.LogCount)
+			traces := normalizeToolUsageTraces(result.Traces)
+			mcpCall, ok := traces["shadow_mcp_server:speakeasy:speakeasy__execute_tool"]
+			require.True(t, ok, "the MCP call must classify under its server: %v", traces)
+			require.Equal(t, "speakeasy", mcpCall.TargetLabel)
+			require.Equal(t, "success", mcpCall.HookStatus)
+			require.Equal(t, uint64(2), mcpCall.LogCount)
 
-	nativeCall, ok := traces["local_tool:local:exec"]
-	require.True(t, ok, "a native tool stays a local tool: %v", traces)
-	require.Equal(t, uint64(2), nativeCall.LogCount)
+			nativeCall, ok := traces["local_tool:local:exec"]
+			require.True(t, ok, "a native tool stays a local tool: %v", traces)
+			require.Equal(t, uint64(2), nativeCall.LogCount)
+		})
+	}
 }
