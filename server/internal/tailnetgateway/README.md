@@ -8,8 +8,11 @@ per-ingress attestor pods.
 ## How it works
 
 - The gateway runs as a StatefulSet. The pod ordinal is the **slot**: pod `n`
-  is tailnet node `speakeasy-gw-<n>` for every customer. Kubernetes guarantees
-  one live pod per ordinal, so no lease is needed.
+  is tailnet node `speakeasy-gw-<n>` for every customer. The StatefulSet
+  controller normally runs one pod per ordinal, so there is no lease and no
+  fencing. A force-deleted or partitioned pod can briefly overlap with its
+  replacement; Tailscale allows one live session per node key, which bounds
+  that overlap.
 - The reconciler (`gram network-ingress-worker`) creates one
   `network_ingress_nodes` row per slot, defines the Tailscale Service
   `svc:<label>` through the Tailscale API and mints a one-shot, preauthorized,
@@ -49,8 +52,8 @@ the dashboard with the `tag:speakeasy` policy, then set in `mise.local.toml`:
 
 ```toml
 GRAM_TAILNET_GATEWAY_UPSTREAM_URL = "https://localhost:<private-listener-port>"
-GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE = "<path to the listener CA>"
-GRAM_TAILNET_GATEWAY_TOKEN_PATH = "<path to a file holding the attestation token>"
+GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE = "<absolute path to the listener CA>"
+GRAM_TAILNET_GATEWAY_TOKEN_PATH = "<absolute path to a file holding the attestation token>"
 ```
 
 and start it with `pitchfork start tailnet-gateway`. Readiness is served on

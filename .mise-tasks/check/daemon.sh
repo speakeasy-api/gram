@@ -61,10 +61,7 @@ case "$usage_name" in
     mise run check:http --url "http://localhost:$TUNNEL_GATEWAY_PUBLIC_PORT/healthz"
     ;;
   tailnet-gateway)
-    # The start task binds the control listener to this address, so probe it
-    # rather than assuming the default port.
-    tailnet_control="${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-127.0.0.1:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}"
-    mise run check:http --url "http://${tailnet_control#:}/readyz"
+    mise run check:http --url "http://$(probe_address "${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-localhost:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}")/readyz"
     ;;
   *)
     echo "error: unknown daemon name: $usage_name" >&2
