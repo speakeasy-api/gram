@@ -27,6 +27,7 @@ type stubAPI struct {
 	mu            sync.Mutex
 	requests      []recordedRequest
 	tokenRequests int
+	tokenStatus   int
 	status        int
 	response      any
 	token         string
@@ -37,7 +38,14 @@ func (s *stubAPI) handler() http.Handler {
 	mux.HandleFunc("POST /api/v2/oauth/token", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.tokenRequests++
+		tokenStatus := s.tokenStatus
 		s.mu.Unlock()
+		if tokenStatus != 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(tokenStatus)
+			_, _ = w.Write([]byte(`{"error":"temporarily_unavailable"}`))
+			return
+		}
 		id, secret := r.FormValue("client_id"), r.FormValue("client_secret")
 		if id == "" || secret == "" {
 			user, pass, ok := r.BasicAuth()
@@ -103,7 +111,7 @@ var creds = tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}
 
 func TestCreateAuthKeySendsOneShotTaggedKey(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: map[string]any{
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: map[string]any{
 		"id": "k123", "key": "tskey-auth-secret", "expires": time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
 	}}
 	client := newClient(t, stub)
@@ -134,7 +142,7 @@ func TestCreateAuthKeySendsOneShotTaggedKey(t *testing.T) {
 
 func TestCreateAuthKeyRejectedCredentials(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: nil}
 	client := newClient(t, stub)
 
 	_, err := client.CreateAuthKey(t.Context(), tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "wrong"}, tailscaleapi.AuthKeyRequest{Tag: "tag:speakeasy", Description: "", TTL: time.Hour})
@@ -142,18 +150,75 @@ func TestCreateAuthKeyRejectedCredentials(t *testing.T) {
 	require.Empty(t, stub.recorded())
 }
 
-func TestForbiddenMapsToUnauthorized(t *testing.T) {
+func TestAPIStatusesMapToDistinctErrors(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusForbidden, token: "tok", response: map[string]any{"message": "missing scope"}}
-	client := newClient(t, stub)
+	svc := tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""}
+	for _, tc := range []struct {
+		status int
+		want   error
+		not    []error
+	}{
+		{http.StatusForbidden, tailscaleapi.ErrForbidden, []error{tailscaleapi.ErrRateLimited, tailscaleapi.ErrUnavailable}},
+		{http.StatusTooManyRequests, tailscaleapi.ErrRateLimited, []error{tailscaleapi.ErrUnauthorized, tailscaleapi.ErrUnavailable}},
+		{http.StatusInternalServerError, tailscaleapi.ErrUnavailable, []error{tailscaleapi.ErrUnauthorized, tailscaleapi.ErrRateLimited}},
+		{http.StatusServiceUnavailable, tailscaleapi.ErrUnavailable, []error{tailscaleapi.ErrUnauthorized, tailscaleapi.ErrRateLimited}},
+		{http.StatusBadRequest, nil, []error{tailscaleapi.ErrUnauthorized, tailscaleapi.ErrRateLimited, tailscaleapi.ErrUnavailable}},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			t.Parallel()
+			stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: tc.status, token: "tok", response: map[string]any{"message": "failed"}}
+			err := newClient(t, stub).UpsertService(t.Context(), creds, svc)
+			require.Error(t, err)
+			if tc.want != nil {
+				require.ErrorIs(t, err, tc.want)
+			}
+			for _, other := range tc.not {
+				require.NotErrorIs(t, err, other)
+			}
+		})
+	}
+}
 
-	err := client.UpsertService(t.Context(), creds, tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""})
+func TestForbiddenStillMatchesUnauthorized(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusForbidden, token: "tok", response: map[string]any{"message": "missing scope"}}
+	err := newClient(t, stub).UpsertService(t.Context(), creds, tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""})
+	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized, "callers that only ask whether the credentials work still match")
+}
+
+func TestUnauthorizedIsNotForbidden(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusUnauthorized, token: "tok", response: map[string]any{"message": "unauthorized"}}
+	err := newClient(t, stub).UpsertService(t.Context(), creds, tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""})
 	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
+	require.NotErrorIs(t, err, tailscaleapi.ErrForbidden)
+}
+
+func TestTokenEndpointOutageIsUnavailable(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: http.StatusServiceUnavailable, status: http.StatusOK, token: "tok", response: nil}
+	_, err := newClient(t, stub).CreateAuthKey(t.Context(), creds, tailscaleapi.AuthKeyRequest{Tag: "tag:speakeasy", Description: "", TTL: time.Hour})
+	require.ErrorIs(t, err, tailscaleapi.ErrUnavailable)
+	require.NotErrorIs(t, err, tailscaleapi.ErrUnauthorized)
+}
+
+func TestUnreachableAPIIsUnavailable(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.NotFoundHandler())
+	baseURL := server.URL
+	server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	client, err := tailscaleapi.New(policy, baseURL)
+	require.NoError(t, err)
+
+	err = client.DeleteDevice(t.Context(), creds, "nABC")
+	require.ErrorIs(t, err, tailscaleapi.ErrUnavailable)
 }
 
 func TestUpsertServiceBody(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: nil}
 	client := newClient(t, stub)
 
 	require.NoError(t, client.UpsertService(t.Context(), creds, tailscaleapi.Service{
@@ -172,7 +237,7 @@ func TestUpsertServiceBody(t *testing.T) {
 
 func TestDeleteMissingResourcesSucceed(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusNotFound, token: "tok", response: map[string]any{"message": "not found"}}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusNotFound, token: "tok", response: map[string]any{"message": "not found"}}
 	client := newClient(t, stub)
 
 	require.NoError(t, client.DeleteDevice(t.Context(), creds, "nABC"))
@@ -189,7 +254,7 @@ func TestDeleteMissingResourcesSucceed(t *testing.T) {
 
 func TestClientReusesTokensPerCredential(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: nil}
 	client := newClient(t, stub)
 	svc := tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""}
 

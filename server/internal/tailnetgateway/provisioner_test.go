@@ -3,6 +3,7 @@ package tailnetgateway_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -199,6 +200,22 @@ func TestProvisionerApplyRejectsBadCredentialsAndInput(t *testing.T) {
 	observation, err = f.provisioner.Apply(ctx, f.desired(t))
 	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
 	require.Equal(t, k8s.NetworkIngressErrorInvalidCredentials, observation.ErrorCode)
+	require.NotErrorIs(t, err, k8s.ErrNetworkIngressProviderCredentialsRejected, "the teardown blocker is only for Delete")
+
+	for _, tc := range []struct {
+		reject   error
+		code     string
+		sentinel error
+	}{
+		{tailscaleapi.ErrForbidden, k8s.NetworkIngressErrorProviderForbidden, k8s.ErrNetworkIngressProviderForbidden},
+		{tailscaleapi.ErrRateLimited, k8s.NetworkIngressErrorProviderRateLimited, k8s.ErrNetworkIngressProviderRateLimited},
+		{tailscaleapi.ErrUnavailable, k8s.NetworkIngressErrorProviderAPIUnavailable, k8s.ErrNetworkIngressProviderAPIUnavailable},
+	} {
+		f.api.Reject = fmt.Errorf("upsert service: %w", tc.reject)
+		observation, err = f.provisioner.Apply(ctx, f.desired(t))
+		require.ErrorIs(t, err, tc.sentinel)
+		require.Equal(t, tc.code, observation.ErrorCode)
+	}
 	f.api.Reject = nil
 
 	desired = f.desired(t)
@@ -312,6 +329,16 @@ func TestProvisionerDeleteSurfacesRejectedCredentials(t *testing.T) {
 	require.ErrorIs(t, f.provisioner.DeleteWithCredentials(ctx, f.resources, []byte("{")), k8s.ErrNetworkIngressProviderCredentialsRejected)
 	f.api.Reject = tailscaleapi.ErrUnauthorized
 	require.ErrorIs(t, f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")), k8s.ErrNetworkIngressProviderCredentialsRejected)
+
+	f.api.Reject = tailscaleapi.ErrForbidden
+	err = f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret"))
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderForbidden)
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderCredentialsRejected, "a missing permission blocks teardown like rejected credentials")
+
+	f.api.Reject = tailscaleapi.ErrRateLimited
+	err = f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret"))
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderRateLimited)
+	require.NotErrorIs(t, err, k8s.ErrNetworkIngressProviderCredentialsRejected)
 }
 
 type fakeOperator struct {

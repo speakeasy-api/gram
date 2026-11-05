@@ -29,6 +29,13 @@ const (
 	NetworkIngressErrorKubernetes          = "kubernetes_api"
 	// Teardown is blocked because the provider refused the saved credentials.
 	NetworkIngressErrorProviderCredentialsRejected = "provider_credentials_rejected" // #nosec G101 -- bounded status code, not credential material.
+	// The provider accepted the credentials but they lack a scope, or may not
+	// act on the tag or service.
+	NetworkIngressErrorProviderForbidden = "provider_forbidden"
+	// The provider throttled the call; it is retried.
+	NetworkIngressErrorProviderRateLimited = "provider_rate_limited"
+	// The provider API was unreachable or failed on its side; it is retried.
+	NetworkIngressErrorProviderAPIUnavailable = "provider_api_unavailable"
 )
 
 var (
@@ -46,6 +53,18 @@ var (
 	// ErrNetworkIngressProviderCredentialsRejected means the provider refused
 	// the saved credentials, so teardown cannot progress until they work again.
 	ErrNetworkIngressProviderCredentialsRejected = errors.New("network ingress provider rejected credentials")
+
+	// ErrNetworkIngressProviderForbidden means the credentials work but lack a
+	// permission. It also matches ErrNetworkIngressProviderCredentialsRejected,
+	// since teardown is blocked the same way.
+	ErrNetworkIngressProviderForbidden = fmt.Errorf("%w: missing permission", ErrNetworkIngressProviderCredentialsRejected)
+
+	// ErrNetworkIngressProviderRateLimited means the provider API throttled the call.
+	ErrNetworkIngressProviderRateLimited = errors.New("network ingress provider rate limited")
+
+	// ErrNetworkIngressProviderAPIUnavailable means the provider API was
+	// unreachable or failed on its side.
+	ErrNetworkIngressProviderAPIUnavailable = errors.New("network ingress provider api unavailable")
 )
 
 // NetworkIngressResourceNames is the provider-neutral, persisted identity of
