@@ -172,7 +172,7 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 
 	names := make([]string, 0, len(mcpRows))
 	for _, row := range mcpRows {
-		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
+		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), conv.Default(row.Url, row.Slug.String)))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
 		RemoteSessionClientID: clientID,

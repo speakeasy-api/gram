@@ -196,6 +196,30 @@ func TestClientMcpServers_DoNotShowATunnelIdentifierAsItsURL(t *testing.T) {
 	require.Nil(t, servers.Items[0].URL)
 }
 
+// A server with no name and no remote URL still has an entry an administrator
+// can read: its slug, not a tunnel identifier that names a private host.
+func TestClientDeletePreflight_NamesAnUnnamedTunnelBySlug(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID, organizationID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	q := authclientbackfill.New(ti.conn)
+	tunnelID, serverID := uuid.New(), uuid.New()
+	require.NoError(t, q.SeedTunneledSourceFixture(ctx, authclientbackfill.SeedTunneledSourceFixtureParams{ID: tunnelID, ProjectID: projectID, Name: "unnamed-tunnel-source", KeyHash: "hash-unnamed-tunnel", ResourceIdentifier: conv.ToPGText("https://unnamed-tunnel.internal.example.com/mcp")}))
+	require.NoError(t, q.SeedTunneledMCPServerFixture(ctx, authclientbackfill.SeedTunneledMCPServerFixtureParams{ID: serverID, ProjectID: projectID, Slug: conv.ToPGText("unnamed-tunnel"), TunneledMcpServerID: conv.ToNullUUID(tunnelID)}))
+	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "unnamed-tunnel-issuer", "https://issuer.example.com/unnamed-tunnel")
+	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "unnamed-tunnel-cid")
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, serverID, registration)
+	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
+
+	preflight, err := ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
+	require.NoError(t, err)
+	require.Equal(t, []string{"unnamed-tunnel"}, preflight.McpServerNames)
+}
+
 // A sign-in can front servers with different upstreams. Where typed auth
 // clients are enforced, the server that offers the registration decides its
 // resource, not every server behind the sign-in it is linked to.
