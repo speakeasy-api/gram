@@ -498,6 +498,14 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		projectIDs = append(projectIDs, p.ID.String())
 	}
 
+	// org:read covers the slice's totals; a session row names its user and
+	// title, so rows come only from projects the caller holds chat:read on.
+	rowProjectIDs, err := s.chatReadableProjects(ctx, authCtx.ActiveOrganizationID, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	scoped := len(rowProjectIDs) < len(projectIDs)
+
 	var cursorSortValue *float64
 	var cursorGramChatID string
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -529,7 +537,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	params := repo.ListSessionsParams{
-		ProjectIDs:           projectIDs,
+		ProjectIDs:           rowProjectIDs,
 		TimeStart:            timeStart,
 		TimeEnd:              timeEnd,
 		Filters:              filters,
@@ -546,6 +554,24 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
 	}
 
+	var totals *telem_gen.SessionTotals
+	if scoped {
+		params.ProjectIDs = projectIDs
+		sums, err := s.chRepo.GetSessionTotals(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error totalling sessions")
+		}
+		totals = &telem_gen.SessionTotals{
+			SessionCount:      sums.SessionCount,
+			MessageCount:      sums.MessageCount,
+			ToolCallCount:     sums.ToolCallCount,
+			TotalInputTokens:  sums.TotalInputTokens,
+			TotalOutputTokens: sums.TotalOutputTokens,
+			TotalTokens:       sums.TotalTokens,
+			TotalCost:         sanitizeFloat64(sums.TotalCost),
+		}
+	}
+
 	var nextCursor *string
 	if len(items) > limit {
 		next := encodeListSessionsCursor(items[limit-1].SortValue, items[limit-1].GramChatID)
@@ -555,7 +581,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 
 	// Chat titles live in Postgres, not the ClickHouse telemetry the session
 	// metrics come from, so resolve them in a single batch and stitch them on.
-	titlesByChatID := s.chatTitlesForSessions(ctx, items, projectIDs)
+	titlesByChatID := s.chatTitlesForSessions(ctx, items, rowProjectIDs)
 
 	sessions := make([]*telem_gen.SessionSummary, len(items))
 	for i, item := range items {
@@ -586,7 +612,35 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 	return &telem_gen.ListSessionsResult{
 		Sessions:   sessions,
 		NextCursor: nextCursor,
+		Scoped:     scoped,
+		Totals:     totals,
 	}, nil
+}
+
+// chatReadableProjects returns the projects whose session rows the caller may
+// see. Evaluate rather than Require: an org reader without chat:read is the
+// expected case, not a denial to record, and RBAC off keeps every project.
+func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
+	// An organization-wide grant reads every project at once.
+	allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(orgID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+	}
+	if allowed {
+		return projectIDs, nil
+	}
+
+	readable := make([]string, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+		}
+		if allowed {
+			readable = append(readable, projectID)
+		}
+	}
+	return readable, nil
 }
 
 // chatTitlesForSessions resolves the Postgres chat title for each session,

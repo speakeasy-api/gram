@@ -1137,10 +1137,17 @@ type QueryTumDetailsResponseBody struct {
 // ListSessionsResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body.
 type ListSessionsResponseBody struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummaryResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped *bool `form:"scoped,omitempty" json:"scoped,omitempty" xml:"scoped,omitempty"`
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -9217,6 +9224,24 @@ type SessionSummaryResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
+// SessionTotalsResponseBody is used to define fields on response body types.
+type SessionTotalsResponseBody struct {
+	// Number of matching chat sessions
+	SessionCount *int64 `form:"session_count,omitempty" json:"session_count,omitempty" xml:"session_count,omitempty"`
+	// Number of LLM completion messages across the sessions
+	MessageCount *int64 `form:"message_count,omitempty" json:"message_count,omitempty" xml:"message_count,omitempty"`
+	// Number of tool calls across the sessions
+	ToolCallCount *int64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
+	// Total input tokens used
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Total output tokens used
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens used
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
+}
+
 // FilterOptionResponseBody is used to define fields on response body types.
 type FilterOptionResponseBody struct {
 	// Unique identifier for the option
@@ -14740,6 +14765,7 @@ func NewQueryTumDetailsGatewayError(body *QueryTumDetailsGatewayErrorResponseBod
 func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSessionsResult {
 	v := &telemetry.ListSessionsResult{
 		NextCursor: body.NextCursor,
+		Scoped:     *body.Scoped,
 	}
 	v.Sessions = make([]*telemetry.SessionSummary, len(body.Sessions))
 	for i, val := range body.Sessions {
@@ -14748,6 +14774,9 @@ func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSess
 			continue
 		}
 		v.Sessions[i] = unmarshalSessionSummaryResponseBodyToTelemetrySessionSummary(val)
+	}
+	if body.Totals != nil {
+		v.Totals = unmarshalSessionTotalsResponseBodyToTelemetrySessionTotals(body.Totals)
 	}
 
 	return v
@@ -18355,11 +18384,19 @@ func ValidateListSessionsResponseBody(body *ListSessionsResponseBody) (err error
 	if body.Sessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
 	}
+	if body.Scoped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scoped", "body"))
+	}
 	for _, e := range body.Sessions {
 		if e != nil {
 			if err2 := ValidateSessionSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateSessionTotalsResponseBody(body.Totals); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -29092,6 +29129,33 @@ func ValidateSessionSummaryResponseBody(body *SessionSummaryResponseBody) (err e
 		if !(*body.Status == "success" || *body.Status == "error") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"success", "error"}))
 		}
+	}
+	return
+}
+
+// ValidateSessionTotalsResponseBody runs the validations defined on
+// SessionTotalsResponseBody
+func ValidateSessionTotalsResponseBody(body *SessionTotalsResponseBody) (err error) {
+	if body.SessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_count", "body"))
+	}
+	if body.MessageCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message_count", "body"))
+	}
+	if body.ToolCallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_count", "body"))
+	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
 	}
 	return
 }

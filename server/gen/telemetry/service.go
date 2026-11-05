@@ -1439,10 +1439,17 @@ type ListSessionsPayload struct {
 // ListSessionsResult is the result type of the telemetry service listSessions
 // method.
 type ListSessionsResult struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummary
 	// Cursor for next page
 	NextCursor *string
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped bool
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotals
 }
 
 // ListToolUsageTracesPayload is the payload type of the telemetry service
@@ -2110,6 +2117,24 @@ type SessionSummary struct {
 	TotalCost float64
 	// Chat session status
 	Status string
+}
+
+// Aggregate usage over a set of chat sessions
+type SessionTotals struct {
+	// Number of matching chat sessions
+	SessionCount int64
+	// Number of LLM completion messages across the sessions
+	MessageCount int64
+	// Number of tool calls across the sessions
+	ToolCallCount int64
+	// Total input tokens used
+	TotalInputTokens int64
+	// Total output tokens used
+	TotalOutputTokens int64
+	// Total tokens used
+	TotalTokens int64
+	// Total cost in USD
+	TotalCost float64
 }
 
 // Per-(skill, user) aggregated counts
