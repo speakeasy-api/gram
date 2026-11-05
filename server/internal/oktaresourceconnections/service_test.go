@@ -1,7 +1,9 @@
 package oktaresourceconnections_test
 
 import (
+	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -589,7 +591,7 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 	offered := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
 	identityProvider := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
 	fixtures := authclientbackfill.New(si.conn)
-	offer := func(serverID, issuerID uuid.UUID, clientType string) uuid.UUID {
+	offer := func(serverID, issuerID uuid.UUID, clientType string) (uuid.UUID, uuid.UUID) {
 		client, err := remotesessionsrepo.New(si.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 			ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(si.orgID), RemoteSessionIssuerID: issuerID,
 			ClientID: "offered-" + uuid.NewString()[:8], ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -598,11 +600,11 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 		authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: si.orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
 		require.NoError(t, err)
 		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: si.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
-		return client.ID
+		return client.ID, authClientID
 	}
 
 	personal := createServer(t, ctx, si, projectID, derived, "personal")
-	personalClient := offer(personal, offered, authz.AuthClientTypeRemoteSession)
+	personalClient, _ := offer(personal, offered, authz.AuthClientTypeRemoteSession)
 	chained := createServer(t, ctx, si, projectID, derived, "chained")
 	offer(chained, offered, authz.AuthClientTypeRemoteSession)
 	offer(chained, identityProvider, authz.AuthClientTypeEMA)
@@ -645,4 +647,33 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.TypedAuthEnforced)
 	require.Equal(t, []uuid.UUID{personalClient}, row.OfferedClientIds)
+
+	several, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: chained, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.Len(t, several.OfferedClientIds, 2)
+	require.True(t, slices.IsSortedFunc(several.OfferedClientIds, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) }), "offered clients are in a stable order")
+
+	for _, tc := range []struct {
+		name     string
+		withdraw func(serverID, authClientID uuid.UUID) error
+	}{
+		{name: "disabled", withdraw: func(_, authClientID uuid.UUID) error {
+			return fixtures.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: authClientID})
+		}},
+		{name: "deleted", withdraw: func(_, authClientID uuid.UUID) error {
+			return fixtures.SoftDeleteAuthClientFixture(ctx, authClientID)
+		}},
+		{name: "detached", withdraw: func(serverID, _ uuid.UUID) error {
+			return fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, serverID)
+		}},
+	} {
+		serverID := createServer(t, ctx, si, projectID, derived, "withdrawn-"+tc.name)
+		_, authClientID := offer(serverID, offered, authz.AuthClientTypeRemoteSession)
+		issuer, eligible := issuerOf(serverID, true)
+		require.True(t, eligible, tc.name)
+		require.Equal(t, offered, issuer, tc.name)
+		require.NoError(t, tc.withdraw(serverID, authClientID), tc.name)
+		_, eligible = issuerOf(serverID, true)
+		require.False(t, eligible, "a %s offer gives the server no authorization server", tc.name)
+	}
 }

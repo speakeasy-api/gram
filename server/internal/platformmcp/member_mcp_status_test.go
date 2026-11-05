@@ -207,6 +207,8 @@ func TestMemberMCPConnectionStatusFollowsTypedAuthClients(t *testing.T) {
 		personal int
 		// shared offers a static credential every caller shares.
 		shared bool
+		// passThrough offers a client that forwards the caller's own credential.
+		passThrough bool
 		// associated associates a registration no auth client offers.
 		associated bool
 		// unreachable withholds the offered registrations from the reader.
@@ -222,6 +224,8 @@ func TestMemberMCPConnectionStatusFollowsTypedAuthClients(t *testing.T) {
 		{name: "no auth client and nothing pending needs no authorization", connected: -1, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp"},
 		{name: "association no auth client records is unfinished setup", associated: true, connected: -1, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "shared credential alone needs no connection", shared: true, connected: -1, state: MCPConnectionStateNotApplicable, reason: "upstream_credential_managed", nextAction: "use_mcp"},
+		{name: "pass-through alone is no shared credential", passThrough: true, connected: -1, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp"},
+		{name: "pass-through beside a personal client leaves one to connect", personal: 1, passThrough: true, connected: -1, state: MCPConnectionStateNotConnected, nextAction: "connect"},
 		{name: "member chooses between shared and personal", personal: 1, shared: true, connected: -1, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect"},
 		{name: "member chooses among personal clients", personal: 2, connected: -1, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect"},
 		{name: "any connected personal client serves", personal: 2, connected: 1, state: MCPConnectionStateActive, nextAction: "use_mcp"},
@@ -282,6 +286,11 @@ func TestMemberMCPConnectionStatusFollowsTypedAuthClients(t *testing.T) {
 			}
 			if test.shared {
 				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: principal.OrganizationID, ProjectID: conv.ToNullUUID(project.ID), ClientType: authz.AuthClientTypeStaticCredential, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+				require.NoError(t, err)
+				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: mcpID, AuthClientID: authClientID, Source: "admin"}))
+			}
+			if test.passThrough {
+				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: principal.OrganizationID, ProjectID: conv.ToNullUUID(project.ID), ClientType: authz.AuthClientTypePassThrough, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: mcpID, AuthClientID: authClientID, Source: "admin"}))
 			}

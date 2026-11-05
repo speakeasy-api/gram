@@ -366,6 +366,9 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		// agree when the server offers several registrations of one provider.
 		match, found := none, false
 		for _, registration := range registrations {
+			if registration.CredentialOwner != string(remotesessions.CredentialOwnerSubject) {
+				continue
+			}
 			if sameIssuerURL(registration.IssuerUrl, issuerURL) && (!found || bytes.Compare(registration.ClientID[:], match.ClientID[:]) < 0) {
 				match, found = remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow(registration), true
 			}

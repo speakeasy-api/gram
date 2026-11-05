@@ -512,6 +512,9 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
+		if sv.TypedAuthEnforced && !slices.Contains(sv.OfferedClientIds, c.ID) {
+			continue
+		}
 		// Identity chaining requests the scopes recorded at Turn on.
 		for _, scope := range remotesessions.GrantScopes(b.RequestedScopes) {
 			if !slices.Contains(boundScopes, scope) {

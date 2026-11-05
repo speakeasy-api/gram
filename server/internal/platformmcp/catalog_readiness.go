@@ -210,26 +210,24 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	var authorization remotesessions.ResolvedAuthorization
 	if enforced {
 		// A server may offer several registrations for its callers to choose
-		// among; the caller is ready through one they hold a connection for.
-		if len(clients) > 1 {
-			for _, client := range clients {
-				reconnect, err := p.sessions.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false})
-				if err != nil {
-					return ProviderReadinessProbeResult{}, fmt.Errorf("check registered Remote MCP authorization: %w", err)
-				}
-				if !reconnect {
-					clients[0] = client
-					break
-				}
+		// among; the caller is ready through the first that yields a credential,
+		// and the first registration's failure is reported when none does.
+		for i, client := range clients {
+			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false})
+			token := tokens[client.RemoteSessionIssuerID]
+			if resolveErr == nil && token.Token == "" {
+				resolveErr = remotesessions.ErrNoValidToken
+			}
+			if i == 0 {
+				err = resolveErr
+			}
+			if resolveErr == nil {
+				err = nil
+				clients[0] = client
+				authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: client.ID, RemoteSessionIssuerID: client.RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
+				break
 			}
 		}
-		var tokens map[uuid.UUID]remotesessions.UpstreamToken
-		tokens, err = p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: clients[0].ID, SkipUnusable: false})
-		token := tokens[clients[0].RemoteSessionIssuerID]
-		if err == nil && token.Token == "" {
-			err = remotesessions.ErrNoValidToken
-		}
-		authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: clients[0].ID, RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
 	} else {
 		if len(clients) != 1 {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil

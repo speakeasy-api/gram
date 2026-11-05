@@ -417,7 +417,7 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 				if client.RemoteSessionClientID.Valid {
 					target.associatedClients[client.RemoteSessionClientID.UUID] = true
 				}
-			default:
+			case authz.IsAgentKeyAuthClientType(client.ClientType.String):
 				target.sharedCredential = true
 			}
 		}

@@ -138,6 +138,18 @@ func TestResolveClientFollowsTypedOffersUnderEnforcement(t *testing.T) {
 			require.Equal(t, tc.state, state)
 		})
 	}
+
+	// Chaining only serves through the client a caller chooses from the
+	// server's offers, so a chaining binding to any other client decides nothing.
+	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: bound.ID, Valid: true}, RequestedScopes: []string{"read"}}
+	enforced := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}, TypedAuthEnforced: true, OfferedClientIds: []uuid.UUID{offered.ID}}
+	id, _, state := resolveClient(enforced, binding.Resource, "", clients, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, "offered", id)
+	require.Equal(t, ClientBindingSingle, state)
+	binding.RemoteSessionClientID.UUID = offered.ID
+	id, _, state = resolveClient(enforced, binding.Resource, "", clients, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, "offered", id)
+	require.Equal(t, ClientBindingBound, state)
 }
 
 func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
