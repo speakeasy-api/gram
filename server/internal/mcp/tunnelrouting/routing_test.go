@@ -26,6 +26,14 @@ func TestFailureHappened_InvalidRoute(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
 }
 
+func TestFailureHappened_ForwardRejected(t *testing.T) {
+	t.Parallel()
+
+	code, ok := FailureHappened(wire.TunnelErrorForwardRejected)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
+}
+
 func TestClientAffinityKeyFromRequest(t *testing.T) {
 	t.Parallel()
 
