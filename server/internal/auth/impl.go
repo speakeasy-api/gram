@@ -1585,9 +1585,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 // persistProvisionedOrganization writes the Speakeasy-side records for an
 // organization that already exists in WorkOS, and returns the row as it stood
 // before any trial arming. A trial armed under opts.ProvisionTrial joins the
-// same transaction, so a failure leaves neither behind. A newly inserted
-// organization also gets its user-session issuer and creation audit atomically;
-// adopting metadata already written by identity sync does not backfill an issuer.
+// same transaction, so a failure leaves neither behind.
 func (s *Service) persistProvisionedOrganization(
 	ctx context.Context,
 	provisionedOrg identity.ProvisionedOrganization,
@@ -1613,7 +1611,7 @@ func (s *Service) persistProvisionedOrganization(
 		}
 	}
 
-	org, _, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,

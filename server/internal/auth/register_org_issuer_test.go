@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -41,6 +42,8 @@ func TestRegisterCreatesNoOrganizationIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, inst.service.Register(ctx, &gen.RegisterPayload{OrgName: name}))
 	organizationID := orgid.FromWorkOSID("workos_org_" + name)
+	_, err = orgrepo.New(inst.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
 	require.Empty(t, organizationIssuers(t, ctx, inst, organizationID))
 	after, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionUserSessionIssuerCreate)
 	require.NoError(t, err)
