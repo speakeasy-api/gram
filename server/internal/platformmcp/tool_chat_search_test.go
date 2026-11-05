@@ -33,13 +33,16 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 		require.False(t, *descriptor.Annotations.DestructiveHint)
 		require.Contains(t, descriptor.Description, "untrusted")
 	}
+	// Every member discovers both tools: each has their own sessions to search,
+	// and chat:read widens the result at call time rather than at discovery.
 	tools := []*mcp.Tool{{Name: searchChatsToolName}, {Name: readChatToolName}}
 	for _, scope := range []authz.Scope{authz.ScopeChatRead, authz.ScopeChatWrite} {
 		scopeCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
 		require.Len(t, live.FilterExternalTools(scopeCtx, f.principal, tools), 2)
 	}
 	admin := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)})
-	require.Empty(t, live.FilterExternalTools(admin, f.principal, tools))
+	require.Len(t, live.FilterExternalTools(admin, f.principal, tools), 2)
+	require.Len(t, live.FilterExternalTools(authz.GrantsToContext(ctx, []authz.Grant{}), f.principal, tools), 2)
 	require.Empty(t, live.For(AudienceAssistant))
 
 	for _, name := range []string{searchChatsToolName, readChatToolName} {
@@ -64,7 +67,16 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	output, ok := result.(SearchChatsOutput)
 	require.True(t, ok)
 	require.Empty(t, output.Hits)
-	_, err = descriptorByName(t, live, searchChatsToolName).Invoke(admin, args)
+	// An administrator without chat:read searches their own scope rather than
+	// being refused, and is refused only when reading someone else's chat.
+	result, err = descriptorByName(t, live, searchChatsToolName).Invoke(admin, args)
+	require.NoError(t, err)
+	output, ok = result.(SearchChatsOutput)
+	require.True(t, ok)
+	require.Empty(t, output.Hits)
+	other := f.chat(t, ctx, "user_fixture_other_owner", "someone else's")
+	seedRecallMessage(t, ctx, f.db, other, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	_, err = descriptorByName(t, live, readChatToolName).Invoke(admin, json.RawMessage(`{"project_id":"`+f.project.ID.String()+`","chat_id":"`+other.String()+`"}`))
 	var denied *ToolRefusalError
 	require.ErrorAs(t, err, &denied)
 	require.Contains(t, denied.Payload, `"required_scope":"chat:read"`)

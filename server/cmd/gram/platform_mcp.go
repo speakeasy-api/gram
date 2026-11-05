@@ -563,6 +563,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
@@ -572,7 +573,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
@@ -1348,6 +1349,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
@@ -1357,7 +1359,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
