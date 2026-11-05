@@ -4,6 +4,7 @@ import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { CatalogLogo } from "./CatalogLogo";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 const mocks = vi.hoisted(() => ({
+  isFetched: true,
   metadata: undefined as undefined | { logoAssetId: string },
   catalog: {
     registrySpecifier: "app.linear/linear",
@@ -17,7 +18,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
-  useGetMcpMetadata: () => ({ data: { metadata: mocks.metadata } }),
+  useGetMcpMetadata: () => ({
+    isFetched: mocks.isFetched,
+    data: { metadata: mocks.metadata },
+  }),
 }));
 vi.mock("./useInstalledCatalogServer", () => ({
   useInstalledCatalogServer: () => mocks.catalog,
@@ -61,4 +65,14 @@ describe("catalog branding", () => {
     );
     expect(screen.getByText("placeholder")).toBeTruthy();
   });
+});
+
+it("does not render cached curated branding while metadata is pending", () => {
+  mocks.metadata = undefined;
+  mocks.isFetched = false;
+  const { container } = render(
+    <SourceMcpIcon mcpServerId="server" className="size-8" />,
+  );
+  expect(container.querySelector("img")).toBeNull();
+  mocks.isFetched = true;
 });

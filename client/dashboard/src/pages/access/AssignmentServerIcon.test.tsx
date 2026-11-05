@@ -2,13 +2,17 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   assetId: "logo-asset",
+  isFetched: true,
   metadata: vi.fn(),
   catalog: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: (...args: unknown[]) => {
     state.metadata(...args);
-    return { data: { metadata: { logoAssetId: state.assetId || undefined } } };
+    return {
+      isFetched: state.isFetched,
+      data: { metadata: { logoAssetId: state.assetId || undefined } },
+    };
   },
 }));
 vi.mock("@/pages/catalog/useInstalledCatalogServer", () => ({
@@ -26,6 +30,7 @@ const server = {
 beforeEach(() => {
   state.assetId = "logo-asset";
   vi.clearAllMocks();
+  state.isFetched = true;
   state.catalog.mockReturnValue(undefined);
   vi.stubGlobal(
     "Image",
@@ -108,18 +113,34 @@ it("retains the avatar initial when a curated image fails", async () => {
   state.assetId = "";
   state.catalog.mockReturnValue({
     registrySpecifier: "test",
-    iconUrl: "broken",
+    meta: { "com.speakeasy.ai/icons": { default: { src: "broken-curated" } } },
   });
+  const failed = vi.fn();
   vi.stubGlobal(
     "Image",
     class extends EventTarget {
-      set src(_value: string) {
+      set src(value: string) {
         queueMicrotask(() => {
           this.dispatchEvent(new Event("error"));
+          failed(value);
         });
       }
     },
   );
-  render(<AssignmentServerIcon server={server} />);
-  await waitFor(() => expect(screen.getByText("G")).toBeDefined());
+  const { container } = render(<AssignmentServerIcon server={server} />);
+  await waitFor(() => expect(failed).toHaveBeenCalledWith("broken-curated"));
+  expect(screen.getByText("G")).toBeDefined();
+  expect(container.querySelector("img")).toBeNull();
+});
+
+it("does not use cached catalog data before metadata settles", async () => {
+  state.assetId = "";
+  state.isFetched = false;
+  state.catalog.mockReturnValue({
+    registrySpecifier: "test",
+    iconUrl: "cached",
+  });
+  const { container } = render(<AssignmentServerIcon server={server} />);
+  expect(state.catalog).toHaveBeenCalledWith("server-a", false, "engineering");
+  expect(container.querySelector("img")).toBeNull();
 });

@@ -12,7 +12,7 @@ export function SourceMcpIcon({
   mcpServerId: string | undefined;
   className: string;
 }): JSX.Element {
-  const { data } = useGetMcpMetadata({ mcpServerId }, undefined, {
+  const { data, isFetched } = useGetMcpMetadata({ mcpServerId }, undefined, {
     enabled: !!mcpServerId,
     // 404 is the normal "no metadata set" answer; don't re-request it on every
     // remount or each navigation replays a console error per server.
@@ -23,12 +23,15 @@ export function SourceMcpIcon({
   });
   const logoAssetId = data?.metadata?.logoAssetId;
 
-  const catalogServer = useInstalledCatalogServer(mcpServerId, !logoAssetId);
+  const catalogServer = useInstalledCatalogServer(
+    mcpServerId,
+    isFetched && !logoAssetId,
+  );
 
   if (logoAssetId) {
     return <AssetImage assetId={logoAssetId} className={className} />;
   }
-  if (catalogServer)
+  if (isFetched && catalogServer)
     return (
       <CatalogLogo
         server={catalogServer}

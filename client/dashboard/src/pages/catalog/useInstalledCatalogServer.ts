@@ -1,3 +1,4 @@
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
@@ -33,21 +34,23 @@ export function useInstalledCatalogServer(
     unproxied?.unproxiedMcpServers.find(
       (s) => s.id === server?.unproxiedMcpServerId,
     )?.url;
+  const primarySlug = server?.toolset?.externalMcpSlugs.toSorted()[0];
   const specifier =
     server?.toolset?.registrySpecifier ??
-    deployment?.deployment?.externalMcps?.find((s) =>
-      server?.toolset?.externalMcpSlugs.includes(s.slug),
-    )?.registryServerSpecifier;
+    deployment?.deployment?.externalMcps?.find((s) => s.slug === primarySlug)
+      ?.registryServerSpecifier;
   const { data: catalog } = useListMCPCatalog(undefined, undefined, {
     projectSlug,
     enabled: options.enabled && !!(url || specifier),
     throwOnError: false,
   });
+  if (!options.enabled) return undefined;
   return catalog?.servers.find((s) =>
     specifier
       ? s.registrySpecifier === specifier
       : s.remotes?.some(
-          (remote) => remote.url.replace(/\/$/, "") === url?.replace(/\/$/, ""),
+          (remote) =>
+            normalizeRemoteUrl(remote.url) === normalizeRemoteUrl(url ?? ""),
         ),
   );
 }

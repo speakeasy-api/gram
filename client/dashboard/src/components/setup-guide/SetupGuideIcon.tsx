@@ -1,3 +1,4 @@
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { BookOpen } from "lucide-react";
 import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
@@ -21,12 +22,17 @@ export function SetupGuideIcon({
       ? s.registrySpecifier === registrySpecifier
       : s.remotes?.some(
           (remote) =>
-            remote.url.replace(/\/$/, "") === serverUrl?.replace(/\/$/, ""),
+            normalizeRemoteUrl(remote.url) ===
+            normalizeRemoteUrl(serverUrl ?? ""),
         ),
   );
   return (
     <CatalogLogo
-      server={server ?? { registrySpecifier: registrySpecifier ?? "", iconUrl }}
+      server={{
+        registrySpecifier: registrySpecifier ?? "",
+        ...server,
+        iconUrl: server?.iconUrl || iconUrl,
+      }}
       className="size-5 object-contain"
       fallback={<BookOpen className="text-muted-foreground size-4" />}
     />

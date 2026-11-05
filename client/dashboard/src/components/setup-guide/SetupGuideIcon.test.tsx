@@ -6,6 +6,7 @@ vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: () => ({
     data: {
       servers: [
+        { registrySpecifier: "no-icon" },
         {
           registrySpecifier: "app.linear/linear",
           remotes: [{ url: "https://example.com/mcp" }],
@@ -32,6 +33,15 @@ it("resolves setup headers by identity and responds to active theme", () => {
   rerender(view("dark"));
   expect(container.querySelector("img")?.getAttribute("src")).toBe("dark");
   expect(container.querySelector("img")?.className).not.toContain("invert");
-  rerender(<SetupGuideIcon serverUrl="https://example.com/mcp/" />);
+  rerender(<SetupGuideIcon serverUrl="https://example.com/mcp///" />);
   expect(container.querySelector("img")?.getAttribute("src")).toBe("default");
+});
+
+it("preserves the descriptor icon when a matching catalog record has none", () => {
+  const { container } = render(
+    <SetupGuideIcon registrySpecifier="no-icon" iconUrl="descriptor" />,
+  );
+  expect(container.querySelector("img")?.getAttribute("src")).toBe(
+    "descriptor",
+  );
 });

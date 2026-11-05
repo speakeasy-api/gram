@@ -16,7 +16,7 @@ export function AssignmentServerIcon({
   server: AccessibleMCPServer;
   className?: string;
 }): JSX.Element {
-  const { data } = useGetMcpMetadata(
+  const { data, isFetched } = useGetMcpMetadata(
     { mcpServerId: server.id, gramProject: server.projectSlug },
     undefined,
     {
@@ -29,13 +29,12 @@ export function AssignmentServerIcon({
   const assetId = data?.metadata?.logoAssetId;
   const catalog = useInstalledCatalogServer(
     server.id,
-    !assetId,
+    isFetched && !assetId,
     server.projectSlug,
   );
-  const dark = useIsDarkTheme();
-  const logo = catalog
-    ? resolveCatalogLogo(catalog, dark ? "dark" : "light")
-    : undefined;
+  const theme = useIsDarkTheme() ? "dark" : "light";
+  const logo =
+    isFetched && catalog ? resolveCatalogLogo(catalog, theme) : undefined;
   const src = assetId
     ? `${getServerURL()}/rpc/assets.serveImage?id=${encodeURIComponent(assetId)}`
     : logo?.src;

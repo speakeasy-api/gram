@@ -150,17 +150,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
                 publish no icon fall back to the mark for what the panel holds,
                 which is a guide. */}
             <div className="bg-primary/5 flex size-8 shrink-0 items-center justify-center dark:bg-neutral-800">
-              {shown.kind === "setup-guide" ? (
-                <SetupGuideIcon {...shown.props} iconUrl={shown.iconUrl} />
-              ) : shown.iconUrl ? (
-                <img
-                  src={shown.iconUrl}
-                  alt=""
-                  className="size-5 object-contain"
-                />
-              ) : (
-                <BookOpen className="text-muted-foreground size-4" />
-              )}
+              <SidePanelIcon descriptor={shown} />
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
               <Text className="truncate font-semibold">{shown.title}</Text>
@@ -203,4 +193,22 @@ export function SidePanelSurface(): React.JSX.Element | null {
       </div>
     </aside>
   );
+}
+
+function SidePanelIcon({
+  descriptor,
+}: {
+  descriptor: SidePanelDescriptor;
+}): React.JSX.Element {
+  if (descriptor.kind === "setup-guide") {
+    return (
+      <SetupGuideIcon {...descriptor.props} iconUrl={descriptor.iconUrl} />
+    );
+  }
+  if (descriptor.iconUrl) {
+    return (
+      <img src={descriptor.iconUrl} alt="" className="size-5 object-contain" />
+    );
+  }
+  return <BookOpen className="text-muted-foreground size-4" />;
 }
