@@ -38,9 +38,10 @@ type ReadScope struct {
 func (s ReadScope) Unrestricted() bool { return s.Kind == ReadScopeUnrestricted }
 
 // allowsOwnFallback reports whether a member lacking scope still reads their
-// own share of the project. Every other scope is all or nothing.
+// own share of the project: tool logs and chat sessions. Every other scope
+// is all or nothing.
 func allowsOwnFallback(scope Scope) bool {
-	return scope == ScopeLogRead
+	return scope == ScopeLogRead || scope == ScopeChatRead
 }
 
 // ResolveReadScope decides how much of projectID the caller reads under scope.
