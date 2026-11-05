@@ -16,6 +16,7 @@ package remotesessions_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -284,6 +285,8 @@ type syntheticLoginOptions struct {
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
 	prober bool
+	// logger, when set, replaces the fixture's logger so a test can assert on log output.
+	logger *slog.Logger
 }
 
 // protectedResourceSeed is a remote_protected_resources row as a login finds it.
@@ -308,6 +311,10 @@ func withRemoteServer(serverURL string) syntheticLoginOption {
 
 func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.protectedResource = &seed }
+}
+
+func withLogger(logger *slog.Logger) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.logger = logger }
 }
 
 func withProber() syntheticLoginOption {
@@ -470,6 +477,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
+	if options.logger != nil {
+		logger = options.logger
+	}
 	tracerProvider := testenv.NewTracerProvider(t)
 	issuerURL, jwksURI := "https://idp.example.com", ""
 	if options.tokenResponseIssuer != "" {

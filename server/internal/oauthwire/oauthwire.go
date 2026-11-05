@@ -43,6 +43,10 @@ const (
 	// metadata member that advertises supported authorization grant profiles.
 	MetadataAuthorizationGrantProfilesSupported = "authorization_grant_profiles_supported"
 
+	// MetadataAuthorizationResponseIssParameterSupported names the
+	// authorization-server metadata member that advertises RFC 9207 iss support.
+	MetadataAuthorizationResponseIssParameterSupported = "authorization_response_iss_parameter_supported"
+
 	// GrantProfileIDJAG identifies support for identity assertion JWT
 	// authorization grants in authorization-server metadata.
 	GrantProfileIDJAG = "urn:ietf:params:oauth:grant-profile:id-jag"
