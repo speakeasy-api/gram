@@ -50,6 +50,8 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
+		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
+		clickhouse.Named("owner_user", s.userID(demoAgentOwner.handle)),
 	}
 }
 
@@ -164,6 +166,23 @@ func (s *seeder) chTelemetryChecks() []chCheck {
      AND agent_id != '') < 80`,
 			settings: "",
 			msg:      "demo seed postflight: agent-sent hook calls missing",
+		},
+		// The owner-scoped Tool Logs read matches the persona's agent by
+		// actor id and the persona by user id; a row that lost either, or
+		// that still named a human on an agent call, would fall outside it.
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND agent_id = @owner_agent AND user_email = '' AND user_id = '') != ` + strconv.Itoa(ownerAgentTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's agent tool calls missing or attributed to a person",
+		},
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND user_id = @owner_user AND event_source = 'tool_call') != ` + strconv.Itoa(ownerHumanTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's own tool calls missing",
 		},
 		{
 			cond:     `(SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id = toUUID(@proj)) < 180`,

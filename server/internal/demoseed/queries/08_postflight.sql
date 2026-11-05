@@ -346,9 +346,24 @@ SELECT count(*)
 FROM chats WHERE project_id = @project_id::uuid AND organization_id <> @org_id::text;
 
 -- name: PostflightCountOwnerlessChats :one
+-- A session driven by an agent credential carries no user ids by design: the
+-- agent is its actor, and its owner reads it through ownership.
 SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
+  AND agent_id IS NULL
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
+
+-- name: PostflightCountAgentOwnerSessions :one
+-- Agent-credential sessions the owner persona can read: the join mirrors
+-- ListOwnedAgentIDs (owner match, not deleted, not latched for reassignment).
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+WHERE c.project_id = @project_id::uuid AND c.organization_id = @org_id::text
+  AND c.user_id IS NULL AND c.external_user_id IS NULL
+  AND a.owner_user_id = @owner_user_id::text
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE;
 
 -- name: PostflightCountAgentAttributedChats :one
 -- Channel sessions carry the agent that produced them; without that stamp the

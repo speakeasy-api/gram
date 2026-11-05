@@ -397,7 +397,9 @@ VALUES
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
   (@agent4::uuid, @org_id::text, @owner2::text,
-   'Release notes assistant', NULL, NULL);
+   'Release notes assistant', NULL, NULL),
+  (@agent5::uuid, @org_id::text, @owner5::text,
+   'Deploy watcher', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one
 -- Global roles are synced from WorkOS in real envs; tolerate their absence
