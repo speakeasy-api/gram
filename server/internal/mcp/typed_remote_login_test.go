@@ -129,20 +129,16 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 					req := httptest.NewRequest(http.MethodPost, "/mcp/"+endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 					rec := recordConnections(t, ti)
-					// A row needs a server id; Valid stays false to keep this fixture's typed path.
-					gateway := uuid.NullUUID{UUID: uuid.New(), Valid: false}
-					endpoint.MetaMcpServerID = gateway
-					challenge, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-					require.NoError(t, err)
-					challenge.Endpoint.MetaMcpServerID = gateway
-					require.NoError(t, ti.authnChallengeCache.Store(ctx, challenge))
+					// connectionScope reads only .UUID for row.ServerID; invalid skips the member-resource checks.
+					endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: false}
 					err = ti.service.ServeConsentAction(httptest.NewRecorder(), req, endpoint)
 					require.Error(t, err)
 					var oopsErr *oops.ShareableError
 					require.ErrorAs(t, err, &oopsErr)
 					require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 					require.Nil(t, posted.Load())
-					rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeConfigurationRequired)
+					row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeConfigurationRequired)
+					require.Equal(t, endpoint.MetaMcpServerID.UUID.String(), row.ServerID)
 					return
 				}
 			}
