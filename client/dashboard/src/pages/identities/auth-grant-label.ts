@@ -32,6 +32,11 @@ export type AuthGrantNames = {
     | undefined;
   /** A member's display name, by user id. */
   member: (userId: string) => string | undefined;
+  /**
+   * Whether the organization's auth clients loaded, so a credential `client`
+   * cannot name is really gone rather than unreadable or still loading.
+   */
+  clientsLoaded: boolean;
 };
 
 /**
@@ -53,11 +58,68 @@ function text(value: string): AuthGrantPart {
   return { kind: "text", text: value };
 }
 
-/** " · on <server>, <server>" after a credential, when it serves any. */
-function onServers(servers: AuthGrantServer[]): AuthGrantPart[] {
-  return servers.length > 0
-    ? [text(" · on "), { kind: "servers", servers }]
+/**
+ * " · on <server>, <server>" after a credential, when it serves any. A grant
+ * narrowed to a project covers only the servers in that project.
+ */
+function onServers(
+  servers: AuthGrantServer[],
+  selector: AgentPolicySelector,
+): AuthGrantPart[] {
+  const projectId = selector.projectId;
+  const covered = isAgentPolicyConstraint(projectId)
+    ? servers.filter((server) => server.projectId === projectId)
+    : servers;
+  return covered.length > 0
+    ? [text(" · on "), { kind: "servers", servers: covered }]
     : [];
+}
+
+/** A person to link; one who is not a member any more keeps their id. */
+function personPart(userId: string, names: AuthGrantNames): AuthGrantPart {
+  return {
+    kind: "person",
+    userId,
+    name: names.member(userId) ?? `User ${shortId(userId)}`,
+  };
+}
+
+/**
+ * A grant on one auth client, still narrowed by the connection owner and the
+ * upstream OAuth client it may also name.
+ */
+function credentialParts(
+  resourceId: string,
+  selector: AgentPolicySelector,
+  names: AuthGrantNames,
+  owner: string | undefined,
+  upstreamPart: AuthGrantPart | undefined,
+): AuthGrantPart[] {
+  const client = names.client(resourceId);
+  const missing = `credential ${shortId(resourceId)}${names.clientsLoaded ? ", no longer found" : ""}`;
+  const credential = client
+    ? `${client.name} · ${clientTypeLabel(client.clientType)}`
+    : `upstream ${missing}`;
+  const rest: AuthGrantPart[] = [
+    ...(upstreamPart
+      ? [text(" · through upstream client "), upstreamPart]
+      : []),
+    ...(client ? onServers(client.servers, selector) : []),
+  ];
+  if (owner === REPRESENTED_USER) {
+    return [
+      text(`The connection of the person the agent acts for to ${credential}`),
+      ...rest,
+    ];
+  }
+  if (owner) {
+    return [
+      personPart(owner, names),
+      text(`'s connection to ${credential}`),
+      ...rest,
+    ];
+  }
+  return [text(client ? credential : `Upstream ${missing}`), ...rest];
 }
 
 /**
@@ -72,21 +134,6 @@ export function authGrantParts(
   selector: AgentPolicySelector,
   names: AuthGrantNames,
 ): AuthGrantPart[] {
-  if (isAgentPolicyConstraint(selector.resourceId)) {
-    const client = names.client(selector.resourceId);
-    if (!client) {
-      return [
-        text(
-          `Upstream credential ${shortId(selector.resourceId)}, no longer found`,
-        ),
-      ];
-    }
-    return [
-      text(`${client.name} · ${clientTypeLabel(client.clientType)}`),
-      ...onServers(client.servers),
-    ];
-  }
-
   const owner = isAgentPolicyConstraint(selector.connectionOwner)
     ? selector.connectionOwner
     : undefined;
@@ -94,7 +141,6 @@ export function authGrantParts(
     ? selector.upstreamClient
     : undefined;
   const upstream = upstreamId ? names.upstreamClient(upstreamId) : undefined;
-  const servers = upstream ? onServers(upstream.servers) : [];
   // An upstream client that cannot be found any more keeps its short id.
   const upstreamPart: AuthGrantPart | undefined = upstreamId
     ? {
@@ -104,6 +150,16 @@ export function authGrantParts(
         issuerId: upstream?.issuerId,
       }
     : undefined;
+  if (isAgentPolicyConstraint(selector.resourceId)) {
+    return credentialParts(
+      selector.resourceId,
+      selector,
+      names,
+      owner,
+      upstreamPart,
+    );
+  }
+  const servers = upstream ? onServers(upstream.servers, selector) : [];
 
   if (owner === REPRESENTED_USER) {
     if (upstream && upstreamPart) {
@@ -125,12 +181,7 @@ export function authGrantParts(
     return [text("Personal connections of the person the agent acts for")];
   }
   if (owner) {
-    // A person who is not a member any more is still linked by their id.
-    const person: AuthGrantPart = {
-      kind: "person",
-      userId: owner,
-      name: names.member(owner) ?? `User ${shortId(owner)}`,
-    };
+    const person = personPart(owner, names);
     if (upstream && upstreamPart) {
       return [
         person,

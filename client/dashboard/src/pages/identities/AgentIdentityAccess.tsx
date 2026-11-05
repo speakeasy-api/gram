@@ -197,8 +197,15 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
       isAgentPolicyConstraint(selector.connectionOwner) &&
       selector.connectionOwner !== REPRESENTED_USER,
   );
+  // Only a grant naming an auth client or an upstream OAuth client needs the
+  // organization's auth clients; wildcard and type-only grants name neither.
+  const needsClients = authGrants.some(
+    ({ selector }) =>
+      isAgentPolicyConstraint(selector.resourceId) ||
+      isAgentPolicyConstraint(selector.upstreamClient),
+  );
   const clients = useAllAuthClients({
-    enabled: authGrants.length > 0 && hasScope("org:read"),
+    enabled: needsClients && hasScope("org:read"),
   });
   const upstreamIds = [
     ...new Set(
@@ -282,6 +289,7 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
     client: (id) => clientById.get(id),
     upstreamClient: (id) => upstreamById.get(id),
     member: (id) => memberById.get(id),
+    clientsLoaded: clients.isSuccess,
   };
 }
 
@@ -374,7 +382,7 @@ export function AgentIdentityPermissions({
                   );
                   return (
                     <li key={grant.id} className="pl-1">
-                      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
+                      <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
                         {selector.resourceKind === "mcp_auth_client" ? (
                           <AuthGrantLabel
                             parts={authGrantParts(selector, authNames)}
@@ -397,7 +405,7 @@ export function AgentIdentityPermissions({
                             {narrowing}
                           </Text>
                         )}
-                      </span>
+                      </div>
                     </li>
                   );
                 })}

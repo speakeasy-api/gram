@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   listMembers: vi.fn(),
   getUpstream: vi.fn(),
+  identityLink: vi.fn(),
+  allAuthClients: vi.fn(),
+  hasScope: vi.fn(),
 }));
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
@@ -24,43 +27,47 @@ vi.mock("@/components/identity-link", () => ({
   }: {
     identifier: { userId: string };
     children: React.ReactNode;
-  }) => <a href={`/identities/user:${identifier.userId}`}>{children}</a>,
+  }) => {
+    mocks.identityLink(identifier);
+    return <a href="#identity">{children}</a>;
+  },
 }));
-vi.mock("@/lib/useAllAuthClients", () => ({
-  useAllAuthClients: () => ({
-    data: [
+const authClients = [
+  {
+    id: "client_calendar",
+    name: "Content calendar",
+    clientType: "service_account",
+    servers: [
       {
-        id: "client_calendar",
-        name: "Content calendar",
-        clientType: "service_account",
-        servers: [
-          {
-            id: "server_calendar",
-            slug: "calendar",
-            name: "Calendar server",
-            projectId: "project_example",
-          },
-        ],
-      },
-      {
-        id: "client_notes",
-        name: "Meeting notes",
-        clientType: "remote_session",
-        remoteSessionClientId: "upstream_notes",
-        servers: [
-          {
-            id: "server_notes",
-            slug: "notes",
-            name: "Notes server",
-            projectId: "project_example",
-          },
-        ],
+        id: "server_calendar",
+        slug: "calendar",
+        name: "Calendar server",
+        projectId: "project_example",
       },
     ],
-  }),
+  },
+  {
+    id: "client_notes",
+    name: "Meeting notes",
+    clientType: "remote_session",
+    remoteSessionClientId: "upstream_notes",
+    servers: [
+      {
+        id: "server_notes",
+        slug: "notes",
+        name: "Notes server",
+        projectId: "project_example",
+      },
+    ],
+  },
+];
+// Like the real query, the list loads only when enabled.
+vi.mock("@/lib/useAllAuthClients", () => ({
+  useAllAuthClients: (options: { enabled: boolean }) =>
+    mocks.allAuthClients(options),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
+  useRBAC: () => ({ hasScope: mocks.hasScope, isLoading: false, error: null }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "owner_example" } }),
@@ -122,6 +129,12 @@ function setup(subject = agent) {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.hasScope.mockReturnValue(true);
+  mocks.allAuthClients.mockImplementation(({ enabled }) =>
+    enabled
+      ? { data: authClients, isSuccess: true }
+      : { data: undefined, isSuccess: false },
+  );
   mocks.list.mockResolvedValue([]);
   mocks.listMembers.mockResolvedValue({
     members: [
@@ -346,19 +359,19 @@ describe("Agent profile permissions", () => {
       screen.getByText("Personal connections of the person the agent acts for"),
     ).toBeTruthy();
     expect(
-      (await screen.findByRole("link", { name: "Ada Lovelace" })).getAttribute(
-        "href",
-      ),
-    ).toBe("/identities/user:user_ada");
+      await screen.findByRole("link", { name: "Ada Lovelace" }),
+    ).toBeTruthy();
+    expect(mocks.identityLink).toHaveBeenCalledWith({ userId: "user_ada" });
     expect(
       (await screen.findByRole("link", { name: "Meeting notes" })).getAttribute(
         "href",
       ),
     ).toMatch(/\/issuer_notes\/clients\/upstream_notes$/);
     // A person who left is still linked; a removed upstream client is not.
-    expect(
-      screen.getByRole("link", { name: "User d265f01b…" }).getAttribute("href"),
-    ).toBe("/identities/user:d265f01b-0000-4000-8000-000000000000");
+    expect(screen.getByRole("link", { name: "User d265f01b…" })).toBeTruthy();
+    expect(mocks.identityLink).toHaveBeenCalledWith({
+      userId: "d265f01b-0000-4000-8000-000000000000",
+    });
     expect(screen.queryByRole("link", { name: "01a10332…" })).toBeNull();
     // Broadest first, down to one named credential.
     expect(
@@ -417,6 +430,68 @@ describe("Agent profile permissions", () => {
       "Any upstream credential in the organization",
       "Content calendar · Service account · on Calendar server",
     ]);
+  });
+  it("falls back to short ids when it may not read the organization", async () => {
+    mocks.hasScope.mockImplementation((scope: string) => scope !== "org:read");
+    mocks.list.mockResolvedValue([
+      {
+        id: "auth_shared",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "client_calendar",
+        },
+      },
+      {
+        id: "auth_attached",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          connectionOwner: "user_ada",
+          upstreamClient: "upstream_notes",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("mcp:auth")).toBeTruthy();
+    expect(
+      screen.getAllByRole("listitem").map((item) => item.textContent),
+    ).toEqual([
+      "User user_ada's connection through upstream client upstream…",
+      "Upstream credential client_c…",
+    ]);
+    expect(mocks.allAuthClients).not.toHaveBeenCalledWith({ enabled: true });
+    expect(mocks.listMembers).not.toHaveBeenCalled();
+    expect(mocks.getUpstream).not.toHaveBeenCalled();
+  });
+  it("loads no auth clients for grants that name none", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "auth_own",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          clientType: "remote_session",
+          connectionOwner: "$represented_user",
+        },
+      },
+      {
+        id: "auth_type",
+        scope: "mcp:auth",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          clientType: "service_account",
+        },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText("Any service account in the organization"),
+    ).toBeTruthy();
+    expect(mocks.allAuthClients).not.toHaveBeenCalledWith({ enabled: true });
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

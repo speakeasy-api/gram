@@ -21,20 +21,37 @@ const calendarServer = {
   projectId: "project-default",
 };
 
+const otherProjectServer = {
+  id: "server-other",
+  slug: "other",
+  name: "Other calendar",
+  projectId: "project-other",
+};
+
+const clients: Record<
+  string,
+  { name: string; clientType: string; servers: (typeof grainServer)[] }
+> = {
+  "client-shared": {
+    name: "Calendar token",
+    clientType: "service_account",
+    servers: [calendarServer, otherProjectServer],
+  },
+  "client-grain": {
+    name: "Grain sign-in",
+    clientType: "remote_session",
+    servers: [grainServer],
+  },
+};
+
 const names: AuthGrantNames = {
-  client: (id) =>
-    id === "client-shared"
-      ? {
-          name: "Calendar token",
-          clientType: "service_account",
-          servers: [calendarServer],
-        }
-      : undefined,
+  client: (id) => clients[id],
   upstreamClient: (id) =>
     id === "upstream-grain"
       ? { name: "Grain", issuerId: "issuer-grain", servers: [grainServer] }
       : undefined,
   member: (id) => (id === "user-ada" ? "Ada Lovelace" : undefined),
+  clientsLoaded: true,
 };
 
 function selector(fields: Partial<AgentPolicySelector>): AgentPolicySelector {
@@ -60,7 +77,40 @@ describe("authGrantParts", () => {
     {
       case: "one credential by name and type, with the servers it serves",
       fields: { resourceId: "client-shared" },
+      want: "Calendar token · Service account · on Content calendar, Other calendar",
+    },
+    {
+      case: "one credential narrowed to a project, with only that project's servers",
+      fields: { resourceId: "client-shared", projectId: "project-default" },
       want: "Calendar token · Service account · on Content calendar",
+    },
+    {
+      case: "one person's connection to one credential",
+      fields: { resourceId: "client-grain", connectionOwner: "user-ada" },
+      want: "Ada Lovelace's connection to Grain sign-in · Each person's own account · on Grain",
+    },
+    {
+      case: "the represented user's connection to one credential",
+      fields: { resourceId: "client-grain", connectionOwner: REPRESENTED_USER },
+      want: "The connection of the person the agent acts for to Grain sign-in · Each person's own account · on Grain",
+    },
+    {
+      case: "one credential through one upstream client",
+      fields: { resourceId: "client-grain", upstreamClient: "upstream-grain" },
+      want: "Grain sign-in · Each person's own account · through upstream client Grain · on Grain",
+    },
+    {
+      case: "one person's connection to a credential that is gone",
+      fields: {
+        resourceId: "63990be4-0000-4000-8000-000000000000",
+        connectionOwner: "user-ada",
+      },
+      want: "Ada Lovelace's connection to upstream credential 63990be4…, no longer found",
+    },
+    {
+      case: "an upstream client's servers narrowed to another project",
+      fields: { upstreamClient: "upstream-grain", projectId: "project-other" },
+      want: "Any personal connection to Grain",
     },
     {
       case: "a credential that is gone",
@@ -118,6 +168,26 @@ describe("authGrantParts", () => {
     },
   ])("names $case", ({ fields, want }) => {
     expect(label(fields)).toBe(want);
+  });
+
+  it("does not call a credential gone before the credentials load", () => {
+    const parts = authGrantParts(
+      selector({ resourceId: "63990be4-0000-4000-8000-000000000000" }),
+      { ...names, clientsLoaded: false },
+    );
+    expect(authGrantText(parts)).toBe("Upstream credential 63990be4…");
+  });
+
+  it("keeps the person in a grant on one credential so it can be linked", () => {
+    const parts = authGrantParts(
+      selector({ resourceId: "client-grain", connectionOwner: "user-ada" }),
+      names,
+    );
+    expect(parts[0]).toEqual({
+      kind: "person",
+      userId: "user-ada",
+      name: "Ada Lovelace",
+    });
   });
 
   it("keeps a named person and the servers apart so they can be linked", () => {
@@ -194,7 +264,7 @@ describe("authGrantRank", () => {
       "The Grain connection of the person the agent acts for · on Grain",
       "Ada Lovelace's personal connections",
       "Ada Lovelace's Grain connection · on Grain",
-      "Calendar token · Service account · on Content calendar",
+      "Calendar token · Service account · on Content calendar, Other calendar",
     ]);
     expect(
       authGrantRank(selector({ clientType: "remote_session", projectId: "p" })),
