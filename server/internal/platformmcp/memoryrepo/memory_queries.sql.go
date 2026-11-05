@@ -116,6 +116,44 @@ FROM (
     AND octet_length(d.content) <= 65536
     AND d.period_end::timestamp AT TIME ZONE 'UTC' > $4 AND d.period_start::timestamp AT TIME ZONE 'UTC' < $5
     AND d.search_vector @@ q.query
+    AND d.id NOT IN (
+      WITH RECURSIVE stale AS (
+        SELECT s.id
+        FROM memory_digests s
+        WHERE s.project_id = $3
+          AND (
+            cardinality(s.chat_ids) > (
+              SELECT count(*)
+              FROM chats c
+              LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+              WHERE c.id = ANY(s.chat_ids)
+                AND c.summary_redacted IS TRUE
+                AND c.summary IS NOT NULL
+                AND c.memory_excluded_at IS NULL
+                AND c.deleted IS FALSE
+                AND (ua.id IS NULL OR ua.account_type <> 'personal')
+            )
+            OR cardinality(s.memo_ids) > (
+              SELECT count(*)
+              FROM memory_memos m
+              LEFT JOIN chats c ON c.id = m.chat_id
+              LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+              WHERE m.id = ANY(s.memo_ids)
+                AND m.deleted IS FALSE
+                AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+            )
+            OR cardinality(s.child_digest_ids) > (
+              SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+            )
+          )
+        UNION
+        SELECT p.id
+        FROM memory_digests p
+        JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+        WHERE p.project_id = $3
+      )
+      SELECT stale.id FROM stale
+    )
 ) hits
 ORDER BY hits.rank DESC, hits.at DESC, hits.id
 LIMIT $8::integer
@@ -154,6 +192,10 @@ type SearchTeamMemoryRow struct {
 // compared as UTC midnights whatever the session time zone is. Ranks are
 // normalized by document length so long digests do not crowd out short
 // memos, and memos, which a person saved on purpose, count double.
+// Stale digests are left out like in the memorydigest reads: one that
+// folded a chat or memo no longer eligible, or a child digest that is gone,
+// and every parent above it, so an exclusion or deletion hides them before
+// the nightly job deletes them.
 func (q *Queries) SearchTeamMemory(ctx context.Context, arg SearchTeamMemoryParams) ([]SearchTeamMemoryRow, error) {
 	rows, err := q.db.Query(ctx, searchTeamMemory,
 		arg.OrganizationID,
