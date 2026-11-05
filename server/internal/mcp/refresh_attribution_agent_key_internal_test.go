@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -52,8 +53,9 @@ func TestAgentKeyMemberChoicesPreservesRequestAttribution(t *testing.T) {
 			f.service.upstreamTokens = source
 			_, err := choices.resolve(ctx, metaMember{serverID: f.serverID, projectID: f.projectID, typedAuthClient: typed, chosenClientID: validUUID(uuid.New())})
 			require.NoError(t, err)
-			require.Equal(t, attribution, source.attribution, "lazy resolution must retain the gateway scope and incoming request")
-			require.NotEqual(t, remotesessions.RefreshIn(scope), source.attribution, "attribution keeps the incoming request")
+			// The client is a func, which require.Equal never treats as equal; %+v compares it by nil-ness and code.
+			require.Equal(t, fmt.Sprintf("%+v", attribution), fmt.Sprintf("%+v", source.attribution), "lazy resolution must retain the gateway scope and incoming request")
+			require.NotEqual(t, fmt.Sprintf("%+v", remotesessions.RefreshIn(scope)), fmt.Sprintf("%+v", source.attribution), "attribution keeps the incoming request")
 		}
 	}
 }

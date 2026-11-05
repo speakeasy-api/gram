@@ -14,12 +14,12 @@ type RefreshAttribution struct {
 	scope   mcpconnectionattempts.Scope
 	attempt mcpconnectionattempts.Attempt
 	skipped *SkippedClients
-	client  *mcpconnectionattempts.Option
+	client  mcpconnectionattempts.Option
 }
 
 // RefreshIn files a refresh as its own attempt under scope.
 func RefreshIn(scope mcpconnectionattempts.Scope) RefreshAttribution {
-	return RefreshAttribution{scope: scope, attempt: mcpconnectionattempts.NoAttempt, skipped: nil, client: nil}
+	return RefreshAttribution{scope: scope, attempt: mcpconnectionattempts.NoAttempt, skipped: nil, client: mcpconnectionattempts.Option{}}
 }
 
 // InAttempt makes the refresh a step of attempt. A zero attempt changes nothing.
@@ -76,7 +76,6 @@ func (s *SkippedClients) Reason(projectID, issuerID uuid.UUID, chosenClient uuid
 
 // FromRequest copies what the request says about its client now, since a refresh can outlive the request.
 func (a RefreshAttribution) FromRequest(r *http.Request) RefreshAttribution {
-	client := mcpconnectionattempts.FromRequest(r)
-	a.client = &client
+	a.client = mcpconnectionattempts.FromRequest(r)
 	return a
 }
