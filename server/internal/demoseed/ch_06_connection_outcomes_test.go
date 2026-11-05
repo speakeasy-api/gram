@@ -111,9 +111,11 @@ func TestConnectionOutcomeSeedKeepsAbandonedBrowserIdentity(t *testing.T) {
 	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), s.connectionServerScope())
 	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[0].ClientFamily)
-	require.Equal(t, s.connectionDevice("stopped-attempt"), rows[0].DeviceKey)
-	require.Empty(t, rows[0].MemberID)
-	require.False(t, rows[0].IsFinal)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, mcpconnectionattempts.FamilyBrowser, row.ClientFamily)
+		require.Equal(t, s.connectionDevice("stopped-attempt"), row.DeviceKey)
+		require.Empty(t, row.MemberID)
+		require.False(t, row.IsFinal)
+	}
 }
