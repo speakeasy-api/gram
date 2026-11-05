@@ -24,11 +24,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,6 +46,7 @@ type connectionRecoveryFixture struct {
 	link     mcp.ConnectionRecoveryLink
 	router   chi.Router
 	asBase   string
+	upstream string
 	userID   string
 	otherID  string
 	fixtures *authclientfixtures.Queries
@@ -51,12 +56,12 @@ type connectionRecoveryFixture struct {
 // registration's callback lands on the dashboard's own host.
 func newConnectionRecoveryFixture(t *testing.T) *connectionRecoveryFixture {
 	t.Helper()
-	return newConnectionRecoveryFixtureWithCallback(t, "", nil)
+	return newConnectionRecoveryFixtureWithCallback(t, "", "", nil)
 }
 
 // newConnectionRecoveryFixtureWithCallback records callbackBase, when set, as
 // the registration's callback origin, and wraps the service's cache with wrap, when set.
-func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string, wrap func(cache.Cache) cache.Cache) *connectionRecoveryFixture {
+func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase, asBase string, wrap func(cache.Cache) cache.Cache) *connectionRecoveryFixture {
 	t.Helper()
 	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, wrap)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -68,11 +73,12 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string,
 		require.NoError(t, q.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: pgtype.Text{String: id, Valid: true}}))
 	}
 	slug := "recovery-" + uuid.NewString()[:6]
-	f.asBase = "https://" + slug + "-as.example.com"
+	f.asBase = conv.Default(asBase, "https://"+slug+"-as.example.com")
 	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, nil, callbackBase)
 	f.fixtures = authclientfixtures.New(ti.conn)
 	remoteID, serverID := uuid.New(), uuid.New()
-	require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Url: "https://mcp.example.com/" + remoteID.String()[:8]}))
+	f.upstream = "https://mcp.example.com/" + remoteID.String()[:8]
+	require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Url: f.upstream}))
 	require.NoError(t, f.fixtures.SeedMCPServerFixture(ctx, authclientfixtures.SeedMCPServerFixtureParams{ID: serverID, ProjectID: *authCtx.ProjectID, Slug: pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true}}))
 	authClientID, err := f.fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
@@ -222,7 +228,7 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 // person's own session.
 func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 	t.Parallel()
-	f := newConnectionRecoveryFixtureWithCallback(t, "https://callback.example.com", nil)
+	f := newConnectionRecoveryFixtureWithCallback(t, "https://callback.example.com", "", nil)
 
 	remote, cookies := f.started(t)
 	require.NotEmpty(t, cookies)
@@ -252,6 +258,100 @@ func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
 	require.NotEqual(t, http.StatusFound, refused.Code)
 	require.NotContains(t, refused.Header().Get("Location"), f.asBase)
 	require.NotContains(t, refused.Body.String(), f.asBase)
+}
+
+// Where typed auth clients are enforced, a link's login stands on the offer it
+// names and asks for the resource that offer decides. It completes and stores
+// the connection whether or not a user session issuer links the registration,
+// and it writes no link.
+func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		linked bool
+	}{
+		{name: "no sign-in link", linked: false},
+		{name: "a sign-in link", linked: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var posted atomic.Value
+			as := newConsentExchangeAS(t, &posted, "recovered-token")
+			f := newConnectionRecoveryFixtureWithCallback(t, "", as.URL, nil)
+			signIn := createUserSessionIssuer(t, f.ctx, f.ti.conn, f.link.ProjectID)
+			f.link.UserSessionIssuerID = signIn
+			f.link.UpstreamResource = f.upstream
+			q := remotesessions_repo.New(f.ti.conn)
+			if tc.linked {
+				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(f.ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn}))
+			}
+			_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(f.ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.link.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+			require.NoError(t, err)
+			seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, f.link.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.userID), f.link.McpServerID)
+			// A browser's request carries no prepared grants: the person's own decide.
+			f.ctx = t.Context()
+
+			path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+			require.NoError(t, err)
+			location, cookies := f.start(t, path, f.userID)
+			require.Equal(t, f.upstream, location.Query().Get("resource"), "the authorization request names the resource")
+			remote, err := f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
+			require.NoError(t, err)
+			subject := urn.NewUserSubject(f.userID)
+			require.Equal(t, &remotesessions.TypedAuthorization{OrganizationID: f.link.OrganizationID, ProjectID: f.link.ProjectID, ServerID: f.link.McpServerID, AuthClientID: f.link.AuthClientID, RemoteSessionClientID: f.link.RegistrationID, Subject: subject}, remote.TypedAuthorization)
+
+			req := f.callback("", cookies)
+			req.URL.RawQuery = url.Values{"state": {location.Query().Get("state")}, "code": {"recovery-code"}}.Encode()
+			w := httptest.NewRecorder()
+			require.NoError(t, f.ti.service.HandleRemoteLoginCallback(w, req))
+			require.Equal(t, http.StatusSeeOther, w.Code)
+			require.True(t, strings.HasSuffix(w.Header().Get("Location"), mcp.ConnectionRecoveryDonePath))
+
+			session, err := q.GetActiveRemoteSession(f.ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: f.link.RegistrationID})
+			require.NoError(t, err, "the connection is stored")
+			require.Equal(t, f.upstream, session.Resource.String)
+			linked, err := q.CheckRemoteSessionClientBindingForUserSessionIssuer(f.ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{RemoteSessionClientID: f.link.RegistrationID, UserSessionIssuerID: signIn, ProjectID: f.link.ProjectID, OrganizationID: f.link.OrganizationID})
+			require.NoError(t, err)
+			require.Equal(t, tc.linked, linked, "the login writes no link of its own")
+		})
+	}
+}
+
+// A person the server would refuse at the callback learns it from the link,
+// before signing in to the provider.
+func TestConnectionRecoveryRefusesATypedLoginTheServerWouldDeny(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixture(t)
+	f.link.UserSessionIssuerID = createUserSessionIssuer(t, f.ctx, f.ti.conn, f.link.ProjectID)
+	_, err := productfeaturesrepo.New(f.ti.conn).EnableFeature(f.ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.link.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	seedPrincipalGrant(t, f.ctx, f.ti, f.link.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.userID), authz.ScopeMCPAuth, f.link.AuthClientID.String())
+	// A browser's request carries no prepared grants: the person's own decide.
+	f.ctx = t.Context()
+
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	refused := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusForbidden, refused.Code)
+	require.Contains(t, refused.Body.String(), "No access")
+	require.NotContains(t, refused.Body.String(), f.asBase)
+}
+
+// Without enforcement a link's login carries no typed authorization and no
+// resource, and its callback still relies on the user session issuer link.
+func TestConnectionRecoveryWithoutEnforcementStandsOnTheLink(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixture(t)
+	f.link.UpstreamResource = f.upstream
+
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	location, _ := f.start(t, path, f.userID)
+	require.False(t, location.Query().Has("resource"))
+	remote, err := f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
+	require.NoError(t, err)
+	require.Nil(t, remote.TypedAuthorization)
+	require.Empty(t, remote.Resource)
 }
 
 // A link connects only through a client the server still offers on the same
@@ -311,7 +411,7 @@ func (c *recoveryStoreFailureCache) Set(ctx context.Context, key string, value a
 func TestConnectionRecoveryStoreFailureRecordsAVerdict(t *testing.T) {
 	t.Parallel()
 	var failing *recoveryStoreFailureCache
-	f := newConnectionRecoveryFixtureWithCallback(t, "", func(delegate cache.Cache) cache.Cache {
+	f := newConnectionRecoveryFixtureWithCallback(t, "", "", func(delegate cache.Cache) cache.Cache {
 		store, ok := delegate.(codemode.OwnershipStore)
 		require.True(t, ok)
 		failing = &recoveryStoreFailureCache{OwnershipStore: store}

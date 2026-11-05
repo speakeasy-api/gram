@@ -177,6 +177,10 @@ type ConnectionRecoveryLink struct {
 	McpServerID    uuid.UUID
 	AuthClientID   uuid.UUID
 	RegistrationID uuid.UUID
+	// UserSessionIssuerID and UpstreamResource are the server's sign-in and
+	// upstream; a link that names no sign-in gets one that does not exist.
+	UserSessionIssuerID uuid.UUID
+	UpstreamResource    string
 }
 
 // IssueConnectionRecovery stores a connection link and returns its path.
@@ -185,9 +189,13 @@ func (s *Service) IssueConnectionRecovery(ctx context.Context, link ConnectionRe
 	if err != nil {
 		return "", err
 	}
+	signIn := link.UserSessionIssuerID
+	if signIn == uuid.Nil {
+		signIn = uuid.New()
+	}
 	err = s.connectionRecoveryCache.Store(ctx, connectionRecovery{
 		ID: token, OrganizationID: link.OrganizationID, UserID: link.UserID, ProjectID: link.ProjectID,
-		UserSessionIssuerID: uuid.New(), McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server",
+		UserSessionIssuerID: signIn, McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server", UpstreamResource: link.UpstreamResource,
 		AuthClientID: link.AuthClientID, RegistrationID: link.RegistrationID, CreatedAt: time.Now(),
 	})
 	if err != nil {
