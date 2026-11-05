@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -138,6 +139,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode identity chaining check").LogError(ctx, logger)
+	}
+	if challengeState.FirstParty && result.Status == chainCheckConnected {
+		s.endChainedFirstParty(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, clientID)
 	}
 	return nil
 }

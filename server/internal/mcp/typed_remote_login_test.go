@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -127,12 +128,17 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 					form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {registration.String()}}
 					req := httptest.NewRequest(http.MethodPost, "/mcp/"+endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					rec := recordConnections(t, ti)
+					// connectionScope reads only .UUID for row.ServerID; invalid skips the member-resource checks.
+					endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: false}
 					err = ti.service.ServeConsentAction(httptest.NewRecorder(), req, endpoint)
 					require.Error(t, err)
 					var oopsErr *oops.ShareableError
 					require.ErrorAs(t, err, &oopsErr)
 					require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 					require.Nil(t, posted.Load())
+					row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeConfigurationRequired)
+					require.Equal(t, endpoint.MetaMcpServerID.UUID.String(), row.ServerID)
 					return
 				}
 			}

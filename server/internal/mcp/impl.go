@@ -266,7 +266,7 @@ type Service struct {
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
-	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	// userSessionRefreshReplayCoordination elects the database rotation winner and claims attemptEndMarker.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
@@ -295,7 +295,9 @@ type Service struct {
 	remoteChallengeMgr *remotesessions.ChallengeManager
 
 	// connections records connection attempt steps.
-	connections    *mcpconnectionattempts.Recorder
+	connections *mcpconnectionattempts.Recorder
+	// attemptEndings claims once-only endings off the request path.
+	attemptEndings *attemptEndings
 	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
@@ -722,6 +724,7 @@ func NewService(
 		userSessionSigner:      userSessionSigner,
 		remoteChallengeMgr:     remoteChallengeMgr,
 		connections:            connections,
+		attemptEndings:         newAttemptEndings(),
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
@@ -974,7 +977,7 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 			result.RedirectURL = redirect.String()
 		}
 
-		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {
+		if deadline := s.verifyRemoteGrant(r.Context(), mcpconnectionattempts.FromRequest(r), *result.Grant); !deadline.IsZero() {
 			redirect, parseErr := url.Parse(result.RedirectURL)
 			if parseErr != nil {
 				return fmt.Errorf("parse remote login redirect: %w", parseErr)

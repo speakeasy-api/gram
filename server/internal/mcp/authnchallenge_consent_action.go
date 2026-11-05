@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -92,6 +93,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		s.recordWrongConsentBrowser(r, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -194,7 +196,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(r, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
 		if berr != nil {
 			return berr
 		}
@@ -273,7 +275,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, *client)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
 		switch {
@@ -341,7 +343,7 @@ func (s *Service) clientServesHostedMember(ctx context.Context, endpoint *Resolv
 // bound is every client bound to the endpoint, self clients included, since
 // each one's upstream decides what client may claim.
 func (s *Service) buildRemoteConnectURL(
-	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -350,6 +352,11 @@ func (s *Service) buildRemoteConnectURL(
 	autoRefresh *bool,
 	focusServer string,
 ) (string, bool, error) {
+	ctx := r.Context()
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepProviderSignIn,
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
+	t.Attach(challengeState.connectionAttempt(endpoint))
+	defer t.Finish(ctx)
 	// endpoint.UpstreamResource only when no other bound client can claim
 	// it: under multi-binding it may belong to a different client's
 	// upstream, while a client shared by servers with different upstreams
@@ -363,6 +370,7 @@ func (s *Service) buildRemoteConnectURL(
 		// request the minted session will make will be.
 		memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 		if cerr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
 		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
@@ -376,9 +384,11 @@ func (s *Service) buildRemoteConnectURL(
 	if rerr == nil && !claimedByMember && endpoint.MetaMcpServerID.Valid {
 		hosted, herr := s.clientServesHostedMember(ctx, endpoint, challengeState, client)
 		if herr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, herr, "resolve gateway members for connection").LogError(ctx, logger)
 		}
 		if !hosted {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
 			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
 		}
 	}
@@ -390,12 +400,14 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
 
 	// The upstream callback returns to the consent page.
 	consentURL, err := s.remoteLoginConsentURL(endpoint, challengeState)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	// The login runs in the client's own project. An organization-level client
@@ -407,9 +419,11 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
 	if err != nil {
-		if errors.Is(err, errTypedLoginDenied) {
+		if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
 			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
 	}
 	if typedAuthorization != nil {
@@ -437,16 +451,20 @@ func (s *Service) buildRemoteConnectURL(
 		BrowserCookieID:     "",
 		BrowserHash:         "",
 		Attempt:             challengeState.connectionAttempt(endpoint),
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
 	})
 	if errors.Is(berr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
 		return "", false, oops.E(oops.CodeBadRequest, berr, "This service doesn't support signing in from Speakeasy.").LogWarn(ctx, logger)
 	}
 	if berr != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}
+	t.Continue()
 	return challengeURL, hop, nil
 }
 
