@@ -189,6 +189,9 @@ func (c *toolCatalogSync) recordListed(ctx context.Context, list *proxy.ToolsLis
 
 	allRecorded := true
 	for _, tool := range list.Result.Tools {
+		if tool == nil {
+			return errors.New("record listed tools: upstream listed a null tool")
+		}
 		if _, recorded := catalog[tool.Name]; !recorded {
 			allRecorded = false
 			break

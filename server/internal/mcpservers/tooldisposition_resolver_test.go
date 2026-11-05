@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -215,4 +216,57 @@ func TestToolCatalog_RecordMissingToolsAddsOnlyNewToolsAndAuditsAsSystem(t *test
 	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
 	require.Equal(t, after, unchanged)
+}
+
+func TestToolCatalog_RecordMissingToolsEvictsAStaleViewWhenNothingIsNew(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	// Reading first caches a view with no tools.
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Empty(t, catalog)
+
+	// Written behind the cache, as when another request's eviction failed.
+	_, err = repo.New(ti.conn).AddMCPServerToolMetadata(ctx, repo.AddMCPServerToolMetadataParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.MustParse(serverID),
+		Tools:       []byte(`[{"tool_name":"ping"}]`),
+	})
+	require.NoError(t, err)
+
+	err = ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	catalog, err = ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Contains(t, catalog, "ping")
+}
+
+func TestToolCatalog_RecordMissingToolsAuditsAsSystemWhenAnAgentTriggersIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+	agentCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+
+	err := ti.dispositions.RecordMissingTools(agentCtx, authCtx.ActiveOrganizationID, serverID, authCtx.ProjectID.String(), []tooldisposition.ToolRecord{
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
 }

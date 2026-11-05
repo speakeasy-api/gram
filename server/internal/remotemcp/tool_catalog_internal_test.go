@@ -327,3 +327,13 @@ func TestToolsListCatalog_WriteFailureRejectsTheListing(t *testing.T) {
 	resp := newListedResponse(t, `{"tools":[{"name":"delete_repository","inputSchema":{"type":"object"}}]}`)
 	require.Error(t, interceptor.InterceptToolsListResponse(blockDestructiveContext(t), resp))
 }
+
+func TestToolsListCatalog_NullToolIsRejected(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{}}
+
+	resp := newListedResponse(t, `{"tools":[null]}`)
+	require.Error(t, newCatalogSync(store, nil).recordListed(t.Context(), resp))
+	require.Empty(t, store.writes)
+}

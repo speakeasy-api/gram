@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -211,7 +212,10 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		return fmt.Errorf("add missing tools: %w", err)
 	}
 	if len(inserted) == 0 {
-		return nil
+		// A caller only records tools it read as missing, so the entries already
+		// exist and its view is stale: another request may have committed them
+		// and failed to evict. Evict here or every retry would read the same view.
+		return c.invalidateAfterWrite(ctx, projectUUID, serverUUID)
 	}
 
 	after, err := txRepo.ListMCPServerToolMetadata(ctx, listParams)
@@ -219,10 +223,18 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		return fmt.Errorf("list tool catalog after write: %w", err)
 	}
 
-	if err := c.audit.LogMcpServerToolMetadataUpdate(ctx, dbtx, audit.LogMcpServerToolMetadataUpdateEvent{
+	// Audit stamps an authenticated agent over the event's actor, but this write
+	// is discovery the request happened to trigger, not the caller's change.
+	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, catalogSystemComponent)
+	auditCtx := ctx
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		auditCtx = contextvalues.WithAuthenticatedActor(ctx, authCtx, actor)
+	}
+
+	if err := c.audit.LogMcpServerToolMetadataUpdate(auditCtx, dbtx, audit.LogMcpServerToolMetadataUpdateEvent{
 		OrganizationID:             organizationID,
 		ProjectID:                  projectUUID,
-		Actor:                      urn.NewPrincipal(urn.PrincipalTypeSystem, catalogSystemComponent),
+		Actor:                      actor,
 		ActorDisplayName:           new(catalogSystemDisplayName),
 		ActorSlug:                  nil,
 		McpServerURN:               urn.NewMcpServer(server.ID),
@@ -238,11 +250,17 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		return fmt.Errorf("commit tool catalog write: %w", err)
 	}
 
-	// Detached: the write has committed, so a caller disconnecting now must not
-	// strand a stale view in cache until the TTL lapses.
+	return c.invalidateAfterWrite(ctx, projectUUID, serverUUID)
+}
+
+// invalidateAfterWrite evicts a server's cached catalog, detached from ctx: the
+// write has committed, so a caller disconnecting now must not strand a stale view
+// in cache until the TTL lapses.
+func (c *Cache) invalidateAfterWrite(ctx context.Context, projectID, mcpServerID uuid.UUID) error {
 	invalidateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), invalidateTimeout)
 	defer cancel()
-	if err := c.Invalidate(invalidateCtx, projectUUID, serverUUID); err != nil {
+
+	if err := c.Invalidate(invalidateCtx, projectID, mcpServerID); err != nil {
 		return fmt.Errorf("invalidate tool catalog: %w", err)
 	}
 	return nil
