@@ -117583,10 +117583,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - inference:execute
-                        - log:read
                         - memory:read
                         - memory:write
+                        - inference:execute
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -117642,10 +117642,10 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
-                            - inference:execute
-                            - log:read
                             - memory:read
                             - memory:write
+                            - inference:execute
+                            - log:read
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -127604,10 +127604,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - inference:execute
-                        - log:read
                         - memory:read
                         - memory:write
+                        - inference:execute
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -128055,10 +128055,10 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - inference:execute
-                        - log:read
                         - memory:read
                         - memory:write
+                        - inference:execute
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -128137,10 +128137,10 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
-                            - inference:execute
-                            - log:read
                             - memory:read
                             - memory:write
+                            - inference:execute
+                            - log:read
                             - agent:read
                             - agent:write
                             - agent:authorize
