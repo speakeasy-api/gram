@@ -352,7 +352,7 @@ func completionRequest(model string, messages []or.ChatMessages, tools []openrou
 		UserEmail:                 "",
 		HTTPMetadata:              nil,
 		APIKeyID:                  "",
-		KeyType:                   openrouter.KeyTypeChat,
+		KeyType:                   openrouter.KeyTypeInternal,
 		KeySlot:                   "",
 		JSONSchema:                nil,
 		Reasoning:                 nil,

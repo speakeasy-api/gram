@@ -139,12 +139,16 @@ func SearchChatsArm(logger *slog.Logger, target Target) (Arm, error) {
 			if err := json.Unmarshal([]byte(arguments), &input); err != nil {
 				return "", fmt.Errorf("decode search_chats arguments: %w", err)
 			}
+			// Pin the call to the team's project, whatever the model asked
+			// for, so arm B can never read the other team's chats.
+			input.ProjectID, input.ProjectSlug = projectID, ""
 			out, err = service.Search(ctx, principal, input)
 		case "read_chat":
 			var input platformmcp.ReadChatInput
 			if err := json.Unmarshal([]byte(arguments), &input); err != nil {
 				return "", fmt.Errorf("decode read_chat arguments: %w", err)
 			}
+			input.ProjectID, input.ProjectSlug = projectID, ""
 			out, err = service.Read(ctx, principal, input)
 		default:
 			return "", fmt.Errorf("unknown tool %q", tool)
