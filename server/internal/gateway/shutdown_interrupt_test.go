@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -213,6 +217,126 @@ func TestToolProxy_Do_ShutdownInterruptsHTTPToolMidStream(t *testing.T) {
 
 	err := waitForToolCall(t, done)
 	require.ErrorIs(t, err, shutdowndrain.ErrInterrupted)
+}
+
+func TestToolProxy_Do_ShutdownInterruptsFilteredHTTPToolMidBody(t *testing.T) {
+	t.Parallel()
+
+	// The response filter reads the whole body before anything is copied, so
+	// without its own check a truncated body would come back as the filter's
+	// synthetic 500 rather than as an interrupt.
+	upstream := newHeldToolServer(t, "application/json", `{"rows":[`)
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+
+	plan := newShutdownTestHTTPPlan(upstream.server.URL)
+	plan.HTTP.ResponseFilter = &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       nil,
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
+	}
+	body, err := json.Marshal(ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       &FilterRequest{Type: string(FilterTypeJQ), Filter: ".rows"},
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	done := make(chan error, 1)
+	go func() {
+		done <- proxy.Do(t.Context(), recorder, bytes.NewReader(body), emptyToolCallEnv(), plan, tm.HTTPLogAttributes{})
+	}()
+	waitForSignal(t, upstream.reached, "the tool's server to start its response")
+
+	drain.Start(0)
+
+	require.ErrorIs(t, waitForToolCall(t, done), shutdowndrain.ErrInterrupted)
+	require.Empty(t, recorder.Header().Get(constants.HeaderFilteredResponse), "an interrupted call writes no filtered response")
+}
+
+func TestToolProxy_ReadResource_ShutdownInterruptsFunctionAwaitingResponse(t *testing.T) {
+	t.Parallel()
+
+	upstream := newHeldToolServer(t, "", "")
+	drain := shutdowndrain.New()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	proxy := NewToolProxy(
+		testenv.NewLogger(t),
+		tracerProvider,
+		testenv.NewMeterProvider(t),
+		ToolCallSourceMCP,
+		testenv.NewEncryptionClient(t),
+		nil,
+		policy,
+		&mockToolCaller{serverURL: upstream.server.URL, onCall: nil, onRequest: nil},
+		nil,
+		drain,
+	)
+
+	plan := NewResourceFunctionCallPlan(&ResourceDescriptor{
+		ID:               uuid.New().String(),
+		Name:             "test_resource",
+		DeploymentID:     uuid.New().String(),
+		ProjectID:        uuid.New().String(),
+		ProjectSlug:      "test-project",
+		OrganizationID:   uuid.New().String(),
+		OrganizationSlug: "test-org",
+		URN:              urn.NewResource(urn.ResourceKindFunction, "functions", "resource://test"),
+		URI:              "resource://test",
+	}, &ResourceFunctionCallPlan{
+		FunctionID:        uuid.New().String(),
+		FunctionsAccessID: uuid.New().String(),
+		Runtime:           "nodejs",
+		URI:               "resource://test",
+		MimeType:          "text/plain",
+		Variables:         []string{},
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- proxy.ReadResource(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte("{}")), emptyToolCallEnv(), plan, tm.HTTPLogAttributes{})
+	}()
+	waitForSignal(t, upstream.reached, "the function runner to receive the read")
+
+	drain.Start(0)
+
+	require.ErrorIs(t, waitForToolCall(t, done), shutdowndrain.ErrInterrupted)
+	waitForSignal(t, upstream.gone, "the function runner to see the read abandoned")
+}
+
+func TestShutdownInterruptedError_KeepsAnErrorTheInterruptDidNotCause(t *testing.T) {
+	t.Parallel()
+
+	drain := shutdowndrain.New()
+	ctx, release := drain.Interruptible(t.Context())
+	defer release()
+
+	drain.Start(0)
+	select {
+	case <-ctx.Done():
+	case <-time.After(shutdownTestTimeout):
+		t.Fatal("timed out waiting for the interrupt")
+	}
+	require.True(t, shutdowndrain.Interrupted(ctx))
+
+	// A call that failed for its own reason just before the interrupt fired
+	// keeps that failure.
+	ordinary := errors.New("upstream rejected the arguments")
+	require.NotErrorIs(t, shutdownInterruptedError(ctx, ordinary), shutdowndrain.ErrInterrupted)
+
+	// A failure the cancellation caused is the interrupt.
+	cancelled := fmt.Errorf("load credentials: %w", context.Canceled)
+	require.ErrorIs(t, shutdownInterruptedError(ctx, cancelled), shutdowndrain.ErrInterrupted)
+	require.ErrorIs(t, shutdownInterruptedError(ctx, cancelled), context.Canceled)
 }
 
 func TestToolProxy_Do_CompletedCallIsNotInterrupted(t *testing.T) {

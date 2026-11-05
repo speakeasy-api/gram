@@ -933,10 +933,9 @@ func (s *Service) remoteBackendProxyBuilder(
 // the gateway runs itself, are answered with a JSON-RPC error. Call it when
 // the server starts shutting down, before waiting for in-flight requests.
 func (s *Service) StartDrain(interruptAfter time.Duration) {
+	// shutdownDrain is the remote proxy manager's own drain when there is
+	// one, so starting it once reaches both paths.
 	s.shutdownDrain.Start(interruptAfter)
-	if s.remoteProxyManager != nil {
-		s.remoteProxyManager.StartDrain(interruptAfter)
-	}
 }
 
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {

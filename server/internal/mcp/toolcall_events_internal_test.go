@@ -135,6 +135,13 @@ func TestToolCallRecordNamesAShutdownInterrupt(t *testing.T) {
 	failure := oops.E(oops.CodeUnavailable, fmt.Errorf("%w: execute request: context canceled", shutdowndrain.ErrInterrupted), "interrupted by server shutdown")
 
 	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusServiceUnavailable, false, failure))
+	var statusCode int64
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == "http.response.status_code" {
+			statusCode = kv.GetValue().GetIntValue()
+		}
+	}
+	require.Equal(t, int64(http.StatusServiceUnavailable), statusCode)
 	require.Equal(t, string(oops.CodeUnavailable), recordStringAttribute(record, "error.type"))
 	require.Equal(t, "interrupted by server shutdown", recordStringAttribute(record, "error.message"))
 	require.Equal(t, "server_shutdown", recordStringAttribute(record, "gram.tool_call.interrupt_reason"), "a deploy, not the tool, ended the call")

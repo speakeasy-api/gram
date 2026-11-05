@@ -252,6 +252,16 @@ func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
 	f.drain.Start(interruptAfter)
 }
 
+// ShutdownDrain returns the drain shared by every proxy this manager builds,
+// so other request paths in the same process can be drained by the same
+// start. A nil manager has no drain.
+func (f *ProxyManager) ShutdownDrain() *shutdowndrain.Drain {
+	if f == nil {
+		return nil
+	}
+	return f.drain
+}
+
 // Build constructs a configured [*proxy.Proxy] for a single request against
 // the given remote MCP server. logger should already carry the slug and
 // remote-server id attributes the caller wants to propagate to interceptor

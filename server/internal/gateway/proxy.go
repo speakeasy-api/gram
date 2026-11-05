@@ -254,14 +254,22 @@ func interruptibleToolKind(kind ToolKind) bool {
 
 // shutdownInterruptedError returns err marked with
 // [shutdowndrain.ErrInterrupted] when the shutdown drain abandoned the call
-// running under ctx, and err unchanged otherwise. A call that completed before
-// the interrupt took effect keeps its result, even when ctx was cancelled
-// after the fact.
+// running under ctx, and err unchanged otherwise. Steps that wait on another
+// server mark their own errors with [shutdownInterrupt]; this is the fallback
+// for the rest, so it only marks an error the cancellation itself caused. A
+// call that completed, or failed for its own reason, before the interrupt took
+// effect keeps its result even when ctx was cancelled after the fact.
 func shutdownInterruptedError(ctx context.Context, err error) error {
-	if err == nil || !shutdowndrain.Interrupted(ctx) || errors.Is(err, shutdowndrain.ErrInterrupted) {
+	if err == nil || errors.Is(err, shutdowndrain.ErrInterrupted) || !errors.Is(err, context.Canceled) || !shutdowndrain.Interrupted(ctx) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", shutdowndrain.ErrInterrupted, err)
+}
+
+// shutdownInterrupt marks err, returned by step while the shutdown drain had
+// interrupted the call, with [shutdowndrain.ErrInterrupted].
+func shutdownInterrupt(step string, err error) error {
+	return fmt.Errorf("%w: %s: %w", shutdowndrain.ErrInterrupted, step, err)
 }
 
 func (tp *ToolProxy) doPlatform(
@@ -1066,7 +1074,7 @@ func (tp *ToolProxy) doExternalMCP(
 		}
 		if shutdowndrain.Interrupted(ctx) {
 			responseStatusCode = http.StatusServiceUnavailable
-			return fmt.Errorf("connect to external MCP server: %w", err)
+			return shutdownInterrupt("connect to external MCP server", err)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
@@ -1083,7 +1091,7 @@ func (tp *ToolProxy) doExternalMCP(
 		}
 		if shutdowndrain.Interrupted(ctx) {
 			responseStatusCode = http.StatusServiceUnavailable
-			return fmt.Errorf("call external MCP tool: %w", err)
+			return shutdownInterrupt("call external MCP tool", err)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
@@ -1258,7 +1266,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		if shutdowndrain.Interrupted(ctx) {
 			span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
 			captureResponseStatusCode(opts, http.StatusServiceUnavailable)
-			return fmt.Errorf("execute request: %w", err)
+			return shutdownInterrupt("execute request", err)
 		}
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)
@@ -1345,7 +1353,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 			if shutdowndrain.Interrupted(ctx) {
 				span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
 				captureResponseStatusCode(opts, http.StatusServiceUnavailable)
-				return fmt.Errorf("read upstream stream: %w", streamErr)
+				return shutdownInterrupt("read upstream stream", streamErr)
 			}
 			span.SetStatus(codes.Error, streamErr.Error())
 			opts.Logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(streamErr))
@@ -1354,6 +1362,13 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		var body io.Reader = resp.Body
 
 		result := handleResponseFiltering(ctx, opts.Logger, opts.FilterConfig, opts.Expression, resp)
+		// The filter reads the whole body first, so a body the shutdown drain
+		// cut short surfaces here rather than in the copy below.
+		if result != nil && result.readErr != nil && shutdowndrain.Interrupted(ctx) {
+			span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
+			captureResponseStatusCode(opts, http.StatusServiceUnavailable)
+			return shutdownInterrupt("read response body for filtering", result.readErr)
+		}
 		if result != nil {
 			opts.Writer.Header().Set("Content-Type", result.contentType)
 			opts.Writer.Header().Set(constants.HeaderFilteredResponse, "1")
@@ -1371,7 +1386,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 			if shutdowndrain.Interrupted(ctx) {
 				span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
 				captureResponseStatusCode(opts, http.StatusServiceUnavailable)
-				return fmt.Errorf("copy response body: %w", err)
+				return shutdownInterrupt("copy response body", err)
 			}
 			span.SetStatus(codes.Error, err.Error())
 			opts.Logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))

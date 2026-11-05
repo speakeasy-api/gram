@@ -314,7 +314,8 @@ type Service struct {
 	remoteProxyManager *remotemcp.ProxyManager
 	// shutdownDrain interrupts tools/call and resources/read work the gateway
 	// runs itself (functions, HTTP tools, external MCP tools) when the server
-	// shuts down. StartDrain starts it together with the remote proxy drain.
+	// shuts down. It is the remote proxy manager's drain when there is one,
+	// so one StartDrain reaches relayed and executed requests alike.
 	shutdownDrain *shutdowndrain.Drain
 	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
@@ -603,7 +604,10 @@ func NewService(
 	)
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
-	shutdownDrain := shutdowndrain.New()
+	shutdownDrain := remoteProxyManager.ShutdownDrain()
+	if shutdownDrain == nil {
+		shutdownDrain = shutdowndrain.New()
+	}
 	service := &Service{
 		assistantWorkloadTokens:   nil,
 		builtinBackends:           map[string]BuiltinBackend{},

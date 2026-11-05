@@ -19,12 +19,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 type responseFilteringResult struct {
 	resp        io.Reader
 	statusCode  int
 	contentType string
+	// readErr is set when the upstream body could not be read, so the caller
+	// can tell a body cut short by the shutdown drain from a filter failure.
+	readErr error
 }
 
 func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterConfig *ResponseFilter, responseFilterRequest *FilterRequest, resp *http.Response) *responseFilteringResult {
@@ -58,12 +62,17 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		filterSpan.SetStatus(codes.Error, err.Error())
-		logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
+		// The caller answers a read abandoned for shutdown itself, so it is
+		// not logged as a filter failure here.
+		if !shutdowndrain.Interrupted(ctx) {
+			filterSpan.SetStatus(codes.Error, err.Error())
+			logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
+		}
 		return &responseFilteringResult{
 			resp:        buf,
 			statusCode:  http.StatusInternalServerError,
 			contentType: "application/octet-stream",
+			readErr:     err,
 		}
 	}
 
@@ -75,6 +84,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 			resp:        buf,
 			statusCode:  http.StatusInternalServerError,
 			contentType: "application/octet-stream",
+			readErr:     nil,
 		}
 	}
 
@@ -105,6 +115,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 				resp:        buf,
 				statusCode:  http.StatusBadRequest,
 				contentType: "application/json",
+				readErr:     nil,
 			}
 		}
 		results = append(results, v)
@@ -126,5 +137,6 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterCon
 		resp:        buf,
 		statusCode:  statusCode,
 		contentType: contentType,
+		readErr:     nil,
 	}
 }

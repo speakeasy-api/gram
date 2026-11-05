@@ -221,9 +221,11 @@ type Proxy struct {
 	// Drain ends streams that only carry server-initiated messages when the
 	// server starts shutting down: the standalone GET stream and the
 	// 2026-07-28 subscriptions/listen stream. POST streams end as soon as
-	// their response has been relayed, and requests still waiting on the
-	// remote MCP server at the interrupt deadline are answered with a
-	// JSON-RPC error. Nil leaves streams open until they end on their own.
+	// their response has been relayed. A request still waiting on the remote
+	// MCP server at the interrupt deadline is answered with a JSON-RPC error,
+	// unless it is a subscriptions/listen request (never interrupted) or a
+	// notification (answered with HTTP 503). Nil leaves streams open until
+	// they end on their own.
 	Drain *shutdowndrain.Drain
 
 	// StreamingTimeout is the per-event idle bound applied to streaming
