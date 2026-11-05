@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -201,8 +202,14 @@ func (s *Service) recordConsentPage(
 	attempt := challengeState.connectionAttempt(endpoint)
 	subject := mcpconnectionattempts.Subject(challengeState.Subject)
 	if gateway != nil {
+		statuses := make([]memberStatus, 0, len(gateway.Servers))
 		for _, server := range gateway.Servers {
-			s.recordGatewayServerStatus(ctx, attempt, gateway, server, subject, fromRequest)
+			if status, ok := gatewayMemberStatus(gateway, server); ok {
+				statuses = append(statuses, status)
+			}
+		}
+		for _, status := range s.changedMemberStatuses(ctx, logger, attempt, statuses) {
+			s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, append(status.opts, subject, fromRequest)...)
 		}
 	}
 	if problem != nil {
@@ -213,10 +220,18 @@ func (s *Service) recordConsentPage(
 	}
 }
 
-func (s *Service) recordGatewayServerStatus(ctx context.Context, attempt mcpconnectionattempts.Attempt, gateway *gatewayConsentView, server gatewayServer, subject, fromRequest mcpconnectionattempts.Option) {
+// memberStatus is one gateway member's discovery row; status is its result and reason.
+type memberStatus struct {
+	id     string
+	status string
+	what   mcpconnectionattempts.Happened
+	opts   []mcpconnectionattempts.Option
+}
+
+func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (memberStatus, bool) {
 	serverID, err := uuid.Parse(server.ServerID)
 	if err != nil {
-		return
+		return memberStatus{id: "", status: "", what: nil, opts: nil}, false
 	}
 	var authClient *authClientResolution
 	for i := range gateway.members {
@@ -226,11 +241,70 @@ func (s *Service) recordGatewayServerStatus(ctx context.Context, attempt mcpconn
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
-	opts := []mcpconnectionattempts.Option{subject, fromRequest, mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
 	if authClient != nil {
 		opts = append(opts, mcpconnectionattempts.AuthClient(authClient.clientID))
 	}
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, what, opts...)
+	return memberStatus{id: serverID.String(), status: fmt.Sprint(what) + "|" + detail, what: what, opts: opts}, true
+}
+
+// memberStatusCache is the cache side of changedMemberStatuses.
+type memberStatusCache interface {
+	Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error
+}
+
+// recordedMember is a slice element, not a map entry, so a retried read can't keep stale keys.
+type recordedMember struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+var errMemberStatusesUnchanged = errors.New("member statuses unchanged")
+
+func memberStatusesKey(attempt mcpconnectionattempts.Attempt) string {
+	return "connectionAttemptMembers:" + attempt.ID().String()
+}
+
+// changedMemberStatuses keeps members whose status changed this attempt; a cache failure keeps all.
+func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus) []memberStatus {
+	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	if !ok || attempt.IsZero() || len(statuses) == 0 {
+		return statuses
+	}
+	var changed []memberStatus
+	var recorded []recordedMember
+	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
+		last := make(map[string]int, len(recorded))
+		for i, member := range recorded {
+			last[member.ID] = i
+		}
+		changed = changed[:0]
+		for _, status := range statuses {
+			i, seen := last[status.id]
+			switch {
+			case !seen:
+				last[status.id] = len(recorded)
+				recorded = append(recorded, recordedMember{ID: status.id, Status: status.status})
+			case recorded[i].Status != status.status:
+				recorded[i].Status = status.status
+			default:
+				continue
+			}
+			changed = append(changed, status)
+		}
+		if len(changed) == 0 {
+			return errMemberStatusesUnchanged
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, errMemberStatusesUnchanged):
+		return nil
+	case err != nil:
+		logger.WarnContext(ctx, "read recorded gateway member statuses", attr.SlogError(err))
+		return statuses
+	}
+	return changed
 }
 
 // gatewayServerHappened maps a server's consent status, and any gap in its

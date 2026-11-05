@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -102,6 +104,86 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 	require.Empty(t, row.AuthClientID, "that reason names no auth client")
 	require.Equal(t, unset.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeUpstreamSignInNotSetUp).MemberID)
 	rec.RequireNotEnded()
+}
+
+func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Recording, *miniredis.Miniredis) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	rec := mcpconnectionattemptstest.New(t)
+	return &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}, rec, mr
+}
+
+func memberView(statuses map[uuid.UUID]gatewayServerStatus) *gatewayConsentView {
+	view := &gatewayConsentView{}
+	for id, status := range statuses {
+		view.Servers = append(view.Servers, gatewayServer{ServerID: id.String(), Status: status})
+	}
+	return view
+}
+
+func TestRecordConsentPage_UnchangedReRenderWritesNoMemberRows(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotConnected, uuid.New(): gatewayServerNotSetUp})
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	require.Len(t, rec.Rows(), 3)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	require.Len(t, rec.Rows(), 3)
+}
+
+func TestRecordConsentPage_ChangedMemberWritesOneRow(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	signedIn, unset := uuid.New(), uuid.New()
+	render := func(status gatewayServerStatus) {
+		view := memberView(map[uuid.UUID]gatewayServerStatus{signedIn: status, unset: gatewayServerNotSetUp})
+		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	}
+
+	render(gatewayServerNotConnected)
+	require.Len(t, rec.Rows(), 2)
+	render(gatewayServerConnected)
+	rows := rec.Rows()
+	require.Len(t, rows, 3)
+	require.Equal(t, signedIn.String(), rows[2].MemberID)
+	require.Equal(t, mcpconnectionattempts.ResultAllowed.String(), rows[2].StepResult)
+
+	render(gatewayServerNotConnected)
+	rows = rec.Rows()
+	require.Len(t, rows, 4, "a return to an earlier status is still a change")
+	require.Equal(t, signedIn.String(), rows[3].MemberID)
+}
+
+func TestRecordConsentPage_NewAttemptRecordsMembersAgain(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	endpoint := gatewayEndpoint()
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
+	require.Len(t, rec.Rows(), 4)
+}
+
+func TestRecordConsentPage_MemberStatusCacheFailureRecordsRows(t *testing.T) {
+	t.Parallel()
+
+	service, rec, mr := memberStatusService(t)
+	mr.Close()
+	endpoint, state := gatewayEndpoint(), openState()
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	require.Len(t, rec.Rows(), 4)
 }
 
 func TestGatewayServerHappened_FirstConnectIsNotAStaleChoice(t *testing.T) {
