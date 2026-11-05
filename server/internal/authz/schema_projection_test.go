@@ -19,9 +19,10 @@ import (
 // compiled projections with the frozen baselines: scope_tables.golden and the
 // runtime policy's runtime_scopes.golden. The declarations exist only in this
 // test. They show that the DSL can reproduce today's tables for a slice and
-// that compiled scope names line up with the authz.Scope constants; the
-// production tables stay authoritative until compiled projections replace
-// them.
+// that compiled scope names line up with the authz.Scope constants. The
+// declaration-level choices the golden files do not record (matching,
+// sensitivity, conditions and anchors) are pinned separately. The production
+// tables stay authoritative until compiled projections replace them.
 func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +70,39 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 		got.WriteString(renderCompiledScope(scope))
 	}
 	require.Equal(t, want.String(), got.String())
+
+	// The golden records leave out declaration-level choices that later
+	// evaluators depend on, so they are pinned here: strict matching for
+	// blocks and the auth-client grant, sensitive log reads, the MCP tool
+	// condition and each grant's anchors.
+	wantDeclared := []string{
+		"log:read matching=permissive sensitive=true conditions=[] anchors=[organization $self]",
+		"mcp:auth matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"mcp:blocked_auth matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"mcp:blocked_connect matching=strict sensitive=false conditions=[mcp_tools] anchors=[$self]",
+		"mcp:blocked_read matching=strict sensitive=false conditions=[mcp_tools] anchors=[$self]",
+		"mcp:blocked_write matching=strict sensitive=false conditions=[mcp_tools] anchors=[$self]",
+		"mcp:connect matching=permissive sensitive=false conditions=[mcp_tools] anchors=[organization project $self]",
+		"mcp:read matching=permissive sensitive=false conditions=[mcp_tools] anchors=[organization project $self]",
+		"mcp:write matching=permissive sensitive=false conditions=[mcp_tools] anchors=[organization project $self]",
+		"org:admin matching=permissive sensitive=false conditions=[] anchors=[$self]",
+		"org:blocked_admin matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"org:blocked_read matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"org:device_agent_sync matching=permissive sensitive=false conditions=[] anchors=[$self]",
+		"org:hooks_ingest matching=permissive sensitive=false conditions=[] anchors=[$self]",
+		"org:read matching=permissive sensitive=false conditions=[] anchors=[$self]",
+		"plugin:blocked_write matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"plugin:write matching=permissive sensitive=false conditions=[] anchors=[organization $self]",
+		"project:blocked_read matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"project:blocked_write matching=strict sensitive=false conditions=[] anchors=[$self]",
+		"project:read matching=permissive sensitive=false conditions=[] anchors=[organization $self]",
+		"project:write matching=permissive sensitive=false conditions=[] anchors=[organization $self]",
+	}
+	var gotDeclared []string
+	for _, scope := range reg.Scopes() {
+		gotDeclared = append(gotDeclared, fmt.Sprintf("%s matching=%s sensitive=%t conditions=%v anchors=%v", scope.Name, scope.Matching, scope.Sensitive, scope.Conditions, scope.Anchors))
+	}
+	require.Equal(t, wantDeclared, gotDeclared)
 
 	frozenRuntime := readGoldenLines(t, filepath.Join("..", "agents", "runtimepolicy", "testdata", "runtime_scopes.golden"))
 	var gotRuntime, wantRuntime []string

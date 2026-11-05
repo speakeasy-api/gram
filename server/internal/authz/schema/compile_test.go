@@ -247,7 +247,7 @@ func TestCompile_AlternativesAndRuntime(t *testing.T) {
 
 	reg := compileValid(t)
 
-	alts, ok := reg.Alternatives(s.PermissionRef{Type: "project", Permission: "plugin_publication"})
+	alts, ok := reg.Alternatives("project", "plugin_publication")
 	require.True(t, ok)
 	require.True(t, alts.VetoBlocks)
 	require.Equal(t, []s.PermissionRef{
@@ -346,6 +346,29 @@ func TestCompile_ReportsEveryProblem(t *testing.T) {
 	require.Contains(t, err.Error(), `type "broken": permission "read": Checks "broken:read" but no Rel("reader") satisfies it`)
 }
 
+func TestCompile_ReportsProjectionProblemsWithDeclarationProblems(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConfig
+	cfg.RetiredRuntimeScopes = []string{"thing:read", "thing:gone", "thing:gone"}
+	_, err := s.Compile(cfg, s.NewType("thing", s.WrittenBy("access"),
+		s.Grant("reader", s.StoredAs("thing:read")),
+		s.Grant("writer", s.StoredAs("thing:write"), s.Describe("write")),
+		s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
+		s.Block("write_blocked", s.StoredAs("thing:blocked_write")),
+		s.Block("all_blocked", s.StoredAs("thing:blocked_all")),
+		s.Permission("read", s.Rel("reader"), s.Checks("thing:read"), s.ExcludedBy("read_blocked", "all_blocked")),
+		s.Permission("write", s.Rel("writer"), s.Checks("thing:write"), s.ExcludedBy("read_blocked", "write_blocked")),
+	))
+	var compileErr *s.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Len(t, compileErr.Problems, 4)
+	require.Contains(t, err.Error(), `grant "reader": user-visible grant needs a Describe`)
+	require.Contains(t, err.Error(), `block "read_blocked" directly excludes several permissions with different broader blocks`)
+	require.Contains(t, err.Error(), `retired runtime scope "thing:gone" listed twice`)
+	require.Contains(t, err.Error(), `retired runtime scope "thing:read" is still declared`)
+}
+
 func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 	t.Parallel()
 
@@ -359,6 +382,16 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			s.Permission("read", s.Rel("reader"), s.Checks(name+":read")),
 		}
 		return s.NewType(name, append(base, opts...)...)
+	}
+	// checked declares thing:read as Checked by expr over reader and writer
+	// grants, with a read block available to ExcludedBy.
+	checked := func(expr s.Expr, opts ...s.PermissionOption) s.TypeDecl {
+		return s.NewType("thing", s.WrittenBy("access"),
+			grant("reader", "thing:read"), grant("writer", "thing:write"),
+			s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
+			s.Permission("write", s.Rel("writer"), s.Checks("thing:write")),
+			s.Permission("read", expr, append([]s.PermissionOption{s.Checks("thing:read")}, opts...)...),
+		)
 	}
 
 	tests := []struct {
@@ -537,7 +570,32 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 		{
 			name:  "Checks a permission with ownership",
 			types: []s.TypeDecl{s.NewType("thing", s.WrittenBy("access"), s.Attr("owner", s.FactUser), grant("reader", "thing:read"), s.Permission("read", s.Union(s.Rel("reader"), s.Is("owner")), s.Checks("thing:read")))},
-			want:  `a permission that Checks a scope may use only Rel, Union, Minus and grant-only Perm`,
+			want:  `a permission that Checks a scope must be expressible as a legacy check: is reads facts, not grants`,
+		},
+		{
+			name:  "Checks a permission with Minus under Union",
+			types: []s.TypeDecl{checked(s.Union(s.Minus(s.Rel("reader"), s.Rel("writer")), s.Rel("reader")))},
+			want:  `must be expressible as a legacy check: Minus is allowed only as the top-level expression`,
+		},
+		{
+			name:  "Checks a permission with Minus and ExcludedBy",
+			types: []s.TypeDecl{checked(s.Minus(s.Rel("reader"), s.Rel("writer")), s.ExcludedBy("read_blocked"))},
+			want:  `must be expressible as a legacy check: Minus cannot be combined with ExcludedBy`,
+		},
+		{
+			name:  "Checks a permission subtracting a Union",
+			types: []s.TypeDecl{checked(s.Minus(s.Rel("reader"), s.Union(s.Rel("writer"))))},
+			want:  `must be expressible as a legacy check: Minus must subtract a single Rel`,
+		},
+		{
+			name: "Checks a permission reaching Minus through Perm",
+			types: []s.TypeDecl{s.NewType("thing", s.WrittenBy("access"),
+				grant("reader", "thing:read"), grant("writer", "thing:write"),
+				s.Permission("write", s.Rel("writer"), s.Checks("thing:write")),
+				s.Permission("unwritten", s.Minus(s.Rel("reader"), s.Rel("writer"))),
+				s.Permission("read", s.Perm("unwritten"), s.Checks("thing:read")),
+			)},
+			want: `must be expressible as a legacy check: Minus is allowed only as the top-level expression`,
 		},
 		{
 			name:  "grant nobody checks",

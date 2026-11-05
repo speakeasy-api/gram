@@ -250,8 +250,13 @@ type Registry struct {
 	permissions  []PermissionDefinition
 	permIndex    map[PermissionRef]int
 	checks       map[string]PermissionRef
-	alternatives map[PermissionRef]AlternativeSet
+	alternatives map[alternativesKey]AlternativeSet
 	runtime      []RuntimeScope
+}
+
+type alternativesKey struct {
+	typeName string
+	name     string
 }
 
 // Types returns every compiled type in declaration order.
@@ -315,10 +320,9 @@ func (r *Registry) PermissionForCheck(scope string) (PermissionRef, bool) {
 	return ref, ok
 }
 
-// Alternatives returns one compiled named alternatives set. ref.Type is the
-// declaring type and ref.Permission the alternatives name.
-func (r *Registry) Alternatives(ref PermissionRef) (AlternativeSet, bool) {
-	a, ok := r.alternatives[ref]
+// Alternatives returns the named alternatives set declared on typeName.
+func (r *Registry) Alternatives(typeName, name string) (AlternativeSet, bool) {
+	a, ok := r.alternatives[alternativesKey{typeName: typeName, name: name}]
 	if !ok {
 		var zero AlternativeSet
 		return zero, false
@@ -356,7 +360,7 @@ func (c *compiler) build() *Registry {
 		permissions:  nil,
 		permIndex:    make(map[PermissionRef]int),
 		checks:       make(map[string]PermissionRef),
-		alternatives: make(map[PermissionRef]AlternativeSet),
+		alternatives: make(map[alternativesKey]AlternativeSet),
 		runtime:      nil,
 	}
 	scopes := make(map[string]ScopeDefinition)
@@ -384,7 +388,7 @@ func (c *compiler) build() *Registry {
 			}
 		}
 		for _, a := range t.alternatives {
-			reg.alternatives[PermissionRef{Type: t.name, Permission: a.name}] = AlternativeSet{
+			reg.alternatives[alternativesKey{typeName: t.name, name: a.name}] = AlternativeSet{
 				Type:       t.name,
 				Name:       a.name,
 				Options:    slices.Clone(a.options),
@@ -438,10 +442,7 @@ func compileType(t *TypeDecl) TypeDefinition {
 }
 
 func compileScope(t *TypeDecl, r relationDecl) ScopeDefinition {
-	keys := mergeKeys(t.selectorKeys, r.selectorKeys)
-	if len(keys) == 0 {
-		keys = nil
-	}
+	keys := sortedUnique(append(slices.Clone(t.selectorKeys), r.selectorKeys...))
 	roles := slices.Clone(r.roles)
 	slices.Sort(roles)
 	roles = slices.Compact(roles)
@@ -604,7 +605,6 @@ func (w *prerequisiteWalker) addCondFacts(cond Cond) {
 // projectChecks derives the legacy authz.Check projection: which other scopes
 // satisfy a check for each scope and which block directly excludes it.
 func (c *compiler) projectChecks(reg *Registry, scopes map[string]ScopeDefinition) {
-	broaderByBlock := make(map[string][]string)
 	for _, p := range reg.permissions {
 		if p.Checks == "" {
 			continue
@@ -633,13 +633,7 @@ func (c *compiler) projectChecks(reg *Registry, scopes map[string]ScopeDefinitio
 			continue
 		}
 		direct := scopes[p.ExcludedBy[0]]
-		broader := sortedUnique(p.ExcludedBy[1:])
-		if previous, seen := broaderByBlock[direct.Name]; seen && !slices.Equal(previous, broader) {
-			c.problemf("type %q: block %q directly excludes several permissions with different broader blocks (%v and %v)", p.Type, direct.Relation, previous, broader)
-			continue
-		}
-		broaderByBlock[direct.Name] = broader
-		direct.SatisfiedBy = broader
+		direct.SatisfiedBy = sortedUnique(p.ExcludedBy[1:])
 		scopes[p.ExcludedBy[0]] = direct
 	}
 }
@@ -693,17 +687,7 @@ func (c *compiler) projectRuntime(scopes []ScopeDefinition) []RuntimeScope {
 	for _, s := range scopes {
 		out = append(out, RuntimeScope{Name: s.Name, Lifecycle: RuntimeActive, SafeSince: s.RuntimeSafeSince})
 	}
-	seen := make(map[string]bool, len(c.cfg.RetiredRuntimeScopes))
 	for _, name := range c.cfg.RetiredRuntimeScopes {
-		switch {
-		case seen[name]:
-			c.problemf("config: retired runtime scope %q listed twice", name)
-			continue
-		case slices.ContainsFunc(scopes, func(s ScopeDefinition) bool { return s.Name == name }):
-			c.problemf("config: retired runtime scope %q is still declared", name)
-			continue
-		}
-		seen[name] = true
 		out = append(out, RuntimeScope{Name: name, Lifecycle: RuntimeRetired, SafeSince: 0})
 	}
 	slices.SortFunc(out, func(a, b RuntimeScope) int { return strings.Compare(a.Name, b.Name) })

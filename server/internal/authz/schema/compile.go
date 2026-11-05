@@ -94,17 +94,63 @@ func Compile(cfg Config, types ...TypeDecl) (*Registry, error) {
 	for i := range c.types {
 		c.validateType(&c.types[i])
 	}
+	c.validateBlockExpansions()
+	c.validateRetiredRuntimeScopes()
 	if len(c.problems) == 0 {
 		c.validatePermissionCycles()
 	}
 	if len(c.problems) > 0 {
 		return nil, &CompileError{Problems: c.problems}
 	}
-	reg := c.build()
-	if len(c.problems) > 0 {
-		return nil, &CompileError{Problems: c.problems}
+	return c.build(), nil
+}
+
+// validateBlockExpansions rejects a block that two Checks permissions expand
+// differently, since the legacy projection gives each block one set of
+// broader blocks.
+func (c *compiler) validateBlockExpansions() {
+	broaderByBlock := make(map[string][]string)
+	for i := range c.types {
+		t := &c.types[i]
+		if c.byName[t.name] != t {
+			continue
+		}
+		m := c.members(t)
+		for _, p := range t.permissions {
+			if p.checks == "" || len(p.excludedBy) == 0 {
+				continue
+			}
+			direct, ok := m.relations[p.excludedBy[0]]
+			if !ok {
+				continue
+			}
+			var broader []string
+			for _, name := range p.excludedBy[1:] {
+				if r, ok := m.relations[name]; ok {
+					broader = append(broader, r.storedAs)
+				}
+			}
+			broader = sortedUnique(broader)
+			if previous, seen := broaderByBlock[direct.storedAs]; seen && !slices.Equal(previous, broader) {
+				c.problemf("type %q: block %q directly excludes several permissions with different broader blocks (%v and %v)", t.name, direct.name, previous, broader)
+				continue
+			}
+			broaderByBlock[direct.storedAs] = broader
+		}
 	}
-	return reg, nil
+}
+
+// validateRetiredRuntimeScopes rejects duplicate retired runtime scopes and
+// retired scopes that a type still declares.
+func (c *compiler) validateRetiredRuntimeScopes() {
+	if dup, ok := firstDuplicate(c.cfg.RetiredRuntimeScopes); ok {
+		c.problemf("config: retired runtime scope %q listed twice", dup)
+	}
+	for _, name := range c.cfg.RetiredRuntimeScopes {
+		if _, declared := c.scopeOwner[name]; declared {
+			c.problemf("config: retired runtime scope %q is still declared", name)
+		}
+	}
 }
 
 func (c *compiler) validateConfig() {
@@ -362,7 +408,7 @@ func (c *compiler) validateRelations(t *TypeDecl) {
 		if !ok {
 			c.problemf("%s: selector keys %v must be distinct and exclude %s and %s", where, r.selectorKeys, selectorKeyResourceKind, selectorKeyResourceID)
 		}
-		keys := mergeKeys(typeKeys, relKeys)
+		keys := sortedUnique(append(slices.Clone(typeKeys), relKeys...))
 		seenAnchors := make(map[string]bool, len(r.anchors))
 		for _, anchor := range r.anchors {
 			switch {
@@ -462,12 +508,6 @@ func (c *compiler) validateSelectorKeys(keys []string) ([]string, bool) {
 	return slices.Compact(out), ok
 }
 
-func mergeKeys(a, b []string) []string {
-	out := append(slices.Clone(a), b...)
-	slices.Sort(out)
-	return slices.Compact(out)
-}
-
 func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 	checked := make(map[string]string)
 	for _, p := range t.permissions {
@@ -482,7 +522,7 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 				c.problemf("%s: ExcludedBy names grant %q; it needs a Block", where, name)
 			}
 		}
-		if dup := firstDuplicate(p.excludedBy); dup != "" {
+		if dup, ok := firstDuplicate(p.excludedBy); ok {
 			c.problemf("%s: ExcludedBy lists block %q twice", where, dup)
 		}
 		if p.checks == "" {
@@ -503,8 +543,8 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 			c.problemf("%s: Checks names %q, which is not a grant of this type", where, p.checks)
 			continue
 		}
-		if !grantOnly(m, p.expr, nil) {
-			c.problemf("%s: a permission that Checks a scope may use only Rel, Union, Minus and grant-only Perm", where)
+		if why := checkProjectable(m, p.expr, true, len(p.excludedBy) > 0, nil); why != "" {
+			c.problemf("%s: a permission that Checks a scope must be expressible as a legacy check: %s", where, why)
 			continue
 		}
 		if !slices.Contains(satisfyingRelations(m, p.expr, nil), relation) {
@@ -521,15 +561,16 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 	}
 }
 
-func firstDuplicate(values []string) string {
-	seen := make(map[string]bool, len(values))
+func firstDuplicate[T comparable](values []T) (T, bool) {
+	seen := make(map[T]bool, len(values))
 	for _, v := range values {
 		if seen[v] {
-			return v
+			return v, true
 		}
 		seen[v] = true
 	}
-	return ""
+	var zero T
+	return zero, false
 }
 
 func (c *compiler) validateExpr(t *TypeDecl, m members, where string, e Expr) {
@@ -591,29 +632,44 @@ func (c *compiler) validateExpr(t *TypeDecl, m members, where string, e Expr) {
 	}
 }
 
-// grantOnly reports whether e reads only grants, through Rel, Union, Minus and
-// Perm references that are themselves grant-only.
-func grantOnly(m members, e Expr, visiting []string) bool {
+// checkProjectable explains why the legacy check projection cannot represent
+// e exactly, or returns "". The projection keeps the satisfying grants and one
+// exclusion, so e may use Rel, Union and grant-only Perm, and Minus only as the
+// permission's top-level node, subtracting a single Rel, without ExcludedBy.
+func checkProjectable(m members, e Expr, top, excluded bool, visiting []string) string {
 	switch e.op {
 	case OpRel:
-		return true
-	case OpUnion, OpMinus:
+		return ""
+	case OpUnion:
 		for _, op := range e.operands {
-			if !grantOnly(m, op, visiting) {
-				return false
+			if why := checkProjectable(m, op, false, excluded, visiting); why != "" {
+				return why
 			}
 		}
-		return true
+		return ""
+	case OpMinus:
+		switch {
+		case !top:
+			return "Minus is allowed only as the top-level expression"
+		case excluded:
+			return "Minus cannot be combined with ExcludedBy"
+		case e.operands[1].op != OpRel:
+			return "Minus must subtract a single Rel"
+		}
+		return checkProjectable(m, e.operands[0], false, excluded, visiting)
 	case OpPerm:
 		p, ok := m.perms[e.name]
-		if !ok || slices.Contains(visiting, e.name) {
-			return false
+		switch {
+		case !ok, slices.Contains(visiting, e.name):
+			return fmt.Sprintf("Perm(%q) must name a grant-only permission", e.name)
+		case len(p.excludedBy) > 0:
+			return fmt.Sprintf("Perm(%q) names a permission with ExcludedBy", e.name)
 		}
-		return len(p.excludedBy) == 0 && grantOnly(m, p.expr, append(visiting, e.name))
+		return checkProjectable(m, p.expr, false, excluded, append(visiting, e.name))
 	case OpIs, OpVia, OpWhen:
-		return false
+		return fmt.Sprintf("%s reads facts, not grants", e.op)
 	default:
-		return false
+		return "missing expression"
 	}
 }
 
@@ -666,24 +722,13 @@ func (c *compiler) validateAlternatives(t *TypeDecl) {
 				anyBlock = true
 			}
 		}
-		if dup := firstDuplicateRef(a.options); dup != nil {
+		if dup, ok := firstDuplicate(a.options); ok {
 			c.problemf("%s: alternative %s.%s listed twice", where, dup.Type, dup.Permission)
 		}
 		if a.veto && !anyBlock {
 			c.problemf("%s: VetoBlocks needs an alternative with ExcludedBy", where)
 		}
 	}
-}
-
-func firstDuplicateRef(refs []PermissionRef) *PermissionRef {
-	seen := make(map[PermissionRef]bool, len(refs))
-	for _, ref := range refs {
-		if seen[ref] {
-			return &ref
-		}
-		seen[ref] = true
-	}
-	return nil
 }
 
 // validatePermissionCycles rejects permissions that reach themselves through
