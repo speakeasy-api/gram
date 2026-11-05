@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -372,4 +373,60 @@ func TestAuthClientRemoteSessionActions_RefuseARetiredIssuer(t *testing.T) {
 	session, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
 	require.NoError(t, err, "the grant is untouched")
 	require.False(t, session.AutoRefresh)
+}
+
+// Without enforcement the administrator's client lists are the servers behind
+// its links, whichever organization owns them and without a slug fallback.
+// Enforcement scopes them to the organization and adds the servers that offer
+// the client.
+func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID, organizationID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	q := repo.New(ti.conn)
+
+	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "mode-list-issuer", "https://issuer.example.com/mode-list")
+	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "mode-list-cid")
+
+	otherOrganization := createOrganization(t, ctx, ti.conn, "mode-list-other")
+	otherProject, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: uuid.New(), Name: "Other", Slug: "mode-list-other-project", OrganizationID: otherOrganization})
+	require.NoError(t, err)
+	otherSignIn := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "mode-list-other-usi")
+	otherServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, otherProject, otherSignIn, "mode-list-other-server", "https://mode-list-other.example.com/mcp")
+
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "mode-list-usi")
+	fixtures := authclientbackfill.New(ti.conn)
+	tunnelID, unnamedServer := uuid.New(), uuid.New()
+	require.NoError(t, fixtures.SeedTunneledSourceFixture(ctx, authclientbackfill.SeedTunneledSourceFixtureParams{ID: tunnelID, ProjectID: projectID, Name: "mode-list-tunnel", KeyHash: "hash-mode-list", ResourceIdentifier: conv.ToPGText("https://mode-list.internal.example.com/mcp")}))
+	require.NoError(t, fixtures.SeedTunneledMCPServerFixture(ctx, authclientbackfill.SeedTunneledMCPServerFixtureParams{ID: unnamedServer, ProjectID: projectID, Slug: conv.ToPGText("mode-list-unnamed"), TunneledMcpServerID: conv.ToNullUUID(tunnelID)}))
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, unnamedServer, registration)
+	linkedServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "mode-list-linked", "https://mode-list-linked.example.com/mcp")
+	for _, id := range []uuid.UUID{signIn, otherSignIn} {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: id}))
+	}
+
+	listed := func() []string {
+		servers, err := ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
+		require.NoError(t, err)
+		ids := make([]string, 0, len(servers.Items))
+		for _, item := range servers.Items {
+			ids = append(ids, item.ID)
+		}
+		return ids
+	}
+
+	preflight, err := ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"mode-list-linked", "mode-list-other-server"}, preflight.McpServerNames)
+	require.ElementsMatch(t, []string{linkedServer.String(), otherServer.String()}, listed())
+
+	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
+
+	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"mode-list-linked", "mode-list-unnamed"}, preflight.McpServerNames)
+	require.ElementsMatch(t, []string{linkedServer.String(), unnamedServer.String()}, listed())
 }
