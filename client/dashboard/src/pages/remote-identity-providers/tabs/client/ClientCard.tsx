@@ -463,12 +463,9 @@ export function ClientCard({
                   </Label>
                 </div>
                 <Text small muted>
-                  Lets the authorization server label each connection with its
-                  MCP client, such as Claude or Cursor. Only sent for public
-                  servers that don't require sign-in. Clients choose their own
-                  names, so treat this as a label. Some authorization servers
-                  reject unknown parameters, so test by connecting from an MCP
-                  client to one of those public servers.
+                  Shows the authorization server which MCP client connected,
+                  such as Claude or Cursor. Public servers only. Test a
+                  connection after turning it on, since some servers reject it.
                 </Text>
               </div>
             )}
