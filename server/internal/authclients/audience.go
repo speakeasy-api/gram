@@ -334,11 +334,17 @@ func readAudience(ctx context.Context, db repo.DBTX, client repo.McpAuthClient) 
 	type entryKey struct{ principal, level, appliesTo, project string }
 	seen := make(map[entryKey]struct{})
 	entries := make([]*types.AuthClientAudienceEntry, 0, len(own)+len(broad))
-	// A deleted agent can never act again, so its rule decides nothing.
-	// Leaving it out also keeps it out of the save, which replaces this
-	// client's rules and so removes the stale grant.
+	// A deleted agent can never act again, so its rule decides nothing and is
+	// not listed. A rule naming this client then drops out of the next save,
+	// which replaces this client's rules; organization-wide rows are left to
+	// the surface that owns them.
 	deletedAgents := make(map[string]struct{})
+	checked := make(map[string]struct{})
 	for _, grant := range slices.Concat(own, broad) {
+		if _, done := checked[grant.PrincipalUrn]; done {
+			continue
+		}
+		checked[grant.PrincipalUrn] = struct{}{}
 		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
 		if err != nil || principal.Type != urn.PrincipalTypeAgent {
 			continue

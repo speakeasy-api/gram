@@ -646,8 +646,10 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		name := names[key.principalURN]
 		if name.displayName == "" {
 			// A deleted agent can never act again, so its rule decides
-			// nothing. Leaving it out also keeps it out of the save, which
-			// replaces this resource's rules and so removes the stale grant.
+			// nothing and is not listed. A rule naming this resource then
+			// drops out of the next save, which replaces this resource's
+			// rules; organization-wide rows are left to the surface that
+			// owns them.
 			if strings.HasPrefix(key.principalURN, string(urn.PrincipalTypeAgent)+":") {
 				continue
 			}
