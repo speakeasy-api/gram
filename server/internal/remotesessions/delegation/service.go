@@ -603,7 +603,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+		s.recordLocalFault(ctx, b, err)
 		return Assertion{}, ErrTemporary
 	}
 	if c.claim != claim {
@@ -612,6 +612,9 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	// Load full discovery and credentials only after obtaining durable ownership.
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Assertion{}, ErrTemporary
+		}
 		if definitiveDelegationFailure(err) {
 			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
@@ -648,7 +651,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil {
-		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+		s.recordLocalFault(ctx, b, err)
 		return Assertion{}, ErrTemporary
 	}
 	if !marked {
@@ -948,6 +951,13 @@ func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnecti
 	human := urn.NewUserSubject(b.HumanID)
 	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
 		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+// recordLocalFault blames Speakeasy for a local failure, unless the caller disconnected.
+func (s *Service) recordLocalFault(ctx context.Context, b Binding, err error) {
+	if !errors.Is(err, context.Canceled) {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+	}
 }
 
 func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {

@@ -3,6 +3,7 @@ package delegation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -324,6 +325,33 @@ func requireOneInternalError(t *testing.T, rec *mcpconnectionattemptstest.Record
 	require.Equal(t, b.IssuerID.String(), row.RemoteSessionIssuerID)
 	require.Equal(t, b.ClientID.String(), row.RemoteSessionClientID)
 	require.Len(t, rec.Rows(), 1)
+}
+
+func TestRenewal_ClientDisconnectBeforePOSTRecordsNothing(t *testing.T) {
+	t.Parallel()
+	disconnect := fmt.Errorf("provider discovery: %w", context.Canceled)
+	for _, tc := range []struct {
+		name  string
+		fault func(*Service, *delegationMemoryStore)
+	}{
+		{"reread", func(s *Service, store *delegationMemoryStore) {
+			s.store = &delegationRereadHookStore{delegationStore: store, beforeReread: func() {}, rereadError: disconnect}
+		}},
+		{"provider load", func(s *Service, _ *delegationMemoryStore) {
+			s.loadProvider = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) { return nil, disconnect }
+		}},
+		{"mark", func(_ *Service, store *delegationMemoryStore) { store.attemptError = disconnect }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, _, b, allow, rec := newRenewalFixture(t, 30*time.Second)
+			tc.fault(s, store)
+			resolveBeforePOST(t, s, store, b, allow)
+			rec.RequireNothing()
+			require.Equal(t, uuid.Nil, store.rows[b].claim)
+			require.True(t, store.rows[b].retryAfter.IsZero(), "a disconnect must not delay the next call")
+		})
+	}
 }
 
 func TestRenewal_RereadFailureRecordsInternalError(t *testing.T) {
