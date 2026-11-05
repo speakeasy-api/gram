@@ -306,6 +306,7 @@ func TestConnectionRecoveryCompletesThroughTheOffer(t *testing.T) {
 			require.NoError(t, f.ti.service.HandleRemoteLoginCallback(w, req))
 			require.Equal(t, http.StatusSeeOther, w.Code)
 			require.True(t, strings.HasSuffix(w.Header().Get("Location"), mcp.ConnectionRecoveryDonePath))
+			require.Equal(t, consentExchangeCapture{HasResource: true, Resource: f.upstream}, posted.Load(), "token leg")
 
 			session, err := q.GetActiveRemoteSession(f.ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: f.link.RegistrationID})
 			require.NoError(t, err, "the connection is stored")

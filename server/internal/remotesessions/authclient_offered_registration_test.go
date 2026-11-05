@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -429,4 +431,35 @@ func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"mode-list-linked", "mode-list-unnamed"}, preflight.McpServerNames)
 	require.ElementsMatch(t, []string{linkedServer.String(), unnamedServer.String()}, listed())
+}
+
+// A platform-global client belongs to no organization, so neither client list
+// reaches it from an organization, whichever organizations link it.
+func TestClientMcpServers_PlatformGlobalClientIsOutOfReach(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	q := repo.New(ti.conn)
+
+	issuerID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "global-list-issuer")
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		RemoteSessionIssuerID: issuerID,
+		ClientID:              "global-list-cid",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "global-list-usi")
+	seedRemoteMcpServerForLogin(t, ctx, ti.conn, *authCtx.ProjectID, signIn, "global-list-server", "https://global-list.example.com/mcp")
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: signIn}))
+
+	_, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: client.ID.String()})
+	var refused *oops.ShareableError
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, oops.CodeNotFound, refused.Code)
+
+	_, err = ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: client.ID.String()})
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, oops.CodeNotFound, refused.Code)
 }
