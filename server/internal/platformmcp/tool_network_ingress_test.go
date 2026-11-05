@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -120,6 +121,9 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.CredentialsConfigured = false })}, networkIngressNextAddCredentials},
 		{"disabled", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Enabled = false; i.Status = "disabled" })}, networkIngressNextEnable},
 		{"error", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "error" })}, networkIngressNextRepair},
+		{"gateway not approved", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "provider_service_not_approved", ""
+		})}, networkIngressNextApproveGateway},
 		{"degraded", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "degraded" })}, networkIngressNextRepair},
 		{"pending", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "pending" })}, networkIngressNextWait},
 		{"online without DNS", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.DNSName = "" })}, networkIngressNextWait},
@@ -264,4 +268,10 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	require.Equal(t, "private-mcp.example.test", got.Ingress.DNSName)
 	require.False(t, got.ReadyForPrivateAccess)
 	require.Equal(t, networkIngressNextUnsupportedProvider, got.NextAction)
+}
+
+func TestNetworkIngressServiceNotApprovedMatchesReconcilerCode(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, k8s.NetworkIngressErrorProviderServiceNotApproved, networkIngressServiceNotApproved)
+	require.Equal(t, networkIngressServiceNotApproved, safeNetworkIngressErrorCode(networkIngressServiceNotApproved), "the code is returned to clients, not withheld")
 }
