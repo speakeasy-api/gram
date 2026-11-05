@@ -77,7 +77,7 @@ RETURNING d.id
 // Their text may still carry what was removed, so they are deleted and the
 // job rebuilds the day from the sources still eligible. Parents that folded
 // them go next, through DeleteOrphanedRollups. It runs for every
-// organization, flag or not: removal from memory must not depend on rollout.
+// organization, gate on or off: removal from memory must not depend on it.
 func (q *Queries) DeleteStaleDayDigests(ctx context.Context) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, deleteStaleDayDigests)
 	if err != nil {
@@ -104,6 +104,44 @@ FROM memory_digests d
 WHERE d.id = $1
   AND d.project_id = $2
   AND d.organization_id = $3
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = $2
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = $2
+    )
+    SELECT stale.id FROM stale
+  )
 `
 
 type GetDigestParams struct {
@@ -123,6 +161,10 @@ type GetDigestRow struct {
 	ChildDigestIds []uuid.UUID
 }
 
+// Stale digests are left out: one that folded a chat or memo no longer
+// eligible, or a child digest that is gone, and every parent above it.
+// DeleteStaleDayDigests removes them on the next run; until then an
+// exclusion or deletion must already hide them.
 func (q *Queries) GetDigest(ctx context.Context, arg GetDigestParams) (GetDigestRow, error) {
 	row := q.db.QueryRow(ctx, getDigest, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i GetDigestRow
@@ -440,6 +482,44 @@ FROM memory_digests d
 WHERE d.id = ANY($1::uuid[])
   AND d.project_id = $2
   AND d.organization_id = $3
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = $2
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = $2
+    )
+    SELECT stale.id FROM stale
+  )
 ORDER BY d.period_start
 `
 
@@ -456,6 +536,10 @@ type ListDigestsByIDRow struct {
 	Content     string
 }
 
+// Stale digests are left out: one that folded a chat or memo no longer
+// eligible, or a child digest that is gone, and every parent above it.
+// DeleteStaleDayDigests removes them on the next run; until then an
+// exclusion or deletion must already hide them.
 func (q *Queries) ListDigestsByID(ctx context.Context, arg ListDigestsByIDParams) ([]ListDigestsByIDRow, error) {
 	rows, err := q.db.Query(ctx, listDigestsByID, arg.Ids, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -486,6 +570,8 @@ const listMemoryOrganizations = `-- name: ListMemoryOrganizations :many
 SELECT DISTINCT c.organization_id
 FROM chats c
 WHERE c.summary_redacted IS TRUE
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
   AND c.summary_generated_at >= $1::timestamptz
 UNION
 SELECT DISTINCT m.organization_id
@@ -500,8 +586,9 @@ WHERE m.deleted IS FALSE
 // not owned through a personal account. An unclassified account
 // (account_type NULL) fails closed like session recall.
 // Organizations with redacted summaries or memos since @since. The job
-// evaluates the rollout flag for these, then lists candidates only for
-// enabled ones, so orgs with the flag off never crowd a batch.
+// checks the Business Memory Extraction gate (memorygate.Enabled) for
+// these, then lists candidates only for enabled ones, so orgs with the
+// gate off never crowd a batch.
 func (q *Queries) ListMemoryOrganizations(ctx context.Context, since pgtype.Timestamptz) ([]string, error) {
 	rows, err := q.db.Query(ctx, listMemoryOrganizations, since)
 	if err != nil {
@@ -590,6 +677,44 @@ FROM memory_digests d
 WHERE d.project_id = $1
   AND d.organization_id = $2
   AND d.period_start >= $3::date
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = $1
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = $1
+    )
+    SELECT stale.id FROM stale
+  )
 ORDER BY d.period_start, d.level
 `
 
@@ -611,6 +736,10 @@ type ListRecallDigestsRow struct {
 
 // Every digest of the project whose period starts at or after @since. The
 // caller drops digests a parent already folded.
+// Stale digests are left out: one that folded a chat or memo no longer
+// eligible, or a child digest that is gone, and every parent above it.
+// DeleteStaleDayDigests removes them on the next run; until then an
+// exclusion or deletion must already hide them.
 func (q *Queries) ListRecallDigests(ctx context.Context, arg ListRecallDigestsParams) ([]ListRecallDigestsRow, error) {
 	rows, err := q.db.Query(ctx, listRecallDigests, arg.ProjectID, arg.OrganizationID, arg.Since)
 	if err != nil {

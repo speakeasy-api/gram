@@ -6,11 +6,14 @@
 
 -- name: ListMemoryOrganizations :many
 -- Organizations with redacted summaries or memos since @since. The job
--- evaluates the rollout flag for these, then lists candidates only for
--- enabled ones, so orgs with the flag off never crowd a batch.
+-- checks the Business Memory Extraction gate (memorygate.Enabled) for
+-- these, then lists candidates only for enabled ones, so orgs with the
+-- gate off never crowd a batch.
 SELECT DISTINCT c.organization_id
 FROM chats c
 WHERE c.summary_redacted IS TRUE
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
   AND c.summary_generated_at >= @since::timestamptz
 UNION
 SELECT DISTINCT m.organization_id
@@ -64,7 +67,7 @@ LIMIT @row_limit;
 -- Their text may still carry what was removed, so they are deleted and the
 -- job rebuilds the day from the sources still eligible. Parents that folded
 -- them go next, through DeleteOrphanedRollups. It runs for every
--- organization, flag or not: removal from memory must not depend on rollout.
+-- organization, gate on or off: removal from memory must not depend on it.
 DELETE FROM memory_digests d
 WHERE d.level = 'day'
   AND (
@@ -183,11 +186,53 @@ RETURNING id;
 -- name: ListRecallDigests :many
 -- Every digest of the project whose period starts at or after @since. The
 -- caller drops digests a parent already folded.
+-- Stale digests are left out: one that folded a chat or memo no longer
+-- eligible, or a child digest that is gone, and every parent above it.
+-- DeleteStaleDayDigests removes them on the next run; until then an
+-- exclusion or deletion must already hide them.
 SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
 FROM memory_digests d
 WHERE d.project_id = @project_id
   AND d.organization_id = @organization_id
   AND d.period_start >= @since::date
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = @project_id
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = @project_id
+    )
+    SELECT stale.id FROM stale
+  )
 ORDER BY d.period_start, d.level;
 
 -- name: ListRecallChats :many
@@ -236,18 +281,102 @@ ORDER BY m.created_at DESC
 LIMIT @row_limit;
 
 -- name: GetDigest :one
+-- Stale digests are left out: one that folded a chat or memo no longer
+-- eligible, or a child digest that is gone, and every parent above it.
+-- DeleteStaleDayDigests removes them on the next run; until then an
+-- exclusion or deletion must already hide them.
 SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
 FROM memory_digests d
 WHERE d.id = @id
   AND d.project_id = @project_id
-  AND d.organization_id = @organization_id;
+  AND d.organization_id = @organization_id
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = @project_id
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = @project_id
+    )
+    SELECT stale.id FROM stale
+  );
 
 -- name: ListDigestsByID :many
+-- Stale digests are left out: one that folded a chat or memo no longer
+-- eligible, or a child digest that is gone, and every parent above it.
+-- DeleteStaleDayDigests removes them on the next run; until then an
+-- exclusion or deletion must already hide them.
 SELECT d.id, d.level, d.period_start, d.content
 FROM memory_digests d
 WHERE d.id = ANY(@ids::uuid[])
   AND d.project_id = @project_id
   AND d.organization_id = @organization_id
+  AND d.id NOT IN (
+    WITH RECURSIVE stale AS (
+      SELECT s.id
+      FROM memory_digests s
+      WHERE s.project_id = @project_id
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+      UNION
+      SELECT p.id
+      FROM memory_digests p
+      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
+      WHERE p.project_id = @project_id
+    )
+    SELECT stale.id FROM stale
+  )
 ORDER BY d.period_start;
 
 -- name: ListZoomChats :many
