@@ -472,11 +472,11 @@ func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remo
 // unusedChainer fails a test that reaches identity chaining.
 type unusedChainer struct{ identityChainer }
 
-// A personal client handed back to the upstream client choice, for stale
-// header copies or a registration that may chain, was checked against the
-// agent's attached connection. If the binding moves to another lender's
-// connection between that check and the token read, neither the direct nor
-// the gateway path serves it; the checked connection still serves.
+// A personal client on a compatibility path, for stale header copies or a
+// registration that may chain, was checked against the agent's attached
+// connection. If the binding moves to another lender's connection between
+// that check and the token read, neither the direct nor the gateway path
+// serves it; the checked connection still serves.
 func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 	t.Parallel()
 
@@ -510,8 +510,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 		f := newAuthClientFixture(t, pool)
 		client := handback(t, f)
 		// The credential chose both the client and its registration, which
-		// stays bound to the sign-in, so the upstream client choice remains
-		// usable for the handback.
+		// stays bound to the sign-in.
 		selector := &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: uuid.New(), credentialID: uuid.New()}
 		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: selector.userSessionIssuerID, ProjectID: validUUID(f.projectID), Slug: "usi-" + selector.userSessionIssuerID.String()[:8]}))
 		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: selector.userSessionIssuerID}))
@@ -538,14 +537,12 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
 				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent}
-				_, handled, err := f.service.enforceAuthClient(ctx, httptest.NewRecorder(), authentication, selector)
+				choice, err := f.service.enforceAuthClient(ctx, httptest.NewRecorder(), authentication, selector)
 				require.NoError(t, err)
-				require.False(t, handled, "the request is handed back to the upstream client choice")
-				require.Nil(t, authentication.authClient, "a handback is not served as a typed client")
+				require.Nil(t, authentication.authClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, authentication.attachedSession, "the checked connection is carried apart from the typed selection")
-				choice, err := selector.forServer(ctx, f.serverID)
-				require.NoError(t, err)
-				authentication.chosenClient = choice.clientID
+				require.Equal(t, validUUID(f.registration), choice.clientID, "the resolver's own registration serves")
+				require.Equal(t, choice.clientID, authentication.chosenClient)
 
 				if replaced {
 					tokens.bound = uuid.New()
@@ -584,7 +581,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				require.NoError(t, member.upstreamUnavailable)
 				require.Equal(t, authClientLegacy, member.authClient.outcome)
 				require.Equal(t, hb.reason, member.authClient.reason)
-				require.False(t, member.typedAuthClient, "a handback is not served as a typed client")
+				require.False(t, member.typedAuthClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, member.authClient.attachedSession)
 
 				if replaced {

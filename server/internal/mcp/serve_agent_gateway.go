@@ -23,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -177,8 +178,9 @@ func (s *Service) authenticateAgentGatewayKey(
 	return s.identityValidator.StampAgent(keyCtx, agentID), authCtx, nil
 }
 
-// resolveMemberTokens honors a selected member before falling back to the
-// member issuer for legacy agent keys. An agent gateway has no issuer itself.
+// resolveMemberTokens honors a selected member before serving an agent key
+// without a choice for it by the member's own clients. An agent gateway has
+// no issuer itself.
 func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if gate.agentID == uuid.Nil || (gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member)) {
 		tokens, err := gate.memberTokens(ctx, member)
@@ -237,12 +239,18 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	return tokens, nil
 }
 
-// agentMemberClientTokens authorizes one legacy agent member client and reads
-// its credential from the connection the permit was decided for: the exact
-// attachment, pinned, or for an unattached agent key its validated
-// authorizer's own connection. A gate collecting served credentials records
-// which auth client and connection the registration's tokens come from.
+// agentMemberClientTokens authorizes one client of a member an agent key has
+// no choice for and reads its credential from the connection the permit was
+// decided for: the exact attachment, pinned, or for an unattached agent key
+// its validated authorizer's own connection. Once the organization enforces,
+// the member's auth client authorizes the registration without a sign-in
+// link. A gate collecting served credentials records which auth client and
+// connection the registration's tokens come from.
 func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateContext, member metaMember, issuer, clientID uuid.UUID, clientType string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	mode, err := s.authClientMode(ctx, gate.organizationID)
+	if err != nil {
+		return nil, err
+	}
 	connection, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, issuer, uuid.NullUUID{UUID: clientID, Valid: true}, clientType)
 	if err != nil {
 		return nil, err
@@ -252,7 +260,20 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if connection.authorizer {
 		subject = urn.NewUserSubject(connection.owner)
 	}
-	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
+	var resolved map[uuid.UUID]remotesessions.UpstreamToken
+	if mode == feature.AuthClientResolverEnforced {
+		resolved, err = s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID:           member.projectID,
+			OrganizationID:      gate.organizationID,
+			UserSessionIssuerID: issuer,
+			Subject:             subject,
+			RegistrationID:      clientID,
+			SkipUnusable:        false,
+			Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request),
+		})
+	} else {
+		resolved, err = s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
+	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
 	}
@@ -286,10 +307,36 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 	return s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
 }
 
-// agentServerClients lists the clients issuer binds that belong to the
-// target server. An issuer can also bind clients of sibling servers, which
-// never serve this one.
+// agentServerClients lists the OAuth registrations that serve the target
+// server for an agent key with no choice for it. Once the organization
+// enforces, they are the registrations of the server's own personal and
+// service-account auth clients, whether or not the sign-in links them.
+// Before that, they are the clients issuer binds that belong to the server;
+// an issuer can also bind clients of sibling servers, which never serve this
+// one.
 func (s *Service) agentServerClients(ctx context.Context, target agentServerTarget, issuer uuid.UUID) ([]remotesessions.Client, error) {
+	mode, err := s.authClientMode(ctx, target.organizationID)
+	if err != nil {
+		return nil, err
+	}
+	if mode == feature.AuthClientResolverEnforced {
+		offered, err := authclientsrepo.New(s.db).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{McpServerID: target.serverID, ProjectID: target.projectID, OrganizationID: target.organizationID})
+		if err != nil {
+			return nil, fmt.Errorf("load agent server auth clients: %w", err)
+		}
+		var registrations []uuid.UUID
+		for _, client := range offered {
+			oauthBacked := client.ClientType == authClientTypeRemoteSession || client.ClientType == authClientTypeServiceAccount
+			if oauthBacked && client.RemoteSessionClientID.Valid && !slices.Contains(registrations, client.RemoteSessionClientID.UUID) {
+				registrations = append(registrations, client.RemoteSessionClientID.UUID)
+			}
+		}
+		clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, target.projectID, target.organizationID, registrations)
+		if err != nil {
+			return nil, fmt.Errorf("load agent server registrations: %w", err)
+		}
+		return clients, nil
+	}
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, target.projectID, target.organizationID, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("load agent server clients: %w", err)
