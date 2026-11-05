@@ -679,6 +679,25 @@ open their effective assignments; the dropdown always offers compact member sear
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
+35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
+    holds every scope, so only a session as the persona shows the owner view.
+    The persona's user row and membership exist locally (`kwame@` the local
+    seed domain), but the dev-idp signs in the git committer only, so a
+    session as the persona needs a dev-idp account for that email; until one
+    exists, verify the data as the local admin and the owner scope through
+    the server tests in `server/internal/telemetry` and `server/internal/chat`.
+    - **Team → Members** lists Kwame Mensah with the Member role only.
+    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
+    - **Agent Sessions** as the persona shows exactly five sessions: the three
+      Deploy watcher sessions (actor is the agent, no user) and the two the
+      persona ran. Opening a Deploy watcher session shows the prompt, the
+      tool calls with their JSON results, and the answer.
+    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
+      those five sessions: the agent's rows name Deploy watcher as actor with
+      no person, the persona's rows name them. The first agent session also
+      contributes PostToolUse hook rows classified as the Acme gateway.
+    - As the local admin (who holds both scopes) the same rows appear among
+      everyone else's, and no other member's sessions appear as the persona.
 
 ## On failure
 
