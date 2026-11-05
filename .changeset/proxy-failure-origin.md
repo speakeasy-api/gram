@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Distinguish local request setup failures, private-connection capacity, and platform availability checks in MCP connection history without changing request responses.
+Add opt-in hooks that distinguish local request setup failures, private-connection capacity, and platform availability checks for MCP connection history. Nothing enables them yet, so connection history and request responses do not change.
