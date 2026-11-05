@@ -11,6 +11,7 @@ import {
 } from "@/components/observe/skillLoadChannel";
 import { applyFilterAdd } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useSlugs } from "@/contexts/Sdk";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { useCallback } from "react";
@@ -156,17 +157,22 @@ export function buildObserveHref(
 
 /**
  * Binds {@link buildObserveHref} to the current project and URL, for panels
- * that only know what they are showing, not where they are. Every member can
- * open Tool Logs: without log:read it shows their own activity.
+ * that only know what they are showing, not where they are. Tool Logs admits
+ * every project reader (without log:read it shows their own activity), so the
+ * link is undefined only for a viewer the page would turn away, such as an
+ * MCP-only member.
  */
-export function useObserveLogsLink(): (scope?: ObserveDeepLinkScope) => string {
+export function useObserveLogsLink(): (
+  scope?: ObserveDeepLinkScope,
+) => string | undefined {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
+  const { canOpen } = useToolLogsAccess();
   const base = `/${orgSlug}/projects/${projectSlug}/logs`;
 
   return useCallback(
     (scope?: ObserveDeepLinkScope) =>
-      buildObserveHref(base, searchParams, scope),
-    [base, searchParams],
+      canOpen ? buildObserveHref(base, searchParams, scope) : undefined,
+    [base, canOpen, searchParams],
   );
 }

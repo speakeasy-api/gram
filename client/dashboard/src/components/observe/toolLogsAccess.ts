@@ -4,7 +4,7 @@ import { useReadableAgents } from "@/hooks/useReadableAgents";
 import type { Chat } from "@gram/client/models/components/chat.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useMemo } from "react";
-import type { FacetGroup } from "./LogsFacetRail";
+import type { FacetGroup, FacetValue } from "./LogsFacetRail";
 
 /**
  * How much of Tool Logs the viewer sees. Every member reads the rows of their
@@ -12,9 +12,14 @@ import type { FacetGroup } from "./LogsFacetRail";
  * to every member's rows. Mirrors the server's own-scope fallback.
  */
 export type ToolLogsAccess = {
+  /** project:read on the active project, which the Tool Logs page admits. */
+  canOpen: boolean;
   /** log:read on the active project: every member's rows, not only their own. */
   projectWide: boolean;
-  /** Grants still loading; projectWide is false until they arrive. */
+  /**
+   * Grants still loading. Both flags are false until they arrive, so a reader
+   * that acts on them fails closed rather than asking for everyone's rows.
+   */
   isLoading: boolean;
 };
 
@@ -23,25 +28,35 @@ export function useToolLogsAccess(): ToolLogsAccess {
   const { hasScope, isLoading } = useRBAC();
   // An empty id would make this an "any project" check, so outside a project
   // the answer is no.
+  const canOpen = Boolean(project.id) && hasScope("project:read", project.id);
   const projectWide = Boolean(project.id) && hasScope("log:read", project.id);
-  return useMemo(() => ({ projectWide, isLoading }), [projectWide, isLoading]);
+  return useMemo(
+    () => ({ canOpen, projectWide, isLoading }),
+    [canOpen, projectWide, isLoading],
+  );
 }
 
 /**
- * The agents whose logs the viewer owns, out of the agents they can read. A
- * latched agent (owner reassignment pending) is nobody's, as on the server.
+ * Whether the viewer owns this agent's logs. A latched agent (owner
+ * reassignment pending) is nobody's, as on the server.
  */
+export function isOwnedAgent(
+  agent: Pick<ManagedAgent, "ownerUserId" | "ownerReassignmentRequiredAt">,
+  viewerUserId: string,
+): boolean {
+  return (
+    agent.ownerUserId === viewerUserId && !agent.ownerReassignmentRequiredAt
+  );
+}
+
+/** The agents whose logs the viewer owns, out of the agents they can read. */
 export function ownedAgentIds(
   agents: readonly ManagedAgent[] | undefined,
   viewerUserId: string,
 ): ReadonlySet<string> {
   return new Set(
     (agents ?? [])
-      .filter(
-        (agent) =>
-          agent.ownerUserId === viewerUserId &&
-          !agent.ownerReassignmentRequiredAt,
-      )
+      .filter((agent) => isOwnedAgent(agent, viewerUserId))
       .map((agent) => agent.id),
   );
 }
@@ -68,29 +83,29 @@ export function isOwnScopeSession(
 }
 
 /**
- * The Tool Logs facets for a viewer limited to their own rows. The facet
- * counts are project-wide aggregates, so they are dropped rather than promise
- * rows the list will not show, and identity facets offer only the viewer and
- * the agents they own. Roles enumerate other members, so that facet goes.
+ * The Tool Logs facets for a viewer limited to their own rows. No project-wide
+ * options are fetched for them, so a group holds only what a link selected
+ * (kept so it can be cleared) plus, for the identity facets, the viewer and
+ * the agents they own. Roles enumerate other members, so that facet goes, and
+ * a group left with nothing to pick goes with it.
  */
 export function ownScopeFacetGroups(
   groups: readonly FacetGroup[],
-  viewerEmail: string,
-  owned: ReadonlySet<string>,
+  own: { user: readonly FacetValue[]; agent: readonly FacetValue[] },
 ): FacetGroup[] {
   return groups.flatMap((group) => {
     if (group.id === "role") return [];
-    let values = group.values;
-    if (group.id === "user") {
-      values = values.filter((value) => value.value === viewerEmail);
-    } else if (group.id === "agent") {
-      values = values.filter((value) => owned.has(value.value));
+    let values: FacetValue[] = group.values.map(
+      ({ count: _count, ...value }) => value,
+    );
+    if (group.id === "user" || group.id === "agent") {
+      const ownValues = own[group.id];
+      const offered = new Set(ownValues.map((value) => value.value));
+      values = [
+        ...ownValues,
+        ...values.filter((value) => !offered.has(value.value)),
+      ];
     }
-    return [
-      {
-        ...group,
-        values: values.map(({ count: _count, ...value }) => value),
-      },
-    ];
+    return values.length > 0 ? [{ ...group, values }] : [];
   });
 }

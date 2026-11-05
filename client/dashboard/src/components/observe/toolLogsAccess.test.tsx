@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FacetGroup } from "./LogsFacetRail";
 import {
   isOwnScopeSession,
+  isOwnedAgent,
   ownScopeFacetGroups,
   ownedAgentIds,
   useOwnedAgentIds,
@@ -73,13 +74,36 @@ describe("useToolLogsAccess", () => {
     );
   });
 
-  it("reports grants still loading so callers can hold their notice", () => {
+  it("opens the page to project readers only", () => {
+    expect(renderHook(useToolLogsAccess).result.current.canOpen).toBe(false);
+
+    state.grants.add("project:read@project-1");
+    expect(renderHook(useToolLogsAccess).result.current.canOpen).toBe(true);
+  });
+
+  it("reports grants still loading, with nothing granted until they arrive", () => {
     state.grantsLoading = true;
 
     expect(renderHook(useToolLogsAccess).result.current).toEqual({
+      canOpen: false,
       projectWide: false,
       isLoading: true,
     });
+  });
+});
+
+describe("isOwnedAgent", () => {
+  it("is the owner's unless the agent is latched", () => {
+    expect(isOwnedAgent(agent({}), "viewer")).toBe(true);
+    expect(isOwnedAgent(agent({ ownerUserId: "someone-else" }), "viewer")).toBe(
+      false,
+    );
+    expect(
+      isOwnedAgent(
+        agent({ ownerReassignmentRequiredAt: new Date("2026-01-01") }),
+        "viewer",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -144,46 +168,49 @@ describe("isOwnScopeSession", () => {
 });
 
 describe("ownScopeFacetGroups", () => {
+  // What the page builds in own scope: nothing fetched, so a group carries
+  // only a link's selection, with a zero count, as the page adds it back.
   const groups: FacetGroup[] = [
     {
       id: "server",
       label: "Server",
-      values: [{ value: "hosted:a", label: "A", count: 12, selected: false }],
+      values: [
+        { value: "hosted:a", label: "hosted:a", count: 0, selected: true },
+      ],
     },
+    { id: "client", label: "Client", values: [] },
     {
       id: "user",
       label: "User",
       values: [
-        { value: "viewer@example.com", label: "Me", count: 3, selected: false },
+        {
+          value: "viewer@example.com",
+          label: "viewer@example.com",
+          count: 0,
+          selected: true,
+        },
         {
           value: "other@example.com",
-          label: "Other",
-          count: 9,
+          label: "other@example.com",
+          count: 0,
           selected: true,
         },
       ],
     },
-    {
-      id: "agent",
-      label: "Agent",
-      values: [
-        { value: "agent-1", label: "Mine", count: 2, selected: false },
-        { value: "agent-2", label: "Theirs", count: 5, selected: false },
-      ],
-    },
+    { id: "agent", label: "Agent", values: [] },
     {
       id: "role",
       label: "Role",
       values: [{ value: "role-1", label: "Admins", selected: false }],
     },
   ];
+  const own = {
+    user: [{ value: "viewer@example.com", label: "Me", selected: true }],
+    agent: [{ value: "agent-1", label: "Mine", selected: false }],
+  };
 
-  it("offers only the viewer and their agents, without project-wide counts", () => {
-    const narrowed = ownScopeFacetGroups(
-      groups,
-      "viewer@example.com",
-      new Set(["agent-1"]),
-    );
+  it("offers the viewer and their agents, keeps a link's selection, and drops roles, counts and empty groups", () => {
+    const narrowed = ownScopeFacetGroups(groups, own);
 
     expect(narrowed.map((group) => group.id)).toEqual([
       "server",
@@ -191,8 +218,13 @@ describe("ownScopeFacetGroups", () => {
       "agent",
     ]);
     expect(narrowed.flatMap((group) => group.values)).toEqual([
-      { value: "hosted:a", label: "A", selected: false },
-      { value: "viewer@example.com", label: "Me", selected: false },
+      { value: "hosted:a", label: "hosted:a", selected: true },
+      { value: "viewer@example.com", label: "Me", selected: true },
+      {
+        value: "other@example.com",
+        label: "other@example.com",
+        selected: true,
+      },
       { value: "agent-1", label: "Mine", selected: false },
     ]);
   });

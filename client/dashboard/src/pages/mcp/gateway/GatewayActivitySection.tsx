@@ -4,6 +4,7 @@ import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeries
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFilters";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
@@ -165,9 +166,13 @@ export function GatewayActivitySection({
     }
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
-  const logsHref = gatewayScopedSearch
-    ? routes.logs.href() + gatewayScopedSearch
-    : undefined;
+  // Tool Logs admits project readers; an MCP-only member gets no link to a
+  // page that would turn them away.
+  const { canOpen: canOpenToolLogs } = useToolLogsAccess();
+  const logsHref =
+    canOpenToolLogs && gatewayScopedSearch
+      ? routes.logs.href() + gatewayScopedSearch
+      : undefined;
   const insightsHref = gatewayScopedSearch
     ? routes.insights.href() + gatewayScopedSearch
     : undefined;

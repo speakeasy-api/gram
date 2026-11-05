@@ -8,7 +8,10 @@ import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetTool
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetToolUsageTargetsResult } from "@gram/client/models/components/gettoolusagetargetsresult.js";
-import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
+import {
+  isOwnedAgent,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useUser } from "@/contexts/Auth";
 import { telemetryReadRetry } from "@/components/observe/telemetryReadRetry";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -250,7 +253,7 @@ function AgentServersPanel({
   const viewer = useUser();
   // The agent's calls are the owner's to read; anyone else needs log:read.
   const canViewToolLogs =
-    useToolLogsAccess().projectWide || agent.ownerUserId === viewer.id;
+    useToolLogsAccess().projectWide || isOwnedAgent(agent, viewer.id);
   const { id: projectId } = useIdentityProject();
   const canReadPolicy = agent.permissions.write;
   const grants = useAgentPolicyGrants(agent);

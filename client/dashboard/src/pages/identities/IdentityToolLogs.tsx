@@ -1,8 +1,12 @@
 import { useMemo } from "react";
 import { Text } from "@/components/ui/Text";
 import { LogsTools } from "@/components/observe/LogsTools";
-import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
+import {
+  isOwnedAgent,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useSession } from "@/contexts/Auth";
+import { isSelfIdentity } from "./useIdentityQueries";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
@@ -54,10 +58,8 @@ export function IdentityToolLogsPanel({
   // this view is honest only for the viewer themself or an agent they own;
   // anyone else's panel would say "no calls" about calls that exist.
   const ownIdentity =
-    (identity?.userIds.includes(user.id) ?? false) ||
-    (agent !== undefined &&
-      agent.ownerUserId === user.id &&
-      !agent.ownerReassignmentRequiredAt);
+    (identity !== undefined && isSelfIdentity(identity, user)) ||
+    (agent !== undefined && isOwnedAgent(agent, user.id));
   const canViewToolLogs = projectWide || ownIdentity;
   const userFilters = useMemo(
     () => identityToolLogFilters(identity, agent?.id),

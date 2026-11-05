@@ -50,8 +50,8 @@ import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
 import { ScopedToolLogsEmptyState } from "@/components/observe/ScopedToolLogsEmptyState";
 import { OwnScopeToolLogsNotice } from "@/components/observe/OwnScopeToolLogsNotice";
 import {
+  isOwnedAgent,
   ownScopeFacetGroups,
-  ownedAgentIds,
   useToolLogsAccess,
 } from "@/components/observe/toolLogsAccess";
 import {
@@ -185,12 +185,12 @@ export function LogsTools({
   const client = useGramContext();
   const { user } = useSession();
   const toolLogsAccess = useToolLogsAccess();
-  // Without log:read the server returns only the viewer's own sessions and
-  // agents, while the summary and facet counts stay project-wide aggregates.
-  // The page then offers only what its rows can back up. Embedded views gate
-  // themselves before rendering this.
-  const ownScope =
-    !scope && !toolLogsAccess.isLoading && !toolLogsAccess.projectWide;
+  // Without log:read the server returns only the viewer's own rows, while the
+  // summary and facet options stay project-wide aggregates: asked for only
+  // once log:read is known, so grants still loading count as own scope.
+  const accessLoading = !scope && toolLogsAccess.isLoading;
+  // Embedded views gate themselves before rendering this.
+  const ownScope = !scope && !toolLogsAccess.projectWide;
 
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ({ toolName }) =>
@@ -389,7 +389,7 @@ export function LogsTools({
   // the window on the server, and the user groups are the widest: they drop
   // the identity scope to list everyone else.
   const filterOptionTypes = scope ? SCOPED_FILTER_OPTION_TYPES : undefined;
-  const { data: filterOptionsData } = useQuery({
+  const { data: fetchedFilterOptions } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
       ...narrowedQueryKey,
@@ -404,18 +404,21 @@ export function LogsTools({
           },
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
     retry: telemetryReadRetry,
     // Holds the rail in place while the narrowed counts load, rather than
     // emptying every group under the pointer.
     placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  // Project-wide, so an own-scope viewer neither asks for them nor reads what
+  // an earlier log:read grant left in the cache under this key.
+  const filterOptionsData = ownScope ? undefined : fetchedFilterOptions;
 
   // Feeds the strip. Same key Insights uses, so crossing over from a deep link
   // paints it from cache rather than refetching the window.
   const {
-    data: timeSeriesData,
+    data: fetchedTimeSeries,
     isPending: timeSeriesPending,
     isError: timeSeriesFailed,
     refetch: refetchTimeSeries,
@@ -472,9 +475,28 @@ export function LogsTools({
     () => new Map((agents ?? []).map((agent) => [agent.id, agent.name])),
     [agents],
   );
-  const ownedAgents = useMemo(
-    () => ownedAgentIds(agents, user.id),
-    [agents, user.id],
+  // What the identity facets offer in own scope, in place of the project-wide
+  // options: the viewer themself and the agents they own.
+  const ownFacetValues = useMemo(
+    () => ({
+      user: [
+        {
+          value: user.email,
+          label: user.email,
+          icon: <IdentityAvatar label={user.email} className="size-5" />,
+          selected: selectedEmails.includes(user.email),
+        },
+      ],
+      agent: (agents ?? [])
+        .filter((agent) => isOwnedAgent(agent, user.id))
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name,
+          icon: <Bot className="text-muted-foreground size-4" />,
+          selected: selectedAgentIds.includes(agent.id),
+        })),
+    }),
+    [agents, selectedAgentIds, selectedEmails, user.email, user.id],
   );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
@@ -834,7 +856,7 @@ export function LogsTools({
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
   const {
-    data: totalsData,
+    data: fetchedTotals,
     isError: totalsFailed,
     refetch: refetchTotals,
   } = useQuery({
@@ -852,6 +874,8 @@ export function LogsTools({
     placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  const totalsData = ownScope ? undefined : fetchedTotals;
+  const timeSeriesData = ownScope ? undefined : fetchedTimeSeries;
 
   const {
     data: tracesData,
@@ -864,7 +888,14 @@ export function LogsTools({
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
-      queryKey: ["tool-usage-traces", ...narrowedQueryKey],
+      // The server narrows the rows to the caller's scope, so the scope is
+      // part of the key: losing log:read must not keep serving everyone's
+      // rows from the cache, and holding it must not serve a stale own set.
+      queryKey: [
+        "tool-usage-traces",
+        ownScope ? "own" : "project",
+        ...narrowedQueryKey,
+      ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListToolUsageTraces(client, {
@@ -881,7 +912,8 @@ export function LogsTools({
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !roleFilterPending,
+      // Waits for the grants so the page fetches once, under the right key.
+      enabled: !roleFilterPending && !accessLoading,
       retry: telemetryReadRetry,
       // The rows hold too: an empty table between two filter states reads as
       // "no results" for as long as the fetch takes.
@@ -1006,10 +1038,13 @@ export function LogsTools({
   // stay stuck on an empty result after logging is first enabled.
   const refetch = useCallback(() => {
     void refetchLogs();
-    void refetchTotals();
-    void refetchTimeSeries();
+    // The aggregates are project-wide, so own scope leaves them alone.
+    if (!ownScope) {
+      void refetchTotals();
+      void refetchTimeSeries();
+    }
     void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
-  }, [queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
+  }, [ownScope, queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
 
   const handleAddFilterFromLog = useCallback(
     (path: string, op: Operator, value: string) => {
@@ -1034,11 +1069,7 @@ export function LogsTools({
         !(group.id === "account_type" && scope.accountType !== undefined),
     );
   } else if (ownScope) {
-    visibleFacetGroups = ownScopeFacetGroups(
-      facetGroups,
-      user.email,
-      ownedAgents,
-    );
+    visibleFacetGroups = ownScopeFacetGroups(facetGroups, ownFacetValues);
   }
 
   return (
@@ -1096,6 +1127,7 @@ export function LogsTools({
             facetGroups={visibleFacetGroups}
             embedded={!!scope}
             ownScope={ownScope}
+            accessLoading={accessLoading}
             defaultTypes={defaultTypes}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
@@ -1355,6 +1387,7 @@ function LogsToolsContent({
   isZoomed,
   embedded = false,
   ownScope = false,
+  accessLoading = false,
   defaultTypes,
 }: {
   isLoading: boolean;
@@ -1423,6 +1456,8 @@ function LogsToolsContent({
   embedded?: boolean;
   /** The viewer reads only their own activity: say so, and skip the summary. */
   ownScope?: boolean;
+  /** Grants not in yet: still no summary, but no notice that may not apply. */
+  accessLoading?: boolean;
   /** The type selection that counts as "no filter" for this view. */
   defaultTypes: ToolUsageType[];
 }) {
@@ -1507,7 +1542,7 @@ function LogsToolsContent({
             </div>
           </div>
 
-          {ownScope && <OwnScopeToolLogsNotice />}
+          {ownScope && !accessLoading && <OwnScopeToolLogsNotice />}
 
           {/* Summary and the window's shape are one statement about the range,
               so they share a panel: the numbers, then beside them the

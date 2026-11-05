@@ -255,6 +255,7 @@ function TriggersTable({
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
             <Icon name="file-text" className="h-4 w-4" />
+            <span className="sr-only">View tool logs for this trigger</span>
           </routes.logs.Link>
         </div>
       ),
