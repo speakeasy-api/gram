@@ -34,6 +34,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description:
       "Run inference in selected projects. Does not grant MCP access.",
     agentEligible: true,
+    label: "Run inference",
+    category: "inference",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "mcp:connect",
@@ -41,6 +45,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Connect to MCP servers and call their tools.",
     agentEligible: true,
+    label: "Connect to MCP servers",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "mcp:read",
@@ -48,6 +56,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "View MCP servers and configuration.",
     agentEligible: true,
+    label: "View MCP servers",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "mcp:write",
@@ -55,6 +67,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Create and modify MCP servers and configuration.",
     agentEligible: true,
+    label: "Manage MCP servers",
+    category: "mcp",
+    sensitive: false,
+    subScopes: ["mcp:connect", "mcp:read"],
   },
   {
     slug: "project:read",
@@ -62,6 +78,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "View projects and project-related resources.",
     agentEligible: true,
+    label: "View projects",
+    category: "project",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "project:write",
@@ -69,6 +89,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Create and modify projects and project-related resources.",
     agentEligible: true,
+    label: "Manage projects",
+    category: "project",
+    sensitive: false,
+    subScopes: ["project:read"],
   },
   {
     slug: "environment:read",
@@ -76,6 +100,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "View environments and their entries within the project.",
     agentEligible: true,
+    label: "View environments",
+    category: "environment",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "environment:write",
@@ -84,6 +112,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description:
       "Add, edit, clone, and remove environments within the project.",
     agentEligible: true,
+    label: "Manage environments",
+    category: "environment",
+    sensitive: false,
+    subScopes: ["environment:read"],
   },
   {
     slug: "skill:read",
@@ -91,6 +123,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "View skills within the project.",
     agentEligible: true,
+    label: "View skills",
+    category: "skill",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "skill:write",
@@ -98,6 +134,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Create and modify skills within the project.",
     agentEligible: true,
+    label: "Manage skills",
+    category: "skill",
+    sensitive: false,
+    subScopes: ["skill:read"],
   },
   {
     slug: "assistant:read",
@@ -105,6 +145,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "View and interact with assistants within the project.",
     agentEligible: true,
+    label: "View assistants",
+    category: "assistant",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "assistant:write",
@@ -112,6 +156,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Create and modify assistants within the project.",
     agentEligible: true,
+    label: "Manage assistants",
+    category: "assistant",
+    sensitive: false,
+    subScopes: ["assistant:read"],
   },
   {
     slug: "risk_policy:evaluate",
@@ -119,6 +167,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Evaluate risk policies.",
     agentEligible: true,
+    label: "Evaluate risk policies",
+    category: "risk_policy",
+    sensitive: false,
+    subScopes: [],
   },
   // The only safe org scopes: what a device agent running as this agent needs.
   // Neither implies any other scope.
@@ -129,6 +181,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description:
       "Enroll devices under this agent and let their device agent fetch its plugins.",
     agentEligible: true,
+    label: "Sync device agent plugins",
+    category: "org",
+    sensitive: false,
+    subScopes: [],
   },
   {
     slug: "org:hooks_ingest",
@@ -137,6 +193,10 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description:
       "Send AI-tool hook events and telemetry to any project in the organization.",
     agentEligible: true,
+    label: "Send hook events",
+    category: "org",
+    sensitive: false,
+    subScopes: [],
   },
 ];
 

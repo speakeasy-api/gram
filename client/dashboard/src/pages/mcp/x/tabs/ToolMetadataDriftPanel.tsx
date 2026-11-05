@@ -1,4 +1,3 @@
-import { RequireScope } from "@/components/require-scope";
 import {
   Tooltip,
   TooltipContent,
@@ -65,19 +64,14 @@ function formatValue(value: string | boolean | undefined): string {
  * advertises, and offers to reconcile it.
  *
  * The session is authoritative, so every row reads as "what syncing would do".
- * Newly advertised tools are recorded automatically and never appear here; what
- * is left is the destructive half — overwriting hints that changed upstream and
- * removing tools the session stopped advertising — which only happens when the
- * user asks for it.
+ * Rendered only for viewers who can write, once a stored record exists.
  */
 export function ToolMetadataDriftPanel({
   drift,
-  mcpServerId,
   onSync,
   isSyncing,
 }: {
   drift: ToolDrift[];
-  mcpServerId: string | undefined;
   onSync: () => void;
   isSyncing: boolean;
 }): JSX.Element | null {
@@ -102,41 +96,33 @@ export function ToolMetadataDriftPanel({
               </span>
             </>
           ) : null}
+          {" · applies to everyone in this project"}
         </Text>
-        <RequireScope
-          scope="mcp:write"
-          resourceId={mcpServerId}
-          level="component"
-          reason="You need write access to this MCP server to sync tool metadata."
-        >
-          {({ disabled }) => (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  className="p-2"
-                  disabled={disabled || isSyncing}
-                  onClick={onSync}
-                >
-                  <Button.LeftIcon>
-                    {isSyncing ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                  </Button.LeftIcon>
-                  {/* The panel header already explains what syncing does, so
-                      the label is for screen readers and the tooltip. */}
-                  <Button.Text className="sr-only">
-                    {isSyncing ? "Syncing annotations" : "Sync annotations"}
-                  </Button.Text>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Sync annotations</TooltipContent>
-            </Tooltip>
-          )}
-        </RequireScope>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="p-2"
+              disabled={isSyncing}
+              onClick={onSync}
+            >
+              <Button.LeftIcon>
+                {isSyncing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+              </Button.LeftIcon>
+              {/* The panel header already explains what syncing does, so
+                  the label is for screen readers and the tooltip. */}
+              <Button.Text className="sr-only">
+                {isSyncing ? "Syncing annotations" : "Sync annotations"}
+              </Button.Text>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Sync annotations</TooltipContent>
+        </Tooltip>
       </div>
 
       <ul className="divide-border divide-y">

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -56,7 +57,8 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 //
 // On a gateway, a `server` query parameter names the server to connect, and
 // the flow lands on that server's connect page. A gateway tool call links here
-// when a server cannot be reached without the user's sign-in.
+// when a server cannot be reached without the user's sign-in. A code_reconnect
+// ticket pins the user and server and takes precedence over the server parameter.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
@@ -64,12 +66,23 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+	query := r.URL.Query()
+	if query.Get("code_reconnect") != "" && (query.Get("workload_reconnect") != "" || query.Get("binding_refresh_attempt") != "" || query.Get("reauthenticate_client_id") != "") {
+		return oops.E(oops.CodeBadRequest, nil, "conflicting connection requests")
+	}
 	reconnect, err := s.consumeWorkloadReconnect(r, endpoint)
 	if err != nil {
 		return err
 	}
 
+	codeReconnect, err := s.codeReconnectTicket(r, endpoint, false)
+	if err != nil {
+		return err
+	}
 	focusServer := r.URL.Query().Get("server")
+	if codeReconnect != nil {
+		focusServer = codeReconnect.Server
+	}
 	if len(focusServer) > maxFocusServerLength {
 		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
 	}
@@ -127,19 +140,33 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		BindingRefreshAttemptID: attemptID,
 		ReauthenticateClientID:  reauthenticateClientID,
 		WorkloadReconnect:       reconnect,
+		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
 	}
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
+	attempt := challengeState.connectionAttempt(endpoint)
+	t.Attach(attempt)
+	t.Consumed()
+	defer func() {
+		if retErr != nil && codeReconnect != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		}
+	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	s.connections.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		t.Refuse(ctx, federatedHappened(err))
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
@@ -148,6 +175,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 		}
 		idpURL, err = s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
@@ -161,14 +189,29 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 	}
 	// Claim only after all validation and login setup succeeded, so a failed
 	// preparation does not consume the dashboard's one-time decision.
+	if codeReconnect != nil {
+		claimed, err := s.codeReconnectTicket(r, endpoint, true)
+		if err != nil {
+			t.Refuse(ctx, ticketClaimHappened(err))
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return err
+		}
+		if claimed == nil || *claimed != *codeReconnect {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
+		}
+	}
 	if attemptID != "" {
 		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return fmt.Errorf("start attachment refresh: %w", err)
 		}
 	}
@@ -178,6 +221,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 
 	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
+	t.Continue()
 	http.Redirect(w, r, idpURL.String(), http.StatusFound)
 	return nil
 }

@@ -213,6 +213,10 @@ func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *p
 			logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 		}
 	}
+	// The gateway resolved which auth client signs this call in upstream; the
+	// row names it so the call does not read as made under the key creator's
+	// authority when a shared credential served it.
+	logAttrs.RecordUpstreamCredential(ctx)
 	// The gateway resolved the caller before dialing this member; without it
 	// proxied dispatches would be the one tool-call flavour with no client.
 	if client, ok := contextvalues.GetMCPClientInfo(ctx); ok {

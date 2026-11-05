@@ -54,6 +54,10 @@ const (
 	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
 	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
 
+	// AuthClientConnectionOwnerUserIDKey is the user whose personal connection a
+	// typed auth client served a request with. Absent for a shared credential.
+	AuthClientConnectionOwnerUserIDKey = attribute.Key("gram.auth_client.connection_owner_user_id")
+
 	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
 	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
 
@@ -304,6 +308,7 @@ const (
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
+	ExternalMCPFailureReasonKey = attribute.Key("gram.external_mcp.failure_reason")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -528,6 +533,7 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -763,6 +769,12 @@ const (
 	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
+	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
+	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
+	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
+	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionStepKey                 = attribute.Key("gram.connection.step")
+	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
@@ -780,6 +792,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -955,6 +968,24 @@ const (
 	AgentDeviceSerialKey      = attribute.Key("gram.agent.device.serial")
 	AgentDeviceHostnameKey    = attribute.Key("gram.agent.device.hostname")
 	AgentDeviceEnvironmentKey = attribute.Key("gram.agent.device.environment")
+	// A device agent crash report (device-agent ADR-0030). Build fields name
+	// the build that crashed, which is not always the one that reported it.
+	AgentCrashIDKey              = attribute.Key("gram.agent.crash.id")
+	AgentCrashKindKey            = attribute.Key("gram.agent.crash.kind")
+	AgentCrashComponentKey       = attribute.Key("gram.agent.crash.component")
+	AgentCrashSignatureKey       = attribute.Key("gram.agent.crash.signature")
+	AgentCrashOccurredAtKey      = attribute.Key("gram.agent.crash.occurred_at")
+	AgentCrashCountKey           = attribute.Key("gram.agent.crash.count")
+	AgentCrashSchemaVersionKey   = attribute.Key("gram.agent.crash.schema_version")
+	AgentCrashOtherGoroutinesKey = attribute.Key("gram.agent.crash.other_goroutines")
+	AgentCrashRollbackFromKey    = attribute.Key("gram.agent.crash.rollback.from")
+	AgentCrashRollbackToKey      = attribute.Key("gram.agent.crash.rollback.to")
+	AgentBuildBinaryKey          = attribute.Key("gram.agent.build.binary")
+	AgentBuildVersionKey         = attribute.Key("gram.agent.build.version")
+	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
+	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
+	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1625,6 +1656,70 @@ func SlogAgentDeviceHostname(v string) slog.Attr {
 
 func SlogAgentDeviceEnvironment(v string) slog.Attr {
 	return slog.String(string(AgentDeviceEnvironmentKey), v)
+}
+
+func SlogAgentCrashID(v string) slog.Attr {
+	return slog.String(string(AgentCrashIDKey), v)
+}
+
+func SlogAgentCrashKind(v string) slog.Attr {
+	return slog.String(string(AgentCrashKindKey), v)
+}
+
+func SlogAgentCrashComponent(v string) slog.Attr {
+	return slog.String(string(AgentCrashComponentKey), v)
+}
+
+func SlogAgentCrashSignature(v string) slog.Attr {
+	return slog.String(string(AgentCrashSignatureKey), v)
+}
+
+func SlogAgentCrashOccurredAt(v string) slog.Attr {
+	return slog.String(string(AgentCrashOccurredAtKey), v)
+}
+
+func SlogAgentCrashCount(v int) slog.Attr {
+	return slog.Int(string(AgentCrashCountKey), v)
+}
+
+func SlogAgentCrashSchemaVersion(v int) slog.Attr {
+	return slog.Int(string(AgentCrashSchemaVersionKey), v)
+}
+
+func SlogAgentCrashOtherGoroutines(v int) slog.Attr {
+	return slog.Int(string(AgentCrashOtherGoroutinesKey), v)
+}
+
+func SlogAgentCrashRollbackFrom(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackFromKey), v)
+}
+
+func SlogAgentCrashRollbackTo(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackToKey), v)
+}
+
+func SlogAgentBuildBinary(v string) slog.Attr {
+	return slog.String(string(AgentBuildBinaryKey), v)
+}
+
+func SlogAgentBuildVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildVersionKey), v)
+}
+
+func SlogAgentBuildChannel(v string) slog.Attr {
+	return slog.String(string(AgentBuildChannelKey), v)
+}
+
+func SlogAgentBuildOS(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSKey), v)
+}
+
+func SlogAgentBuildArch(v string) slog.Attr {
+	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
@@ -2925,6 +3020,20 @@ func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMet
 
 func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
 
+func SlogConnectionDropCounts(v string) slog.Attr {
+	return slog.String(string(ConnectionDropCountsKey), v)
+}
+
+func ConnectionDropReason(v string) attribute.KeyValue { return ConnectionDropReasonKey.String(v) }
+func SlogConnectionDropReason(v string) slog.Attr {
+	return slog.String(string(ConnectionDropReasonKey), v)
+}
+
+func ConnectionOutcome(v string) attribute.KeyValue  { return ConnectionOutcomeKey.String(v) }
+func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
+func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
+func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
+
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {
 	return slog.String(string(ProductFeatureNameKey), v)
@@ -2972,6 +3081,11 @@ func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(Wo
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
 }
 
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
@@ -3430,6 +3544,8 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
 
+func SlogMcpSessionSubject(v string) slog.Attr { return slog.String(string(McpSessionSubjectKey), v) }
+
 func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
 func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
 
@@ -3642,6 +3758,10 @@ func SlogMCPApprovalRequestID(v string) slog.Attr {
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
+
+func SlogExternalMCPFailureReason(v string) slog.Attr {
+	return slog.String(string(ExternalMCPFailureReasonKey), v)
+}
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }

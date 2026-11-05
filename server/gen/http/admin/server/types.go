@@ -17,6 +17,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetOrganizationProviderSetupRequestBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP request body.
+type SetOrganizationProviderSetupRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Enabled        *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetOrganizationFeatureRequestBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP request body.
 type SetOrganizationFeatureRequestBody struct {
@@ -653,6 +660,9 @@ type GetSessionResponseBody struct {
 // GetOrganizationFeaturesResponseBody is the type of the "admin" service
 // "getOrganizationFeatures" endpoint HTTP response body.
 type GetOrganizationFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -710,11 +720,87 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
+}
+
+// SetOrganizationProviderSetupResponseBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP response body.
+type SetOrganizationProviderSetupResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
+	// Whether logging is enabled
+	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool `form:"hooks_fail_open_enabled" json:"hooks_fail_open_enabled" xml:"hooks_fail_open_enabled"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization can use the Speakeasy Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool `form:"remote_session_auto_refresh_enabled" json:"remote_session_auto_refresh_enabled" xml:"remote_session_auto_refresh_enabled"`
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool `form:"session_portability_enabled" json:"session_portability_enabled" xml:"session_portability_enabled"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP response body.
 type SetOrganizationFeatureResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -772,6 +858,10 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -1101,7 +1191,7 @@ type ListProjectMcpServersResponseBody struct {
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
 	// List of organization activity.
-	Logs []*AuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
+	Logs []*AdminAuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2169,7 +2259,8 @@ type GetHookClientsResponseBody struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
@@ -2214,15 +2305,23 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2251,15 +2350,23 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2288,15 +2395,23 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2325,15 +2440,23 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -3759,6 +3882,196 @@ type GetOrganizationFeaturesUnexpectedResponseBody struct {
 // service "getOrganizationFeatures" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationProviderSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupForbiddenResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type SetOrganizationProviderSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "bad_request" error.
+type SetOrganizationProviderSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupNotFoundResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "not_found" error.
+type SetOrganizationProviderSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupConflictResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "conflict" error.
+type SetOrganizationProviderSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnsupportedMediaResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetOrganizationProviderSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvalidResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationProviderSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationProviderSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationProviderSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unexpected" error.
+type SetOrganizationProviderSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationProviderSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -22839,8 +23152,12 @@ type AdminMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
-// AuditLogResponseBody is used to define fields on response body types.
-type AuditLogResponseBody struct {
+// AdminAuditLogResponseBody is used to define fields on response body types.
+type AdminAuditLogResponseBody struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool   `form:"is_internal,omitempty" json:"is_internal,omitempty" xml:"is_internal,omitempty"`
 	ID               string  `form:"id" json:"id" xml:"id"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
@@ -22855,7 +23172,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -23747,15 +24070,23 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -23791,6 +24122,13 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionSetupGuideResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSetupGuideResponseBody struct {
+	Slug  string `form:"slug" json:"slug" xml:"slug"`
+	Title string `form:"title" json:"title" xml:"title"`
 }
 
 // AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
@@ -24317,6 +24655,7 @@ func NewGetSessionResponseBody(res *admin.AdminSession) *GetSessionResponseBody 
 // the result of the "getOrganizationFeatures" endpoint of the "admin" service.
 func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView) *GetOrganizationFeaturesResponseBody {
 	body := &GetOrganizationFeaturesResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24339,6 +24678,40 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupResponseBody builds the HTTP response body
+// from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationProviderSetupResponseBody {
+	body := &SetOrganizationProviderSetupResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
+		LogsEnabled:                             *res.LogsEnabled,
+		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            *res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              *res.SsoEnabled,
+		ScimEnabled:                             *res.ScimEnabled,
+		HooksBrowserLoginEnabled:                *res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    *res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  *res.CustomModelKeysEnabled,
+		SkillsEnabled:                           *res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                *res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       *res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      *res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
+		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         *res.CodeModeEnabled,
+		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24347,6 +24720,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 // result of the "setOrganizationFeature" endpoint of the "admin" service.
 func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationFeatureResponseBody {
 	body := &SetOrganizationFeatureResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24369,6 +24743,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24642,16 +25017,16 @@ func NewListOrganizationActivityResponseBody(res *admin.AdminListOrganizationAct
 		NextCursor: res.NextCursor,
 	}
 	if res.Logs != nil {
-		body.Logs = make([]*AuditLogResponseBody, len(res.Logs))
+		body.Logs = make([]*AdminAuditLogResponseBody, len(res.Logs))
 		for i, val := range res.Logs {
 			if val == nil {
 				body.Logs[i] = nil
 				continue
 			}
-			body.Logs[i] = marshalAdminAuditLogToAuditLogResponseBody(val)
+			body.Logs[i] = marshalAdminAdminAuditLogToAdminAuditLogResponseBody(val)
 		}
 	} else {
-		body.Logs = []*AuditLogResponseBody{}
+		body.Logs = []*AdminAuditLogResponseBody{}
 	}
 	return body
 }
@@ -25975,6 +26350,8 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -25999,6 +26376,16 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26018,6 +26405,8 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26042,6 +26431,16 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26062,6 +26461,8 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26086,6 +26487,16 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26106,6 +26517,8 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26130,6 +26543,16 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -27613,6 +28036,156 @@ func NewGetOrganizationFeaturesUnexpectedResponseBody(res *goa.ServiceError) *Ge
 // "admin" service.
 func NewGetOrganizationFeaturesGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationFeaturesGatewayErrorResponseBody {
 	body := &GetOrganizationFeaturesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnauthorizedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnauthorizedResponseBody {
+	body := &SetOrganizationProviderSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupForbiddenResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupForbiddenResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupForbiddenResponseBody {
+	body := &SetOrganizationProviderSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupBadRequestResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupBadRequestResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupBadRequestResponseBody {
+	body := &SetOrganizationProviderSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupNotFoundResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupNotFoundResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupNotFoundResponseBody {
+	body := &SetOrganizationProviderSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupConflictResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupConflictResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupConflictResponseBody {
+	body := &SetOrganizationProviderSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnsupportedMediaResponseBody {
+	body := &SetOrganizationProviderSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvalidResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupInvalidResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvalidResponseBody {
+	body := &SetOrganizationProviderSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "setOrganizationProviderSetup"
+// endpoint of the "admin" service.
+func NewSetOrganizationProviderSetupInvariantViolationResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvariantViolationResponseBody {
+	body := &SetOrganizationProviderSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnexpectedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnexpectedResponseBody {
+	body := &SetOrganizationProviderSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupGatewayErrorResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupGatewayErrorResponseBody {
+	body := &SetOrganizationProviderSetupGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -42591,6 +43164,18 @@ func NewGetOrganizationFeaturesPayload(organizationID string, adminSessionToken 
 	return v
 }
 
+// NewSetOrganizationProviderSetupPayload builds a admin service
+// setOrganizationProviderSetup endpoint payload.
+func NewSetOrganizationProviderSetupPayload(body *SetOrganizationProviderSetupRequestBody, adminSessionToken *string) *admin.SetOrganizationProviderSetupPayload {
+	v := &admin.SetOrganizationProviderSetupPayload{
+		OrganizationID: *body.OrganizationID,
+		Enabled:        *body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewSetOrganizationFeaturePayload builds a admin service
 // setOrganizationFeature endpoint payload.
 func NewSetOrganizationFeaturePayload(body *SetOrganizationFeatureRequestBody, adminSessionToken *string) *admin.SetOrganizationFeaturePayload {
@@ -43937,6 +44522,18 @@ func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillM
 	v.AdminSessionToken = adminSessionToken
 
 	return v
+}
+
+// ValidateSetOrganizationProviderSetupRequestBody runs the validations defined
+// on SetOrganizationProviderSetupRequestBody
+func ValidateSetOrganizationProviderSetupRequestBody(body *SetOrganizationProviderSetupRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	return
 }
 
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on

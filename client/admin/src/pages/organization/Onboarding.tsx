@@ -26,6 +26,7 @@ import {
 import { organizationQuery } from "@/lib/adminQueries";
 import { onboardingPresets } from "@/lib/onboardingPresets";
 import { errorMessage } from "@/lib/gramAdminApi";
+import { statusCode } from "@/lib/adminAuth";
 import {
   assignAdminOrganizationOnboardingPlaybook,
   createAdminOnboardingPlaybook,
@@ -34,7 +35,6 @@ import {
   onboardingUseCasesQuery,
   organizationOnboardingPlaybookQuery,
   updateAdminOnboardingPlaybook,
-  statusCode,
 } from "@/lib/gramAdminClient";
 import { OnboardingStack } from "./OnboardingStack";
 

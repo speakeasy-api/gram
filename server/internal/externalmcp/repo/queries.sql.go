@@ -229,6 +229,24 @@ func (q *Queries) CreateMCPRegistry(ctx context.Context, arg CreateMCPRegistryPa
 	return id, err
 }
 
+const ensureNativeCatalogRegistry = `-- name: EnsureNativeCatalogRegistry :exec
+INSERT INTO mcp_registries
+  (id, name, url, source_type, auth_profile, enabled, certification_state, source_key)
+VALUES ($1, 'Speakeasy', $2, 'native_v1', 'none', true, 'certified', 'speakeasy')
+ON CONFLICT (id) DO NOTHING
+`
+
+type EnsureNativeCatalogRegistryParams struct {
+	ID  uuid.UUID
+	Url string
+}
+
+// Never changes an existing row, including an operator-disabled native source.
+func (q *Queries) EnsureNativeCatalogRegistry(ctx context.Context, arg EnsureNativeCatalogRegistryParams) error {
+	_, err := q.db.Exec(ctx, ensureNativeCatalogRegistry, arg.ID, arg.Url)
+	return err
+}
+
 const findExternalMCPToolEntriesForProjects = `-- name: FindExternalMCPToolEntriesForProjects :many
 WITH project_deployments AS (
     SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
@@ -1033,6 +1051,24 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const nativeCatalogRegistryMatches = `-- name: NativeCatalogRegistryMatches :one
+SELECT url = $1::text AND source_type = 'native_v1' AND auth_profile = 'none' AND source_key = 'speakeasy' AS valid
+FROM mcp_registries
+WHERE id = $2
+`
+
+type NativeCatalogRegistryMatchesParams struct {
+	Url string
+	ID  uuid.UUID
+}
+
+func (q *Queries) NativeCatalogRegistryMatches(ctx context.Context, arg NativeCatalogRegistryMatchesParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, nativeCatalogRegistryMatches, arg.Url, arg.ID)
+	var valid pgtype.Bool
+	err := row.Scan(&valid)
+	return valid, err
 }
 
 const setMCPRegistryEnabledFixture = `-- name: SetMCPRegistryEnabledFixture :exec

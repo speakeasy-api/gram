@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {

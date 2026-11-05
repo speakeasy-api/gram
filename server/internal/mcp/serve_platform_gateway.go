@@ -27,9 +27,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -101,14 +103,18 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	} else {
 		connectRoot, connectURL = root, root+"/connect/first-party"
 	}
+	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
+		fromRequest:         mcpconnectionattempts.FromRequest(nil),
+		skippedUpstreams:    skipped,
+		request:             nil,
 		projectID:           uuid.Nil,
 		metaServerID:        metaServer.ID,
 		agentID:             uuid.Nil,
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID)),
+		projectTokens:       s.newOrganizationGatewayTokens(nil, resolved, urn.NewUserSubject(userID), skipped),
 		// Credential choices belong to one gateway connection; Platform MCP
 		// holds none, so each member routes through its project's clients.
 		memberChoices:       nil,
@@ -116,6 +122,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
@@ -132,6 +139,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		connectURL:          connectURL,
 		consentDiagnostics:  nil,
 		skillsOverMCP:       nil,
+		servedCredentials:   nil,
 	}
 	params, err := json.Marshal(toolsCallParams{Name: tool, Arguments: arguments, Meta: nil})
 	if err != nil {
@@ -223,11 +231,11 @@ func (s *Service) searchPlatformGatewayTools(ctx context.Context, logger *slog.L
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_unavailable", Message: ""})
 				return nil
 			}
 			if catalog.incomplete {
-				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete"})
+				failed = append(failed, codemode.FailedMember{Server: member.slug, Reason: "catalog_incomplete", Message: ""})
 			}
 			for _, entry := range catalog.entries {
 				definition, err := json.Marshal(entry)

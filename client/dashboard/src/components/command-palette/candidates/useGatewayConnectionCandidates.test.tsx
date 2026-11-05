@@ -7,7 +7,6 @@ const state = vi.hoisted(() => ({
   project: "project-one",
   allowed: true,
   navigate: vi.fn(),
-  routeOptions: [] as Array<{ projectSlug: string }>,
   fetchNextPage: vi.fn<() => Promise<unknown>>(),
   next: false,
   nextError: false,
@@ -21,23 +20,16 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => state.project,
+  // Differs from the request project so the tests show which one links use.
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "route-project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => state.allowed }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: (options: { projectSlug: string }) => {
-    state.routeOptions.push(options);
-    return {
-      mcp: {
-        organizationGateway: { href: () => "/org/gateway" },
-        gateway: {
-          sessions: { href: (id: string) => `/gateway/${id}/sessions` },
-        },
-      },
-    };
-  },
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useLocation: () => ({ pathname: "/", search: "" }),
+  useNavigate: () => state.navigate,
 }));
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   buildMetaMcpServersQuery: (_: unknown, input: unknown) => ({
@@ -130,12 +122,16 @@ it("finds a cached registration and opens its canonical gateway with private mat
   expect(isSendable(registration)).toBe(false);
   void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
-    "/gateway/gateway-one/sessions?registration=later-page",
+    "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
   );
   void result.current[0]!.run("open");
-  expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=connections");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+  );
   void result.current[1]!.run("open");
-  expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=activity");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=activity",
+  );
 });
 it("does not fetch or return cached resources while closed or unauthorized", () => {
   state.next = true;
@@ -180,7 +176,10 @@ it("keys both inventories by organization and project and offers org navigation 
     { gramProject: "project-one", limit: 100 },
     "org-one",
   ]);
-  expect(state.routeOptions.at(-1)).toEqual({ projectSlug: "project-one" });
+  void result.current[0]!.run("open");
+  expect(state.navigate).toHaveBeenLastCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+  );
   state.org = "org-two";
   state.project = "project-two";
   rerender({ inProject: false });

@@ -24,7 +24,7 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 	{
 		err = json.Unmarshal([]byte(cliAuthAuthorizeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"project_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"key_scope\": \"producer\",\n      \"project_slug\": \"abc123\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.CodeChallenge) < 43 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code_challenge", body.CodeChallenge, utf8.RuneCountInString(body.CodeChallenge), 43, true))
@@ -34,6 +34,9 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 		}
 		if !(body.CodeChallengeMethod == "S256") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.code_challenge_method", body.CodeChallengeMethod, []any{"S256"}))
+		}
+		if !(body.KeyScope == "agent_user" || body.KeyScope == "producer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_scope", body.KeyScope, []any{"agent_user", "producer"}))
 		}
 		if err != nil {
 			return nil, err
@@ -49,6 +52,13 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 		CodeChallenge:       body.CodeChallenge,
 		CodeChallengeMethod: body.CodeChallengeMethod,
 		ProjectSlug:         body.ProjectSlug,
+		KeyScope:            body.KeyScope,
+	}
+	{
+		var zero string
+		if v.KeyScope == zero {
+			v.KeyScope = "agent_user"
+		}
 	}
 	v.SessionToken = sessionToken
 

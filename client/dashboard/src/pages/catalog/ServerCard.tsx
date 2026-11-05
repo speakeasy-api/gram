@@ -1,23 +1,68 @@
 import { catalogLogoClassName } from "./logo";
 import { cn } from "@/lib/utils";
-import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/Card";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Plus } from "lucide-react";
 import { Link } from "react-router";
-import type { PulseMCPServer } from "./hooks";
+import type { CatalogInstallState } from "./catalogInstall";
+import type { CatalogServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
 
 interface ServerCardProps {
-  server: PulseMCPServer;
+  server: CatalogServer;
   detailHref: string;
-  /** Whether this catalog server is already installed in the project. */
-  isAdded: boolean;
+  /** Unknown while install lookups are loading or failed, so the card does not flash Add. */
+  installState: CatalogInstallState;
   /** Starts the install flow for this one server. */
   onAdd: () => void;
+}
+
+export function CatalogInstallButton({
+  state,
+  onAdd,
+  size = "sm",
+  iconClassName = "h-4 w-4",
+  stopNavigation = false,
+}: {
+  state: CatalogInstallState;
+  onAdd: () => void;
+  size?: "sm" | "md";
+  iconClassName?: string;
+  /** The catalog card and row are links; the button must not follow them. */
+  stopNavigation?: boolean;
+}): JSX.Element {
+  if (state === "unknown") {
+    return (
+      <Skeleton
+        className={size === "md" ? "h-10 w-28" : "h-8 w-24"}
+        aria-hidden
+      />
+    );
+  }
+
+  const added = state === "added";
+  return (
+    <Button
+      variant={added ? "secondary" : "primary"}
+      size={size}
+      onClick={(event) => {
+        if (stopNavigation) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        onAdd();
+      }}
+    >
+      <Button.LeftIcon>
+        <Plus className={iconClassName} />
+      </Button.LeftIcon>
+      <Button.Text>{added ? "Add again" : "Add"}</Button.Text>
+    </Button>
+  );
 }
 
 /**
@@ -26,19 +71,11 @@ interface ServerCardProps {
 export function ServerCard({
   server,
   detailHref,
-  isAdded,
+  installState,
   onAdd,
 }: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
   const { canvasRef, start, stop } = useIconDither();
-
-  // The catalog list carries a precomputed tool count, not the tool defs.
-  const toolCount = server.toolCount;
-
-  // Remote-only servers (auth-gated proxies like GitHub, Make) can't enumerate
-  // tools until a user authenticates, so the "No Tools" badge would be
-  // misleading. Hide it for them.
-  const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
 
   return (
     // The whole card is the link to the detail page; Add is the one control
@@ -72,7 +109,7 @@ export function ServerCard({
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 -z-10 size-full"
             />
-            {isAdded && (
+            {installState === "added" && (
               <div className="absolute top-3.5 left-3.5 z-10">
                 <Badge variant="success">
                   <Badge.Text>Added</Badge.Text>
@@ -101,10 +138,6 @@ export function ServerCard({
           </div>
           <div className="flex items-baseline gap-1">
             <ManualSetupBadge server={server} className="mr-1" />
-            <ToolCollectionBadge
-              count={toolCount}
-              emptyLabel={isRemoteOnly ? null : undefined}
-            />
           </div>
         </div>
 
@@ -115,21 +148,11 @@ export function ServerCard({
 
         {/* Footer row with the install action */}
         <div className="mt-auto flex items-center justify-end gap-2 pt-2">
-          <Button
-            variant={isAdded ? "secondary" : "primary"}
-            size="sm"
-            onClick={(e) => {
-              // The card is a link; adding must not also navigate.
-              e.preventDefault();
-              e.stopPropagation();
-              onAdd();
-            }}
-          >
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>{isAdded ? "Add again" : "Add"}</Button.Text>
-          </Button>
+          <CatalogInstallButton
+            state={installState}
+            onAdd={onAdd}
+            stopNavigation
+          />
         </div>
       </Card.Entity>
     </Link>

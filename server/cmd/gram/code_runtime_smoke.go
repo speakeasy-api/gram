@@ -33,7 +33,7 @@ type smokeProvider interface {
 type smokeHost struct{}
 
 func (smokeHost) Servers(context.Context, codemode.PageArgs) (*codemode.ServerPage, error) {
-	return &codemode.ServerPage{Items: []codemode.Server{{Slug: "smoke", Name: "Smoke"}}, NextCursor: ""}, nil
+	return &codemode.ServerPage{Items: []codemode.Server{{Slug: "smoke", Name: "Smoke", Connection: nil}}, NextCursor: ""}, nil
 }
 
 func (smokeHost) Search(context.Context, codemode.SearchArgs) (*codemode.SearchPage, error) {
@@ -46,6 +46,10 @@ func (smokeHost) Describe(context.Context, string) (*codemode.Description, error
 
 func (smokeHost) Call(_ context.Context, _ string, arguments json.RawMessage) (*codemode.ToolResult, error) {
 	return &codemode.ToolResult{Outcome: "completed", Warnings: nil, OK: true, Data: arguments, Content: json.RawMessage(`[]`), Error: ""}, nil
+}
+
+func (smokeHost) Connect(context.Context, string) (*codemode.ConnectionAction, error) {
+	return nil, errors.New("smoke host has no upstream connections")
 }
 
 type smokeCheck struct {

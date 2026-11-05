@@ -130,6 +130,11 @@ function aiScanEnabledSetting(config: DeviceAgentConfiguration): boolean {
   return config.config.disable_ai_scan !== true;
 }
 
+// disable_crash_reports follows disable_ai_scan: stored only as true.
+function crashReportsEnabledSetting(config: DeviceAgentConfiguration): boolean {
+  return config.config.disable_crash_reports !== true;
+}
+
 function blockedVersionsSetting(config: DeviceAgentConfiguration): string {
   const value = config.config.blocked_versions;
   if (!Array.isArray(value)) return "";
@@ -243,6 +248,9 @@ function DeviceAgentConfigurationForm({
   const [aiScanEnabled, setAIScanEnabled] = useState(() =>
     aiScanEnabledSetting(configuration),
   );
+  const [crashReportsEnabled, setCrashReportsEnabled] = useState(() =>
+    crashReportsEnabledSetting(configuration),
+  );
   const [saveError, setSaveError] = useState<string>();
 
   const mutation = useUpdateDeviceAgentConfigurationMutation({
@@ -277,7 +285,8 @@ function DeviceAgentConfigurationForm({
     syncInterval !== syncIntervalSetting(configuration) ||
     pinnedTarget !== stringSetting(configuration, "pinned_target", "") ||
     blockedVersions !== blockedVersionsSetting(configuration) ||
-    aiScanEnabled !== aiScanEnabledSetting(configuration);
+    aiScanEnabled !== aiScanEnabledSetting(configuration) ||
+    crashReportsEnabled !== crashReportsEnabledSetting(configuration);
   const disabled = mutation.isPending || !canEdit;
 
   const handleSave = () => {
@@ -305,6 +314,11 @@ function DeviceAgentConfigurationForm({
       delete config.disable_ai_scan;
     } else {
       config.disable_ai_scan = true;
+    }
+    if (crashReportsEnabled) {
+      delete config.disable_crash_reports;
+    } else {
+      config.disable_crash_reports = true;
     }
 
     if (pinnedTarget.trim()) {
@@ -422,6 +436,25 @@ function DeviceAgentConfigurationForm({
             onCheckedChange={setAIScanEnabled}
             disabled={disabled}
             aria-label="Shadow AI scan"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <Text variant="body" className="font-medium">
+              Crash reports
+            </Text>
+            <Text muted small>
+              Send agent crash reports to Speakeasy unless a device&apos;s local
+              or MDM setting turns them off. Reports carry error text and code
+              locations, never file contents or hostnames.
+            </Text>
+          </div>
+          <Switch
+            checked={crashReportsEnabled}
+            onCheckedChange={setCrashReportsEnabled}
+            disabled={disabled}
+            aria-label="Crash reports"
           />
         </div>
 

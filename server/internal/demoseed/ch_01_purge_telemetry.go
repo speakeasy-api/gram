@@ -127,6 +127,9 @@ var chPurgeOrgTables = []string{
 	"agent_events",
 	"sigint_readings",
 	"sigint_readings_v2",
+	"mcp_connection_events",
+	// Target of mcp_connection_attempt_summaries_mv.
+	"mcp_connection_attempt_summaries",
 }
 
 // chPurge runs the scoped deletes: telemetry source + every MV target + the
@@ -161,7 +164,9 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
+				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}
@@ -463,6 +468,17 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
 				if hash64("authz", i)%3 != 0 {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
+				}
+				// How the gateway signed the call in upstream: the person's
+				// own Linear connection, the shared engineering token, or
+				// nothing for calls recorded before the gateway named it, so
+				// the Tool Logs row shows all three renderings. The ids are
+				// seeded auth clients, so the id a row names resolves to one.
+				switch hash64("upstreamcred", i) % 3 {
+				case 1:
+					attrs += `,"gram.auth_client.type":"remote_session","gram.auth_client.id":"` + s.det("auth-client-linear").String() + `","gram.auth_client.connection_owner_user_id":"` + s.userID(u.handle) + `"`
+				case 2:
+					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`

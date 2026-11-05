@@ -207,6 +207,8 @@ describe("Overview", () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       account_type: "payg",
+      trial_state: "converted",
+      trial_converted_at: "2026-03-08T12:34:56Z",
     });
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
@@ -225,6 +227,8 @@ describe("Overview", () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       account_type: "payg",
+      trial_state: "converted",
+      trial_converted_at: "2026-03-08T12:34:56Z",
       stripe_customer_id: "cus_example",
     });
     await renderRouteTree(routeTree, {

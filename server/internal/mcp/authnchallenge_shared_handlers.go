@@ -135,7 +135,10 @@ func (s *Service) HandleSharedRegister(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	return s.serveRegister(w, r, issuer.logger, issuer.authorizationServer.issuerID)
+	// A shared authorization server names no server, so a refusal has no row to land on.
+	return s.serveRegister(w, r, issuer.logger, issuer.authorizationServer.issuerID, func(ctx context.Context, code string) {
+		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "register_"+code)
+	})
 }
 
 // HandleSharedRevoke serves RFC 7009 token revocation on a shared
@@ -348,12 +351,17 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	case oauthwire.GrantTypeRefreshToken:
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
 	case "client_credentials", oauthwire.GrantTypeJWTBearer:
-		if grantType == "client_credentials" && s.assistantWorkloadTokens == nil {
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
-		}
 		resources := r.PostForm[oauthwire.ParamResource]
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
 			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
+		}
+		if grantType == "client_credentials" && s.assistantWorkloadTokens == nil {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+		}
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && extractClientCredentials(r).clientless(r) {
+			if _, ok := s.platformWorkloadResource(resources[0]); ok {
+				return s.handlePlatformWorkloadGrant(ctx, w, r, issuer, resources[0])
+			}
 		}
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)

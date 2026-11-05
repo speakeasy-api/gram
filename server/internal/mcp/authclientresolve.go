@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -121,6 +122,9 @@ type authClientResolution struct {
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
 
+	// noAuthChoice is a recorded no-auth choice, whether or not the server still needs none.
+	noAuthChoice bool
+
 	// noAuthAllowed is a server that needs no upstream authentication: it
 	// offers no enabled auth client and has no upstream credentials an auth
 	// client does not record yet.
@@ -135,12 +139,21 @@ type authClientResolution struct {
 	// unattached agent key's permit was decided for; its tokens come from
 	// that user's connection.
 	authorizerOwner string
+
+	// connectionOwner is the user whose personal connection the permit was
+	// decided for, empty when the client is shared or no permit ran.
+	connectionOwner string
 }
 
 // headersOnly reports a resolved client whose material is its headers alone,
 // with no bearer to acquire.
 func (r *authClientResolution) headersOnly() bool {
 	return r.outcome == authClientResolved && isHeadersOnlyType(r.clientType)
+}
+
+// staleNoAuth reports a no-auth choice the server has outgrown.
+func (r *authClientResolution) staleNoAuth() bool {
+	return r.outcome == authClientGap && r.noAuthChoice
 }
 
 // sendsClientHeaders reports whether the request sends the client's own
@@ -238,7 +251,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: ""}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -258,6 +271,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			res.reason = authClientReasonUnmapped
 			return res
 		}
+		res.noAuthChoice = true
 		switch {
 		case row.ServerHasHeaderClients && !row.ServerHasOauthClients:
 			// A no-auth choice from before the backfill gave the server its
@@ -480,6 +494,7 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 		}
 		permit.ConnectionOwner = connection.owner
 		res.attachedSession = connection.attachedSession
+		res.connectionOwner = connection.owner
 		if connection.authorizer {
 			res.authorizerOwner = connection.owner
 		}
@@ -641,6 +656,7 @@ func (s *Service) loadAuthClientHeaders(ctx context.Context, organizationID stri
 		}
 		current.headers = append(current.headers, proxy.ConfiguredHeader{
 			IsRequired:             row.IsRequired,
+			IsSecret:               row.IsSecret,
 			Name:                   row.Name,
 			StaticValue:            value,
 			ValueFromRequestHeader: row.ValueFromRequestHeader.String,
@@ -692,9 +708,12 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 		}
 		return none, false, nil
 	case authClientGap:
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable)
-		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
+		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
+		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
+			mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject),
+			s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		return none, true, s.authClientNoAccessError(ctx, endpoint.McpServerID.UUID, res)
 	case authClientNoAuth:
 		authentication.chosenClient = none.clientID
@@ -757,6 +776,7 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 			Subject:             subject,
 			RegistrationID:      res.choice.clientID.UUID,
 			SkipUnusable:        false,
+			Attribution:         remotesessions.RefreshAttribution{},
 		})
 		if err != nil {
 			return false, false, fmt.Errorf("check auth client reconnect: %w", err)

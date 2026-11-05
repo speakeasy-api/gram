@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -132,7 +134,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{attachedSession: checked}}
 				choices := &memberChoices{enforced: true, byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return s.resolveChosenMemberTokens(ctx, endpoint, urn.NewAgentSubject(agent), true, member)
+					return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), true, member)
 				}}
 				// Simulate replacing the attachment after permission checked its
 				// exact session, but before the credential lookup reads it.
@@ -163,7 +165,7 @@ func TestAgentMemberResolvedTypeRequiresAttachment(t *testing.T) {
 	gate := &metaGateContext{agentID: uuid.New(), organizationID: f.orgID}
 	// The catalog supplies the personal client type even when the caller has
 	// not supplied one. No attachment lookup is available in this fixture.
-	connection, err := f.service.authorizeAgentMemberClient(t.Context(), gate, member, f.issuerID, validUUID(f.registration), "")
+	connection, _, err := f.service.authorizeAgentMemberClient(t.Context(), gate, member, f.issuerID, validUUID(f.registration), "")
 	require.Error(t, err)
 	require.Equal(t, uuid.Nil, connection.attachedSession)
 }
@@ -222,7 +224,7 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			f.service.upstreamTokens = source
 			agentID := uuid.New()
 			ctx := admittedAgentContext(t, f.orgID, agentID)
-			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID}
+			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID, servedCredentials: map[uuid.UUID]contextvalues.UpstreamCredential{}}
 			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
 
 			tokens, err := f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
@@ -234,11 +236,21 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, session, tokens[source.issuerID].RemoteSessionID)
 			require.Len(t, source.subjects, 1)
+			// The call's log row names the personal connection that served it.
+			require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: client.String(), AuthClientType: authClientTypeRemoteSession, ConnectionOwnerUserID: "user_owner"}, gate.servedCredentials[f.registration])
 			if tc.attached {
 				require.Equal(t, urn.NewAgentSubject(agentID), source.subjects[0], "the attachment serves its pinned connection")
 			} else {
 				require.Equal(t, urn.NewUserSubject("user_owner"), source.subjects[0], "the authorizer's own connection serves")
 			}
+			source.clientErr = remotesessions.ErrRemoteSessionUnavailable
+			_, err = f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok, "agent outage must reach request recorder: %v", err)
+			require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+			_, unavailable := errors.AsType[memberUnavailableError](err)
+			require.True(t, unavailable)
+
 		})
 	}
 }
@@ -263,7 +275,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{authorizerOwner: owner}}
-				_, err := s.resolveChosenMemberTokens(t.Context(), endpoint, agent, true, member)
+				_, err := s.resolveChosenMemberTokens(t.Context(), remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
 				require.NoError(t, err)
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent, chosenClient: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authorizerOwner: owner}
 				if typed {

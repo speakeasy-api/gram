@@ -47,7 +47,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			g.execute = false
 			g.catalogRef.Mode = toolfilter.CatalogModeLive
 			m.authClient = nil
-		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
+		}, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
 		{name: "missing member", change: func(g *metaGateContext, _ *metaMember) { delete(g.catalog.Members, "source") }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": false, "server_id_matches": false, "project_id_matches": false}},
 		{name: "changed server", change: func(_ *metaGateContext, m *metaMember) { m.serverID = uuid.New() }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": true, "server_id_matches": false, "project_id_matches": true}},
 		{name: "changed project", change: func(_ *metaGateContext, m *metaMember) { m.projectID = uuid.New() }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": true, "server_id_matches": true, "project_id_matches": false}},
@@ -55,18 +55,18 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			a := g.catalog.Members["source"]
 			a.Auth = nil
 			g.catalog.Members["source"] = a
-		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": false, "registration_id_matches": false, "auth_client_id_matches": false}},
+		}, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": false, "registration_id_matches": false, "auth_client_id_matches": false}},
 		{name: "changed registration", change: func(_ *metaGateContext, m *metaMember) {
 			m.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": false, "auth_client_id_matches": true}},
-		{name: "changed auth client", change: func(_ *metaGateContext, m *metaMember) { m.authClient.clientID = uuid.New() }, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
-		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true}},
-		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true}},
+		}, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": false, "auth_client_id_matches": true}},
+		{name: "changed auth client", change: func(_ *metaGateContext, m *metaMember) { m.authClient.clientID = uuid.New() }, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
+		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true}},
+		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true}},
 		{name: "missing approved configuration", change: func(g *metaGateContext, _ *metaMember) {
 			a := g.catalog.Members["source"]
 			a.BackendHash = ""
 			g.catalog.Members["source"] = a
-		}, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
+		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
 		{name: "upstream unavailable", change: func(_ *metaGateContext, m *metaMember) { m.upstreamUnavailable = upstreamError }},
 	}
 	for _, tt := range tests {
@@ -291,11 +291,14 @@ func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	catalog := connectionCatalog{Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID, IssuerID: endpoint.UserSessionIssuerID, Resource: endpointToolSelectionResource(endpoint), ClientID: "test-client", Subject: subject, Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}, ExpiresAt: now.Add(time.Hour)}
 	raw, err := json.Marshal(catalog)
 	require.NoError(t, err)
-	conditional, ok := service.connectionCatalogCache.(cache.ConditionalCache)
-	require.True(t, ok)
-	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
-	require.NoError(t, err)
-	require.True(t, stored)
+	require.NoError(t, service.publishConnectionCatalog(ctx, &catalog, now))
+	conflicting := catalog
+	conflicting.ClientID = "different-client"
+	require.ErrorContains(t, service.publishConnectionCatalog(ctx, &conflicting, now), "publication conflict")
+	expired := catalog
+	expired.ID = uuid.New()
+	expired.ExpiresAt = now
+	require.ErrorIs(t, service.publishConnectionCatalog(ctx, &expired, now), errConnectionCatalogExpired)
 	reference := &toolfilter.CatalogReference{ID: catalog.ID, Mode: toolfilter.CatalogModeCached, AllTools: true}
 	loaded, err := service.loadConnectionCatalog(ctx, endpoint, subject, reference, now)
 	require.NoError(t, err)

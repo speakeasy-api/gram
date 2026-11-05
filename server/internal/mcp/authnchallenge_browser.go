@@ -11,6 +11,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -30,6 +31,9 @@ type ChallengeBrowserBinding struct {
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
+	if err := validateCodeReconnectBinding(state); err != nil {
+		return err
+	}
 	if err := validateWorkloadReconnectBinding(state); err != nil {
 		return err
 	}
@@ -113,11 +117,23 @@ func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http
 // The remote state is immutable and single-use. Peek before the manager can
 // exchange a code or persist credentials; it still owns the atomic consumption.
 // Dashboard-owned linking (FinalRedirectURI) does not have a consent parent.
-func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
+func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	remote, err := s.remoteLoginCache.Get(r.Context(), "remoteLogin:"+r.URL.Query().Get("state"))
 	if err != nil {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	var parentReconnect *CodeReconnectBinding
+	var parentWorkload *WorkloadReconnectBinding
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		if parentReconnect.expired(time.Now()) || parentWorkload.expired(time.Now()) {
+			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))...)
+			return
+		}
+		s.recordRemoteLoginRefusal(r, remote, retErr)
+	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err
 	}
@@ -128,20 +144,34 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("load parent login state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	parentReconnect = parent.CodeReconnect
+	parentWorkload = parent.WorkloadReconnect
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
-	}
-	if err := validateWorkloadReconnectBinding(parent); err != nil {
-		return err
 	}
 	// A login on another callback host carries its own browser binding, set
 	// there by the bind stop of the remote login browser hop.
 	if remote.BrowserHash != "" {
-		return s.validateRemoteLoginHopBrowser(r, parent, remote)
-	}
-	err = validateChallengeBrowser(r, parent, true)
-	if err != nil {
+		if err := s.validateRemoteLoginHopBrowser(r, parent, remote); err != nil {
+			return err
+		}
+	} else if err := validateChallengeBrowser(r, parent, true); err != nil {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateWorkloadReconnectBinding(parent); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid workload connection binding"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateCodeReconnectBinding(parent); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid code connection binding"), oauthui.ReasonSessionChanged))
+	}
+	if parent.CodeReconnect != nil {
+		endpoint, err := s.loadResolvedMcpEndpointByRef(r.Context(), parent.Endpoint)
+		if err != nil {
+			return err
+		}
+		if _, err := s.consentSubjectMembers(r.Context(), endpoint, parent); err != nil {
+			return err
+		}
 	}
 	return nil
 }

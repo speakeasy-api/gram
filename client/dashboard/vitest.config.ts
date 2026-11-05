@@ -23,6 +23,8 @@ export default defineConfig({
   },
   test: {
     fsModuleCache: true,
+    // Component and browser-behavior tests. DOM-independent files opt into
+    // Node with `// @vitest-environment node` on the first line.
     environment: "happy-dom",
     setupFiles: ["./src/test/setup.ts"],
   },

@@ -68,7 +68,7 @@ func TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring(t *testing.T) {
 	// The gate treats NULL-with-no-refresh as non-expiring and keeps returning
 	// the token, rather than rejecting it as ErrNoValidToken once a synthetic
 	// hour lapses.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved, "non-expiring token must keep resolving")
 }
@@ -101,7 +101,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 	require.True(t, env.session.RefreshTokenEncrypted.Valid, "refresh token must be persisted")
 
 	// The stored token is served and no refresh is attempted.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load())
@@ -113,7 +113,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 		ProjectID: conv.ToNullUUID(env.projectID),
 		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-48 * time.Hour)),
 	}))
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load(), "unknown access expiry must not force a refresh")
@@ -216,10 +216,12 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
-	legacyCallbackURL bool
-	issuerScopes      []string
-	clientScope       []string
-	scopeOverride     []string
+	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
+	tokenResponseIssuer string
+	legacyCallbackURL   bool
+	issuerScopes        []string
+	clientScope         []string
+	scopeOverride       []string
 	// omitScopeFallback sets the issuer to send no scope where its catalogue is the last resort.
 	omitScopeFallback bool
 	// authorizeQuery is appended to the issuer's authorization endpoint, e.g. a baked-in scope.
@@ -460,6 +462,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	issuerURL, jwksURI := "https://idp.example.com", ""
+	if options.tokenResponseIssuer != "" {
+		issuerURL = options.tokenResponseIssuer
+	}
 	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
 	trusted := testIssuerTLSRootCAs.Clone()
 	if options.idTokenIssuer != nil {

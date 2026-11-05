@@ -631,6 +631,9 @@ type recordingRegistrationStore struct {
 	dashboard                RegistrationDashboardSetup
 	pendingSecretFields      []CatalogConfigurationField
 	pendingSecretFieldsCalls int
+	readiness                Readiness
+	readinessFound           bool
+	readinessCalls           int
 }
 
 func (s *recordingRegistrationStore) ResolveProject(context.Context, string, string) (ResolvedProject, error) {
@@ -667,6 +670,11 @@ func (s *recordingRegistrationStore) CompleteRegistration(_ context.Context, _ P
 func (s *recordingRegistrationStore) ResolveRegistrationPendingSecretFields(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID, _ []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
 	s.pendingSecretFieldsCalls++
 	return append([]CatalogConfigurationField(nil), s.pendingSecretFields...), s.err
+}
+
+func (s *recordingRegistrationStore) GetProviderReadiness(context.Context, Principal, uuid.UUID, uuid.UUID) (Readiness, bool, error) {
+	s.readinessCalls++
+	return s.readiness, s.readinessFound, s.err
 }
 
 func (s *recordingRegistrationStore) ResolveRegistrationCatalogIdentity(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (CatalogCandidate, error) {
@@ -890,5 +898,75 @@ func TestRegistrationServiceOffersSignInInChatWhenTheClientIsAutomatic(t *testin
 			require.Equal(t, tc.registration, result.AutomaticClientRegistration)
 			require.NotEmpty(t, result.DashboardSetupURL, "the dashboard stays available as the fallback")
 		})
+	}
+}
+
+func TestCatalogNextActionNamesTheOneRequiredStepLeft(t *testing.T) {
+	t.Parallel()
+
+	browser := "browser-catalog-registry-" + uuid.NewString()
+	for _, tc := range []struct {
+		name           string
+		providerKey    string
+		authSetup      string
+		secretsPending bool
+		ready          bool
+		want           string
+	}{
+		{"secrets pending win over sign-in", browser, "dcr", true, false, nextActionSecureDashboardSetup},
+		{"secrets pending win over stored readiness", browser, "none", true, true, nextActionSecureDashboardSetup},
+		{"stored readiness means nothing is left", browser, "manual", false, true, nextActionReady},
+		{"no sign-in means nothing is left", browser, "none", false, false, nextActionReady},
+		{"dynamic client registration leaves only sign-in", browser, "dcr", false, false, nextActionConnectSignIn},
+		{"client metadata document leaves only sign-in", browser, "cimd", false, false, nextActionConnectSignIn},
+		{"manual client setup needs the dashboard", browser, "manual", false, false, nextActionContinueDashboardSetup},
+		{"unknown sign-in needs the dashboard", browser, "unknown", false, false, nextActionContinueDashboardSetup},
+		{"reviewed provider starts setup", "provider", "dcr", false, false, nextActionStartSetup},
+	} {
+		require.Equal(t, tc.want, catalogNextAction(tc.providerKey, tc.authSetup, tc.secretsPending, tc.ready), tc.name)
+	}
+}
+
+func TestRegistrationServiceReplayOfAReadyServerLeavesNoSetup(t *testing.T) {
+	t.Parallel()
+
+	providerKey := "browser-catalog-registry-" + uuid.NewString()
+	for _, tc := range []struct {
+		name      string
+		readiness Readiness
+		found     bool
+		want      string
+	}{
+		{"fresh ready check", Readiness{State: ReadinessReady, Fresh: true}, true, nextActionReady},
+		{"stale ready check", Readiness{State: ReadinessReady, Fresh: false}, true, nextActionConnectSignIn},
+		{"not ready", Readiness{State: ReadinessNeedsGramAuthorization, Fresh: true}, true, nextActionConnectSignIn},
+		{"never checked", Readiness{}, false, nextActionConnectSignIn},
+	} {
+		project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+		store := &recordingRegistrationStore{
+			project:        project,
+			readiness:      tc.readiness,
+			readinessFound: tc.found,
+			begin: OperationReceipt{
+				ID:                uuid.New(),
+				RegistrationID:    uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				Status:            receiptStatusSucceeded,
+				Replayed:          true,
+				AlreadyRegistered: true,
+			},
+		}
+		service := newRegistrationService(
+			testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: providerKey, CatalogRef: "reviewed/mcp", SetupIntent: "dashboard_source_settings", AuthSetup: "dcr"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}},
+			&testRegistrationGate{enabled: true},
+			store,
+		)
+
+		result, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+			ProjectSlug: project.Slug, ProviderKey: providerKey, CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+		})
+
+		require.NoError(t, err, tc.name)
+		require.Equal(t, tc.want, result.NextAction, tc.name)
+		require.Equal(t, 1, store.readinessCalls, tc.name)
 	}
 }

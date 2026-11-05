@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -25,13 +26,14 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => mocks.project,
 }));
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    home: { href: () => "/acme" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "sandbox" }),
 }));
 
-vi.mock("react-router", () => ({
+// The navigate options are part of what's under test, so only useNavigate is
+// replaced; the route helpers still resolve the real org home URL.
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => mocks.navigate,
 }));
 
@@ -90,7 +92,11 @@ async function confirmDelete() {
 
 describe("SettingsDangerZone", () => {
   it("sends the user to org home after deleting a project", async () => {
-    render(<SettingsDangerZone />);
+    render(
+      <MemoryRouter>
+        <SettingsDangerZone />
+      </MemoryRouter>,
+    );
 
     await confirmDelete();
 

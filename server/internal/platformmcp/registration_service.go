@@ -38,6 +38,7 @@ type RegistrationPersistence interface {
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
 	IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error)
+	GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error)
 }
 
 type RegisterCatalogMCPInput struct {
@@ -63,6 +64,8 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+	// NextAction is the one required setup step left, or nextActionReady.
+	NextAction string
 
 	// ServerName is the display name the MCP server was added under.
 	ServerName string
@@ -733,8 +736,20 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		}
 	}
 
+	// A server added before may already be signed in to. The stored check is
+	// the same evidence get_mcp_readiness reports; it is read, never probed.
+	ready := false
+	if receipt.AlreadyRegistered && principal.HasConnection() {
+		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, receipt.RegistrationID.UUID)
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("read catalog registration readiness: %w", err)
+		}
+		ready = found && readiness.Fresh && readiness.State == ReadinessReady
+	}
+
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
+		NextAction:          catalogNextAction(catalog.ProviderKey, catalog.AuthSetup, len(pendingSecretFields) > 0, ready),
 		Project:             project,
 		ServerName:          configuration.displayName,
 		ProviderKey:         catalog.ProviderKey,
@@ -744,6 +759,30 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Registration:        receipt.RegistrationID.UUID.String(),
 		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
+}
+
+// catalogNextAction picks the one required setup step left for a catalogue
+// registration. Sharing through a plugin is optional, so it is never a step.
+func catalogNextAction(providerKey, authSetup string, secretsPending, ready bool) string {
+	switch {
+	case secretsPending:
+		return nextActionSecureDashboardSetup
+	case ready:
+		return nextActionReady
+	case !isBrowserCatalogProviderKey(providerKey):
+		return nextActionStartSetup
+	}
+	switch authSetup {
+	case "none":
+		return nextActionReady
+	case "dcr", "cimd":
+		// The OAuth client is set up automatically, so only the user's
+		// sign-in is left, and the agent can connect it in chat.
+		return nextActionConnectSignIn
+	default:
+		// "manual" needs an administrator in the dashboard; "unknown" may.
+		return nextActionContinueDashboardSetup
+	}
 }
 
 // isDirectRemoteDisplayNameBreak rejects values that change the structure of a

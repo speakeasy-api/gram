@@ -324,9 +324,41 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome,
-		"a token acquired under the previous trusted registration is never released")
+	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonReauthenticationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome,
+		"a token acquired under the previous trusted registration is never released, and a new sign-in repairs it")
 	require.Equal(t, requests, f.idp.Requests())
+}
+
+func TestDevIDP_HeldDelegationClaim(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		age       time.Duration
+		reason    Reason
+		retryable bool
+		decision  RefreshDecision
+	}{
+		{name: "renewal may be running", age: 0, reason: ReasonTransientFailure, retryable: true, decision: RefreshUnconfirmed},
+		{name: "nothing is running", age: time.Hour, reason: ReasonReauthenticationRequired, retryable: false, decision: RefreshReauthenticate},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newDevIDPFixture(t, devIDPOptions{})
+			affected, err := repo.New(f.db).SetTrustedDelegationStateFixture(t.Context(), repo.SetTrustedDelegationStateFixtureParams{
+				OrganizationID: f.req.OrganizationID, ClientID: f.idpClientID,
+				RefreshClaimID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				UpdatedAt:      pgtype.Timestamptz{Time: time.Now().Add(-tc.age), Valid: true, InfinityModifier: pgtype.Finite},
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, affected)
+
+			requests := f.idp.Requests()
+			_, outcome := f.chainer.Acquire(t.Context(), f.req)
+			require.Equal(t, Outcome{Stage: StageDelegation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: tc.retryable, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
+			require.Equal(t, requests, f.idp.Requests(), "a held claim contacts nobody")
+			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, f.enc, f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
+		})
+	}
 }
 
 // Okta mints ID-JAGs only for a resource app's Issuer URL, which can differ

@@ -616,7 +616,7 @@ export default function PolicyCenter(): JSX.Element {
 }
 
 // Layout route wrapper: the policy list and the policy detail subpage render
-// through this Outlet (see routes.tsx policyCenter).
+// through this Outlet (see route-pages.tsx policyCenter).
 export function PolicyCenterRoot(): JSX.Element {
   return <Outlet />;
 }

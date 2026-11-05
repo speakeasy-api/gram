@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { describe, expect, it } from "vitest";
 import {

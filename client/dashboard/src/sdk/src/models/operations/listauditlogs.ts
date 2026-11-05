@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListAuditLogsResult,
@@ -16,6 +17,18 @@ export type ListAuditLogsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
+
+/**
+ * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+ */
+export const QueryParamCategory = {
+  Configuration: "configuration",
+  Security: "security",
+} as const;
+/**
+ * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+ */
+export type QueryParamCategory = ClosedEnum<typeof QueryParamCategory>;
 
 export type ListAuditLogsRequest = {
   /**
@@ -58,6 +71,10 @@ export type ListAuditLogsRequest = {
    * Exclusive end of the window to list changes from. Omit for the whole history.
    */
   to?: Date | undefined;
+  /**
+   * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
+   */
+  category?: QueryParamCategory | undefined;
   /**
    * API Key header
    */
@@ -104,6 +121,11 @@ export function listAuditLogsSecurityToJSON(
 }
 
 /** @internal */
+export const QueryParamCategory$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamCategory
+> = z.enum(QueryParamCategory);
+
+/** @internal */
 export type ListAuditLogsRequest$Outbound = {
   cursor?: string | undefined;
   project_slug?: string | undefined;
@@ -115,6 +137,7 @@ export type ListAuditLogsRequest$Outbound = {
   acting_surface?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+  category: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -135,6 +158,7 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     actingSurface: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    category: z._default(QueryParamCategory$outboundSchema, "configuration"),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

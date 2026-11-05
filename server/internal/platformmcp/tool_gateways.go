@@ -56,7 +56,7 @@ func registerGatewayTools(reg *Registrar, service *GatewayService) {
 	}, meta, createHandler)
 	addTool(reg, &mcp.Tool{
 		Name:  setGatewayMembersToolName,
-		Title: "Set a Gateway's Members",
+		Title: "Choose a Gateway's MCP Servers",
 		Description: "Replace the MCP servers behind one gateway in an explicit project with exactly the listed servers, in order: servers not yet on it are added, servers left out are removed, and the rest are reordered. An empty list removes every member. " +
 			"Before calling, tell the user which servers will be added and removed. When the gateway is in a plugin, the change reaches everyone holding that plugin; an organization administrator adding a server here approves it in Shadow MCP for that audience, as distributing it would. " +
 			"Browser connections approved through the Tool access picker keep their approved members and need new consent for added or previously unavailable servers. Cached tool lists need new consent to include new tools. Older connections, management-issued sessions and agents follow current membership and their access grants. " +

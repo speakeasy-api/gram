@@ -2253,7 +2253,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
 		"max(tool_name) as tool_name",
-		"any(tool_source) as tool_source",
+		"max(tool_source) as tool_source",
 		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
@@ -2275,7 +2275,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	// correct boolean precedence. Multiple .Having() calls would create separate conditions
 	// that interact incorrectly with the OR in the tool_name check, causing the gram_urn
 	// filter to be bypassed when startsWith(gram_urn, 'tools:') is true.
-	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '') OR startsWith(gram_urn, 'tools:'))"}
+	havingParts := []string{"((tool_name IS NOT NULL AND tool_name != '' AND (event_source != 'hook' OR " + hookToolNamePredicate("tool_name") + ")) OR startsWith(gram_urn, 'tools:'))"}
 	havingArgs := []any{}
 
 	// URN filter must use HAVING because it's an aggregate function in SELECT
@@ -4157,7 +4157,7 @@ const (
 	toolUsageTargetKindLocalTools = "local_tools"
 	toolUsageTargetKindSkill      = "skill"
 
-	toolUsageUserKindAgentID        = "agent_id"
+	ToolUsageUserKindAgentID        = "agent_id"
 	toolUsageUserKindEmail          = "email"
 	toolUsageUserKindExternalUserID = "external_user_id"
 	toolUsageUserKindUserID         = "user_id"
@@ -4622,12 +4622,12 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	if splitAgents {
 		users := make([]ToolUsageUserFilterOptionRow, 0, len(options.Users)+len(agents))
 		for _, row := range options.Users {
-			if row.UserKind != toolUsageUserKindAgentID {
+			if row.UserKind != ToolUsageUserKindAgentID {
 				users = append(users, row)
 			}
 		}
 		for _, row := range agents {
-			if row.UserKind == toolUsageUserKindAgentID {
+			if row.UserKind == ToolUsageUserKindAgentID {
 				users = append(users, row)
 			}
 		}
@@ -4729,7 +4729,7 @@ func toolUsageAgentFilter(agentIDs []string) squirrel.Sqlizer {
 		return nil
 	}
 	return squirrel.And{
-		squirrel.Eq{"user_kind": toolUsageUserKindAgentID},
+		squirrel.Eq{"user_kind": ToolUsageUserKindAgentID},
 		squirrel.Eq{"user_key": agentIDs},
 	}
 }
@@ -5960,6 +5960,25 @@ const (
 	toolUsageSummaryMCPSkillLoad = "g_event_source = 'resource_read' AND g_skill_name != ''"
 )
 
+// hookNonToolEventNames lists, as a SQL tuple body, the hook event names that
+// unified ingest used to store as gram.tool.name on hook rows that are not
+// tool calls: prompts, session lifecycle, assistant output, notifications,
+// and canonical event types without a provider-style name (verbatim unknown
+// types, such as Kit's "prompt", included). Ingest now leaves the tool name
+// empty on those rows, and hookToolNamePredicate excludes these names so
+// rows stored before that still do not count as tool calls.
+const hookNonToolEventNames = "'UserPromptSubmit', 'BeforeSubmitPrompt', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', " +
+	"'Notification', 'ConfigChange', 'PreCompact', 'PostCompact', 'AfterAgentResponse', 'AfterAgentThought', " +
+	"'session.started', 'session.updated', 'session.ended', 'prompt.submitted', 'assistant.responded', " +
+	"'assistant.thought', 'usage.reported', 'notification.reported', 'mcp.inventory', 'client.delivery_failed', " +
+	"'skill.activated', 'prompt'"
+
+// hookToolNamePredicate matches a hook row, or a trace's aggregated tool
+// name, that names a tool call. column is the tool name column or alias.
+func hookToolNamePredicate(column string) string {
+	return "(" + column + " != '' AND " + column + " NOT IN (" + hookNonToolEventNames + "))"
+}
+
 func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	groupedSB := sq.Select(
 		"toString(trace_id) AS g_trace_id",
@@ -5967,7 +5986,13 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"sum(log_count) AS g_log_count",
 		"any(gram_urn) AS g_gram_urn",
 		"max(tool_name) AS g_tool_name",
-		"any(tool_source) AS g_tool_source",
+		// max, not any: an MCP hook call can name its server on only one of
+		// its rows (OpenClaw reports it on the post-call result alone), so
+		// across a trace's unmerged summary rows the populated value must win
+		// over the unattributed sibling's empty string. The table column and
+		// its MV still aggregate tool_source with any(), so once the rows
+		// collapse into one the empty string can already have won.
+		"max(tool_source) AS g_tool_source",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
 		"any(user_email) AS g_user_email",
@@ -5996,7 +6021,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
@@ -6134,7 +6159,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 	userKind := chMultiIf(
-		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
+		"g_agent_id != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -6279,7 +6304,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (" + hookToolNamePredicate("tool_name") + " OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -6322,6 +6347,34 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		return "", nil, fmt.Errorf("building tool usage trace raw source: %w", err)
 	}
 
+	logGroupKind := chMultiIf(
+		"trace_id != ''", "'trace_id'",
+		"trigger_correlation_id != ''", "'correlation_id'",
+		"trigger_event_id != ''", "'trigger_event_id'",
+		"'log_id'",
+	)
+	logGroupValue := chMultiIf(
+		"trace_id != ''", "toString(trace_id)",
+		"trigger_correlation_id != ''", "trigger_correlation_id",
+		"trigger_event_id != ''", "trigger_event_id",
+		"toString(log_id)",
+	)
+	// An MCP hook call can name its server, or the URL it reached, on only
+	// some of its rows (an OpenClaw call blocked before it ran reports no
+	// server on its result, and older relays report OpenClaw servers on the
+	// result alone). Every row of the log group inherits them, so the call
+	// classifies as one target instead of splitting into a gateway or MCP row
+	// and a shadow or local-tool row, matching the max() the summary path reads.
+	logGroupWindow := "OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	rawSQL = fmt.Sprintf(
+		"SELECT * REPLACE ("+
+			"if(tool_source != '', tool_source, max(tool_source) %[1]s) AS tool_source, "+
+			"if(mcp_match != '', mcp_match, max(mcp_match) %[1]s) AS mcp_match, "+
+			"if(mcp_server_url != '', mcp_server_url, max(mcp_server_url) %[1]s) AS mcp_server_url"+
+			") FROM (%[2]s)",
+		logGroupWindow, rawSQL,
+	)
+
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
 	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
@@ -6348,24 +6401,12 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
-	logGroupKind := chMultiIf(
-		"trace_id != ''", "'trace_id'",
-		"trigger_correlation_id != ''", "'correlation_id'",
-		"trigger_event_id != ''", "'trigger_event_id'",
-		"'log_id'",
-	)
-	logGroupValue := chMultiIf(
-		"trace_id != ''", "toString(trace_id)",
-		"trigger_correlation_id != ''", "trigger_correlation_id",
-		"trigger_event_id != ''", "trigger_event_id",
-		"toString(log_id)",
-	)
 	// Reuse the existing trace/log-group window so sparse actor attributes win
 	// before user identity enters GROUP BY, without another scan or join.
 	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	traceAuthorizerUserID := "max(authorizer_user_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	userKind := chMultiIf(
-		traceAgentID+" != ''", "'"+toolUsageUserKindAgentID+"'",
+		traceAgentID+" != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -6684,7 +6725,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
 	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
-		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
+		"g_agent_id != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -6705,7 +6746,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_source) AS g_tool_source",
+		"max(tool_source) AS g_tool_source",
 		"max(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
@@ -6734,7 +6775,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(tool_name) AS g_tool_name",
-		"any(tool_source) AS g_tool_source",
+		"max(tool_source) AS g_tool_source",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
@@ -6759,7 +6800,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) = 'hook'").
-		Having("(g_tool_name != '' OR g_skill_name != '')")
+		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
@@ -8207,7 +8248,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 		// the two readers then agree, and someone seen through both lanes
 		// counts once whenever both rows name the same email.
 		userKey = chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
-		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != ''))"
+		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND " + hookToolNamePredicate("tool_name") + "))"
 	default:
 		// Count users with tool calls
 		eventPredicate = "startsWith(gram_urn, 'tools:')"

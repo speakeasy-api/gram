@@ -9445,6 +9445,19 @@ type ToolUsageTraceSummaryResponseBody struct {
 	AuthorizerUserID *string `form:"authorizer_user_id,omitempty" json:"authorizer_user_id,omitempty" xml:"authorizer_user_id,omitempty"`
 	// Email of the authorizer when they resolve to a known user
 	AuthorizerLabel *string `form:"authorizer_label,omitempty" json:"authorizer_label,omitempty" xml:"authorizer_label,omitempty"`
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string `form:"auth_client_type,omitempty" json:"auth_client_type,omitempty" xml:"auth_client_type,omitempty"`
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string `form:"connection_owner_user_id,omitempty" json:"connection_owner_user_id,omitempty" xml:"connection_owner_user_id,omitempty"`
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string `form:"connection_owner_label,omitempty" json:"connection_owner_label,omitempty" xml:"connection_owner_label,omitempty"`
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Telemetry event source
@@ -9464,6 +9477,18 @@ type ToolUsageTraceSummaryResponseBody struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string `form:"via_meta_mcp_server_name,omitempty" json:"via_meta_mcp_server_name,omitempty" xml:"via_meta_mcp_server_name,omitempty"`
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string `form:"via_meta_mcp_server_kind,omitempty" json:"via_meta_mcp_server_kind,omitempty" xml:"via_meta_mcp_server_kind,omitempty"`
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string `form:"via_meta_mcp_server_project_slug,omitempty" json:"via_meta_mcp_server_project_slug,omitempty" xml:"via_meta_mcp_server_project_slug,omitempty"`
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string `form:"via_meta_mcp_server_agent_id,omitempty" json:"via_meta_mcp_server_agent_id,omitempty" xml:"via_meta_mcp_server_agent_id,omitempty"`
 	// Stable MCP client identity used by filters; 'unattributed' when the caller
 	// never reported one
 	ClientKey string `form:"client_key" json:"client_key" xml:"client_key"`

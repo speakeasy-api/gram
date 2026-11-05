@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { ServerInfoPopover } from "./ServerInfoPopover";
 import { StepServers } from "./StepServers";
@@ -19,11 +20,8 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
     return auth.result;
   },
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    toolset: { href: (slug: string) => `/toolsets/${slug}` },
-    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "other-project" }),
 }));
 afterEach(() => {
   cleanup();
@@ -62,6 +60,7 @@ it("opens metadata without selecting the server, and keeps its slug out of the r
       selected={[]}
       onChange={onChange}
     />,
+    { wrapper: MemoryRouter },
   );
   expect(screen.queryByText("hidden-slug")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
@@ -78,6 +77,7 @@ it("distinguishes zero calls from missing telemetry", () => {
     <ServerInfoPopover
       server={{ ...server, description: "A useful server", recentToolCalls: 0 }}
     />,
+    { wrapper: MemoryRouter },
   );
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("0")).toBeTruthy();
@@ -89,11 +89,12 @@ it("links legacy toolsets by their own slug rather than endpoint suffix or MCP i
     <ServerInfoPopover
       server={{ ...server, kind: "Toolset", toolsetSlug: "actual-toolset" }}
     />,
+    { wrapper: MemoryRouter },
   );
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(
     screen.getByRole("link", { name: "Open MCP server" }).getAttribute("href"),
-  ).toBe("/toolsets/actual-toolset");
+  ).toBe("/org/projects/project/toolsets/actual-toolset");
 });
 
 it("names each way a server signs in when it offers several", () => {
@@ -109,7 +110,7 @@ it("names each way a server signs in when it offers several", () => {
       ],
     },
   };
-  render(<ServerInfoPopover server={server} />);
+  render(<ServerInfoPopover server={server} />, { wrapper: MemoryRouter });
   // Asked only once someone opens the popover.
   expect(auth.requests).toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
@@ -130,7 +131,7 @@ it("says when a server needs no sign-in, and when it has none set up", () => {
     isError: false,
     data: { status: "no_auth_required", clients: [] },
   };
-  render(<ServerInfoPopover server={server} />);
+  render(<ServerInfoPopover server={server} />, { wrapper: MemoryRouter });
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("No sign-in needed")).toBeTruthy();
   cleanup();
@@ -140,7 +141,7 @@ it("says when a server needs no sign-in, and when it has none set up", () => {
     isError: false,
     data: { status: "undecided", clients: [] },
   };
-  render(<ServerInfoPopover server={server} />);
+  render(<ServerInfoPopover server={server} />, { wrapper: MemoryRouter });
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("Not set up")).toBeTruthy();
 });
@@ -151,7 +152,9 @@ it("says a hosted server that needs sign-in and offers none is not set up", () =
     isError: false,
     data: { status: "setup_incomplete", clients: [] },
   };
-  render(<ServerInfoPopover server={{ ...server, kind: "Hosted" }} />);
+  render(<ServerInfoPopover server={{ ...server, kind: "Hosted" }} />, {
+    wrapper: MemoryRouter,
+  });
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("Not set up")).toBeTruthy();
   expect(screen.queryByText("Hosted by Speakeasy")).toBeNull();
@@ -162,6 +165,7 @@ it("calls a toolset hosted by Speakeasy", () => {
     <ServerInfoPopover
       server={{ ...server, kind: "Toolset", toolsetSlug: "actual-toolset" }}
     />,
+    { wrapper: MemoryRouter },
   );
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("Hosted by Speakeasy")).toBeTruthy();

@@ -3,9 +3,6 @@ package feature
 type Flag string
 
 const (
-	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
-	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
-
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -202,6 +199,16 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
+
+	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
+	// platform to an organization before its catalog entry is enabled, so it
+	// can be tried in production. Evaluated server-side when the platform
+	// catalog is listed (workloadpolicy), so the catalog reports the entry as
+	// enabled and the picker, Command K and preselected setup links offer it.
+	// Targeted by PostHog organization group (org slug). Fails closed: off,
+	// missing or failing, the entry stays "Coming soon". Removed once the entry
+	// is enabled.
+	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
 
 	// FlagAuthClientResolver makes the typed auth client resolver
 	// authoritative for an organization's direct proxied servers. Off, the

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -228,7 +229,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
@@ -379,18 +380,25 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return none, nil
 	}
 
-	var match remotesessions.UpstreamToken
+	var match, outage remotesessions.UpstreamToken
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
 			nullResources++
 		}
-		if upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
-			found++
-			match = entry
+		if !upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+			continue
 		}
+		if entry.SessionUnavailable() {
+			outage = entry
+			continue
+		}
+		found++
+		match = entry
 	}
 	switch {
+	case found == 0 && outage.SessionUnavailable():
+		return none, outage.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {
 			return none, err
@@ -757,9 +765,11 @@ func (s *Service) serveRemoteBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, r, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
+
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -788,6 +798,7 @@ func (s *Service) serveRemoteBackend(
 func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	logger *slog.Logger,
 	baseURL string,
 	endpoint *mcpendpointsrepo.McpEndpoint,
@@ -848,6 +859,9 @@ func (s *Service) agentKeyUngatedUpstream(
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
+		skippedUpstreams:       nil,
+		request:                r,
+		agentKeyClients:        nil,
 	}
 	token, err := s.resolveDirectUpstreamToken(ctx, w, logger, authentication, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
 	if err != nil {
@@ -968,7 +982,7 @@ func (s *Service) serveTunneledBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, r, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
 
@@ -979,6 +993,7 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,
@@ -991,6 +1006,10 @@ func (s *Service) serveTunneledBackend(
 		Request:            r,
 	}, buildOptions...)
 	if err != nil {
+		if errors.Is(err, errTunnelNoRoute) {
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+		}
+		tagTunnelOutage(w, err)
 		return err
 	}
 	// Only observed traffic needs attribution; otherwise skip the Redis work.
@@ -1101,10 +1120,14 @@ func (s *Service) prepareProxyBackendContext(
 	}
 
 	ctx = withMandatoryAdmission(ctx)
-	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
+	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
+		if mcpaccess.IsServerPermissionDenied(err) {
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+		}
 		return nil, "", err
 	}
+	ctx = authorized
 
 	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, projectWithOrganization.ID, billing.Tier(projectWithOrganization.GramAccountType))
 	ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{

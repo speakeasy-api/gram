@@ -2483,6 +2483,19 @@ type ToolUsageTraceSummary struct {
 	AuthorizerUserID *string
 	// Email of the authorizer when they resolve to a known user
 	AuthorizerLabel *string
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string
 	// Telemetry event source
@@ -2502,6 +2515,18 @@ type ToolUsageTraceSummary struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string
 	// Stable MCP client identity used by filters; 'unattributed' when the caller
 	// never reported one
 	ClientKey string

@@ -43,7 +43,7 @@ import {
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
-import { useOpenOrganization } from "@/pages/organizations/rowActions";
+import { useOpenOrganization } from "@/pages/organizations/useOpenOrganization";
 
 const SEARCH_DEBOUNCE_MS = 200;
 

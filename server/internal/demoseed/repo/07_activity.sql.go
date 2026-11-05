@@ -51,6 +51,15 @@ func (q *Queries) ActivityDeleteAuditLogs(ctx context.Context, organizationID st
 	return err
 }
 
+const activityDeleteSecurityAuditLogs = `-- name: ActivityDeleteSecurityAuditLogs :exec
+DELETE FROM security_audit_logs WHERE organization_id = $1
+`
+
+func (q *Queries) ActivityDeleteSecurityAuditLogs(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activityDeleteSecurityAuditLogs, organizationID)
+	return err
+}
+
 const activityDeleteSpendRuleEvents = `-- name: ActivityDeleteSpendRuleEvents :exec
 DELETE FROM spend_rule_events WHERE organization_id = $1
 `
@@ -87,7 +96,7 @@ func (q *Queries) ActivityInsertAnthropicInferenceConfig(ctx context.Context, ar
 
 const activityInsertAssistantThread = `-- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES ($1, $2, $3, $4, $5, 'dashboard', now() - interval '38 minutes')
+VALUES ($1, $2, $3, $4, $5, $6, now() - interval '38 minutes')
 `
 
 type ActivityInsertAssistantThreadParams struct {
@@ -96,6 +105,7 @@ type ActivityInsertAssistantThreadParams struct {
 	ProjectID     uuid.UUID
 	CorrelationID string
 	ChatID        uuid.UUID
+	SourceKind    string
 }
 
 func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg ActivityInsertAssistantThreadParams) error {
@@ -105,6 +115,7 @@ func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg Activit
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+		arg.SourceKind,
 	)
 	return err
 }
@@ -397,6 +408,46 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 		arg.SubjectID,
 		arg.SessionID,
 		arg.RiskPolicyID,
+	)
+	return err
+}
+
+const activityInsertSecurityAuditLog = `-- name: ActivityInsertSecurityAuditLog :exec
+INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                                 actor_display_name, action, subject_id, subject_type,
+                                 subject_display_name, acting_surface, created_at)
+VALUES ($1, $2, $3::uuid, $4, 'agent',
+        (SELECT agents.name FROM agents
+         WHERE agents.organization_id = $2 AND agents.id::text = $4),
+        $5, $6, 'workload_admission', $7::text,
+        'system', now() - $8::interval)
+`
+
+type ActivityInsertSecurityAuditLogParams struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	ActorID            string
+	Action             string
+	SubjectID          string
+	SubjectDisplayName string
+	Age                pgtype.Interval
+}
+
+// Security entries: an agent's runtime admitting and withdrawing its own
+// workload identity on each start and teardown. They live in the security log
+// and show under Security activity on the audit log page.
+// The actor's name is read from the seeded agent, as the runtime records it.
+func (q *Queries) ActivityInsertSecurityAuditLog(ctx context.Context, arg ActivityInsertSecurityAuditLogParams) error {
+	_, err := q.db.Exec(ctx, activityInsertSecurityAuditLog,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ActorID,
+		arg.Action,
+		arg.SubjectID,
+		arg.SubjectDisplayName,
+		arg.Age,
 	)
 	return err
 }

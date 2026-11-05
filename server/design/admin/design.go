@@ -228,10 +228,15 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminAuditLog = Type("AdminAuditLog", func() {
+	Extend(auditlogs.AuditLog)
+	Attribute("is_internal", Boolean, "Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.")
+})
+
 var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
 	Required("logs")
 
-	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("logs", ArrayOf(AdminAuditLog), "List of organization activity.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
@@ -562,6 +567,21 @@ var _ = Service("admin", func() {
 		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminGetOrganizationFeatures")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
+	})
+
+	Method("setOrganizationProviderSetup", func() {
+		Description("Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.")
+		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationProviderSetupRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.providerSetup"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationProviderSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationProviderSetup"}`)
 	})
 
 	Method("setOrganizationFeature", func() {
@@ -1407,7 +1427,7 @@ var _ = Service("admin", func() {
 	signupOfferMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
-		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")
@@ -1430,7 +1450,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("setStripeSubscription", func() {
-		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Description("Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")

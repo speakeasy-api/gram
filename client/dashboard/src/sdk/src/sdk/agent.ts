@@ -12,6 +12,7 @@ import { agentHideMcpServer } from "../funcs/agentHideMcpServer.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
+import { agentReportCrash } from "../funcs/agentReportCrash.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentReportState } from "../funcs/agentReportState.js";
 import { agentUnhideMcpServer } from "../funcs/agentUnhideMcpServer.js";
@@ -27,6 +28,7 @@ import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
+import { ReportCrashResult } from "../models/components/reportcrashresult.js";
 import { ReportStateResult } from "../models/components/reportstateresult.js";
 import {
   CreateAgentSessionHandoffRequest,
@@ -68,6 +70,10 @@ import {
   ReportAgentAIScanRequest,
   ReportAgentAIScanSecurity,
 } from "../models/operations/reportagentaiscan.js";
+import {
+  ReportAgentCrashRequest,
+  ReportAgentCrashSecurity,
+} from "../models/operations/reportagentcrash.js";
 import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
@@ -274,6 +280,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(agentReportAIScan(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportCrash agent
+   *
+   * @remarks
+   * Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.
+   */
+  async reportCrash(
+    request: ReportAgentCrashRequest,
+    security?: ReportAgentCrashSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ReportCrashResult> {
+    return unwrapAsync(agentReportCrash(
       this,
       request,
       security,
