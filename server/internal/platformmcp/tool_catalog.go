@@ -65,7 +65,7 @@ type CandidateInspection struct {
 func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_mcp_catalog",
-		Title:       "Search Reviewed MCP Servers",
+		Title:       "Search the MCP Catalog",
 		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything. Each result's auth_setup says how the server signs users in: present it with the result, and when it is unknown check the setup guide with search_speakeasy_docs before saying how it signs in.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
@@ -128,7 +128,7 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemote DirectRemoteInspector, gate CatalogRegistrationGateChecker, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
-		Title:       "Inspect an MCP Server",
+		Title:       "Preview an MCP Server Before Adding It",
 		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a reviewed catalog entry, supports_dcr, supports_cimd, and auth_setup report advertised capabilities, not a verified connection; unknown setup is not manual setup. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
