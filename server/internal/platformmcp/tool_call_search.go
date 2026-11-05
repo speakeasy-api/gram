@@ -293,6 +293,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		statuses = []string{search.outcome}
 	}
 	rows, err := s.search.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
+		OwnScope:           nil,
 		GramProjectID:      search.projectID,
 		TimeStart:          search.window.start.UnixNano(),
 		TimeEnd:            search.window.end.UnixNano(),
