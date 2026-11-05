@@ -44,3 +44,49 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   expect(copied).not.toContain('"Authorization=Bearer $SPEAKEASY_AGENT_KEY"');
   expect(copied).not.toContain("gram_secret");
 });
+
+function covered(existingKey?: { lastUsedAt?: Date } | null) {
+  render(
+    <StepInstall
+      command={null}
+      commandError={null}
+      minting={false}
+      onRegenerate={vi.fn<() => void>()}
+      onIssue={vi.fn<() => void>()}
+      issuing={false}
+      secret={null}
+      existingKey={existingKey}
+      gatewayURL={gatewayURL}
+      serverCount={1}
+    />,
+  );
+}
+
+it("asks for a key when the agent has none", () => {
+  covered(null);
+  expect(
+    screen.getByText("This agent needs a key before it can be connected."),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
+});
+
+it("says an agent with a used key is already connected", () => {
+  covered({ lastUsedAt: new Date(Date.now() - 3 * 3_600_000) });
+  expect(
+    screen.getByText(
+      "This agent is already connected. Its key was last used 3h ago.",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText(/the current one keeps working/)).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Issue another key" }),
+  ).toBeTruthy();
+});
+
+it("says an agent already has a key that nothing has used yet", () => {
+  covered({});
+  expect(screen.getByText("This agent already has a key.")).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Issue another key" }),
+  ).toBeTruthy();
+});

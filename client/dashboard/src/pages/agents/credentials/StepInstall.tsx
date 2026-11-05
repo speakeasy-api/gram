@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
+import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useState, type JSX } from "react";
 import { CodeBlock } from "./CodeBlock";
@@ -22,6 +23,42 @@ const INSTALL_TABS = [
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
 
+/** A key the agent already holds, which this step cannot show again. */
+export type ExistingAgentKey = {
+  /** When a runtime last used it; absent for a key nothing has used. */
+  lastUsedAt?: Date;
+};
+
+/**
+ * What covers the step while no key is on screen. An agent that already has
+ * one is usually connected, so saying it "needs a key" reads as if it were
+ * not: the only thing missing is a key to show, and a new one is for a new
+ * runtime.
+ */
+function keyCover(existingKey: ExistingAgentKey | null | undefined): {
+  title: string;
+  detail: string;
+  action: string;
+} {
+  if (!existingKey) {
+    return {
+      title: "This agent needs a key before it can be connected.",
+      detail:
+        "A key can only be read at the moment it is issued, so one that already exists cannot be shown here.",
+      action: "Issue a key",
+    };
+  }
+  const lastUsed = formatRelativeTime(existingKey.lastUsedAt ?? null);
+  return {
+    title: lastUsed
+      ? `This agent is already connected. Its key was last used ${lastUsed}.`
+      : "This agent already has a key.",
+    detail:
+      "A key can only be read at the moment it is issued, so it cannot be shown here. Issue another only to connect a new runtime: the current one keeps working.",
+    action: "Issue another key",
+  };
+}
+
 export function StepInstall({
   command,
   commandError,
@@ -30,6 +67,7 @@ export function StepInstall({
   onIssue,
   issuing,
   secret,
+  existingKey,
   gatewayURL,
   serverCount,
 }: {
@@ -41,6 +79,8 @@ export function StepInstall({
   onIssue: () => void;
   issuing: boolean;
   secret: string | null;
+  /** The agent's live key, when it already has one. */
+  existingKey?: ExistingAgentKey | null;
   gatewayURL: string;
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";
@@ -63,6 +103,7 @@ export function StepInstall({
       ? "Every server sits"
       : `${serverCount} ${serverCount === 1 ? "server sits" : "servers sit"}`;
   const key = secret ?? `<your ${KEY_ENV}>`;
+  const cover = keyCover(existingKey);
   // One complete call per runtime, not the pair of values on their own: the
   // question the step has to answer is what to do with them.
   // Streamable HTTP, not the SDK's built-in "sse" transport: the gateway
@@ -338,17 +379,12 @@ export function StepInstall({
         {!secret && (
           <div className="absolute inset-0 flex items-center justify-center p-6">
             <div className="bg-card border-border max-w-md space-y-3 border p-5 text-center shadow-sm">
-              <Text>
-                {issuing
-                  ? "Issuing a key…"
-                  : "This agent needs a key before it can be connected."}
-              </Text>
+              <Text>{issuing ? "Issuing a key…" : cover.title}</Text>
               <Text muted small className="block">
-                A key can only be read at the moment it is issued, so one that
-                already exists cannot be shown here.
+                {cover.detail}
               </Text>
               <Button disabled={issuing} onClick={onIssue}>
-                {issuing ? "Issuing…" : "Issue a key"}
+                {issuing ? "Issuing…" : cover.action}
               </Button>
             </div>
           </div>
