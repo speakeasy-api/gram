@@ -2070,7 +2070,38 @@ func (p *Proxy) dispatchInterceptorError(
 	if _, ok := errors.AsType[*MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
+	if refusal, ok := errors.AsType[*UpstreamListingRefusalError](err); ok {
+		return p.answerUpstreamListingRefusal(ctx, w, span, id, refusal, responseBytes)
+	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)
+	return nil
+}
+
+// answerUpstreamListingRefusal answers the way the POST path answers the same
+// failure on a forwarded request: a [RejectError] as a JSON-RPC error, any other
+// cause returned for the caller's error path, and an upstream refusal relayed
+// with its status and challenge.
+func (p *Proxy) answerUpstreamListingRefusal(
+	ctx context.Context,
+	w http.ResponseWriter,
+	span trace.Span,
+	id jsonrpc.ID,
+	refusal *UpstreamListingRefusalError,
+	responseBytes *int64,
+) error {
+	if refusal.Cause != nil {
+		if rejection, ok := errors.AsType[*RejectError](refusal.Cause); ok {
+			*responseBytes = p.writeRejection(ctx, w, span, id, rejection)
+			return nil
+		}
+		return fmt.Errorf("upstream listing: %w", refusal.Cause)
+	}
+
+	written, err := writeResponse(w, refusal.Response, http.NoBody, p.WWWAuthenticate)
+	*responseBytes = written
+	if err != nil {
+		return fmt.Errorf("relay upstream listing refusal: %w", err)
+	}
 	return nil
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -140,6 +141,10 @@ type ProxyManager struct {
 	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
 	platformMCPSelectedUseRecorder        toolcallobserver.SuccessRecorder
 
+	// toolCatalogRefreshes bounds upstream listings triggered by tools/call for
+	// tools missing from the catalog.
+	toolCatalogRefreshes *toolCatalogRefreshes
+
 	// witnessStore backs listing-witnessed live enforcement of live
 	// annotation grants: the list interceptor records the rows each session
 	// was shown, the call interceptor matches against them.
@@ -208,6 +213,7 @@ func NewProxyManager(
 		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
+		toolCatalogRefreshes:                  newToolCatalogRefreshes(),
 		witnessStore:                          witnessStore,
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
@@ -361,17 +367,31 @@ func (f *ProxyManager) BuildTarget(
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
+	// Only remote-backed servers hold a tool catalog; the catalog API rejects
+	// every other backend.
+	var catalog *toolCatalogSync
+	if visibility == mcpservers.VisibilityPrivate && identity.RemoteMCPServerID != "" {
+		catalog = &toolCatalogSync{
+			store:          f.toolDispositions,
+			refreshes:      f.toolCatalogRefreshes,
+			organizationID: organizationID,
+			mcpServerID:    identity.McpServerID,
+			projectID:      projectID,
+			listUpstream:   nil,
+		}
+	}
+
 	if visibility == mcpservers.VisibilityPrivate {
-		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
-		)
+		authzInterceptor := NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		authzInterceptor.catalog = catalog
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors, authzInterceptor)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
-		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
-		)
+		filterInterceptor := NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		filterInterceptor.catalog = catalog
+		toolsListRespInterceptors = append(toolsListRespInterceptors, filterInterceptor)
 	}
 
 	// Session-selection enforcement runs after the RBAC interceptors above so
@@ -436,7 +456,7 @@ func (f *ProxyManager) BuildTarget(
 			f.TunnelMetrics.Observe(identity.TunneledMCPServerID, identity.McpServerID, method, client, outcome, elapsed)
 		}
 	}
-	return &proxy.Proxy{
+	built := &proxy.Proxy{
 		RequestObserver:             observer,
 		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
@@ -488,6 +508,10 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+	if catalog != nil {
+		catalog.listUpstream = built.ListUpstreamTools
+	}
+	return built
 }
 
 // Dispositions supplies the proxy's shared metadata resolver to gateway discovery.
@@ -497,4 +521,21 @@ func (f *ProxyManager) Dispositions(ctx context.Context, mcpServerID, projectID 
 		return nil, fmt.Errorf("resolve gateway tool dispositions: %w", err)
 	}
 	return dispositions, nil
+}
+
+// ToolCatalog forwards to the proxy's shared resolver, which gateway discovery reads through this manager.
+func (f *ProxyManager) ToolCatalog(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
+	catalog, err := f.toolDispositions.ToolCatalog(ctx, mcpServerID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve gateway tool catalog: %w", err)
+	}
+	return catalog, nil
+}
+
+// RecordMissingTools forwards to the proxy's shared resolver, which gateway discovery reads through this manager.
+func (f *ProxyManager) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []tooldisposition.ToolRecord) error {
+	if err := f.toolDispositions.RecordMissingTools(ctx, organizationID, mcpServerID, projectID, tools); err != nil {
+		return fmt.Errorf("record gateway tools: %w", err)
+	}
+	return nil
 }
