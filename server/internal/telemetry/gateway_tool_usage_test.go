@@ -655,9 +655,6 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 	require.Len(t, filtered.Traces, 2, "the agent gateway filter covers both agent gateway calls")
 }
 
-// A deleted project's gateway URL still names its gateway while no other
-// project has the slug. Once a live project reuses the slug the URL names the
-// live project's gateway, and a slug two deleted projects shared names none.
 // targetGatewayPage is where a trace says the gateway it reached has its
 // page: kind, project slug and agent id, empty when unset.
 func targetGatewayPage(trace *gen.ToolUsageTraceSummary) [3]string {
@@ -668,6 +665,9 @@ func targetGatewayPage(trace *gen.ToolUsageTraceSummary) [3]string {
 	}
 }
 
+// A deleted project's gateway URL still names its gateway while no other
+// project has the slug. Once a live project reuses the slug the URL names the
+// live project's gateway, and a slug two deleted projects shared names none.
 func TestListToolUsageTraces_ClassifiesDeletedProjectGatewayCallsByURL(t *testing.T) {
 	t.Parallel()
 
