@@ -24,7 +24,7 @@ func registerDeviceCoverageTools(reg *Registrar, service *DeviceCoverageService)
 	}
 	addTool(reg, &mcp.Tool{
 		Name:        operationGetDeviceCoverage,
-		Title:       "Get Device Coverage",
+		Title:       "See Which Devices Are Covered",
 		Description: "Summarize how much of this organization's fleet runs the Speakeasy device agent, and whether those devices enforce the policy last served to them. The fleet is every device in a connected MDM plus every machine running the agent that no MDM holds (agent_only_devices), so this works with no MDM connected; mdm_connected says whether one is, and without one the gap buckets (no_agent, no_email, unresolved_email, missing) are always 0. agent_active devices are split into policy_attested (applies the served policy), policy_outdated (reports a different or no policy), policy_unreported (no recent report) and enforcement_halted (a blocked build stopped enforcing). attestation is device when every active device matched on its own serial, or user when some only prove their assigned user runs the agent somewhere; agent_active_device_attested counts those matched on their own serial. Narrow to one MDM's inventory with provider.",
 		Annotations: readOnlyAnnotations(),
 	}, deviceCoverageMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetDeviceCoverageInput) (*mcp.CallToolResult, DeviceCoverageOutput, error) {
@@ -49,7 +49,7 @@ func registerDeviceCoverageTools(reg *Registrar, service *DeviceCoverageService)
 func registerUnavailableDeviceCoverageTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        operationGetDeviceCoverage,
-		Title:       "Get Device Coverage",
+		Title:       "See Which Devices Are Covered",
 		Description: "Summarize device agent coverage and policy enforcement across the fleet. This is not available on this deployment.",
 		Annotations: readOnlyAnnotations(),
 	}, deviceCoverageMeta, unavailableDeviceCoverageTool[GetDeviceCoverageInput])

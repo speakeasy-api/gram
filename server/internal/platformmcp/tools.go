@@ -599,7 +599,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
-		Title:       "Inspect an MCP Server",
+		Title:       "Preview an MCP Server Before Adding It",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
@@ -670,7 +670,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 		annotations *mcp.ToolAnnotations
 	}{
 		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet.", readOnlyOpenWorldAnnotations()},
-		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
+		{"get_mcp_repair_plan", "Find What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
 	} {
 		// Same project scope as the live registration of each tool.
 		projectScope := ProjectScopeExplicit
