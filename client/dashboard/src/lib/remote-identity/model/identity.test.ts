@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { describe, expect, it } from "vitest";
 import {

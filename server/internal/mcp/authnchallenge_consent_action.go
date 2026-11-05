@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
@@ -243,6 +244,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
+			consentRefreshAttribution(r, endpoint, challengeState),
 			subject,
 			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,
@@ -275,7 +277,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
 		switch {
@@ -530,7 +532,11 @@ func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, 
 		return ""
 	}
 	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "mcp client to forward the name of not found", attr.SlogError(err))
+		return ""
+	case err != nil:
 		logger.WarnContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
 		return ""
 	}

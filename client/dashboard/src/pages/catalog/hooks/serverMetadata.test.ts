@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { FilterValues } from "../filter-defaults";
 import type { CatalogServer } from "../hooks";

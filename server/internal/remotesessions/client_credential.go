@@ -201,6 +201,7 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
+		refreshFailureRecorded:             false,
 	}, nil
 }
 

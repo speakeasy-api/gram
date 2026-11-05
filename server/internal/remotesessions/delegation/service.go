@@ -10,14 +10,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Delegation errors are deliberately stable and contain no provider payloads.
 var (
-	ErrTemporary        = errors.New("delegation temporarily unavailable")
-	ErrReauthentication = errors.New("delegation reauthentication required")
-	ErrConfiguration    = errors.New("delegation configuration requires remediation")
+	ErrTemporary = errors.New("delegation temporarily unavailable")
+	// ErrProviderUnavailable marks a failed provider dependency, not local storage or signing.
+	ErrProviderUnavailable = errors.New("delegation provider temporarily unavailable")
+	ErrReauthentication    = errors.New("delegation reauthentication required")
+	ErrConfiguration       = errors.New("delegation configuration requires remediation")
 
 	// ErrStaleRegistration is the ErrConfiguration a retained delegation
 	// reports when it predates the current trusted registration. Unlike other
@@ -138,6 +141,7 @@ type Service struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	refreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+	connections     *mcpconnectionattempts.Recorder
 	refreshPaused   func(context.Context, Provider) bool
 }
 
@@ -146,7 +150,7 @@ func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *S
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused}
+	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused, connections: dependencies.Connections}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -166,13 +170,17 @@ func (s *Service) encrypt(value string) (string, error) {
 	}
 	return encrypted, nil
 }
+
+// errCredentialDecryption marks a Speakeasy key or ciphertext fault without exposing encrypted values.
+var errCredentialDecryption = errors.New("stored credential could not be decrypted")
+
 func (s *Service) decrypt(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
 	decrypted, err := s.enc.Decrypt(value)
 	if err != nil {
-		return "", ErrConfiguration
+		return "", errors.Join(ErrConfiguration, errCredentialDecryption)
 	}
 	return decrypted, nil
 }
@@ -422,6 +430,7 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 			return ErrTemporary
 		}
 		if ok {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRefused)
 			return nil
 		}
 	}
@@ -524,11 +533,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	now := s.now()
@@ -543,6 +554,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	if configurationFailureBlocks(c, now) {
@@ -590,32 +602,70 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}()
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
-	if err != nil || c.claim != claim {
+	if err != nil {
+		s.recordLocalFault(ctx, b, err)
+		return Assertion{}, ErrTemporary
+	}
+	if c.claim != claim {
 		return Assertion{}, ErrTemporary
 	}
 	// Load full discovery and credentials only after obtaining durable ownership.
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Assertion{}, ErrTemporary
+		}
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
+		code := mcpconnectionattempts.CodeInternalError
+		if errors.Is(err, ErrProviderUnavailable) {
+			// A retained failure keeps its own pacing, and a backoff on it would answer as misconfigured.
+			if !configurationFailureRetained(c) {
+				persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshSetupRetryable, SigningFailure: false, RetryAfter: 0})
+			}
+			code = mcpconnectionattempts.CodeRenewalRetryable
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if p.DelegationConfigurationHash() != c.config {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
+		code := mcpconnectionattempts.CodeReauthenticationRequired
+		if errors.Is(err, errCredentialDecryption) {
+			code = mcpconnectionattempts.CodeInternalError
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
-	if err != nil || !marked {
+	if err != nil {
+		s.recordLocalFault(ctx, b, err)
+		return Assertion{}, ErrTemporary
+	}
+	if !marked {
 		return Assertion{}, ErrTemporary
 	}
 	refreshStarted = true
+	// From the POST onward, even a panic or local persistence failure is a
+	// renewal outcome. Keep the spent claim held; recording must not retry it.
+	renewalDecided := false
+	defer func() {
+		if !renewalDecided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	result, refreshErr := s.refreshIdentity(ctx, p, refresh, subject, nonce)
 	// The caller's timeout must not prevent recording rotation or quarantining
 	// an ambiguous generation. This bounded write is still CAS protected.
@@ -629,7 +679,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		// erases the credential instead.
 		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
 		if result != nil && result.Credentials != nil && !invalidIdentity {
-			refreshErr = &RefreshError{Kind: RefreshAmbiguous, RetryAfter: 0}
+			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 			c.assertion = ""
 			c.assertionExpiry = time.Time{}
 			if rotation := result.Credentials.RefreshToken(); rotation != "" {
@@ -645,10 +695,12 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 				}
 			}
 		}
+		renewalDecided = true
 		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, refreshErr)
 	}
 	if result == nil || result.Credentials == nil {
-		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous, RetryAfter: 0})
+		renewalDecided = true
+		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0})
 	}
 	next := c
 	next.observedAt = s.now()
@@ -679,7 +731,8 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if identity := result.Identity; identity != nil {
 		defer identity.DiscardCredentials()
 		if identity.SubjectID() != subject || identity.IssuerURL() != p.IssuerURL() {
-			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, RetryAfter: 0})
+			renewalDecided = true
+			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, SigningFailure: false, RetryAfter: 0})
 		}
 		if identity.Expiration().After(s.now()) {
 			next.assertion, err = s.encrypt(result.Credentials.IDToken())
@@ -723,21 +776,36 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if !ok {
+		renewalDecided = true // A newer callback or revocation owns the outcome.
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalAmbiguous)
 		return Assertion{}, ErrTemporary
 	}
 	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	if next.status == "configuration_failure" {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
-	return s.assertion(next)
+	assertion, err := s.assertion(next)
+	if err != nil {
+		return Assertion{}, err
+	}
+	renewalDecided = true
+	s.recordRenewal(persistCtx, b, mcpconnectionattempts.ResultRenewed)
+	return assertion, nil
 }
 
 // Authorizers must use a stable configuration/reauthentication error for a
@@ -789,9 +857,15 @@ func clearDelegationSecrets(c delegationCredential) delegationCredential {
 	return c
 }
 func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegationCredential, claim uuid.UUID, cause error) error {
+	decided := false
+	defer func() {
+		if !decided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	var failure *RefreshError
 	if !errors.As(cause, &failure) {
-		failure = &RefreshError{Kind: RefreshAmbiguous, RetryAfter: 0}
+		failure = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 	}
 	next := c
 	next.observedAt = s.now()
@@ -856,10 +930,50 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
 	ok, err := s.store.finish(ctx, b, c.generation, claim, next)
-	if err != nil || !ok {
+	if err != nil {
 		return ErrTemporary
 	}
+	if !ok {
+		decided = true
+		return ErrTemporary
+	}
+	decided = true
+	code := renewalHappened(kind)
+	if failure.SigningFailure {
+		code = mcpconnectionattempts.CodeInternalError
+	}
+	s.recordRenewal(ctx, b, code)
 	return outcome
+}
+
+// recordRenewal records a renewal's outcome, or a setup that stops one. A tool call served from the held assertion writes nothing.
+func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnectionattempts.Happened) {
+	human := urn.NewUserSubject(b.HumanID)
+	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
+		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+// recordLocalFault blames Speakeasy for a local failure, unless the caller disconnected.
+func (s *Service) recordLocalFault(ctx context.Context, b Binding, err error) {
+	if !errors.Is(err, context.Canceled) {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+	}
+}
+
+func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
+	switch kind {
+	case RefreshInvalidGrant:
+		return mcpconnectionattempts.CodeReauthenticationRequired
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
+		return mcpconnectionattempts.CodeRenewalMisconfigured
+	case RefreshInvalidIdentity:
+		return mcpconnectionattempts.CodeInvalidIdentity
+	case RefreshRetryable, RefreshSetupRetryable:
+		return mcpconnectionattempts.CodeRenewalRetryable
+	case RefreshAmbiguous:
+		return mcpconnectionattempts.CodeRenewalAmbiguous
+	}
+	return mcpconnectionattempts.CodeRenewalAmbiguous
 }
 
 // Revoke explicitly erases secrets. The caller must authorize administrative

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";

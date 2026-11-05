@@ -486,7 +486,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	)
 	require.Equal(t, "grant-owner@example.com", env.session.UpstreamEmail.String)
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 	require.EqualValues(t, 1, refreshes.Load())
@@ -507,7 +507,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	strangerToken := issuer.mint(t, stranger)
 	refreshIDToken.Store(&strangerToken)
 	for _, access := range []string{"access-2", "access-3"} {
-		resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		require.NoError(t, err)
 		require.Equal(t, access, resolved)
 		sess = restatedSession(t, env)
@@ -527,7 +527,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	partial["name"] = "Renamed Owner"
 	partialToken := issuer.mint(t, partial)
 	refreshIDToken.Store(&partialToken)
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-4", resolved)
 	sess = restatedSession(t, env)
@@ -545,7 +545,7 @@ func TestRefreshRestatesIdentityOnlyWhenIDTokenReturned(t *testing.T) {
 	renamed["email"] = "renamed@example.com"
 	tok := issuer.mint(t, renamed)
 	refreshIDToken.Store(&tok)
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-5", resolved)
 	sess = restatedSession(t, env)
@@ -700,7 +700,7 @@ func TestRefreshGivesLegacySessionIdentity(t *testing.T) {
 	delete(claims, "nonce")
 	body := `,"id_token":"` + issuer.mint(t, claims) + `"`
 	refreshBody.Store(&body)
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 
@@ -775,7 +775,7 @@ func TestReconnectDuringRestatementKeepsItsIdentity(t *testing.T) {
 	body := `,"id_token":"` + issuer.mint(t, refreshed) + `"`
 	refreshBody.Store(&body)
 	armed.Store(true)
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 
@@ -813,7 +813,7 @@ func TestRefreshDropsEmailVerifiedWhenEmailChanges(t *testing.T) {
 		mutate(claims)
 		body := `,"id_token":"` + issuer.mint(t, claims) + `"`
 		refreshBody.Store(&body)
-		_, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		_, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		require.NoError(t, err)
 		return decodeEnrichment(t, restatedSession(t, env).Enrichment)
 	}
@@ -847,7 +847,7 @@ func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
 
 	same := `, "team": {"n": 1, "id": "T1"}, "app_id": "A1"`
 	refreshBody.Store(&same)
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-1", resolved)
 	sess := restatedSession(t, env)
@@ -856,7 +856,7 @@ func TestRefreshWithUnchangedExtrasSkipsIdentityWrite(t *testing.T) {
 
 	changed := `,"app_id":"A1","team":{"id":"T2","n":1}`
 	refreshBody.Store(&changed)
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-2", resolved)
 	sess = restatedSession(t, env)

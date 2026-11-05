@@ -650,7 +650,7 @@ func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
 	// The client's sole attached MCP server pins its derived resource.
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-refresh-res", "https://upstream-refresh.example.com/")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, int64(1), refreshCount.Load())
@@ -670,7 +670,7 @@ func TestResolveAccessTokens_DerivesPerClientFallbackResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-res", "https://upstream-lazy.example.com/")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, int64(1), refreshCount.Load())
@@ -728,7 +728,7 @@ func TestRefreshRemoteSession_StoredResourceWinsOverDerivation(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-stored-res", "https://derived-loser.example.com/")
 	setStoredSessionResource(t, ctx, fx, "https://stored-winner.example.com")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-winner.example.com"}, captured.Load())
@@ -746,7 +746,7 @@ func TestRefreshRemoteSession_AmbiguousDerivationSendsNoResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-amb-refresh-1", "https://amb-one.example.com")
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-amb-refresh-2", "https://amb-two.example.com")
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
@@ -765,7 +765,7 @@ func TestResolveAccessTokens_StoredResourceWinsOverDerivation(t *testing.T) {
 	setStoredSessionResource(t, ctx, fx, "https://stored-lazy.example.com")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-lazy.example.com"}, captured.Load())
@@ -787,7 +787,7 @@ func TestResolveAccessTokens_AmbiguousDerivationSendsNoResource(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-lazy-amb-2", "https://amb-two.example.com")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
@@ -805,7 +805,7 @@ func TestResolveAccessToken_ExplicitFallbackSkipsDerivation(t *testing.T) {
 	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-explicit-fb", "https://derived-unused.example.com/")
 	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
 
-	token, err := fx.mgr.ResolveAccessToken(ctx, fx.clientID, fx.subject, "https://caller-fallback.example.com")
+	token, err := fx.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, fx.clientID, fx.subject, "https://caller-fallback.example.com")
 	require.NoError(t, err)
 	require.Equal(t, "rotated-explicit-fb", token)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://caller-fallback.example.com"}, captured.Load())
@@ -820,7 +820,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
@@ -842,7 +842,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	result, err := fx.mgr.RefreshRemoteSession(ctx, remotesessions.RefreshAttribution{}, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)

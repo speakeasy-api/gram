@@ -40,6 +40,9 @@ type AuthClientTokenRequest struct {
 	Subject             urn.SessionSubject
 	RegistrationID      uuid.UUID
 	SkipUnusable        bool
+
+	// Attribution says where a refresh's connection row goes.
+	Attribution RefreshAttribution
 }
 
 // ResolveAuthClientAccessTokens resolves the caller's credential for the
@@ -67,11 +70,11 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 		// An attached caller reaches a person's connection through its
 		// attachment. A service account's token belongs to nobody, so no
 		// attachment applies to it.
-		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+		return m.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
 	case err != nil:
 		return nil, err
 	}
-	return m.resolveClientTokens(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+	return m.resolveClientTokens(ctx, req.Attribution, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
 }
 
 // AuthClientNeedsReconnect is RemoteSessionsNeedReconnect for the one

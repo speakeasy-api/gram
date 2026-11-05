@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import {
