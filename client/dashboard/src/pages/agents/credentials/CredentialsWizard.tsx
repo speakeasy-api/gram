@@ -1357,6 +1357,7 @@ export function CredentialsWizard({
         allServers ? listedServers : selected.map((entry) => entry.server),
         undefined,
         true,
+        enforcement === "enforced",
       );
       if (missing.length)
         toast.warning(
@@ -1412,6 +1413,7 @@ export function CredentialsWizard({
           reach,
           signal,
           allServers,
+          enforcement === "enforced",
         );
         if (missing.length)
           toast.warning(

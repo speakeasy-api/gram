@@ -255,6 +255,48 @@ describe("attachOwnerConnections", () => {
     );
   });
 
+  describe("on an issuer shared with another server", () => {
+    // The issuer lists another server's registration; this server's own
+    // credential signs in through client_one, which the owner connected.
+    const own = {
+      ...authClient("remote_session"),
+      personal: true,
+      remoteSessionClientId: "client_one",
+    } as AuthClient;
+    const shared = () =>
+      api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server")],
+        candidates: [session({})],
+        bindings: [],
+      });
+
+    it("attaches the server's own sign-in when upstream auth is enforced", async () => {
+      const { fake, attachBinding } = shared();
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
+      expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+    });
+
+    it("asks for the issuer's sign-ins when it is not, as the issuer routes the call", async () => {
+      const { fake, attachBinding } = shared();
+      await expect(
+        attachOwnerConnections(fake, "agent_new", [server]),
+      ).rejects.toThrow(/no longer available/);
+      expect(attachBinding).not.toHaveBeenCalled();
+    });
+  });
+
   it("keeps another person’s valid attachment even without a personal candidate", async () => {
     const { fake, attachBinding, detachBinding } = api({
       clients: [client("client_one")],

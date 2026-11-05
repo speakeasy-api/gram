@@ -141,7 +141,13 @@ async function personalServers(
   api: ConnectionApi,
   servers: InventoryServer[],
   signal?: AbortSignal,
-): Promise<{ personal: InventoryServer[]; unreadable: InventoryServer[] }> {
+): Promise<{
+  personal: InventoryServer[];
+  unreadable: InventoryServer[];
+  /** The upstream sign-ins each personal server's own auth clients ask for. */
+  signIns: Map<string, ServerSignIn[] | undefined>;
+}> {
+  const signIns = new Map<string, ServerSignIn[] | undefined>();
   const reads = await Promise.all(
     servers.map(async (server) => {
       if (!server.issuerId) return "shared" as const;
@@ -151,9 +157,9 @@ async function personalServers(
           undefined,
           { signal },
         );
-        return offersPersonalSignIn(auth)
-          ? ("personal" as const)
-          : ("shared" as const);
+        if (!offersPersonalSignIn(auth)) return "shared" as const;
+        signIns.set(server.id, serverSignIns(auth));
+        return "personal" as const;
       } catch (failure) {
         if (signal?.aborted) throw failure;
         return "unreadable" as const;
@@ -163,6 +169,7 @@ async function personalServers(
   return {
     personal: servers.filter((_, index) => reads[index] === "personal"),
     unreadable: servers.filter((_, index) => reads[index] === "unreadable"),
+    signIns,
   };
 }
 
@@ -170,6 +177,10 @@ async function personalServers(
  * Attach the caller's own connections, preserving every valid assignment.
  * Editors may replace stale assignments with their own usable session.
  * Bulk selection reports missing servers and continues with the rest.
+ *
+ * Under upstream auth enforcement the sign-ins come from each server's own
+ * auth clients: an issuer shared across the organization lists other
+ * servers' registrations, which the caller has no reason to have connected.
  */
 export async function attachOwnerConnections(
   api: ConnectionApi,
@@ -177,8 +188,34 @@ export async function attachOwnerConnections(
   servers: InventoryServer[],
   signal?: AbortSignal,
   skipMissing = false,
+  enforced = false,
 ): Promise<string[]> {
-  const { personal, unreadable } = await personalServers(api, servers, signal);
+  const { personal, unreadable, signIns } = await personalServers(
+    api,
+    servers,
+    signal,
+  );
+  /**
+   * The sign-ins the servers on one issuer ask for, from their own auth
+   * clients. Undefined without enforcement, or while any of them has setup
+   * incomplete, when the issuer's registrations are still the answer.
+   */
+  const typedSignIns = (
+    issuer: InventoryServer,
+  ): ServerSignIn[] | undefined => {
+    if (!enforced) return undefined;
+    const reads = personal
+      .filter(
+        (server) =>
+          server.projectId === issuer.projectId &&
+          server.issuerId === issuer.issuerId,
+      )
+      .map((server) => signIns.get(server.id));
+    if (reads.some((read) => !read)) return undefined;
+    return [
+      ...new Map(reads.flatMap((read) => read!).map((c) => [c.id, c])).values(),
+    ];
+  };
   if (unreadable[0] && !skipMissing)
     throw new Error(
       `Could not check how ${unreadable[0].name} signs in. Try again.`,
@@ -196,14 +233,16 @@ export async function attachOwnerConnections(
     const gramProject = server.projectSlug;
     const userSessionIssuerId = server.issuerId!;
     const scope = { gramProject, principalId: agentId, userSessionIssuerId };
+    const typed = typedSignIns(server);
     const [clients, candidates, bindings] = await Promise.all([
-      collectPageItems(
-        api.remoteSessionClients.list(
-          { gramProject, userSessionIssuerId },
-          undefined,
-          { signal },
+      typed ??
+        collectPageItems(
+          api.remoteSessionClients.list(
+            { gramProject, userSessionIssuerId },
+            undefined,
+            { signal },
+          ),
         ),
-      ),
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
