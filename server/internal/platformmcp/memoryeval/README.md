@@ -19,8 +19,8 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   loads the corpus into Postgres and probes the `search_chats` baseline. It
   asserts no credential leaks, no other-project results and full retrieval of
   source chats, and logs the remaining leaks, private-session hits and
-  estimated tool tokens. Arms C and D add their own probes and the recall
-  size assertion.
+  estimated tool tokens. The PRs that add arms C and D will add their own
+  probes and the recall size assertion.
 - **Judged accuracy** (on demand, costs LLM calls): `mise run eval:memory`
   answers every question with each arm's tools, grades answers with a judge
   model that differs from the answering model, and prints a report. Set
@@ -30,7 +30,9 @@ Arms: A has no memory tools, B is today's `search_chats` and `read_chat`.
 Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
 `search_team_memory`) are added by the PRs that ship those tools.
 
-The flag turns on when arm D meets every gate:
+Planned rollout criterion, once arm D lands: Organizational Memory is enabled for
+customers (the staff admin Org Memory toggle) only when arm D meets every
+gate. Nothing in this package evaluates the gates yet; read them off the report.
 
 - **Complete run**: no errored answers in either arm, since errors drop out
   of every rate below.
