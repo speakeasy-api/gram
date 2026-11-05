@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -542,6 +543,9 @@ func (s *Service) finalizeClientCreate(
 	// A successful binding write must include its captured associations and
 	// typed state. On failure the caller rolls back the entire DB mutation.
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
+	}
+	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
 
@@ -1081,6 +1085,9 @@ func (s *Service) commitClientAttachmentChange(
 	// A successful binding write must include its captured associations and
 	// typed state. On failure the caller rolls back the entire DB mutation.
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
+	}
+	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
 

@@ -13,10 +13,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 )
@@ -32,6 +34,13 @@ import (
 // backfill: the gateway capture is the one path that writes them, and only
 // for the single client a gateway issuer binds for a server's derived
 // authorization server.
+//
+// Under upstream auth enforcement neither capture runs, so a reconcile only
+// prunes. Every association becomes an auth client the server offers, and an
+// enforced server offers only what was configured for it: a client another
+// server's configuration bound to an issuer in front of this one is not that,
+// and neither is one it finds itself alone with after that server is deleted.
+// A writer that configures the binding itself calls CaptureSoleConsumers.
 //
 // Each statement decides from the bindings as they are when it runs, and the
 // prune runs after the captures, so a reconcile that races a binding change
@@ -74,21 +83,29 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 		}
 		return nil
 	}
-	sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-		OrganizationID:       organizationID,
-		ProjectID:            projectID,
-		UserSessionIssuerIds: userIssuerIDs,
-	})
+	enforced, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
 	if err != nil {
-		return fmt.Errorf("capture mcp server upstream clients: %w", err)
+		return fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
-	gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
-		ProjectID:            projectID,
-		OrganizationID:       organizationID,
-		UserSessionIssuerIds: userIssuerIDs,
-	})
-	if err != nil {
-		return fmt.Errorf("capture gateway upstream clients: %w", err)
+	var captured []uuid.UUID
+	if !enforced {
+		sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+			UserSessionIssuerIds: userIssuerIDs,
+		})
+		if err != nil {
+			return fmt.Errorf("capture mcp server upstream clients: %w", err)
+		}
+		gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
+			ProjectID:            projectID,
+			OrganizationID:       organizationID,
+			UserSessionIssuerIds: userIssuerIDs,
+		})
+		if err != nil {
+			return fmt.Errorf("capture gateway upstream clients: %w", err)
+		}
+		captured = slices.Concat(sole, gateway)
 	}
 	pruned, err := prune(ctx, q, organizationID, projectID)
 	if err != nil {
@@ -96,7 +113,28 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 	}
 	// After pruning, publish only the captured associations that remain.
 	// The writer scope predates capture and protects OAuth and EMA copies.
-	if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, append(append(sole, gateway...), pruned...)...); err != nil {
+	if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, append(captured, pruned...)...); err != nil {
+		return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
+	}
+	return nil
+}
+
+// CaptureSoleConsumers associates each client bound to userIssuerIDs with the
+// issuer's server when that server is the issuer's only consumer, and records
+// their auth clients. It is for a writer that has just configured those
+// bindings or moved a server onto them, for which the issuer's one server is
+// the server being configured. Without enforcement Reconcile has already done
+// this and it writes nothing. The caller holds LockEMAWriterScope.
+func CaptureSoleConsumers(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	sole, err := repo.New(tx).CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
+		OrganizationID:       organizationID,
+		ProjectID:            projectID,
+		UserSessionIssuerIds: userIssuerIDs,
+	})
+	if err != nil {
+		return fmt.Errorf("capture mcp server upstream clients: %w", err)
+	}
+	if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, sole...); err != nil {
 		return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
 	}
 	return nil

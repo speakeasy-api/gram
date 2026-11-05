@@ -251,6 +251,32 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });
 
+  it("says why when the commit is refused as a conflict", async () => {
+    mocks.commit.mockRejectedValue(
+      Object.assign(
+        new Error(
+          "another MCP server signs in through the client bound to this server's User Identity issuer",
+        ),
+        { statusCode: 409 },
+      ),
+    );
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result).toMatchObject({
+      status: "setup-required",
+      mcpServer: { visibility: "disabled" },
+      message:
+        "Another MCP server signs in through the client bound to this server's User Identity issuer",
+    });
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+  });
+
   it("names organization admin when the commit is forbidden", async () => {
     mocks.commit.mockRejectedValue(
       Object.assign(new Error("forbidden"), { statusCode: 403 }),

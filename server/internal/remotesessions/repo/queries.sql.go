@@ -2912,6 +2912,110 @@ func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx c
 	return err
 }
 
+const describeReplacedClientUse = `-- name: DescribeReplacedClientUse :one
+SELECT
+  EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    JOIN mcp_servers AS s
+      ON s.id = a.mcp_server_id
+     AND s.project_id = a.project_id
+     AND s.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = a.project_id
+     AND p.organization_id = a.organization_id
+     AND p.deleted IS FALSE
+    WHERE a.organization_id = $1::text
+      AND a.remote_session_client_id = ANY($2::uuid[])
+      AND a.mcp_server_id <> $3::uuid
+      AND a.deleted IS FALSE
+      AND (
+        s.user_session_issuer_id = $4::uuid
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_servers AS gateway
+          JOIN meta_mcp_server_members AS member
+            ON member.meta_mcp_server_id = gateway.id
+           AND member.project_id = gateway.project_id
+           AND member.deleted IS FALSE
+          WHERE gateway.user_session_issuer_id = $4::uuid
+            AND gateway.organization_id = a.organization_id
+            AND gateway.deleted IS FALSE
+            AND member.mcp_server_id = s.id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM user_session_issuers AS organization_issuer
+          WHERE organization_issuer.id = $4::uuid
+            AND organization_issuer.project_id IS NULL
+            AND organization_issuer.organization_id = a.organization_id
+            AND organization_issuer.deleted IS FALSE
+            AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+        )
+      )
+  )::boolean AS serves_other_mcp_servers,
+  (
+    NOT EXISTS (
+      SELECT 1
+      FROM unnest($2::uuid[]) AS replaced(client_id)
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM mcp_server_remote_session_clients AS own
+        WHERE own.mcp_server_id = $3::uuid
+          AND own.remote_session_client_id = replaced.client_id
+          AND own.organization_id = $1::text
+          AND own.deleted IS FALSE
+      )
+    )
+  )::boolean AS all_associated_with_mcp_server
+`
+
+type DescribeReplacedClientUseParams struct {
+	OrganizationID         string
+	RemoteSessionClientIds []uuid.UUID
+	McpServerID            uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+}
+
+type DescribeReplacedClientUseRow struct {
+	ServesOtherMcpServers      bool
+	AllAssociatedWithMcpServer bool
+}
+
+// Reports who else the given clients serve through their bindings to one
+// user session issuer, for a commit that would unbind them on behalf of one
+// MCP server.
+//
+// serves_other_mcp_servers: another live MCP server of the organization is
+// associated with one of the clients and reaches it through this issuer, as
+// its own issuer, as the issuer of a gateway it is a member of, or as the
+// organization's only organization-level issuer. Unbinding the client would
+// remove that server's association.
+//
+// all_associated_with_mcp_server: every one of the clients is associated with
+// the MCP server the commit configures, so they are that server's own.
+//
+// Organization-wide, because an organization-owned client bound to an
+// organization-level issuer serves servers in every project. mcp_server_id is
+// the nil UUID for a commit that configures no server.
+func (q *Queries) DescribeReplacedClientUse(ctx context.Context, arg DescribeReplacedClientUseParams) (DescribeReplacedClientUseRow, error) {
+	row := q.db.QueryRow(ctx, describeReplacedClientUse,
+		arg.OrganizationID,
+		arg.RemoteSessionClientIds,
+		arg.McpServerID,
+		arg.UserSessionIssuerID,
+	)
+	var i DescribeReplacedClientUseRow
+	err := row.Scan(&i.ServesOtherMcpServers, &i.AllAssociatedWithMcpServer)
+	return i, err
+}
+
 const detachOrganizationRemoteSessionClientFromUserSessionIssuer = `-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers link
 USING remote_session_clients c, user_session_issuers u
