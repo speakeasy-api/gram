@@ -39,6 +39,7 @@ export type CatalogServer = Omit<ExternalMCPServerEntry, "meta"> & {
 // forwarded so callers that only need a specific server (e.g. the detail page)
 // can narrow the response.
 type CatalogQueryOptions = {
+  projectSlug?: string;
   enabled?: boolean;
   throwOnError?: boolean;
 };
@@ -58,7 +59,8 @@ function useListMCPCatalogImpl(
   options?: CatalogQueryOptions,
 ) {
   const client = useSdkClient();
-  const projectSlug = useProjectSlugForRequests();
+  const currentProjectSlug = useProjectSlugForRequests();
+  const projectSlug = options?.projectSlug ?? currentProjectSlug;
 
   return useQuery({
     queryKey: queryKeyListMCPCatalog({
