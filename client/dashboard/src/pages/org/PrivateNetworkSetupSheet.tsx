@@ -166,9 +166,9 @@ export function PrivateNetworkSetupSheet({
             <Text variant="subheading">3. Create a Tailscale OAuth client</Text>
             <Text small muted>
               Grant Auth Keys, Devices Core, and Services write scopes, then
-              apply the <code>tag:speakeasy</code> tag. Speakeasy uses it only
-              to register its gateway nodes and define the service; it never
-              leaves our control plane.
+              apply the <code>tag:speakeasy</code> tag. Speakeasy uses the OAuth
+              client only to register its gateway nodes and define the service.
+              The client never leaves Speakeasy&apos;s control plane.
             </Text>
           </div>
 
