@@ -1,0 +1,21 @@
+.changeset/evidence-transcript-focus.md
+  s_08225572f8077f::t_37310bb48730ff 1-5
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_08225572f8077f::t_9d1f0aa264ad57 1492-1495
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd548782eff3e550b77f3ebb5dfe329606ca71bc",
+  "prompts": {},
+  "sessions": {
+    "s_08225572f8077f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fa8453c-5f8b-422c-8e93-1f382a703b31",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
