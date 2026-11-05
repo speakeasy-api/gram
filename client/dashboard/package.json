@@ -28,7 +28,7 @@
     "@ai-sdk/mcp": "2.0.87",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-ai-sdk": "~1.4.20",
+    "@assistant-ui/react-ai-sdk": "~1.4.21",
     "@assistant-ui/react-markdown": "^0.14.24",
     "@calcom/embed-react": "^1.5.3",
     "@cfworker/json-schema": "catalog:",
