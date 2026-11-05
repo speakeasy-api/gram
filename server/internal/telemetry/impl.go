@@ -1909,10 +1909,10 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 // sessions plus agents they currently own. Non-human callers keep plain Require.
 func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
 	check := authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}
-	// Only a member reading as themselves falls back. Assistant runtime and
-	// embedded chat-session callers keep the plain check.
+	// Only a member reading as themselves falls back. API keys, assistant
+	// runtime and embedded chat-session callers keep the plain check.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	if requiredScope != authz.ScopeLogRead || authCtx.UserID == "" || authCtx.ExternalUserID != "" || isAssistantCall {
+	if requiredScope != authz.ScopeLogRead || authCtx.UserID == "" || authCtx.ExternalUserID != "" || authCtx.APIKeyID != "" || isAssistantCall {
 		return nil, s.authz.Require(ctx, check)
 	}
 	// Evaluate, not Require: a member without the grant is expected, not a
