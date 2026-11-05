@@ -7,12 +7,19 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { handleAPIError } from "@/lib/errors";
 import { invalidateAllNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { toast } from "sonner";
@@ -20,18 +27,41 @@ import { useCreateNetworkIngressMutation } from "@gram/client/react-query/create
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+const DEFAULT_HOSTNAME = "speakeasy";
+
+// Mirrors the server's rule: a lowercase DNS label of at most 63 characters.
 const HOSTNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-const TAILSCALE_POLICY_SNIPPET = `"tagOwners": {
-  "tag:k8s-operator": ["autogroup:admin"],
-  "tag:gram-proxy": ["tag:k8s-operator"],
-  "tag:gram-service": ["tag:k8s-operator"]
+// ACCESS_GROUP is the example group the restricted snippet introduces.
+const ACCESS_GROUP = "group:speakeasy-users";
+
+function tailscalePolicySnippet(
+  hostname: string,
+  accessGroup?: string,
+): string {
+  const groups = accessGroup
+    ? `"groups": {
+  "${accessGroup}": ["alice@example.com"]
+},
+`
+    : "";
+  const source = accessGroup ?? "autogroup:member";
+  return `${groups}"tagOwners": {
+  "tag:speakeasy": ["autogroup:admin"]
 },
 "autoApprovers": {
   "services": {
-    "tag:gram-service": ["tag:gram-proxy"]
+    "svc:${hostname}": ["tag:speakeasy"]
   }
-}`;
+},
+"grants": [
+  {
+    "src": ["${source}"],
+    "dst": ["svc:${hostname}"],
+    "ip": ["tcp:443"]
+  }
+]`;
+}
 
 export function PrivateNetworkSetupSheet({
   open,
@@ -41,10 +71,11 @@ export function PrivateNetworkSetupSheet({
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [hostname, setHostname] = useState("");
+  const [hostname, setHostname] = useState(DEFAULT_HOSTNAME);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [identityRequired, setIdentityRequired] = useState(false);
+  const [groupSnippetOpen, setGroupSnippetOpen] = useState(false);
 
   const resetCredentials = () => {
     setClientId("");
@@ -55,7 +86,7 @@ export function PrivateNetworkSetupSheet({
     gcTime: 0,
     onSuccess: async () => {
       resetCredentials();
-      setHostname("");
+      setHostname(DEFAULT_HOSTNAME);
       setIdentityRequired(false);
       await invalidateAllNetworkIngress(queryClient);
       onOpenChange(false);
@@ -77,8 +108,12 @@ export function PrivateNetworkSetupSheet({
     onOpenChange(false);
   };
 
+  const hostnameValid = HOSTNAME_PATTERN.test(hostname);
+  // The snippet always names a valid service, even mid-edit.
+  const serviceLabel = hostnameValid ? hostname : DEFAULT_HOSTNAME;
+
   const canSubmit =
-    HOSTNAME_PATTERN.test(hostname.toLowerCase()) &&
+    hostnameValid &&
     clientId.trim() !== "" &&
     clientSecret !== "" &&
     !create.isPending;
@@ -101,30 +136,86 @@ export function PrivateNetworkSetupSheet({
         </SheetHeader>
         <div className="flex-1 space-y-6 overflow-y-auto px-4">
           <div className="space-y-2">
-            <Text variant="subheading">1. Check the tailnet prerequisites</Text>
-            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-              <li>MagicDNS is enabled.</li>
-              <li>HTTPS certificates are enabled.</li>
-              <li>
-                The policy has isolated operator, proxy, and service tags plus
-                service-advertisement auto-approval.
-              </li>
-            </ul>
-            <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
-              <code>{TAILSCALE_POLICY_SNIPPET}</code>
-            </pre>
+            <Text variant="subheading">1. Choose a private hostname</Text>
+            <Input
+              id="private-hostname"
+              aria-label="Private hostname"
+              value={hostname}
+              onChange={(value) => setHostname(value.trim().toLowerCase())}
+              placeholder={DEFAULT_HOSTNAME}
+              validate={(value) =>
+                HOSTNAME_PATTERN.test(value.trim().toLowerCase()) ||
+                "Use lowercase letters, numbers, and hyphens, up to 63 characters."
+              }
+              autoComplete="off"
+            />
             <Text small muted>
-              Keep these tags dedicated to Speakeasy. Your tailnet policy must
-              also allow the intended users to reach the generated service tag.
+              Your private MCP servers will be at{" "}
+              <code>{serviceLabel}.&lt;your tailnet&gt;.ts.net</code>. One
+              hostname serves the whole organization, and each MCP server keeps
+              its own path on it. Pick a durable name that no device or service
+              on your tailnet already uses.
             </Text>
           </div>
 
           <div className="space-y-2">
-            <Text variant="subheading">2. Create a Tailscale OAuth client</Text>
+            <Text variant="subheading">2. Check the tailnet prerequisites</Text>
+            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+              <li>MagicDNS is enabled.</li>
+              <li>HTTPS certificates are enabled.</li>
+              <li>
+                Devices that will connect run Tailscale 1.86 or later, which
+                Tailscale Services require.
+              </li>
+              <li>
+                The policy owns a <code>tag:speakeasy</code> tag, auto-approves
+                the <code>svc:{serviceLabel}</code> service for it, and grants
+                your users access to that service.
+              </li>
+            </ul>
+            <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
+              <code>{tailscalePolicySnippet(serviceLabel)}</code>
+            </pre>
             <Text small muted>
-              Grant Devices Core, Auth Keys, and Services write scopes, then
-              apply the <code>tag:k8s-operator</code> tag. Do not reuse a
-              broadly privileged client.
+              Keep the tag dedicated to Speakeasy. This grant lets every member
+              of your tailnet reach your private MCP servers.
+            </Text>
+            <Collapsible
+              open={groupSnippetOpen}
+              onOpenChange={setGroupSnippetOpen}
+            >
+              <CollapsibleTrigger className="text-muted-foreground hover:text-default flex items-center gap-1 text-sm">
+                <Icon
+                  name="chevron-right"
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    groupSnippetOpen && "rotate-90",
+                  )}
+                />
+                Limit access to a group
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <Text small muted>
+                  Use this policy instead to let only the people in{" "}
+                  <code>{ACCESS_GROUP}</code> reach the service. Replace the
+                  example address with their logins.
+                </Text>
+                <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
+                  <code>
+                    {tailscalePolicySnippet(serviceLabel, ACCESS_GROUP)}
+                  </code>
+                </pre>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+
+          <div className="space-y-2">
+            <Text variant="subheading">3. Create a Tailscale OAuth client</Text>
+            <Text small muted>
+              Grant Auth Keys, Devices Core, and Services write scopes, then
+              apply the <code>tag:speakeasy</code> tag. Speakeasy uses the OAuth
+              client only to register its gateway nodes and define the service.
+              The client never leaves Speakeasy&apos;s control plane.
             </Text>
           </div>
 
@@ -135,30 +226,6 @@ export function PrivateNetworkSetupSheet({
             onClientIdChange={setClientId}
             onClientSecretChange={setClientSecret}
           />
-          <div className="space-y-2">
-            <Label htmlFor="private-hostname">
-              Organization private hostname
-            </Label>
-            <Input
-              id="private-hostname"
-              value={hostname}
-              onChange={(value) => setHostname(value.toLowerCase())}
-              placeholder="acme-speakeasy"
-              validate={(value) =>
-                HOSTNAME_PATTERN.test(value.toLowerCase()) ||
-                "Use a lowercase DNS label containing letters, numbers, or hyphens."
-              }
-              autoComplete="off"
-            />
-            <Text small muted>
-              Choose a durable label for the organization, not an individual MCP
-              server. MCP servers opt in separately and keep their own endpoint
-              paths on the shared hostname. Tailscale appends your
-              tailnet&apos;s
-              <code>.ts.net</code> suffix. This label cannot be changed after
-              setup.
-            </Text>
-          </div>
           <div className="flex items-start justify-between gap-6 border p-4">
             <div className="space-y-1">
               <Label id="identity-required-label">Require user identity</Label>
@@ -190,9 +257,9 @@ export function PrivateNetworkSetupSheet({
                 request: {
                   createIngressRequestBody: {
                     provider: "tailscale",
-                    hostname: hostname.toLowerCase(),
                     oauthClientId: clientId.trim(),
                     oauthClientSecret: clientSecret,
+                    hostname,
                     identityRequired,
                   },
                 },
