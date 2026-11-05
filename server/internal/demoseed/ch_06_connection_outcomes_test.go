@@ -11,17 +11,14 @@ import (
 func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec(), now: time.Now()}
-	scopes := []mcpconnectionattempts.Scope{
-		mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR),
-	}
-	rows, err := s.connectionRequestRows(scopes)
+	rows, err := s.connectionRequestRows()
 	require.NoError(t, err)
 	require.Len(t, rows, connectionAttemptDays*len(connectionRequestEndings))
 	steps := make(map[string]bool)
 	outcomes := make(map[string]bool)
 	attempts := make(map[string]bool)
+	refusalKinds := make(map[string]bool)
+	scheduledRefreshes, clientRefreshes := 0, 0
 	for _, row := range rows {
 		require.True(t, row.IsFinal)
 		require.False(t, attempts[row.AttemptID.String()], "each outcome is its own attempt")
@@ -43,10 +40,18 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		}
 		require.NotEqual(t, "rejected_by_member", row.Reason, "request outcomes must match a live request producer")
 		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "usage_limit_reached" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused") {
-			require.Equal(t, "meta", row.ServerKind)
+			refusalKinds[row.Reason+"/"+row.ServerKind] = true
 			require.Equal(t, s.projectID(), row.ProjectID)
-			require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
-			require.Equal(t, s.det("mcpserver-support").String(), row.MemberID)
+			switch row.ServerKind {
+			case "meta":
+				require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
+				require.Equal(t, s.det("mcpserver-support").String(), row.MemberID)
+			case "mcp":
+				require.Equal(t, s.det("mcpserver-github").String(), row.ServerID)
+				require.Empty(t, row.MemberID, "a direct server has no member")
+			default:
+				require.Fail(t, "refusal on an unexpected server kind", row.ServerKind)
+			}
 		} else {
 			require.Empty(t, row.MemberID, "no member should be attributed to a different gateway")
 		}
@@ -58,8 +63,11 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 			require.Empty(t, row.ClientFamily, "background renewal has no browser")
 		case "provider_refresh":
 			if row.AppKey == "background" {
+				scheduledRefreshes++
 				require.Equal(t, "provider_session", row.ServerKind)
 				require.Empty(t, row.ClientFamily)
+			} else {
+				clientRefreshes++
 			}
 		}
 	}
@@ -76,8 +84,21 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		"inbound_token/refresh_token_expired",
 		"inbound_token/refresh_replayed",
 		"inbound_token/refresh_token_revoked",
+		"inbound_token/refreshed",
+		"mcp_request/invalid_remote_session",
+		"mcp_request/remote_session_unavailable",
+		"provider_refresh/refreshed",
+		"provider_refresh/invalid_grant",
+		"provider_refresh/provider_server_error",
+		"sign_in_renewal/renewed",
 	} {
 		require.True(t, outcomes[outcome], outcome)
+	}
+	require.Positive(t, scheduledRefreshes, "some refreshes are the scheduled sweep")
+	require.Positive(t, clientRefreshes, "some refreshes come from a client")
+	for _, reason := range []string{"provider_server_error", "tool_permission_denied", "usage_limit_reached", "provider_rejected", "mcp_tool_calls_paused"} {
+		require.True(t, refusalKinds[reason+"/mcp"], reason+" on a direct server")
+		require.True(t, refusalKinds[reason+"/meta"], reason+" on a gateway")
 	}
 	for _, step := range []string{"mcp_request", "inbound_token", "provider_refresh", "sign_in_renewal"} {
 		require.True(t, steps[step], step)
@@ -87,18 +108,12 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 func TestConnectionOutcomeSeedKeepsAbandonedBrowserIdentity(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec()}
-	for _, scope := range []mcpconnectionattempts.Scope{
-		mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR),
-	} {
-		attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
-		rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
-		require.NoError(t, err)
-		require.Len(t, rows, 1)
-		require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[0].ClientFamily)
-		require.Equal(t, s.connectionDevice("stopped-attempt"), rows[0].DeviceKey)
-		require.Empty(t, rows[0].MemberID)
-		require.False(t, rows[0].IsFinal)
-	}
+	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), s.connectionServerScope())
+	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[0].ClientFamily)
+	require.Equal(t, s.connectionDevice("stopped-attempt"), rows[0].DeviceKey)
+	require.Empty(t, rows[0].MemberID)
+	require.False(t, rows[0].IsFinal)
 }
