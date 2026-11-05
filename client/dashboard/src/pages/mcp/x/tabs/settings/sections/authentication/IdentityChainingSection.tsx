@@ -146,12 +146,11 @@ export function IdentityChainingSection({
     { enabled: linkedUsed },
   );
   const credentialRegistrationIds = new Set(
-    (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap(
-      (client) =>
-        client.remoteSessionClientId &&
-        PER_PERSON_CREDENTIALS.has(client.clientType)
-          ? [client.remoteSessionClientId]
-          : [],
+    (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap((client) =>
+      client.remoteSessionClientId &&
+      PER_PERSON_CREDENTIALS.has(client.clientType)
+        ? [client.remoteSessionClientId]
+        : [],
     ),
   );
   const registrationsQuery = useAllRemoteSessionClients(

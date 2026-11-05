@@ -75,13 +75,7 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({
-    scope,
-    children,
-  }: {
-    scope: string;
-    children: ReactNode;
-  }) =>
+  RequireScope: ({ scope, children }: { scope: string; children: ReactNode }) =>
     mocks.admin && scope === "org:admin" ? children : <div>Unauthorized</div>,
 }));
 vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
