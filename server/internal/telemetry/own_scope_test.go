@@ -221,35 +221,59 @@ func TestTelemetry_LogReads_MemberFilterCannotWidenScope(t *testing.T) {
 	require.Empty(t, traces.Traces)
 }
 
-// Assistant-runtime and embedded chat-session callers are not a member reading
-// their own activity; both keep the plain check and are refused without log:read.
-func TestTelemetry_LogReads_AssistantAndExternalCallersKeepPlainCheck(t *testing.T) {
+// Assistant-runtime, embedded chat-session and API-key callers are not a member
+// reading their own activity; all keep the plain check and are refused without
+// log:read.
+func TestTelemetry_LogReads_NonMemberCallersKeepPlainCheck(t *testing.T) {
 	t.Parallel()
 
-	callers := map[string]func(t *testing.T, ctx context.Context) context.Context{
-		"assistant runtime": func(t *testing.T, ctx context.Context) context.Context {
-			t.Helper()
-			return contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
+	type caller struct {
+		shape func(t *testing.T, ctx context.Context) context.Context
+		code  oops.Code
+	}
+	callers := map[string]caller{
+		"assistant runtime": {
+			shape: func(t *testing.T, ctx context.Context) context.Context {
+				t.Helper()
+				return contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
+			},
+			code: oops.CodeForbidden,
 		},
-		"embedded chat session": func(t *testing.T, ctx context.Context) context.Context {
-			t.Helper()
-			authCtx, ok := contextvalues.GetAuthContext(ctx)
-			require.True(t, ok)
-			clone := *authCtx
-			clone.ExternalUserID = "external-" + uuid.NewString()[:8]
-			return contextvalues.SetAuthContext(ctx, &clone)
+		"embedded chat session": {
+			shape: func(t *testing.T, ctx context.Context) context.Context {
+				t.Helper()
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				require.True(t, ok)
+				clone := *authCtx
+				clone.ExternalUserID = "external-" + uuid.NewString()[:8]
+				return contextvalues.SetAuthContext(ctx, &clone)
+			},
+			code: oops.CodeForbidden,
+		},
+		// An API key that carries its creator's user id but no authorization
+		// mode is refused outright rather than read as that member.
+		"api key with creator user id": {
+			shape: func(t *testing.T, ctx context.Context) context.Context {
+				t.Helper()
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				require.True(t, ok)
+				clone := *authCtx
+				clone.APIKeyID = uuid.NewString()
+				return contextvalues.SetAuthContext(ctx, &clone)
+			},
+			code: oops.CodeUnauthorized,
 		},
 	}
-	for name, shape := range callers {
+	for name, c := range callers {
 		for _, endpoint := range logReadEndpoints {
 			t.Run(name+"/"+endpoint.name, func(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestLogsService(t)
-				ctx = authztest.WithExactGrants(t, shape(t, ctx))
+				ctx = authztest.WithExactGrants(t, c.shape(t, ctx))
 				endpoint.call(ctx, ti, func(err error) {
 					var oopsErr *oops.ShareableError
 					require.ErrorAs(t, err, &oopsErr)
-					require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+					require.Equal(t, c.code, oopsErr.Code)
 				})
 			})
 		}

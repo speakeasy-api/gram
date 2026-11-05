@@ -15,7 +15,8 @@ import (
 )
 
 // logReadEndpoints are the telemetry reads that return individual tool calls or
-// raw log records. Each must require log:read on the active project.
+// raw log records. Each reads the whole project with log:read and only the
+// caller's own scope without it.
 var logReadEndpoints = []struct {
 	name string
 	call func(ctx context.Context, ti *testInstance, check func(error))
