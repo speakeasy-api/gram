@@ -50,34 +50,6 @@ func (o configuredAuthOffer) personalRegistrations() []uuid.UUID {
 	return ids
 }
 
-func (o configuredAuthOffer) gatewayCapability(tunneled bool, headers map[uuid.UUID][]proxy.ConfiguredHeader) (supported, oauth bool) {
-	if len(o.clients) == 0 {
-		return true, false
-	}
-	for _, client := range o.clients {
-		clientOAuth := false
-		switch client.ClientType.String {
-		case authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA:
-			clientOAuth = true
-		case authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough:
-			if tunneled {
-				continue
-			}
-		default:
-			continue
-		}
-		if !tunneled {
-			clientHeaders := headers[client.AuthClientID.UUID]
-			if usable, _ := remoteMemberAuth(clientHeaders, clientOAuth); !usable {
-				continue
-			}
-		}
-		supported = true
-		oauth = oauth || clientOAuth
-	}
-	return supported, oauth
-}
-
 // Discovery needs header presence and source metadata, so it can avoid decrypting secrets.
 func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID][]proxy.ConfiguredHeader, error) {
 	rows, err := authclientsrepo.New(s.db).ListAuthClientHeaders(ctx, authclientsrepo.ListAuthClientHeadersParams{OrganizationID: organizationID, AuthClientIds: ids})
@@ -112,10 +84,14 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 	var serverIDs, remoteIDs, clientIDs []uuid.UUID
 	for _, member := range members {
 		offer, known := offers[member.serverID]
-		if !known || !member.remoteServerID.Valid || (offer.pending && len(offer.clients) == 0) {
+		if !known || (offer.pending && len(offer.clients) == 0) {
 			continue
 		}
 		serverIDs = append(serverIDs, member.serverID)
+		// A tunneled server is sent no configured headers.
+		if !member.remoteServerID.Valid {
+			continue
+		}
 		remoteIDs = append(remoteIDs, member.remoteServerID.UUID)
 		for _, client := range offer.clients {
 			clientIDs = append(clientIDs, client.AuthClientID.UUID)
@@ -154,28 +130,42 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 	return metadata, nil
 }
 
-// Use the serving resolver's effective header source so discovery matches execution.
-func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata) bool {
-	if member.tunneledServerID.Valid {
-		supported, _ := offer.gatewayCapability(true, nil)
-		return supported
-	}
+// Discovery lists a member only when the serving resolver could reach it
+// through one of its offered clients. signInRegistrations are the
+// registrations linked to the gateway sign-in.
+func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata, signInRegistrations map[uuid.UUID]bool) bool {
 	for _, client := range offer.clients {
-		single := configuredAuthOffer{clients: []upstreamclientsrepo.ListServerConsentAuthClientsRow{client}, pending: false}
-		supported, oauth := single.gatewayCapability(false, nil)
-		if !supported {
-			continue
-		}
 		row, ok := metadata.selections[[2]uuid.UUID{member.serverID, client.AuthClientID.UUID}]
 		if !ok {
 			continue
 		}
 		resolution := decideAuthClient(row)
+		headersOnly := isHeadersOnlyType(resolution.clientType)
+		switch resolution.outcome {
+		case authClientResolved:
+		case authClientLegacy:
+			// The upstream client choice serves these under its own rule:
+			// headers alone only on a server with no associated registration,
+			// and a registration only when the server associates it and the
+			// gateway sign-in links it.
+			registration := row.RegistrationID.UUID
+			if headersOnly && len(member.associatedClients) > 0 {
+				continue
+			}
+			if !headersOnly && (!row.RegistrationID.Valid || !member.associatedClients[registration] || !signInRegistrations[registration]) {
+				continue
+			}
+		case authClientGap, authClientNoAuth, authClientNoAccess:
+			continue
+		}
+		if !member.remoteServerID.Valid {
+			return true
+		}
 		effective := proxy.MergeAuthClientHeaders(proxy.HeaderPolicyRemote, metadata.nonCredential[member.remoteServerID.UUID], metadata.headers[client.AuthClientID.UUID])
-		if resolution.outcome == authClientLegacy && !resolution.sendsClientHeaders() {
+		if !resolution.sendsClientHeaders() {
 			effective = metadata.source[member.remoteServerID.UUID]
 		}
-		if supported, _ := remoteMemberAuth(effective, oauth); supported {
+		if supported, _ := remoteMemberAuth(effective, !headersOnly); supported {
 			return true
 		}
 	}
