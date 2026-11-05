@@ -161,6 +161,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "memory_memo:create",
   "meta-mcp:add_member",
   "meta-mcp:create",
   "meta-mcp:delete",
@@ -311,6 +312,7 @@ export const AUDIT_ACTIONS = [
   "spend_rule:archive",
   "spend_rule:create",
   "spend_rule:update",
+  "team_memory:read",
   "template:create",
   "template:delete",
   "template:update",
@@ -1038,6 +1040,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated spend rule";
     case "spend_rule:archive":
       return "archived spend rule";
+
+    case "team_memory:read":
+      return "read team memory for";
+    case "memory_memo:create":
+      return "saved team memo";
 
     case "template:create":
       return "created template";
