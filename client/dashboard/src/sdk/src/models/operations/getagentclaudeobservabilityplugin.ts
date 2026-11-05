@@ -17,10 +17,6 @@ export type GetAgentClaudeObservabilityPluginRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  /**
-   * Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
-   */
-  gramUserEmail?: string | undefined;
 };
 
 export type GetAgentClaudeObservabilityPluginResponse = {
@@ -63,7 +59,6 @@ export function getAgentClaudeObservabilityPluginSecurityToJSON(
 /** @internal */
 export type GetAgentClaudeObservabilityPluginRequest$Outbound = {
   "Gram-Key"?: string | undefined;
-  "Gram-User-Email"?: string | undefined;
 };
 
 /** @internal */
@@ -74,12 +69,10 @@ export const GetAgentClaudeObservabilityPluginRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramKey: z.optional(z.string()),
-      gramUserEmail: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         gramKey: "Gram-Key",
-        gramUserEmail: "Gram-User-Email",
       });
     }),
   );

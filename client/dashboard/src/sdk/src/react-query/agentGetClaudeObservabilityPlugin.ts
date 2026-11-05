@@ -59,7 +59,7 @@ export type AgentGetClaudeObservabilityPluginQueryError =
  * getClaudeObservabilityPlugin agent
  *
  * @remarks
- * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+ * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.
  */
 export function useAgentGetClaudeObservabilityPlugin(
   request?: GetAgentClaudeObservabilityPluginRequest | undefined,
@@ -88,7 +88,7 @@ export function useAgentGetClaudeObservabilityPlugin(
  * getClaudeObservabilityPlugin agent
  *
  * @remarks
- * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+ * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.
  */
 export function useAgentGetClaudeObservabilityPluginSuspense(
   request?: GetAgentClaudeObservabilityPluginRequest | undefined,
@@ -115,12 +115,7 @@ export function useAgentGetClaudeObservabilityPluginSuspense(
 
 export function setAgentGetClaudeObservabilityPluginData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      gramKey?: string | undefined;
-      gramUserEmail?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramKey?: string | undefined }],
   data: AgentGetClaudeObservabilityPluginQueryData,
 ): AgentGetClaudeObservabilityPluginQueryData | undefined {
   const key = queryKeyAgentGetClaudeObservabilityPlugin(...queryKeyBase);
@@ -133,12 +128,7 @@ export function setAgentGetClaudeObservabilityPluginData(
 
 export function invalidateAgentGetClaudeObservabilityPlugin(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      gramKey?: string | undefined;
-      gramUserEmail?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { gramKey?: string | undefined }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({

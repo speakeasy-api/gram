@@ -51,7 +51,6 @@ export function buildAgentGetClaudeObservabilityPluginQuery(
   return {
     queryKey: queryKeyAgentGetClaudeObservabilityPlugin({
       gramKey: request?.gramKey,
-      gramUserEmail: request?.gramUserEmail,
     }),
     queryFn: async function agentGetClaudeObservabilityPluginQueryFn(
       ctx,
@@ -78,10 +77,7 @@ export function buildAgentGetClaudeObservabilityPluginQuery(
 }
 
 export function queryKeyAgentGetClaudeObservabilityPlugin(
-  parameters: {
-    gramKey?: string | undefined;
-    gramUserEmail?: string | undefined;
-  },
+  parameters: { gramKey?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "agent", "getClaudeObservabilityPlugin", parameters];
 }
