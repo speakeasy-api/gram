@@ -640,6 +640,10 @@ type ListResourceAudienceResponseBody struct {
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version string `form:"version" json:"version" xml:"version"`
+	// Who can connect to this resource once every rule is applied, blocks and
+	// their overrides included. Omitted for an MCP gateway, which has no connect
+	// rule of its own: each server it fronts decides.
+	ConnectAudience *ResourceConnectAudienceResponseBody `form:"connect_audience,omitempty" json:"connect_audience,omitempty" xml:"connect_audience,omitempty"`
 }
 
 // SetResourceAudienceResponseBody is the type of the "access" service
@@ -654,6 +658,10 @@ type SetResourceAudienceResponseBody struct {
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version string `form:"version" json:"version" xml:"version"`
+	// Who can connect to this resource once every rule is applied, blocks and
+	// their overrides included. Omitted for an MCP gateway, which has no connect
+	// rule of its own: each server it fronts decides.
+	ConnectAudience *ResourceConnectAudienceResponseBody `form:"connect_audience,omitempty" json:"connect_audience,omitempty" xml:"connect_audience,omitempty"`
 }
 
 // ListAudienceOptionsResponseBody is the type of the "access" service
@@ -9627,6 +9635,33 @@ type ResourceAudienceEntryResponseBody struct {
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
 
+// ResourceConnectAudienceResponseBody is used to define fields on response
+// body types.
+type ResourceConnectAudienceResponseBody struct {
+	// How the resource admits callers. A public resource admits anyone without a
+	// rule and a disabled one serves nobody, so the members list decides access
+	// only when the resource is private.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// Every organization member a connect rule reaches, granted or blocked.
+	// Members no rule reaches cannot connect to a private resource and are left
+	// out.
+	Members []*ResourceConnectAudienceMemberResponseBody `form:"members" json:"members" xml:"members"`
+}
+
+// ResourceConnectAudienceMemberResponseBody is used to define fields on
+// response body types.
+type ResourceConnectAudienceMemberResponseBody struct {
+	// The member's user id.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// The connect decision for this member. "allowed": a rule lets them connect
+	// and nothing blocks it. "allowed_over_block": a direct rule naming this
+	// resource outranks a block they inherit from a role or everyone. "blocked": a
+	// block takes connect away.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// How many of the resource's tools the member can call once connected.
+	ToolAccess string `form:"tool_access" json:"tool_access" xml:"tool_access"`
+}
+
 // AudienceOptionResponseBody is used to define fields on response body types.
 type AudienceOptionResponseBody struct {
 	// Canonical principal URN to grant access to.
@@ -10753,6 +10788,9 @@ func NewListResourceAudienceResponseBody(res *access.ResourceAudienceResult) *Li
 	} else {
 		body.Entries = []*ResourceAudienceEntryResponseBody{}
 	}
+	if res.ConnectAudience != nil {
+		body.ConnectAudience = marshalAccessResourceConnectAudienceToResourceConnectAudienceResponseBody(res.ConnectAudience)
+	}
 	return body
 }
 
@@ -10783,6 +10821,9 @@ func NewSetResourceAudienceResponseBody(res *access.ResourceAudienceResult) *Set
 		}
 	} else {
 		body.Entries = []*ResourceAudienceEntryResponseBody{}
+	}
+	if res.ConnectAudience != nil {
+		body.ConnectAudience = marshalAccessResourceConnectAudienceToResourceConnectAudienceResponseBody(res.ConnectAudience)
 	}
 	return body
 }

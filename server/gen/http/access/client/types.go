@@ -636,6 +636,10 @@ type ListResourceAudienceResponseBody struct {
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Who can connect to this resource once every rule is applied, blocks and
+	// their overrides included. Omitted for an MCP gateway, which has no connect
+	// rule of its own: each server it fronts decides.
+	ConnectAudience *ResourceConnectAudienceResponseBody `form:"connect_audience,omitempty" json:"connect_audience,omitempty" xml:"connect_audience,omitempty"`
 }
 
 // SetResourceAudienceResponseBody is the type of the "access" service
@@ -650,6 +654,10 @@ type SetResourceAudienceResponseBody struct {
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Who can connect to this resource once every rule is applied, blocks and
+	// their overrides included. Omitted for an MCP gateway, which has no connect
+	// rule of its own: each server it fronts decides.
+	ConnectAudience *ResourceConnectAudienceResponseBody `form:"connect_audience,omitempty" json:"connect_audience,omitempty" xml:"connect_audience,omitempty"`
 }
 
 // ListAudienceOptionsResponseBody is the type of the "access" service
@@ -9695,6 +9703,33 @@ type ResourceAudienceEntryResponseBody struct {
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
 
+// ResourceConnectAudienceResponseBody is used to define fields on response
+// body types.
+type ResourceConnectAudienceResponseBody struct {
+	// How the resource admits callers. A public resource admits anyone without a
+	// rule and a disabled one serves nobody, so the members list decides access
+	// only when the resource is private.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// Every organization member a connect rule reaches, granted or blocked.
+	// Members no rule reaches cannot connect to a private resource and are left
+	// out.
+	Members []*ResourceConnectAudienceMemberResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
+}
+
+// ResourceConnectAudienceMemberResponseBody is used to define fields on
+// response body types.
+type ResourceConnectAudienceMemberResponseBody struct {
+	// The member's user id.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The connect decision for this member. "allowed": a rule lets them connect
+	// and nothing blocks it. "allowed_over_block": a direct rule naming this
+	// resource outranks a block they inherit from a role or everyone. "blocked": a
+	// block takes connect away.
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// How many of the resource's tools the member can call once connected.
+	ToolAccess *string `form:"tool_access,omitempty" json:"tool_access,omitempty" xml:"tool_access,omitempty"`
+}
+
 // SetResourceAudienceEntryRequestBody is used to define fields on request body
 // types.
 type SetResourceAudienceEntryRequestBody struct {
@@ -15610,6 +15645,9 @@ func NewListResourceAudienceResourceAudienceResultOK(body *ListResourceAudienceR
 		}
 		v.Entries[i] = unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry(val)
 	}
+	if body.ConnectAudience != nil {
+		v.ConnectAudience = unmarshalResourceConnectAudienceResponseBodyToAccessResourceConnectAudience(body.ConnectAudience)
+	}
 
 	return v
 }
@@ -15787,6 +15825,9 @@ func NewSetResourceAudienceResourceAudienceResultOK(body *SetResourceAudienceRes
 			continue
 		}
 		v.Entries[i] = unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry(val)
+	}
+	if body.ConnectAudience != nil {
+		v.ConnectAudience = unmarshalResourceConnectAudienceResponseBodyToAccessResourceConnectAudience(body.ConnectAudience)
 	}
 
 	return v
@@ -18575,6 +18616,11 @@ func ValidateListResourceAudienceResponseBody(body *ListResourceAudienceResponse
 			}
 		}
 	}
+	if body.ConnectAudience != nil {
+		if err2 := ValidateResourceConnectAudienceResponseBody(body.ConnectAudience); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -18599,6 +18645,11 @@ func ValidateSetResourceAudienceResponseBody(body *SetResourceAudienceResponseBo
 			if err2 := ValidateResourceAudienceEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.ConnectAudience != nil {
+		if err2 := ValidateResourceConnectAudienceResponseBody(body.ConnectAudience); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -30691,6 +30742,55 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 	for _, e := range body.Dispositions {
 		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dispositions[*]", e, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		}
+	}
+	return
+}
+
+// ValidateResourceConnectAudienceResponseBody runs the validations defined on
+// ResourceConnectAudienceResponseBody
+func ValidateResourceConnectAudienceResponseBody(body *ResourceConnectAudienceResponseBody) (err error) {
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
+	if body.Members == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("members", "body"))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "public" || *body.Visibility == "private" || *body.Visibility == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"public", "private", "disabled"}))
+		}
+	}
+	for _, e := range body.Members {
+		if e != nil {
+			if err2 := ValidateResourceConnectAudienceMemberResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResourceConnectAudienceMemberResponseBody runs the validations
+// defined on ResourceConnectAudienceMemberResponseBody
+func ValidateResourceConnectAudienceMemberResponseBody(body *ResourceConnectAudienceMemberResponseBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.Decision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decision", "body"))
+	}
+	if body.ToolAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_access", "body"))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "allowed" || *body.Decision == "allowed_over_block" || *body.Decision == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"allowed", "allowed_over_block", "blocked"}))
+		}
+	}
+	if body.ToolAccess != nil {
+		if !(*body.ToolAccess == "all" || *body.ToolAccess == "some" || *body.ToolAccess == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_access", *body.ToolAccess, []any{"all", "some", "none"}))
 		}
 	}
 	return

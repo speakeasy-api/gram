@@ -13,6 +13,7 @@ var All = []outbox.EventRegistration{
 	AccessGrantV1,
 	AccessMemberV1,
 	AccessRequestV1,
+	AccessResourceAudienceV1,
 	AccessRoleV1,
 	AccessRuleV1,
 	AgentV1,

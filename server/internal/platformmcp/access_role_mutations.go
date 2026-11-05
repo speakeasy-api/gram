@@ -115,6 +115,7 @@ type AccessRoleMutationBackend interface {
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
 	ReconcileRoleDelivery(context.Context, access.RoleReconciliation)
 	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
+	SetResourceConnectRule(context.Context, string, access.RoleAuditActor, string, urn.Principal, string, string) (access.ResourceConnectionAudience, error)
 }
 
 type normalizedMCPAccessRoleRule struct {

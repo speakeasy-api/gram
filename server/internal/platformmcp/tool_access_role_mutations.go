@@ -22,6 +22,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	authClientAccess := unavailableAccessRoleMutationHandler[SetMCPRoleAuthClientAccessInput, SetMCPRoleAuthClientAccessOutput]()
 	offerCredential := unavailableAccessRoleMutationHandler[OfferMCPUpstreamCredentialInput, OfferMCPUpstreamCredentialOutput]()
 	headlessCredential := unavailableAccessRoleMutationHandler[ChooseMCPHeadlessCallerCredentialInput, ChooseMCPHeadlessCallerCredentialOutput]()
+	connectionAudience := unavailableAccessRoleMutationHandler[SetMCPConnectionAudienceInput, SetMCPConnectionAudienceOutput]()
 	if mutations != nil && mutations.valid() {
 		create = func(ctx context.Context, _ *mcp.CallToolRequest, input CreateMCPAccessRoleInput) (*mcp.CallToolResult, CreateMCPAccessRoleOutput, error) {
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (CreateMCPAccessRoleOutput, error) {
@@ -49,6 +50,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 					return mutations.ChooseHeadlessCallerCredential(ctx, principal, input)
 				})
 			}
+		}
+		connectionAudience = func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPConnectionAudienceInput) (*mcp.CallToolResult, SetMCPConnectionAudienceOutput, error) {
+			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (SetMCPConnectionAudienceOutput, error) {
+				return mutations.SetConnectionAudience(ctx, principal, input)
+			})
 		}
 		if assignments, err := NewAccessRoleAssignmentService(mutations); err == nil {
 			assign = func(ctx context.Context, _ *mcp.CallToolRequest, input AssignMCPAccessRoleInput) (*mcp.CallToolResult, AssignMCPAccessRoleOutput, error) {
@@ -89,6 +95,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 		Description: "See and choose which upstream credential one configured MCP serves an app or workload that signs in without a browser and so cannot choose on the consent screen. First call with confirmed:false to preview the server's credentials, every app registered with its sign-in (including apps not yet configured, with chosen:false), and every caller's current choice. Then, after the user confirms the exact caller (user_session_client_id, or workload_issuer_id with workload_subject), server and choice, call with confirmed:true and one of auth_client_id, no_auth or remove. Only this server's choice changes; the caller's other servers keep theirs. Sessions issued afterwards use it; existing sessions keep theirs, and a token request can still name its own choice. Workloads can use shared credentials only. Choosing grants nothing: each issuance checks the caller may use it. Applies only where typed upstream credentials are enforced. Returns names and IDs, never credential values.",
 		Annotations: writeAnnotations(true, true, false),
 	}, meta, headlessCredential)
+	addTool(reg, &mcp.Tool{
+		Name: operationSetMCPConnectionAudience, Title: "Choose Who Can Connect to an MCP Server",
+		Description: "Set one audience's connect rule on one configured MCP: everyone in the organization, one role (role_reference from list_access_roles or get_mcp_access), or one member (member_reference from list_access_members). access is allowed (may connect to the whole server), blocked (may not connect), or not_granted (removes this server's own rule for that audience). Read get_mcp_access first and pass its connection_audience.version as expected_version; a change made since is refused as a conflict. Only that audience's whole-server connect rule changes: view and manage rules, other audiences, and narrower rules limited to some tools are kept (allowed replaces that audience's tool-limited grant with the whole server, and blocked replaces its tool-limited block), and rules covering every server are changed with the role tools instead. A block wins over that audience's grants, and a block on everyone or a role also stops administrators who hold it unless they are named on the server. Connect rules for roles can add or remove the server from plugins assigned to the role. The change is audited, and the result reports the connection audience after it. Requires explicit confirmation.",
+		Annotations: writeAnnotations(true, true, false),
+	}, meta, connectionAudience)
 }
 
 func unavailableAccessRoleMutationHandler[In, Out any]() mcp.ToolHandlerFor[In, Out] {

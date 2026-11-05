@@ -12,6 +12,7 @@ const (
 	subjectTypeAPIKey                      subjectType = "api_key"
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
 	subjectTypeAccessMember                subjectType = "access_member"
+	subjectTypeAccessResourceAudience      subjectType = "access_resource_audience"
 	subjectTypeAccessRole                  subjectType = "access_role"
 	subjectTypeAccessGrant                 subjectType = "access_grant"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"

@@ -10542,6 +10542,45 @@ func marshalAccessResourceAudienceEntryToResourceAudienceEntryResponseBody(v *ac
 	return res
 }
 
+// marshalAccessResourceConnectAudienceToResourceConnectAudienceResponseBody
+// builds a value of type *ResourceConnectAudienceResponseBody from a value of
+// type *access.ResourceConnectAudience.
+func marshalAccessResourceConnectAudienceToResourceConnectAudienceResponseBody(v *access.ResourceConnectAudience) *ResourceConnectAudienceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResourceConnectAudienceResponseBody{
+		Visibility: v.Visibility,
+	}
+	if v.Members != nil {
+		res.Members = make([]*ResourceConnectAudienceMemberResponseBody, len(v.Members))
+		for i, val := range v.Members {
+			if val == nil {
+				res.Members[i] = nil
+				continue
+			}
+			res.Members[i] = marshalAccessResourceConnectAudienceMemberToResourceConnectAudienceMemberResponseBody(val)
+		}
+	} else {
+		res.Members = []*ResourceConnectAudienceMemberResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessResourceConnectAudienceMemberToResourceConnectAudienceMemberResponseBody
+// builds a value of type *ResourceConnectAudienceMemberResponseBody from a
+// value of type *access.ResourceConnectAudienceMember.
+func marshalAccessResourceConnectAudienceMemberToResourceConnectAudienceMemberResponseBody(v *access.ResourceConnectAudienceMember) *ResourceConnectAudienceMemberResponseBody {
+	res := &ResourceConnectAudienceMemberResponseBody{
+		UserID:     v.UserID,
+		Decision:   v.Decision,
+		ToolAccess: v.ToolAccess,
+	}
+
+	return res
+}
+
 // unmarshalSetResourceAudienceEntryRequestBodyToAccessSetResourceAudienceEntry
 // builds a value of type *access.SetResourceAudienceEntry from a value of type
 // *SetResourceAudienceEntryRequestBody.

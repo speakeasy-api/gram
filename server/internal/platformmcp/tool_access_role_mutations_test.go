@@ -11,7 +11,7 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 	t.Parallel()
 
 	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole, operationConfigureInferenceAccessRole, operationSetMCPRoleAuthClientAccess} {
+	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole, operationConfigureInferenceAccessRole, operationSetMCPRoleAuthClientAccess, operationSetMCPConnectionAudience} {
 		descriptor := descriptorByName(t, registrar, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences)
 		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
@@ -20,7 +20,7 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 		require.False(t, descriptor.Annotations.ReadOnlyHint)
 		require.True(t, descriptor.Annotations.IdempotentHint)
 		require.NotNil(t, descriptor.Annotations.DestructiveHint)
-		require.Equal(t, name == operationUpdateMCPAccessRole || name == operationConfigureInferenceAccessRole || name == operationSetMCPRoleAuthClientAccess, *descriptor.Annotations.DestructiveHint)
+		require.Equal(t, name == operationUpdateMCPAccessRole || name == operationConfigureInferenceAccessRole || name == operationSetMCPRoleAuthClientAccess || name == operationSetMCPConnectionAudience, *descriptor.Annotations.DestructiveHint)
 
 		arguments := json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","add_rules":[],"remove_rules":[],"idempotency_key":"key","confirmed":true}`)
 		if name == operationCreateMCPAccessRole {
@@ -35,6 +35,9 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 		}
 		if name == operationSetMCPRoleAuthClientAccess {
 			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","mcp_id":"00000000-0000-0000-0000-000000000002","role_reference":"opaque-role","auth_client_id":"00000000-0000-0000-0000-000000000003","access":"blocked","confirmed":true}`)
+		}
+		if name == operationSetMCPConnectionAudience {
+			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","mcp_id":"00000000-0000-0000-0000-000000000002","audience":"everyone","access":"blocked","expected_version":"0000000000000000","confirmed":true}`)
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), arguments)
 		var refusal *ToolRefusalError

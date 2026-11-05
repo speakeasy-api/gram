@@ -219,7 +219,11 @@ type GetMCPAccessOutput struct {
 	// SharedAuthClientRoles lists roles with a rule on a shared credential
 	// the server offers, whether or not they can enter the server.
 	SharedAuthClientRoles []MCPRoleSharedAuthClients `json:"shared_auth_client_roles"`
-	ExpiresAt             string                     `json:"expires_at"`
+	// ConnectionAudience is who may connect: the connect rules naming this
+	// server and the members they reach. It decides entry only when
+	// authorization_mode is rbac.
+	ConnectionAudience MCPConnectionAudience `json:"connection_audience" jsonschema:"connect rules naming this server and how many members they reach after blocks and overrides; set_mcp_connection_audience changes them. Decides entry only when authorization_mode is rbac"`
+	ExpiresAt          string                `json:"expires_at"`
 }
 
 // AccessReadService projects the access service's local role/member authority
@@ -621,11 +625,16 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 		sharedRoles = append(sharedRoles, MCPRoleSharedAuthClients{Name: role.Name, Reference: reference, AuthClients: sharedClients, UnevaluatedGrants: unevaluated})
 	}
 
+	connectionAudience, err := s.readConnectionAudience(ctx, principal, row.McpServerID.String(), roles.Roles, now)
+	if err != nil {
+		return GetMCPAccessOutput{}, err
+	}
+
 	// Anyone enters a public server and nobody enters a disabled or unserved
 	// one, so no role decides entry or tools.
 	if target.AuthorizationMode != "rbac" {
 		expiresAt := ""
-		if len(sharedRoles) > 0 {
+		if len(sharedRoles) > 0 || len(connectionAudience.Roles) > 0 {
 			expiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
 		}
 		return GetMCPAccessOutput{
@@ -633,6 +642,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 			MCP:                   target,
 			Roles:                 []MCPRoleCoverage{},
 			SharedAuthClientRoles: sharedRoles,
+			ConnectionAudience:    connectionAudience,
 			ExpiresAt:             expiresAt,
 		}, nil
 	}
@@ -658,6 +668,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 		MCP:                   target,
 		Roles:                 make([]MCPRoleCoverage, 0, len(roles.Roles)),
 		SharedAuthClientRoles: sharedRoles,
+		ConnectionAudience:    connectionAudience,
 		ExpiresAt:             now.Add(SubjectReferenceTTL).Format(time.RFC3339),
 	}
 	for _, role := range roles.Roles {

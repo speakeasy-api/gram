@@ -123260,6 +123260,8 @@ components:
         ResourceAudienceResult:
             type: object
             properties:
+                connect_audience:
+                    $ref: '#/components/schemas/ResourceConnectAudience'
                 entries:
                     type: array
                     items:
@@ -123296,6 +123298,48 @@ components:
                 - plugin_id
                 - name
                 - slug
+        ResourceConnectAudience:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceConnectAudienceMember'
+                    description: Every organization member a connect rule reaches, granted or blocked. Members no rule reaches cannot connect to a private resource and are left out.
+                visibility:
+                    type: string
+                    description: How the resource admits callers. A public resource admits anyone without a rule and a disabled one serves nobody, so the members list decides access only when the resource is private.
+                    enum:
+                        - public
+                        - private
+                        - disabled
+            required:
+                - visibility
+                - members
+        ResourceConnectAudienceMember:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: 'The connect decision for this member. "allowed": a rule lets them connect and nothing blocks it. "allowed_over_block": a direct rule naming this resource outranks a block they inherit from a role or everyone. "blocked": a block takes connect away.'
+                    enum:
+                        - allowed
+                        - allowed_over_block
+                        - blocked
+                tool_access:
+                    type: string
+                    description: How many of the resource's tools the member can call once connected.
+                    enum:
+                        - all
+                        - some
+                        - none
+                user_id:
+                    type: string
+                    description: The member's user id.
+            required:
+                - user_id
+                - decision
+                - tool_access
         ResourceEntry:
             type: object
             properties:
