@@ -73,6 +73,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *toolsets.Service
+	authz          *authz.Engine
 	feature        *feature.InMemory
 	deployments    *deployments.Service
 	assets         *assets.Service
@@ -138,6 +139,7 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 
 	return ctx, &testInstance{
 		service:        svc,
+		authz:          authzEngine,
 		feature:        f,
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
@@ -234,6 +236,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 
 	return ctx, &testInstance{
 		service:        svc,
+		authz:          authzEngine,
 		feature:        f,
 		conn:           conn,
 		temporalEnv:    temporalEnv,
