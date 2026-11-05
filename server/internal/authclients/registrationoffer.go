@@ -47,7 +47,8 @@ type RegistrationOffer struct {
 // writes nothing else: the registration gets no binding to a user session
 // issuer and the server no upstream client association, so the offer reaches
 // this server alone and follows neither. A server that already offers the
-// registration is left as it is.
+// registration through an enabled auth client is left as it is; a disabled one
+// stays disabled beside the new offer, since it may be shared with other servers.
 //
 // It performs no authorization. The caller holds the server's row lock and
 // the auth client writer scope. A refusal is an *AttachRefusedError.

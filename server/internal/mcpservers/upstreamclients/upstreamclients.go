@@ -90,9 +90,10 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 	var captured []uuid.UUID
 	if !enforced {
 		sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-			OrganizationID:       organizationID,
-			ProjectID:            projectID,
-			UserSessionIssuerIds: userIssuerIDs,
+			OrganizationID:         organizationID,
+			ProjectID:              projectID,
+			UserSessionIssuerIds:   userIssuerIDs,
+			RemoteSessionClientIds: nil,
 		})
 		if err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)
@@ -119,22 +120,35 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 	return nil
 }
 
-// CaptureSoleConsumers associates each client bound to userIssuerIDs with the
-// issuer's server when that server is the issuer's only consumer, and records
-// their auth clients. It is for a writer that has just configured those
-// bindings or moved a server onto them, for which the issuer's one server is
-// the server being configured. Without enforcement Reconcile has already done
-// this and it writes nothing. dbtx is either the caller's transaction, whose
-// writer scope must predate its first mutation, or a pool to begin one from.
-func CaptureSoleConsumers(ctx context.Context, dbtx repo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+// CaptureSoleConsumers associates clientIDs, where bound to userIssuerIDs, with
+// the issuer's server when that server is the issuer's only consumer, and
+// records their auth clients. It is for a writer that has just configured those
+// bindings, for which the issuer's one server is the server being configured;
+// any other client on the issuer may be what a deleted server left behind and
+// stays out of it. A nil clientIDs takes every bound client, for a writer moving
+// a server that already signs in through them onto the issuer.
+//
+// Only upstream auth enforcement needs this: without it Reconcile has already
+// captured them, so it writes nothing. dbtx is either the caller's transaction,
+// whose writer scope must predate its first mutation, or a pool to begin one
+// from.
+func CaptureSoleConsumers(ctx context.Context, dbtx repo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs, clientIDs []uuid.UUID) error {
 	return inTx(ctx, dbtx, func(tx pgx.Tx) error {
+		enforced, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
+		if err != nil {
+			return fmt.Errorf("read upstream auth enforcement: %w", err)
+		}
+		if !enforced {
+			return nil
+		}
 		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
 			return fmt.Errorf("lock upstream association writer scope: %w", err)
 		}
 		sole, err := repo.New(tx).CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-			OrganizationID:       organizationID,
-			ProjectID:            projectID,
-			UserSessionIssuerIds: userIssuerIDs,
+			OrganizationID:         organizationID,
+			ProjectID:              projectID,
+			UserSessionIssuerIds:   userIssuerIDs,
+			RemoteSessionClientIds: clientIDs,
 		})
 		if err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)

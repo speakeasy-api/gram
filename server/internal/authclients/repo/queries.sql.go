@@ -1322,6 +1322,7 @@ SELECT EXISTS (
     ON ac.id = msac.auth_client_id
    AND ac.organization_id = msac.organization_id
    AND ac.deleted IS FALSE
+   AND ac.enabled IS TRUE
   WHERE msac.mcp_server_id = $1
     AND msac.project_id = $2
     AND msac.organization_id = $3
@@ -1337,8 +1338,8 @@ type ServerOffersRegistrationParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
-// Whether the MCP server already offers a live auth client that signs in
-// through the OAuth registration.
+// Whether the MCP server already offers a live, enabled auth client that signs
+// in through the OAuth registration.
 func (q *Queries) ServerOffersRegistration(ctx context.Context, arg ServerOffersRegistrationParams) (bool, error) {
 	row := q.db.QueryRow(ctx, serverOffersRegistration,
 		arg.McpServerID,

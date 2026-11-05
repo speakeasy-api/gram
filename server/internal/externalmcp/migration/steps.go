@@ -223,7 +223,7 @@ func (m *Migrator) switchServer(ctx context.Context, tx pgx.Tx, principal urn.Pr
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
 			return fmt.Errorf("resync upstream issuer: %w", err)
 		}
-		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}, nil); err != nil {
 			return fmt.Errorf("capture upstream clients: %w", err)
 		}
 	}

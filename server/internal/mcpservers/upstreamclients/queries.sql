@@ -32,7 +32,8 @@ DO UPDATE SET updated_at = clock_timestamp();
 -- organization. With one consumer the binding can only be meant for that
 -- server, so the association is proven rather than guessed. Issuers shared by
 -- several servers, or also fronting a gateway, prove nothing and are left for
--- explicit configuration.
+-- explicit configuration. remote_session_client_ids limits the capture to those
+-- clients; NULL captures every client bound to the issuer.
 --
 -- Tenancy: the ids arrive from callers that already hold the issuer, but are
 -- re-pinned to the caller's project and organization so a foreign id writes
@@ -61,6 +62,8 @@ JOIN remote_session_clients AS c
 WHERE s.project_id = @project_id::uuid
   AND s.deleted IS FALSE
   AND s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND (sqlc.narg('remote_session_client_ids')::uuid[] IS NULL
+       OR c.id = ANY(sqlc.narg('remote_session_client_ids')::uuid[]))
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other

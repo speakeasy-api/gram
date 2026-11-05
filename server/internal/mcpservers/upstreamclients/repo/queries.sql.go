@@ -230,6 +230,8 @@ JOIN remote_session_clients AS c
 WHERE s.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND s.user_session_issuer_id = ANY($3::uuid[])
+  AND ($4::uuid[] IS NULL
+       OR c.id = ANY($4::uuid[]))
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
@@ -256,9 +258,10 @@ RETURNING mcp_server_id
 `
 
 type CaptureSoleConsumerAssociationsParams struct {
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	UserSessionIssuerIds []uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	UserSessionIssuerIds   []uuid.UUID
+	RemoteSessionClientIds []uuid.UUID
 }
 
 // Returns the server of each association it adds, so the caller can record
@@ -268,14 +271,20 @@ type CaptureSoleConsumerAssociationsParams struct {
 // organization. With one consumer the binding can only be meant for that
 // server, so the association is proven rather than guessed. Issuers shared by
 // several servers, or also fronting a gateway, prove nothing and are left for
-// explicit configuration.
+// explicit configuration. remote_session_client_ids limits the capture to those
+// clients; NULL captures every client bound to the issuer.
 //
 // Tenancy: the ids arrive from callers that already hold the issuer, but are
 // re-pinned to the caller's project and organization so a foreign id writes
 // nothing, and only the organization's own servers and gateways count as
 // other consumers.
 func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
+	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerIds,
+		arg.RemoteSessionClientIds,
+	)
 	if err != nil {
 		return nil, err
 	}

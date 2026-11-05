@@ -545,7 +545,7 @@ func (s *Service) finalizeClientCreate(
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
-	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs); err != nil {
+	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs, []uuid.UUID{created.ID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
 
@@ -1087,7 +1087,7 @@ func (s *Service) commitClientAttachmentChange(
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
-	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs); err != nil {
+	if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs, []uuid.UUID{clientID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
 	}
 

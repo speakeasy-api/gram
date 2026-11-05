@@ -324,8 +324,8 @@ ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING id;
 
 -- name: ServerOffersRegistration :one
--- Whether the MCP server already offers a live auth client that signs in
--- through the OAuth registration.
+-- Whether the MCP server already offers a live, enabled auth client that signs
+-- in through the OAuth registration.
 SELECT EXISTS (
   SELECT 1
   FROM mcp_server_auth_clients msac
@@ -333,6 +333,7 @@ SELECT EXISTS (
     ON ac.id = msac.auth_client_id
    AND ac.organization_id = msac.organization_id
    AND ac.deleted IS FALSE
+   AND ac.enabled IS TRUE
   WHERE msac.mcp_server_id = @mcp_server_id
     AND msac.project_id = @project_id
     AND msac.organization_id = @organization_id

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -16,10 +17,13 @@ import (
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // Several MCP servers usually share one user session issuer, and a client's
@@ -418,4 +422,185 @@ func TestMigrationLeavesAServerOnlyOfferAlone(t *testing.T) {
 			requireFirstServerKeepsItsClient(t, ctx, ti, shared)
 		})
 	}
+}
+
+// An auth client an administrator disabled offers nothing, so a commit that
+// reports success on the server still has to leave an enabled offer.
+func TestCommitServerIdentityConfigurationOffersAgainOverADisabledOfferUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := activeOrganizationID(t, ctx)
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+	shared := seedSharedIssuer(t, ctx, ti, "enforced-disabled", "")
+	providerID := createServerIdentityProvider(t, ctx, ti, "enforced-disabled-second-provider", "", false, []string{"none"})
+	storedClient := createServerIdentityClient(t, ctx, ti, "enforced-disabled-second-client", providerID, false)
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(shared.second, providerID, storedClient))
+	require.NoError(t, err)
+	queries := authclientsrepo.New(ti.conn)
+	listParams := authclientsrepo.ListServerAuthClientsParams{McpServerID: shared.second, ProjectID: projectIDFromContext(t, ctx), OrganizationID: orgID}
+	offered, err := queries.ListServerAuthClients(ctx, listParams)
+	require.NoError(t, err)
+	require.Len(t, offered, 1)
+	_, err = queries.UpdateAuthClient(ctx, authclientsrepo.UpdateAuthClientParams{Name: offered[0].Name, Enabled: false, ID: offered[0].ID, OrganizationID: orgID})
+	require.NoError(t, err)
+
+	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(shared.second, providerID, storedClient))
+	require.NoError(t, err)
+
+	offered, err = queries.ListServerAuthClients(ctx, listParams)
+	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(offered, func(client authclientsrepo.McpAuthClient) bool {
+		return client.Enabled && client.RemoteSessionClientID == conv.ToNullUUID(storedClient)
+	}), "the commit must leave an enabled offer of the client it configured")
+}
+
+// The organization gateway reaches every server in the organization through the
+// organization's only organization-level issuer, whichever issuer the server
+// signs in through itself, and that is what keeps the server's association with
+// a client bound there. Replacing that client on behalf of another server would
+// remove the association and the auth client it publishes.
+func TestCommitServerIdentityConfigurationKeepsTheClientOfAServerOnAnotherIssuer(t *testing.T) {
+	t.Parallel()
+
+	seed := func(t *testing.T, ctx context.Context, ti *testInstance) (owner, fronted, providerID, ownerClient, organizationIssuer uuid.UUID, frontedClients []uuid.UUID) {
+		t.Helper()
+
+		organizationIssuer = seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "kept-org-issuer")
+		owner, _ = sourceBackedTarget(t, ctx, ti, "kept-owner", organizationIssuer)
+		providerID = createServerIdentityProvider(t, ctx, ti, "kept-provider", "", false, []string{"none"})
+		result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(owner, providerID, "kept-owner-client"))
+		require.NoError(t, err)
+		ownerClient, err = uuid.Parse(result.Client.ID)
+		require.NoError(t, err)
+
+		fronted, _ = sourceBackedTarget(t, ctx, ti, "kept-fronted", createUserSessionIssuer(t, ctx, ti.conn, "kept-dedicated-issuer"))
+		_, err = ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(fronted, providerID, "kept-fronted-client"))
+		require.NoError(t, err)
+		frontedClients = associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), fronted)
+		require.Contains(t, frontedClients, ownerClient, "the server's derived provider gives it the organization issuer's client")
+		return owner, fronted, providerID, ownerClient, organizationIssuer, frontedClients
+	}
+	requireKept := func(t *testing.T, ctx context.Context, ti *testInstance, fronted, ownerClient, organizationIssuer uuid.UUID, frontedClients []uuid.UUID) {
+		t.Helper()
+
+		requireClientBound(t, ctx, ti, ownerClient, organizationIssuer, true)
+		require.ElementsMatch(t, frontedClients, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), fronted))
+		require.Contains(t, offeredAuthClients(t, ctx, ti.conn, fronted), authclientbackfill.OAuthClientID(activeOrganizationID(t, ctx), ownerClient, authclientbackfill.TypeRemoteSession))
+	}
+
+	t.Run("under enforcement", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		owner, fronted, providerID, ownerClient, organizationIssuer, frontedClients := seed(t, ctx, ti)
+		enforceUpstreamAuth(t, ctx, ti.conn, activeOrganizationID(t, ctx))
+
+		_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(owner, providerID, "kept-owner-next-client"))
+		require.NoError(t, err)
+
+		requireKept(t, ctx, ti, fronted, ownerClient, organizationIssuer, frontedClients)
+	})
+
+	t.Run("without enforcement", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		owner, fronted, providerID, ownerClient, organizationIssuer, frontedClients := seed(t, ctx, ti)
+
+		_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(owner, providerID, "kept-owner-next-client"))
+		requireOopsCode(t, err, oops.CodeConflict)
+
+		requireKept(t, ctx, ti, fronted, ownerClient, organizationIssuer, frontedClients)
+	})
+}
+
+// A client a deleted server configured stays bound to the issuer. It is not what
+// the writers below configure, so it must not reach the server left on the
+// issuer under enforcement.
+func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// write changes the issuer's bindings and returns the client the
+		// remaining server is expected to offer, if any.
+		write func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID
+	}{
+		{name: "attaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+			t.Helper()
+			clientID := createServerIdentityClient(t, ctx, ti, "leftover-attached-client", providerID, false)
+			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			require.NoError(t, err)
+			return []uuid.UUID{clientID}
+		}},
+		{name: "creating a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+			t.Helper()
+			created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+				RemoteSessionIssuerID: providerID.String(),
+				UserSessionIssuerIds:  []string{userIssuerID.String()},
+				ClientID:              "leftover-created-client",
+				ClientSecret:          nil,
+				SessionToken:          nil,
+				ApikeyToken:           nil,
+				ProjectSlugInput:      nil,
+			})
+			require.NoError(t, err)
+			return []uuid.UUID{uuid.MustParse(created.ID)}
+		}},
+		{name: "detaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+			t.Helper()
+			clientID := createServerIdentityClient(t, ctx, ti, "leftover-detached-client", providerID, false)
+			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			require.NoError(t, err)
+			_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			require.NoError(t, err)
+			return nil
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			orgID := activeOrganizationID(t, ctx)
+			projectID := projectIDFromContext(t, ctx)
+			enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+			shared := seedSharedIssuer(t, ctx, ti, "leftover", "")
+			_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
+			require.NoError(t, err)
+			requireClientBound(t, ctx, ti, shared.firstClient, shared.userIssuerID, true)
+			providerID := createServerIdentityProvider(t, ctx, ti, "leftover-second-provider", "", false, []string{"none"})
+
+			want := tc.write(t, ctx, ti, providerID, shared.userIssuerID)
+
+			require.ElementsMatch(t, want, associatedClients(t, ctx, ti.conn, projectID, shared.second))
+			wantOffered := make([]uuid.UUID, 0, len(want))
+			for _, clientID := range want {
+				wantOffered = append(wantOffered, authclientbackfill.OAuthClientID(orgID, clientID, authclientbackfill.TypeRemoteSession))
+			}
+			require.ElementsMatch(t, wantOffered, offeredAuthClients(t, ctx, ti.conn, shared.second))
+		})
+	}
+}
+
+// Reconcile is what captures without enforcement, so the capture for enforced
+// writers leaves a binding it has not seen alone.
+func TestCaptureSoleConsumersWritesNothingWithoutEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "capture-off-issuer")
+	target, _ := sourceBackedTarget(t, ctx, ti, "capture-off-target", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "capture-off-provider", "", false, []string{"none"})
+	clientID := createServerIdentityClient(t, ctx, ti, "capture-off-client", providerID, false)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
+
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
 }
