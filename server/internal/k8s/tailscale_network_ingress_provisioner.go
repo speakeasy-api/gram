@@ -18,13 +18,16 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -52,6 +55,37 @@ const (
 	networkIngressWorkerServiceAccount   = "gram-network-ingress-worker"
 	networkIngressAttestorManagerRole    = "gram-network-ingress-attestor-manager"
 	networkIngressAttestorManagerBinding = "gram-network-ingress-attestor-manager"
+
+	// MaxNetworkIngressReplicas bounds proxy and attestor pods per ingress.
+	// Each proxy replica is a separate tailnet device in the customer's
+	// tailnet, so the bound keeps device growth predictable.
+	MaxNetworkIngressReplicas = 5
+
+	// attestorMinReadySeconds keeps a new attestor out of rolling-update
+	// accounting until it has stayed Ready for one readiness period.
+	attestorMinReadySeconds = 10
+
+	// attestorPreStopSeconds gives the Service endpoint removal time to reach
+	// the proxies before the attestor receives SIGTERM.
+	attestorPreStopSeconds = 10
+
+	// attestorTerminationGracePeriodSeconds covers the preStop sleep plus the
+	// attestor's 60s HTTP drain.
+	attestorTerminationGracePeriodSeconds = 75
+
+	// podTemplateHashLabel scopes spread constraints to one ReplicaSet so a
+	// rolling update never blocks on the previous revision's placement.
+	podTemplateHashLabel = "pod-template-hash"
+)
+
+var (
+	// attestorCPURequest and attestorMemoryRequest reserve capacity for a
+	// small reverse proxy so pool autoscaling reflects real demand.
+	attestorCPURequest    = resource.MustParse("50m")
+	attestorMemoryRequest = resource.MustParse("64Mi")
+
+	// attestorMemoryLimit stops one tenant's attestor exhausting a shared node.
+	attestorMemoryLimit = resource.MustParse("256Mi")
 )
 
 var (
@@ -76,6 +110,31 @@ type TailscaleNetworkIngressConfig struct {
 	KubernetesAPICIDR string
 	KubernetesAPIPort int32
 	ClusterCIDRs      []string
+
+	// ProxyClass names the cluster-scoped ProxyClass that schedules and pins
+	// proxy pods. Empty leaves ProxyGroups on the operator defaults.
+	ProxyClass string
+
+	// ProxyReplicas is the proxy pod count per ProxyGroup. Zero means one.
+	ProxyReplicas int32
+
+	// AttestorReplicas is the attestor pod count per ingress. Zero means one.
+	// Above one, attestors also get resources, probes, a surge-only rollout,
+	// a graceful preStop and node spreading.
+	AttestorReplicas int32
+
+	// WorkloadPoolKey is the node label and taint key of the dedicated pool
+	// that runs attestors. Empty keeps attestors on the default scheduling.
+	WorkloadPoolKey string
+
+	// WorkloadPoolValue is the node label and taint value paired with
+	// WorkloadPoolKey. Both are set or both are empty.
+	WorkloadPoolValue string
+
+	// DisruptionBudgets enables PodDisruptionBudget management for apply,
+	// teardown and orphan inventory. It requires the matching RBAC and
+	// admission foundation, and must stay enabled once budgets exist.
+	DisruptionBudgets bool
 }
 
 type TailscaleNetworkIngressProvisioner struct {
@@ -111,7 +170,42 @@ func (config TailscaleNetworkIngressConfig) validateApply() error {
 			return fmt.Errorf("%w: cluster network is invalid", ErrNetworkIngressInvalidDesiredState)
 		}
 	}
+	if err := config.ValidateTopology(); err != nil {
+		return fmt.Errorf("%w: %w", ErrNetworkIngressInvalidDesiredState, err)
+	}
 	return nil
+}
+
+// ValidateTopology rejects invalid replica, ProxyClass, node pool and
+// disruption budget settings. The zero value is valid and selects one proxy
+// and one attestor with default scheduling.
+func (config TailscaleNetworkIngressConfig) ValidateTopology() error {
+	if config.ProxyClass != "" && len(k8svalidation.IsDNS1123Subdomain(config.ProxyClass)) > 0 {
+		return errors.New("invalid private ingress ProxyClass")
+	}
+	for _, replicas := range []int32{config.ProxyReplicas, config.AttestorReplicas} {
+		if replicas < 0 || replicas > MaxNetworkIngressReplicas {
+			return fmt.Errorf("private ingress replicas must be between 0 and %d", MaxNetworkIngressReplicas)
+		}
+	}
+	if (config.WorkloadPoolKey == "") != (config.WorkloadPoolValue == "") {
+		return errors.New("private ingress workload pool requires both a key and a value")
+	}
+	if config.WorkloadPoolKey != "" && (len(k8svalidation.IsQualifiedName(config.WorkloadPoolKey)) > 0 || len(k8svalidation.IsValidLabelValue(config.WorkloadPoolValue)) > 0) {
+		return errors.New("invalid private ingress workload pool")
+	}
+	if (config.ProxyReplicas > 1 || config.AttestorReplicas > 1) && !config.DisruptionBudgets {
+		return errors.New("private ingress replicas above one require disruption budgets")
+	}
+	return nil
+}
+
+func (config TailscaleNetworkIngressConfig) proxyReplicas() int32 {
+	return max(1, config.ProxyReplicas)
+}
+
+func (config TailscaleNetworkIngressConfig) attestorReplicas() int32 {
+	return max(1, config.AttestorReplicas)
 }
 
 //nolint:exhaustruct // observations intentionally populate only known current state.
@@ -148,7 +242,7 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	if err := p.replaceImmutableProxyGroup(ctx, desired); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
-	if err := p.applyDynamic(ctx, proxyGroupGVR, "", proxyGroupObject(desired, p.config.ProxyTag)); err != nil {
+	if err := p.applyDynamic(ctx, proxyGroupGVR, "", proxyGroupObject(desired, p.config)); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
 	if err := p.applyServiceAccount(ctx, desired); err != nil {
@@ -168,6 +262,9 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 		expectedHost = desired.Hostname
 	}
 	if err := p.applyDeployment(ctx, desired, expectedHost); err != nil {
+		return p.applyError(NetworkIngressErrorKubernetes, err)
+	}
+	if err := p.applyDisruptionBudgets(ctx, desired); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
 	if err := p.applyService(ctx, desired); err != nil {
@@ -201,11 +298,9 @@ func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resour
 	if err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, fmt.Errorf("get ProxyGroup: %w", err))
 	}
-	deployment, err := p.clientset.AppsV1().Deployments(resources.Namespace).Get(ctx, resources.AttestorDeployment, metav1.GetOptions{})
-	if k8serrors.IsNotFound(err) {
+	if _, err := p.clientset.AppsV1().Deployments(resources.Namespace).Get(ctx, resources.AttestorDeployment, metav1.GetOptions{}); k8serrors.IsNotFound(err) {
 		return NetworkIngressObservation{Status: NetworkIngressStatusPending}, nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, fmt.Errorf("get attestor Deployment: %w", err))
 	}
 	ingress, err := p.clientset.NetworkingV1().Ingresses(resources.Namespace).Get(ctx, resources.Ingress, metav1.GetOptions{})
@@ -217,17 +312,23 @@ func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resour
 	}
 
 	dnsName := ingressHostname(ingress)
-	desiredReplicas := int32(1)
-	if deployment.Spec.Replicas != nil {
-		desiredReplicas = *deployment.Spec.Replicas
-	}
-	rolloutReady := deployment.Status.ObservedGeneration >= deployment.Generation && deployment.Status.UpdatedReplicas == desiredReplicas && deployment.Status.ReadyReplicas == desiredReplicas && deployment.Status.AvailableReplicas == desiredReplicas
 	configuredHostname := ingressDesiredHostname(ingress)
 	if desiredHostname != "" {
 		configuredHostname = desiredHostname
 	}
-	hostReady := dnsName != "" && configuredHostname != "" && deploymentExpectedHost(deployment) == dnsName && hostnameMatchesDesired(dnsName, configuredHostname)
-	ready := unstructuredConditionTrue(tailnet, "TailnetReady") && unstructuredConditionTrue(proxyGroup, "ProxyGroupReady") && rolloutReady && hostReady
+	hostReady := dnsName != "" && configuredHostname != "" && hostnameMatchesDesired(dnsName, configuredHostname)
+	attestorServing := false
+	if hostReady {
+		attestorServing, err = p.attestorServing(ctx, resources, dnsName)
+		if err != nil {
+			return p.applyError(NetworkIngressErrorKubernetes, err)
+		}
+	}
+	// Online means customers can reach the backend now. Rollouts and partial
+	// capacity keep serving through the remaining replicas, so they are left
+	// to monitoring rather than reported as customer-visible status.
+	proxyServing := unstructuredConditionTrue(proxyGroup, "ProxyGroupReady") || unstructuredConditionTrue(proxyGroup, "ProxyGroupAvailable")
+	ready := unstructuredConditionTrue(tailnet, "TailnetReady") && proxyServing && hostReady && attestorServing
 	if ready {
 		return NetworkIngressObservation{Status: NetworkIngressStatusOnline, DNSName: dnsName}, nil
 	}
@@ -236,6 +337,33 @@ func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resour
 
 func (p *TailscaleNetworkIngressProvisioner) Observe(ctx context.Context, resources NetworkIngressResourceNames) (NetworkIngressObservation, error) {
 	return p.observe(ctx, resources, "")
+}
+
+// attestorServing reports whether at least one Ready, non-terminating attestor
+// pod expects the observed tailnet hostname.
+func (p *TailscaleNetworkIngressProvisioner) attestorServing(ctx context.Context, resources NetworkIngressResourceNames, dnsName string) (bool, error) {
+	selector := labels.Set(resourceOwnerLabels(resources.OwnerID.String()))
+	selector[networkIngressAppLabel] = "gram-netingress-attestor"
+	pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
+	if err != nil {
+		return false, fmt.Errorf("list attestor pods: %w", err)
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.DeletionTimestamp == nil && podReady(pod) && expectedHostArgument(pod.Spec) == dnsName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func podReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 func deleteOwnedResource(ctx context.Context, name, ownerID, kind string, get func(context.Context, string) (metav1.Object, error), remove func(context.Context, string, metav1.DeleteOptions) error) error {
@@ -501,7 +629,24 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 
 	// Initiate all independent deletions in each named phase, but do not cross a
 	// dependency barrier until every resource in the preceding phase is absent.
-	workloadPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment}
+	deleteAttestorDisruptionBudget := func() error {
+		if !namespaceOwned || !p.config.DisruptionBudgets {
+			return nil
+		}
+		client := p.clientset.PolicyV1().PodDisruptionBudgets(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorDeployment, ownerID, "attestor PodDisruptionBudget", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteProxyDisruptionBudget := func() error {
+		if !p.config.DisruptionBudgets {
+			return nil
+		}
+		return p.deleteProxyDisruptionBudget(ctx, resources)
+	}
+	workloadPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment, deleteAttestorDisruptionBudget, deleteProxyDisruptionBudget}
 	if err := runNetworkIngressDeletionPhase(workloadPhase...); err != nil {
 		return err
 	}
@@ -726,7 +871,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorDeployment, Namespace: desired.Resources.Namespace, Labels: labels},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: new(int32(1)),
+			Replicas: new(p.config.attestorReplicas()),
 			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
@@ -759,6 +904,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 			},
 		},
 	}
+	p.applyAttestorTopology(deployment)
 	client := p.clientset.AppsV1().Deployments(desired.Resources.Namespace)
 	existing, err := client.Get(ctx, deployment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
@@ -774,6 +920,136 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 	deployment.ResourceVersion = existing.ResourceVersion
 	_, err = client.Update(ctx, deployment, metav1.UpdateOptions{})
 	return wrapKubernetesMutation("update attestor Deployment", err)
+}
+
+// applyAttestorTopology adds node pool scheduling and the highly available
+// rollout shape. With the zero configuration it leaves the Deployment as is.
+//
+//nolint:exhaustruct,exhaustive // Kubernetes desired-state literals omit API-owned defaults; resource lists set only CPU and memory budgets.
+func (p *TailscaleNetworkIngressProvisioner) applyAttestorTopology(deployment *appsv1.Deployment) {
+	pod := &deployment.Spec.Template.Spec
+	if p.config.WorkloadPoolKey != "" {
+		pod.NodeSelector = map[string]string{p.config.WorkloadPoolKey: p.config.WorkloadPoolValue}
+		pod.Tolerations = []corev1.Toleration{{Key: p.config.WorkloadPoolKey, Operator: corev1.TolerationOpEqual, Value: p.config.WorkloadPoolValue, Effect: corev1.TaintEffectNoSchedule}}
+	}
+	if p.config.AttestorReplicas <= 1 {
+		return
+	}
+	deployment.Spec.MinReadySeconds = attestorMinReadySeconds
+	deployment.Spec.Strategy = appsv1.DeploymentStrategy{
+		Type:          appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateDeployment{MaxSurge: new(intstr.FromInt32(1)), MaxUnavailable: new(intstr.FromInt32(0))},
+	}
+	pod.TerminationGracePeriodSeconds = new(int64(attestorTerminationGracePeriodSeconds))
+	selector := &metav1.LabelSelector{MatchLabels: maps.Clone(deployment.Spec.Selector.MatchLabels)}
+	pod.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+		{MaxSkew: 1, TopologyKey: corev1.LabelHostname, WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: selector, MatchLabelKeys: []string{podTemplateHashLabel}},
+		{MaxSkew: 1, TopologyKey: corev1.LabelTopologyZone, WhenUnsatisfiable: corev1.ScheduleAnyway, LabelSelector: selector, MatchLabelKeys: []string{podTemplateHashLabel}},
+	}
+	container := &pod.Containers[0]
+	container.Resources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{corev1.ResourceCPU: attestorCPURequest, corev1.ResourceMemory: attestorMemoryRequest},
+		Limits:   corev1.ResourceList{corev1.ResourceMemory: attestorMemoryLimit},
+	}
+	container.LivenessProbe = &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("health")}}, PeriodSeconds: 10, FailureThreshold: 3}
+	container.Lifecycle = &corev1.Lifecycle{PreStop: &corev1.LifecycleHandler{Sleep: &corev1.SleepAction{Seconds: attestorPreStopSeconds}}}
+}
+
+// applyDisruptionBudgets keeps one attestor and one proxy available during
+// voluntary disruptions when that component runs more than one replica, and
+// removes the budget otherwise.
+func (p *TailscaleNetworkIngressProvisioner) applyDisruptionBudgets(ctx context.Context, desired NetworkIngressDesired) error {
+	if !p.config.DisruptionBudgets {
+		return nil
+	}
+	ownerID := desired.ID.String()
+	attestorClient := p.clientset.PolicyV1().PodDisruptionBudgets(desired.Resources.Namespace)
+	if p.config.AttestorReplicas > 1 {
+		if err := upsertDisruptionBudget(ctx, p.clientset, p.attestorDisruptionBudget(desired)); err != nil {
+			return err
+		}
+	} else if err := ignoreDeletionPending(deleteOwnedResource(ctx, desired.Resources.AttestorDeployment, ownerID, "attestor PodDisruptionBudget", func(ctx context.Context, name string) (metav1.Object, error) {
+		return attestorClient.Get(ctx, name, metav1.GetOptions{})
+	}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+		return attestorClient.Delete(ctx, name, options)
+	})); err != nil {
+		return err
+	}
+	if p.config.ProxyReplicas > 1 {
+		return upsertDisruptionBudget(ctx, p.clientset, p.proxyDisruptionBudget(desired))
+	}
+	return ignoreDeletionPending(p.deleteProxyDisruptionBudget(ctx, desired.Resources))
+}
+
+func (p *TailscaleNetworkIngressProvisioner) deleteProxyDisruptionBudget(ctx context.Context, resources NetworkIngressResourceNames) error {
+	client := p.clientset.PolicyV1().PodDisruptionBudgets(p.config.OperatorNamespace)
+	return deleteOwnedResource(ctx, resources.ProxyNetworkPolicy, resources.OwnerID.String(), "proxy PodDisruptionBudget", func(ctx context.Context, name string) (metav1.Object, error) {
+		return client.Get(ctx, name, metav1.GetOptions{})
+	}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+		return client.Delete(ctx, name, options)
+	})
+}
+
+// ignoreDeletionPending lets apply continue while Kubernetes finishes removing
+// a budget that is no longer desired; the next pass confirms its absence.
+func ignoreDeletionPending(err error) error {
+	if errors.Is(err, ErrNetworkIngressDeletionPending) {
+		return nil
+	}
+	return err
+}
+
+// attestorDisruptionBudget reuses the attestor Deployment name, so persisted
+// resource identities need no new fields.
+//
+//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+func (p *TailscaleNetworkIngressProvisioner) attestorDisruptionBudget(desired NetworkIngressDesired) *policyv1.PodDisruptionBudget {
+	labels := ingressLabels(desired)
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorDeployment, Namespace: desired.Resources.Namespace, Labels: labels},
+		Spec:       disruptionBudgetSpec(maps.Clone(labels)),
+	}
+}
+
+// proxyDisruptionBudget reuses the proxy NetworkPolicy name in the operator
+// namespace, so persisted resource identities need no new fields.
+//
+//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+func (p *TailscaleNetworkIngressProvisioner) proxyDisruptionBudget(desired NetworkIngressDesired) *policyv1.PodDisruptionBudget {
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.ProxyNetworkPolicy, Namespace: p.config.OperatorNamespace, Labels: ingressLabels(desired)},
+		Spec:       disruptionBudgetSpec(map[string]string{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: desired.Resources.ProxyGroup}),
+	}
+}
+
+// disruptionBudgetSpec allows one voluntary disruption at a time. Unhealthy
+// pods stay evictable so a crash-looping replica cannot block node drains.
+//
+//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+func disruptionBudgetSpec(selector map[string]string) policyv1.PodDisruptionBudgetSpec {
+	return policyv1.PodDisruptionBudgetSpec{
+		MaxUnavailable:             new(intstr.FromInt32(1)),
+		Selector:                   &metav1.LabelSelector{MatchLabels: selector},
+		UnhealthyPodEvictionPolicy: new(policyv1.AlwaysAllow),
+	}
+}
+
+func upsertDisruptionBudget(ctx context.Context, clientset kubernetes.Interface, budget *policyv1.PodDisruptionBudget) error {
+	client := clientset.PolicyV1().PodDisruptionBudgets(budget.Namespace)
+	existing, err := client.Get(ctx, budget.Name, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		_, err = client.Create(ctx, budget, metav1.CreateOptions{})
+		return wrapKubernetesMutation("create PodDisruptionBudget", err)
+	}
+	if err != nil {
+		return fmt.Errorf("get PodDisruptionBudget: %w", err)
+	}
+	if err := ensureResourceOwned(existing.Labels, budget.Labels[networkIngressIDLabel]); err != nil {
+		return fmt.Errorf("refuse to adopt PodDisruptionBudget: %w", err)
+	}
+	budget.ResourceVersion = existing.ResourceVersion
+	_, err = client.Update(ctx, budget, metav1.UpdateOptions{})
+	return wrapKubernetesMutation("update PodDisruptionBudget", err)
 }
 
 //nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
@@ -1002,8 +1278,12 @@ func tailnetObject(desired NetworkIngressDesired) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": tailscaleAPIGroup + "/" + tailscaleAPIVersion, "kind": "Tailnet", "metadata": map[string]any{"name": desired.Resources.Tailnet, "labels": unstructuredIngressLabels(desired)}, "spec": map[string]any{"credentials": map[string]any{"secretName": desired.Resources.CredentialsSecret}}}}
 }
 
-func proxyGroupObject(desired NetworkIngressDesired, proxyTag string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": tailscaleAPIGroup + "/" + tailscaleAPIVersion, "kind": "ProxyGroup", "metadata": map[string]any{"name": desired.Resources.ProxyGroup, "labels": unstructuredIngressLabels(desired)}, "spec": map[string]any{"type": "ingress", "replicas": int64(1), "tailnet": desired.Resources.Tailnet, "tags": []any{proxyTag}}}}
+func proxyGroupObject(desired NetworkIngressDesired, config TailscaleNetworkIngressConfig) *unstructured.Unstructured {
+	spec := map[string]any{"type": "ingress", "replicas": int64(config.proxyReplicas()), "tailnet": desired.Resources.Tailnet, "tags": []any{config.ProxyTag}}
+	if config.ProxyClass != "" {
+		spec["proxyClass"] = config.ProxyClass
+	}
+	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": tailscaleAPIGroup + "/" + tailscaleAPIVersion, "kind": "ProxyGroup", "metadata": map[string]any{"name": desired.Resources.ProxyGroup, "labels": unstructuredIngressLabels(desired)}, "spec": spec}}
 }
 
 func proxyGroupPolicyObject(desired NetworkIngressDesired) *unstructured.Unstructured {
@@ -1060,12 +1340,12 @@ func (p *TailscaleNetworkIngressProvisioner) existingIngressHostname(ctx context
 	return ingressHostname(ingress), nil
 }
 
-func deploymentExpectedHost(deployment *appsv1.Deployment) string {
-	if deployment == nil || len(deployment.Spec.Template.Spec.Containers) == 0 {
+func expectedHostArgument(spec corev1.PodSpec) string {
+	if len(spec.Containers) == 0 {
 		return ""
 	}
 	const prefix = "--expected-host="
-	for _, argument := range deployment.Spec.Template.Spec.Containers[0].Args {
+	for _, argument := range spec.Containers[0].Args {
 		if after, ok := strings.CutPrefix(argument, prefix); ok {
 			return after
 		}
