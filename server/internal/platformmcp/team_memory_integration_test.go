@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	memorydigestrepo "github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
 	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -283,6 +284,27 @@ func TestSearchTeamMemoryHidesIneligibleAndForeignItems(t *testing.T) {
 	f.summarizedChat(t, ctx, f.project.ID, "Unclassified", "canary-unclassified decision about caching", at, uuid.NullUUID{UUID: unclassified, Valid: true})
 	old := f.summarizedChat(t, ctx, f.project.ID, "Old", "canary-old decision about caching", now.Add(-200*24*time.Hour), uuid.NullUUID{})
 	_, err := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, ChatID: excluded.String(), Content: "canary-excluded-memo decision about caching"})
+	require.NoError(t, err)
+	// A day digest that folded the excluded chat, and the week above it,
+	// stay hidden even before the nightly job deletes them.
+	digests := memorydigestrepo.New(f.db)
+	day := now.Truncate(24*time.Hour).AddDate(0, 0, -1)
+	staleDay, err := digests.InsertDigest(ctx, memorydigestrepo.InsertDigestParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Level: "day",
+		PeriodStart: pgtype.Date{Time: day, InfinityModifier: pgtype.Finite, Valid: true},
+		PeriodEnd:   pgtype.Date{Time: day.AddDate(0, 0, 1), InfinityModifier: pgtype.Finite, Valid: true},
+		Content:     "canary-stale-day decision about caching", ChatIds: []uuid.UUID{excluded}, MemoIds: []uuid.UUID{}, ChildDigestIds: []uuid.UUID{},
+		Model: pgtype.Text{}, InputTokens: pgtype.Int4{}, OutputTokens: pgtype.Int4{},
+	})
+	require.NoError(t, err)
+	monday := day.AddDate(0, 0, -((int(day.Weekday()) + 6) % 7))
+	_, err = digests.InsertDigest(ctx, memorydigestrepo.InsertDigestParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Level: "week",
+		PeriodStart: pgtype.Date{Time: monday, InfinityModifier: pgtype.Finite, Valid: true},
+		PeriodEnd:   pgtype.Date{Time: monday.AddDate(0, 0, 7), InfinityModifier: pgtype.Finite, Valid: true},
+		Content:     "canary-stale-week decision about caching", ChatIds: []uuid.UUID{}, MemoIds: []uuid.UUID{}, ChildDigestIds: []uuid.UUID{staleDay},
+		Model: pgtype.Text{}, InputTokens: pgtype.Int4{}, OutputTokens: pgtype.Int4{},
+	})
 	require.NoError(t, err)
 
 	other, err := projectsrepo.New(f.db).CreateProject(ctx, projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Other memory project", Slug: "other-memory-search"})
