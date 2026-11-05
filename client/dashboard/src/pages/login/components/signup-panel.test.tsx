@@ -192,9 +192,7 @@ describe("SignUpPanel", () => {
         "someone@example.com",
       );
       await user.type(screen.getByLabelText("Company name"), "Acme Inc");
-      await user.click(
-        screen.getByRole("button", { name: /create account/i }),
-      );
+      await user.click(screen.getByRole("button", { name: /create account/i }));
 
       expect(assign).toHaveBeenCalledTimes(1);
       const params = new URL(
