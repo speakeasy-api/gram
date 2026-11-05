@@ -2,6 +2,7 @@ package tailnetgateway
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/netip"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
 )
+
+// ErrNodeNeedsLogin means control refused the node's persisted identity and
+// it is waiting for an interactive login it will never get.
+var ErrNodeNeedsLogin = errors.New("tailnet node needs login")
 
 // NodeSpec describes one tailnet node to start.
 type NodeSpec struct {
@@ -54,6 +59,9 @@ type NodeState struct {
 
 	// BackendState is tsnet's state machine name, for diagnostics.
 	BackendState string
+
+	// NeedsLogin is true when control no longer accepts the node's identity.
+	NeedsLogin bool
 
 	// NodeID is the stable Tailscale node id, used to delete the device.
 	NodeID string

@@ -29,12 +29,18 @@ const (
 
 	// NodeStatusStopped means the hosting pod stopped the node cleanly.
 	NodeStatusStopped NodeStatus = "stopped"
+
+	// NodeStatusNeedsLogin means the slot's persisted identity no longer logs
+	// in, typically because the device was removed from the tailnet. The pod
+	// stops hosting it until the reconciler deletes the old device, resets
+	// the slot and mints a fresh key.
+	NodeStatusNeedsLogin NodeStatus = "needs_login"
 )
 
 // ParseNodeStatus validates a stored status value.
 func ParseNodeStatus(value string) (NodeStatus, error) {
 	switch NodeStatus(value) {
-	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped:
+	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped, NodeStatusNeedsLogin:
 		return NodeStatus(value), nil
 	default:
 		return "", fmt.Errorf("invalid network ingress node status %q", value)

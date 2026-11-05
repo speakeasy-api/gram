@@ -46,6 +46,9 @@ const (
 	// idleConnTimeout keeps idle keep-alive connections a little longer than
 	// the ten-minute MCP session keep-alive so clients are not cut mid-session.
 	idleConnTimeout = 620 * time.Second
+
+	// needsLoginProbeTimeout bounds the status read after a failed Up.
+	needsLoginProbeTimeout = 5 * time.Second
 )
 
 // TsnetRuntime starts real tailnet nodes with tsnet. Build it with
@@ -140,7 +143,11 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 	defer cancel()
 
 	if _, err := srv.Up(upCtx); err != nil {
+		needsLogin := backendNeedsLogin(ctx, srv)
 		_ = srv.Close()
+		if needsLogin {
+			return nil, fmt.Errorf("bring tsnet node up: %w: %w", ErrNodeNeedsLogin, err)
+		}
 		return nil, fmt.Errorf("bring tsnet node up: %w", err)
 	}
 
@@ -170,6 +177,22 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		mu:                 sync.Mutex{},
 		serveErr:           nil,
 	}, nil
+}
+
+// backendNeedsLogin reports whether a node that failed to come up is stuck
+// waiting for login. Up's own context has expired by then, so this uses a
+// short one of its own.
+func backendNeedsLogin(ctx context.Context, srv *tsnet.Server) bool {
+	lc, err := srv.LocalClient()
+	if err != nil {
+		return false
+	}
+
+	statusCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), needsLoginProbeTimeout)
+	defer cancel()
+
+	st, err := lc.StatusWithoutPeers(statusCtx)
+	return err == nil && st.BackendState == ipn.NeedsLogin.String()
 }
 
 // validate names every field Start needs that the spec leaves unset.
@@ -255,15 +278,18 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	n.mu.Unlock()
 
 	if serveErr != nil {
-		return NodeState{Online: false, BackendState: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
 	}
 
 	st, err := n.lc.Status(ctx)
 	if err != nil {
-		return NodeState{Online: false, BackendState: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
 	}
 
-	state := NodeState{Online: st.BackendState == ipn.Running.String(), BackendState: st.BackendState, NodeID: "", FQDN: n.fqdn}
+	state := NodeState{
+		Online: st.BackendState == ipn.Running.String(), BackendState: st.BackendState,
+		NeedsLogin: st.BackendState == ipn.NeedsLogin.String(), NodeID: "", FQDN: n.fqdn,
+	}
 	if st.Self != nil {
 		state.NodeID = string(st.Self.ID)
 	}

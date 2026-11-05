@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
-	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
@@ -156,7 +155,25 @@ func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailsc
 
 // Apply defines the service, ensures slot rows and mints keys for slots that
 // have not registered and hold no unexpired key, then observes.
+//
+// A failed Apply says nothing about hosts that are already serving, and the
+// private listener routes by the recorded DNS name. So when Apply fails while
+// a host is online, the error observation keeps that host's DNS name, and a
+// Tailscale outage or rate limit does not cut live traffic.
 func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+	observation, err := p.apply(ctx, desired)
+	if err == nil || observation.DNSName != "" || desired.ID == uuid.Nil || desired.OrganizationID == "" {
+		return observation, err
+	}
+	live, observeErr := p.observe(ctx, desired.ID, desired.OrganizationID)
+	if observeErr == nil && live.Status == k8s.NetworkIngressStatusOnline {
+		observation.DNSName = live.DNSName
+		observation.ConnectedAt = live.ConnectedAt
+	}
+	return observation, err
+}
+
+func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
 	creds, observation, err := p.validateDesired(desired)
 	if err != nil {
 		return observation, err
@@ -213,6 +230,12 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		if err != nil {
 			return errorObservation(""), fmt.Errorf("check gateway slot registration: %w", err)
 		}
+		if registered && node.Status == string(NodeStatusNeedsLogin) {
+			if err := p.resetRefusedSlot(ctx, creds, store, node); err != nil {
+				return apiFailure(err)
+			}
+			registered = false
+		}
 		if registered {
 			continue
 		}
@@ -244,12 +267,28 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
 }
 
+// resetRefusedSlot replaces an identity control no longer accepts, typically
+// because the device was removed from the tailnet. The pod has already
+// stopped hosting it. The old device is deleted if it still exists and the
+// persisted state is cleared, so the caller mints a key for a fresh login.
+func (p *Provisioner) resetRefusedSlot(ctx context.Context, creds tailscaleapi.Credentials, store *PostgresStateStore, node repo.NetworkIngressNode) error {
+	if node.NodeID.Valid && node.NodeID.String != "" {
+		if err := p.api.DeleteDevice(ctx, creds, node.NodeID.String); err != nil {
+			return fmt.Errorf("delete refused slot device: %w", err)
+		}
+	}
+	if err := store.Reset(ctx); err != nil {
+		return fmt.Errorf("reset refused slot state: %w", err)
+	}
+	return nil
+}
+
 // purgeRetiredSlot deletes a retired slot's device and rows once no host is
 // still reporting it live.
 func (p *Provisioner) purgeRetiredSlot(ctx context.Context, creds tailscaleapi.Credentials, ingressID uuid.UUID, organizationID string, node repo.NetworkIngressNode, now time.Time) error {
 	if node.LastSeenAt.Valid && node.LastSeenAt.Time.After(now.Add(-p.cfg.StaleAfter)) {
 		switch node.Status {
-		case string(NodeStatusStopped), string(NodeStatusPending), string(NodeStatusError):
+		case string(NodeStatusStopped), string(NodeStatusPending), string(NodeStatusError), string(NodeStatusNeedsLogin):
 		default:
 			return nil
 		}
@@ -324,7 +363,7 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 				connected := node.ConnectedSince.Time
 				observation.ConnectedAt = &connected
 			}
-		case fresh && node.Status == string(NodeStatusError):
+		case fresh && (node.Status == string(NodeStatusError) || node.Status == string(NodeStatusNeedsLogin)):
 			failed = true
 		}
 	}
@@ -365,14 +404,19 @@ func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.N
 	if err != nil {
 		return err
 	}
+	existing, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID})
+	if err != nil {
+		return fmt.Errorf("list gateway slots: %w", err)
+	}
+	// Apply creates the slot rows right after defining the service, so an
+	// ingress without them never got a device onto the tailnet. Calling
+	// Tailscale anyway would let a wrong secret block deletion for good, and
+	// could delete a svc: the gateway never created. The rare cost is a
+	// service left behind when the slot insert failed after the upsert.
+	if len(existing) == 0 {
+		return nil
+	}
 	if len(credentials) == 0 {
-		nodes, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID})
-		if err != nil {
-			return fmt.Errorf("list gateway slots: %w", err)
-		}
-		if own.runtime != networkingress.RuntimeGateway && len(nodes) == 0 {
-			return nil
-		}
 		return fmt.Errorf("%w: credentials are required to delete the tailnet service and devices", k8s.ErrNetworkIngressProviderCredentialsRejected)
 	}
 	creds, err := credentialsFrom(credentials)
@@ -395,7 +439,7 @@ func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.N
 			continue
 		}
 		switch node.Status {
-		case string(NodeStatusStopped), string(NodeStatusPending), string(NodeStatusError):
+		case string(NodeStatusStopped), string(NodeStatusPending), string(NodeStatusError), string(NodeStatusNeedsLogin):
 			continue
 		default:
 			return fmt.Errorf("%w: slot %d is still hosted", k8s.ErrNetworkIngressDeletionPending, node.Slot)

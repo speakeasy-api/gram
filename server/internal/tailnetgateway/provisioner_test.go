@@ -306,9 +306,9 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	_, err = store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "node state is purged with the devices")
 
-	// The service may still exist even with no node rows, so a gateway
-	// ingress keeps requiring credentials until it is torn down with them.
-	require.ErrorIs(t, f.provisioner.Delete(ctx, f.resources), k8s.ErrNetworkIngressProviderCredentialsRejected)
+	// Teardown already removed the service with the slots, so a redelivered
+	// delete finishes without calling Tailscale.
+	require.NoError(t, f.provisioner.Delete(ctx, f.resources))
 }
 
 func TestProvisionerDeleteWithoutCredentialsIsNoOpBeforeApply(t *testing.T) {
@@ -339,6 +339,91 @@ func TestProvisionerDeleteSurfacesRejectedCredentials(t *testing.T) {
 	err = f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret"))
 	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderRateLimited)
 	require.NotErrorIs(t, err, k8s.ErrNetworkIngressProviderCredentialsRejected)
+}
+
+func TestProvisionerApplyFailureKeepsOnlineDNSName(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovkeepdns")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
+
+	f.api.Reject = fmt.Errorf("upsert service: %w", tailscaleapi.ErrUnavailable)
+	observation, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderAPIUnavailable)
+	require.Equal(t, k8s.NetworkIngressErrorProviderAPIUnavailable, observation.ErrorCode)
+	require.Equal(t, "private.example.ts.net", observation.DNSName, "a Tailscale outage must not cut traffic to an online host")
+	require.NotNil(t, observation.ConnectedAt)
+
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusStopped, "nONE")
+	observation, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.Error(t, err)
+	require.Empty(t, observation.DNSName, "with no online host there is nothing to keep")
+}
+
+func TestProvisionerDeleteSkipsTailscaleWhenNothingReachedTheTailnet(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovwrongsecret")
+	f.api.Reject = tailscaleapi.ErrUnauthorized
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
+
+	// The saved secret is still wrong, but no slot was ever created, so
+	// deletion finishes instead of blocking on rejected credentials.
+	require.NoError(t, f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "wrong")))
+	require.NoError(t, f.provisioner.Delete(ctx, f.resources))
+}
+
+func TestProvisionerReplacesRefusedIdentity(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrefused")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 0)
+	require.NoError(t, err)
+	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
+	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0}))
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusNeedsLogin, "nREMOVED")
+	keys := len(f.api.Keys())
+
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.Equal(t, []string{"nREMOVED"}, f.api.DeletedDevices(), "the refused device is removed from the tailnet")
+	registered, err := store.Registered(ctx)
+	require.NoError(t, err)
+	require.False(t, registered, "the refused identity is reset")
+	require.Len(t, f.api.Keys(), keys+1, "a fresh key is minted for the slot")
+	slot, err := repo.New(f.db).GetNetworkIngressNodeSlot(ctx, repo.GetNetworkIngressNodeSlotParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0})
+	require.NoError(t, err)
+	require.True(t, slot.AuthKeyEncrypted.Valid)
+
+	// Until the gateway logs in again, later reconciles leave the slot alone.
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.Len(t, f.api.DeletedDevices(), 1)
+	require.Len(t, f.api.Keys(), keys+1)
+
+	require.Equal(t, string(tailnetgateway.NodeStatusPending), slot.Status, "the fresh key returns the slot to pending")
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusPending, observation.Status, "the replacement is in progress")
+}
+
+func TestProvisionerReportsSlotWaitingForLoginAsError(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovneedslogin")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusNeedsLogin, "nREMOVED")
+
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a slot waiting for login is not healthy")
 }
 
 type fakeOperator struct {
