@@ -501,19 +501,15 @@ function DataExportsInner(): JSX.Element {
     await queryClient.cancelQueries({ queryKey });
     const previous =
       queryClient.getQueryData<ListDataExportsForOrgResult>(queryKey);
-    queryClient.setQueryData<ListDataExportsForOrgResult>(
-      queryKey,
-      (current) =>
-        current
-          ? {
-              ...current,
-              routes: current.routes.map((candidate) =>
-                candidate.id === route.id
-                  ? { ...candidate, enabled }
-                  : candidate,
-              ),
-            }
-          : current,
+    queryClient.setQueryData<ListDataExportsForOrgResult>(queryKey, (current) =>
+      current
+        ? {
+            ...current,
+            routes: current.routes.map((candidate) =>
+              candidate.id === route.id ? { ...candidate, enabled } : candidate,
+            ),
+          }
+        : current,
     );
 
     try {
