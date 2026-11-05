@@ -104,43 +104,43 @@ FROM memory_digests d
 WHERE d.id = $1
   AND d.project_id = $2
   AND d.organization_id = $3
-  AND d.id NOT IN (
-    WITH RECURSIVE stale AS (
-      SELECT s.id
-      FROM memory_digests s
-      WHERE s.project_id = $2
-        AND (
-          cardinality(s.chat_ids) > (
-            SELECT count(*)
-            FROM chats c
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE c.id = ANY(s.chat_ids)
-              AND c.summary_redacted IS TRUE
-              AND c.summary IS NOT NULL
-              AND c.memory_excluded_at IS NULL
-              AND c.deleted IS FALSE
-              AND (ua.id IS NULL OR ua.account_type <> 'personal')
-          )
-          OR cardinality(s.memo_ids) > (
-            SELECT count(*)
-            FROM memory_memos m
-            LEFT JOIN chats c ON c.id = m.chat_id
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE m.id = ANY(s.memo_ids)
-              AND m.deleted IS FALSE
-              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-          )
-          OR cardinality(s.child_digest_ids) > (
-            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-          )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM memory_digests s
+    WHERE s.project_id = d.project_id
+      AND (
+        s.id = d.id
+        OR s.id = ANY(d.child_digest_ids)
+        OR EXISTS (
+          SELECT 1 FROM memory_digests w
+          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
         )
-      UNION
-      SELECT p.id
-      FROM memory_digests p
-      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
-      WHERE p.project_id = $2
-    )
-    SELECT stale.id FROM stale
+      )
+      AND (
+        cardinality(s.chat_ids) > (
+          SELECT count(*)
+          FROM chats c
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE c.id = ANY(s.chat_ids)
+            AND c.summary_redacted IS TRUE
+            AND c.summary IS NOT NULL
+            AND c.memory_excluded_at IS NULL
+            AND c.deleted IS FALSE
+            AND (ua.id IS NULL OR ua.account_type <> 'personal')
+        )
+        OR cardinality(s.memo_ids) > (
+          SELECT count(*)
+          FROM memory_memos m
+          LEFT JOIN chats c ON c.id = m.chat_id
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE m.id = ANY(s.memo_ids)
+            AND m.deleted IS FALSE
+            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+        )
+        OR cardinality(s.child_digest_ids) > (
+          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+        )
+      )
   )
 `
 
@@ -482,43 +482,43 @@ FROM memory_digests d
 WHERE d.id = ANY($1::uuid[])
   AND d.project_id = $2
   AND d.organization_id = $3
-  AND d.id NOT IN (
-    WITH RECURSIVE stale AS (
-      SELECT s.id
-      FROM memory_digests s
-      WHERE s.project_id = $2
-        AND (
-          cardinality(s.chat_ids) > (
-            SELECT count(*)
-            FROM chats c
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE c.id = ANY(s.chat_ids)
-              AND c.summary_redacted IS TRUE
-              AND c.summary IS NOT NULL
-              AND c.memory_excluded_at IS NULL
-              AND c.deleted IS FALSE
-              AND (ua.id IS NULL OR ua.account_type <> 'personal')
-          )
-          OR cardinality(s.memo_ids) > (
-            SELECT count(*)
-            FROM memory_memos m
-            LEFT JOIN chats c ON c.id = m.chat_id
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE m.id = ANY(s.memo_ids)
-              AND m.deleted IS FALSE
-              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-          )
-          OR cardinality(s.child_digest_ids) > (
-            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-          )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM memory_digests s
+    WHERE s.project_id = d.project_id
+      AND (
+        s.id = d.id
+        OR s.id = ANY(d.child_digest_ids)
+        OR EXISTS (
+          SELECT 1 FROM memory_digests w
+          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
         )
-      UNION
-      SELECT p.id
-      FROM memory_digests p
-      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
-      WHERE p.project_id = $2
-    )
-    SELECT stale.id FROM stale
+      )
+      AND (
+        cardinality(s.chat_ids) > (
+          SELECT count(*)
+          FROM chats c
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE c.id = ANY(s.chat_ids)
+            AND c.summary_redacted IS TRUE
+            AND c.summary IS NOT NULL
+            AND c.memory_excluded_at IS NULL
+            AND c.deleted IS FALSE
+            AND (ua.id IS NULL OR ua.account_type <> 'personal')
+        )
+        OR cardinality(s.memo_ids) > (
+          SELECT count(*)
+          FROM memory_memos m
+          LEFT JOIN chats c ON c.id = m.chat_id
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE m.id = ANY(s.memo_ids)
+            AND m.deleted IS FALSE
+            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+        )
+        OR cardinality(s.child_digest_ids) > (
+          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+        )
+      )
   )
 ORDER BY d.period_start
 `
@@ -677,43 +677,43 @@ FROM memory_digests d
 WHERE d.project_id = $1
   AND d.organization_id = $2
   AND d.period_start >= $3::date
-  AND d.id NOT IN (
-    WITH RECURSIVE stale AS (
-      SELECT s.id
-      FROM memory_digests s
-      WHERE s.project_id = $1
-        AND (
-          cardinality(s.chat_ids) > (
-            SELECT count(*)
-            FROM chats c
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE c.id = ANY(s.chat_ids)
-              AND c.summary_redacted IS TRUE
-              AND c.summary IS NOT NULL
-              AND c.memory_excluded_at IS NULL
-              AND c.deleted IS FALSE
-              AND (ua.id IS NULL OR ua.account_type <> 'personal')
-          )
-          OR cardinality(s.memo_ids) > (
-            SELECT count(*)
-            FROM memory_memos m
-            LEFT JOIN chats c ON c.id = m.chat_id
-            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-            WHERE m.id = ANY(s.memo_ids)
-              AND m.deleted IS FALSE
-              AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-          )
-          OR cardinality(s.child_digest_ids) > (
-            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-          )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM memory_digests s
+    WHERE s.project_id = d.project_id
+      AND (
+        s.id = d.id
+        OR s.id = ANY(d.child_digest_ids)
+        OR EXISTS (
+          SELECT 1 FROM memory_digests w
+          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
         )
-      UNION
-      SELECT p.id
-      FROM memory_digests p
-      JOIN stale ON p.child_digest_ids @> ARRAY[stale.id]
-      WHERE p.project_id = $1
-    )
-    SELECT stale.id FROM stale
+      )
+      AND (
+        cardinality(s.chat_ids) > (
+          SELECT count(*)
+          FROM chats c
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE c.id = ANY(s.chat_ids)
+            AND c.summary_redacted IS TRUE
+            AND c.summary IS NOT NULL
+            AND c.memory_excluded_at IS NULL
+            AND c.deleted IS FALSE
+            AND (ua.id IS NULL OR ua.account_type <> 'personal')
+        )
+        OR cardinality(s.memo_ids) > (
+          SELECT count(*)
+          FROM memory_memos m
+          LEFT JOIN chats c ON c.id = m.chat_id
+          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+          WHERE m.id = ANY(s.memo_ids)
+            AND m.deleted IS FALSE
+            AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+        )
+        OR cardinality(s.child_digest_ids) > (
+          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+        )
+      )
   )
 ORDER BY d.period_start, d.level
 `
