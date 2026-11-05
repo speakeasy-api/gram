@@ -118,6 +118,7 @@ var frozenCodes = []string{
 	"sign_in_provider_error",
 	"review_canceled",
 	"connection_catalog_expired",
+	"tunnel_at_capacity",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

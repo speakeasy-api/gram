@@ -125,10 +125,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 	exclude := map[string]struct{}{}
 	var unpublishErr error
 	var dialErr error
+	var gatewayStatus string
 	for range maxForwardAttempts {
 		addr, ok := SelectRoute("", candidates, exclude)
 		if !ok {
-			return nil, errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr)
+			return nil, withGatewayStatus(errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr), gatewayStatus)
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
@@ -172,6 +173,10 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:
+			// A failed availability check is ours, so it outranks a busy gateway in any route order.
+			if gatewayStatus != wire.TunnelErrorActiveCheckFailed {
+				gatewayStatus = resp.Header.Get(ErrorHeader)
+			}
 			drainAndClose(resp)
 			exclude[addr] = struct{}{}
 		default:
@@ -179,11 +184,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		}
 	}
 
-	return nil, errors.Join(
+	return nil, withGatewayStatus(errors.Join(
 		fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute),
 		dialErr,
 		unpublishErr,
-	)
+	), gatewayStatus)
 }
 
 // isDeadGateway reports whether err means this gateway is definitively gone:
@@ -237,4 +242,20 @@ func buildForward(req *http.Request, body []byte, gatewayURL, tunnelID, forwardT
 func drainAndClose(resp *http.Response) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 	_ = resp.Body.Close()
+}
+
+// gatewayStatusError keeps a gateway refusal after failover exhausted every route.
+// Its error text and error matching remain those of the original transport failure.
+type gatewayStatusError struct {
+	cause  error
+	status string
+}
+
+func (e *gatewayStatusError) Error() string { return e.cause.Error() }
+func (e *gatewayStatusError) Unwrap() error { return e.cause }
+func withGatewayStatus(err error, status string) error {
+	if status == "" {
+		return err
+	}
+	return &gatewayStatusError{cause: err, status: status}
 }

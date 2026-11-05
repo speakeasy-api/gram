@@ -256,6 +256,7 @@ var (
 	CodeCredentialMisconfigured    = define("credential_misconfigured", OutcomeFailed, WhoAdmin, "The connection to this service is not set up correctly.", "Check the connection settings for this server.")
 	CodeRemoteSessionUnavailable   = define("remote_session_unavailable", OutcomeFailed, WhoProvider, "The service's sign-in system is temporarily unavailable.", "Wait a few minutes and try again.")
 	CodeProviderRejected           = define("provider_rejected", OutcomeFailed, WhoPerson, "The service rejected your access.", "Reconnect. If it keeps happening, ask your admin.")
+	CodeTunnelAtCapacity           = define("tunnel_at_capacity", OutcomeFailed, WhoAdmin, "The private connection is at capacity.", "Try again shortly. If it keeps happening, check the tunnel capacity.")
 	CodeTunnelUnavailable          = define("tunnel_unavailable", OutcomeFailed, WhoAdmin, "The private connection is down.", "Check that its tunnel is running.")
 	CodeKillswitchCheckUnavailable = define("killswitch_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check whether tool use is allowed.", "Try again in a few minutes.")
 	CodeMemberToolsMissing         = defineResult("member_tools_missing", resultPartial, OutcomeFailed, WhoAdmin, "Some of this gateway's servers did not list their tools.", "Check those servers' status on the gateway.")

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -50,10 +51,13 @@ type proxyBuildOptions struct {
 	// client's headers; the server's credential headers are not sent.
 	authClientHeaders  []proxy.ConfiguredHeader
 	authClientSelected bool
+
+	// connections, when set, records refused and failed tools/call requests.
+	connections *ConnectionAttribution
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -102,6 +106,13 @@ func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 	}}
 }
 
+// WithConnectionAttribution records this proxy's refused and failed tool calls.
+func WithConnectionAttribution(attribution ConnectionAttribution) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.connections = &attribution
+	}}
+}
+
 // WithAnonymousCaller marks the caller as admitted without a Speakeasy credential.
 // It has no effect on a private server.
 func WithAnonymousCaller() BuildOption {
@@ -111,7 +122,11 @@ func WithAnonymousCaller() BuildOption {
 }
 
 type ProxyManager struct {
-	TunnelMetrics  *metrics.Collector
+	TunnelMetrics *metrics.Collector
+
+	// Connections records refused and failed tools/call requests; nil records nothing.
+	Connections *mcpconnectionattempts.Recorder
+
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -193,6 +208,7 @@ func NewProxyManager(
 
 	return &ProxyManager{
 		TunnelMetrics:                         nil,
+		Connections:                           nil,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -281,6 +297,7 @@ func (f *ProxyManager) Build(
 			StaticValue:            h.Value.String,
 			ValueFromRequestHeader: h.ValueFromRequestHeader.String,
 			IsRequired:             h.IsRequired,
+			IsSecret:               h.IsSecret,
 		})
 	}
 
@@ -347,6 +364,7 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
+	connections := newToolsCallConnections(options.connections, f.Connections, identity, upstreamURL, upstreamAuth, headers)
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
 	if visibility == mcpservers.VisibilityPrivate {
 		// Private calls use a method-level preflight so even malformed params
@@ -491,9 +509,10 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
 		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
-		// Only the log row: a call that never got a reply has nothing to
-		// bill, scan, or record as a selected use.
-		ToolsCallFailureInterceptors: []proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor},
+		// Log and connection-outcome rows only: a call with no reply has
+		// nothing to bill, scan, or record as a selected use.
+		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
+		ToolsCallRefusalInterceptors: connections.refusals(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
