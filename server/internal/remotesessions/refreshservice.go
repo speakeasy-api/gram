@@ -300,6 +300,11 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 
 // attachmentsForClients loads the MCP servers attached to each client in one
 // round trip, within organizationID. A client with no attachments has no entry.
+//
+// Where the organization enforces typed auth clients, the servers that offer a
+// client through one are its attachments, and the servers behind its user
+// session issuer links add none: such a client's resource is decided by the
+// servers configured to use it, linked to their sign-in or not.
 func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
@@ -309,7 +314,14 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
 	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	// Offered rows sort first for each client.
+	offered := make(map[uuid.UUID]bool, len(clientIDs))
 	for _, row := range rows {
+		if row.Offered {
+			offered[row.ClientID] = true
+		} else if offered[row.ClientID] {
+			continue
+		}
 		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
 			ID:          row.ID,
 			ProjectID:   row.ProjectID,

@@ -8651,21 +8651,54 @@ func (q *Queries) ListOrganizationMcpServersForClient(ctx context.Context, remot
 
 const listOrganizationMcpServersForClients = `-- name: ListOrganizationMcpServersForClients :many
 SELECT DISTINCT
-    link.remote_session_client_id AS client_id,
+    attached.client_id,
     m.id,
     m.project_id,
     p.slug AS project_slug,
     m.name,
     m.slug,
-    COALESCE(rms.url, '')::text AS url
-FROM remote_session_client_user_session_issuers AS link
-JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id
+    (CASE WHEN attached.offered THEN COALESCE(rms.url, tms.resource_identifier, '') ELSE COALESCE(rms.url, '') END)::text AS url,
+    attached.offered
+FROM (
+    SELECT link.remote_session_client_id AS client_id,
+           linked.id AS mcp_server_id,
+           FALSE AS offered
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN mcp_servers AS linked ON linked.user_session_issuer_id = link.user_session_issuer_id
+    WHERE link.remote_session_client_id = ANY($1::uuid[])
+    UNION ALL
+    SELECT ac.remote_session_client_id AS client_id,
+           offering.id AS mcp_server_id,
+           TRUE AS offered
+    FROM mcp_auth_clients AS ac
+    JOIN mcp_server_auth_clients AS offer
+      ON offer.auth_client_id = ac.id
+     AND offer.organization_id = ac.organization_id
+     AND offer.deleted IS FALSE
+    JOIN mcp_servers AS offering
+      ON offering.id = offer.mcp_server_id
+     AND offering.project_id = offer.project_id
+    JOIN projects AS offering_project
+      ON offering_project.id = offer.project_id
+     AND offering_project.organization_id = offer.organization_id
+     AND offering_project.deleted IS FALSE
+    JOIN organization_features AS enforced
+      ON enforced.organization_id = ac.organization_id
+     AND enforced.feature_name = 'upstream_auth_enforced'
+     AND enforced.deleted IS FALSE
+    WHERE ac.organization_id = $2::text
+      AND ac.remote_session_client_id = ANY($1::uuid[])
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND ac.enabled
+      AND ac.deleted IS FALSE
+) AS attached
+JOIN mcp_servers AS m ON m.id = attached.mcp_server_id
 JOIN projects AS p ON p.id = m.project_id
 LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-WHERE link.remote_session_client_id = ANY($1::uuid[])
-  AND p.organization_id = $2::text
+LEFT JOIN tunneled_mcp_servers AS tms ON tms.id = m.tunneled_mcp_server_id AND tms.project_id = m.project_id AND tms.deleted IS FALSE
+WHERE p.organization_id = $2::text
   AND m.deleted IS FALSE
-ORDER BY link.remote_session_client_id ASC, m.id DESC
+ORDER BY attached.client_id ASC, attached.offered DESC, m.id DESC
 `
 
 type ListOrganizationMcpServersForClientsParams struct {
@@ -8681,6 +8714,7 @@ type ListOrganizationMcpServersForClientsRow struct {
 	Name        pgtype.Text
 	Slug        pgtype.Text
 	Url         string
+	Offered     bool
 }
 
 // ListOrganizationMcpServersForClient for a set of clients in one round trip,
@@ -8688,6 +8722,16 @@ type ListOrganizationMcpServersForClientsRow struct {
 // or a login decides every bound client's resource from one load. Same
 // liveness and remote-only rules as the single-client query, held to the
 // caller's organization so the client ids cannot read another tenant's servers.
+//
+// Where the organization enforces typed auth clients, a server that offers a
+// client through a live, enabled auth client is attached to it as well,
+// whether or not a user session issuer links the two. The offer is judged as
+// the consent screen judges it: the auth client is the organization's and,
+// when it belongs to a project, the server's own. offered marks those rows,
+// which sort first for each client. An offered tunneled server names its own
+// resource identifier: serving routes the chosen client by that client's
+// issuer, so the identifier cannot unqualify a sibling's grant, and a provider
+// that requires a resource needs it on the login.
 func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg ListOrganizationMcpServersForClientsParams) ([]ListOrganizationMcpServersForClientsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClients, arg.RemoteSessionClientIds, arg.OrganizationID)
 	if err != nil {
@@ -8705,6 +8749,7 @@ func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg 
 			&i.Name,
 			&i.Slug,
 			&i.Url,
+			&i.Offered,
 		); err != nil {
 			return nil, err
 		}
@@ -14463,6 +14508,52 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionAutoRefreshInTenant = `-- name: SetRemoteSessionAutoRefreshInTenant :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM remote_session_clients AS c,
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND c.id = s.remote_session_client_id
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $4::uuid
+  AND p.organization_id = $5::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshInTenantParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// SetRemoteSessionAutoRefresh for a registration a server offers through an
+// auth client, scoped as SoftDeleteRemoteSessionBySubjectAndClientInTenant.
+// Does not touch updated_at, which is the refresh CAS token and keepalive
+// clock.
+func (q *Queries) SetRemoteSessionAutoRefreshInTenant(ctx context.Context, arg SetRemoteSessionAutoRefreshInTenantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefreshInTenant,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionClientJsonWebKeySet = `-- name: SetRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients
 SET
@@ -14869,6 +14960,83 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	var items []SoftDeleteRemoteSessionBySubjectAndClientRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionBySubjectAndClientRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteRemoteSessionBySubjectAndClientInTenant = `-- name: SoftDeleteRemoteSessionBySubjectAndClientInTenant :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_clients AS c,
+     -- A deleted sign-in still names the organization the consent was made in.
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND c.id = s.remote_session_client_id
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $3::uuid
+  AND p.organization_id = $4::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// SoftDeleteRemoteSessionBySubjectAndClient for a registration a server offers
+// through an auth client, which no user session issuer need link. The caller
+// has checked that offer; the write stays within the tenant as
+// GetActiveRemoteSessionInTenant reads: the client's reach pins a project
+// registration to its project, and the consent must have come through a
+// sign-in of the server's organization. Returns the stored credentials it
+// tombstones, for upstream revocation.
+func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientInTenantParams) ([]SoftDeleteRemoteSessionBySubjectAndClientInTenantRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClientInTenant,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
 		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
 			return nil, err
 		}

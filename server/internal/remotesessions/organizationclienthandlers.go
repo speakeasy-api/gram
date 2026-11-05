@@ -165,13 +165,13 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
 	}
 
-	mcpRows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, authCtx.ActiveOrganizationID, []uuid.UUID{clientID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
-	names := make([]string, 0, len(mcpRows))
-	for _, row := range mcpRows {
+	names := make([]string, 0, len(attachments[clientID]))
+	for _, row := range attachments[clientID] {
 		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
@@ -252,13 +252,13 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	rows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, authCtx.ActiveOrganizationID, []uuid.UUID{clientID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
-	items := make([]*orgclientsgen.OrganizationMcpServer, 0, len(rows))
-	for _, row := range rows {
+	items := make([]*orgclientsgen.OrganizationMcpServer, 0, len(attachments[clientID]))
+	for _, row := range attachments[clientID] {
 		items = append(items, &orgclientsgen.OrganizationMcpServer{
 			ID:          row.ID.String(),
 			ProjectID:   row.ProjectID.String(),
