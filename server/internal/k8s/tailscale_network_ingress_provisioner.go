@@ -182,52 +182,6 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	return p.observe(ctx, desired.Resources, desired.Hostname)
 }
 
-// HasResources reports whether the operator still owns Kubernetes resources
-// for the ingress, which is how the tailnet gateway cutover decides whether a
-// teardown must finish before the gateway takes over.
-func (p *TailscaleNetworkIngressProvisioner) HasResources(ctx context.Context, resources NetworkIngressResourceNames) (bool, error) {
-	if err := resources.Validate(); err != nil {
-		return false, err
-	}
-	ownerID := resources.OwnerID.String()
-	// The namespace follows teardown's rule: a validly foreign-owned namespace
-	// is not ours and the cluster-scoped resources are checked on their own,
-	// while invalid ownership labels are refused.
-	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, resources.Namespace, metav1.GetOptions{})
-	switch {
-	case err == nil:
-		if err := ensureResourceOwned(namespace.GetLabels(), ownerID); err != nil {
-			if !foreignNetworkIngressOwner(namespace.GetLabels(), ownerID) {
-				return false, fmt.Errorf("refuse to inspect namespace with invalid ownership: %w", err)
-			}
-		} else {
-			return true, nil
-		}
-	case !k8serrors.IsNotFound(err):
-		return false, fmt.Errorf("get namespace: %w", err)
-	}
-	for _, candidate := range []struct {
-		kind string
-		gvr  schema.GroupVersionResource
-		name string
-	}{
-		{kind: "Tailnet", gvr: tailnetGVR, name: resources.Tailnet},
-		{kind: "ProxyGroup", gvr: proxyGroupGVR, name: resources.ProxyGroup},
-	} {
-		object, err := p.dynamic.Resource(candidate.gvr).Get(ctx, candidate.name, metav1.GetOptions{})
-		switch {
-		case err == nil:
-			if err := ensureResourceOwned(object.GetLabels(), ownerID); err != nil {
-				return false, fmt.Errorf("refuse to adopt %s: %w", candidate.kind, err)
-			}
-			return true, nil
-		case !k8serrors.IsNotFound(err):
-			return false, fmt.Errorf("get %s: %w", candidate.kind, err)
-		}
-	}
-	return false, nil
-}
-
 //nolint:exhaustruct // observations intentionally populate only known current state.
 func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resources NetworkIngressResourceNames, desiredHostname string) (NetworkIngressObservation, error) {
 	if err := resources.Validate(); err != nil {
@@ -405,7 +359,15 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 	} else if err != nil {
 		return fmt.Errorf("get namespace before teardown: %w", err)
 	} else if err := ensureResourceOwned(namespace.Labels, ownerID); err != nil {
-		if !foreignNetworkIngressOwner(namespace.Labels, ownerID) {
+		actualOwner := namespace.Labels[networkIngressIDLabel]
+		parsedOwner, parseErr := uuid.Parse(actualOwner)
+		foreignOwner :=
+			namespace.Labels[managedByLabelKey] == networkIngressManagedBy &&
+				parseErr == nil &&
+				parsedOwner != uuid.Nil &&
+				parsedOwner.String() == actualOwner &&
+				actualOwner != ownerID
+		if !foreignOwner {
 			return fmt.Errorf("refuse to delete namespace with invalid ownership: %w", err)
 		}
 		// A foreign namespace may reuse the deterministic name after the original
@@ -595,19 +557,6 @@ func ingressLabels(desired NetworkIngressDesired) map[string]string {
 
 func resourceOwnerLabels(ownerID string) map[string]string {
 	return map[string]string{managedByLabelKey: networkIngressManagedBy, networkIngressIDLabel: ownerID}
-}
-
-// foreignNetworkIngressOwner reports whether labels name a different, valid
-// ingress owner: managed by this provider with a well-formed id that is not
-// ownerID. Anything else is invalid ownership, not foreign ownership.
-func foreignNetworkIngressOwner(labels map[string]string, ownerID string) bool {
-	actualOwner := labels[networkIngressIDLabel]
-	parsedOwner, err := uuid.Parse(actualOwner)
-	return labels[managedByLabelKey] == networkIngressManagedBy &&
-		err == nil &&
-		parsedOwner != uuid.Nil &&
-		parsedOwner.String() == actualOwner &&
-		actualOwner != ownerID
 }
 
 func ensureResourceOwned(labels map[string]string, ownerID string) error {
