@@ -15,6 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// errTypedLoginNotOffered refuses a login through a registration the server
+// offers through no typed auth client.
+var errTypedLoginNotOffered = fmt.Errorf("%w: server does not offer this connection", remotesessions.ErrTypedAuthorizationDenied)
+
 // ValidateRemoteLoginTypedAuthorization rechecks the exact binding and subject
 // that authorized a typed login, not another client that happens to be usable.
 func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, state remotesessions.RemoteLoginState) error {
@@ -100,11 +104,16 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		}
 		var selected *remotesessions.TypedAuthorization
 		var denied error
+		hosted := false
 		for _, candidate := range members {
 			if candidate.backend != metaMemberBackendProxied {
+				hosted = hosted || memberUsesClient(candidate, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 				continue
 			}
 			a, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challenge, client, chosenMetaMember{serverID: uuid.NullUUID{UUID: candidate.serverID, Valid: true}, projectID: candidate.projectID})
+			if errors.Is(err, errTypedLoginNotOffered) {
+				continue
+			}
 			if err != nil {
 				if !errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
 					return nil, err
@@ -121,6 +130,11 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		}
 		if selected != nil {
 			return selected, nil
+		}
+		if denied == nil && !hosted {
+			// No member offers the registration, and no hosted member signs
+			// in through it.
+			return nil, errTypedLoginNotOffered
 		}
 		return nil, denied
 	}
@@ -151,5 +165,5 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 	if denied != nil {
 		return nil, fmt.Errorf("typed connection is not authorized for this subject: %w", denied)
 	}
-	return nil, nil
+	return nil, errTypedLoginNotOffered
 }

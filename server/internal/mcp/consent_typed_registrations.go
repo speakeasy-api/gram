@@ -45,9 +45,11 @@ func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID 
 	return offered, nil
 }
 
-// withTypedMemberRegistrations adds to each proxied member's associated
-// clients the registrations it offers through typed auth clients, so consent
-// matches their services to the member.
+// withTypedMemberRegistrations makes the registrations each proxied member
+// offers through typed auth clients its associated clients, where typed auth
+// client resolution is enforced, so consent matches a service to the members
+// the resolver serves through it. A member offering none is matched to none.
+// Elsewhere members keep the clients associated with them.
 func (s *Service) withTypedMemberRegistrations(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
@@ -56,22 +58,20 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 		}
 	}
 	offered, err := s.typedOfferedRegistrations(ctx, organizationID, ids)
-	if err != nil || len(offered) == 0 {
+	if err != nil || offered == nil {
 		return err
 	}
 	for i := range members {
-		registrations := offered[members[i].serverID]
-		if len(registrations) == 0 {
+		if members[i].backend != metaMemberBackendProxied {
 			continue
 		}
-		clients := make(map[uuid.UUID]bool, len(members[i].associatedClients)+len(registrations))
-		for id := range members[i].associatedClients {
-			clients[id] = true
-		}
+		registrations := offered[members[i].serverID]
+		clients := make(map[uuid.UUID]bool, len(registrations))
 		for _, id := range registrations {
 			clients[id] = true
 		}
 		members[i].associatedClients = clients
+		members[i].typedRegistrations = true
 	}
 	return nil
 }
@@ -145,22 +145,23 @@ func (s *Service) withTypedRegistrationClients(ctx context.Context, organization
 	return clients, nil
 }
 
-// withTypedRegistrationStatuses fills in the subject's session state for
-// registrations in typed that statuses lacks, read where the auth client
-// resolver would serve them.
+// withTypedRegistrationStatuses reads the subject's session state for the
+// registrations in typed where the auth client resolver would serve them, in
+// place of what statuses holds for them.
 func (s *Service) withTypedRegistrationStatuses(ctx context.Context, organizationID string, subject urn.SessionSubject, statuses map[uuid.UUID]remotesessions.RemoteSessionState, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+	if len(typed) == 0 {
+		return statuses, nil
+	}
 	byProject := map[uuid.UUID][]uuid.UUID{}
 	for id, projectID := range typed {
-		if _, ok := statuses[id]; ok {
-			continue
-		}
 		byProject[projectID] = append(byProject[projectID], id)
-	}
-	if len(byProject) == 0 {
-		return statuses, nil
 	}
 	merged := make(map[uuid.UUID]remotesessions.RemoteSessionState, len(statuses))
 	maps.Copy(merged, statuses)
+	maps.DeleteFunc(merged, func(id uuid.UUID, _ remotesessions.RemoteSessionState) bool {
+		_, ok := typed[id]
+		return ok
+	})
 	for projectID, ids := range byProject {
 		found, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, subject, projectID, organizationID, ids)
 		if err != nil {

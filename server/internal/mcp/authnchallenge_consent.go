@@ -2018,8 +2018,15 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challen
 	return &resourceDisplayOwner{
 		endpoint: endpoint,
 		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			// Where typed auth client resolution is enforced, a member lends
+			// its resource to the registrations it offers through typed auth
+			// clients.
+			typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+			if err != nil {
+				return nil, err
+			}
 			if endpoint.IsOrganizationGateway() {
-				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, endpoint.OrganizationID)
+				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, metamcprepo.ListOrganizationProxiedMCPServerResourcesParams{TypedOffers: typedOffers, OrganizationID: endpoint.OrganizationID})
 				if err != nil {
 					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
 				}
@@ -2042,6 +2049,7 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challen
 				return converted, nil
 			}
 			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
+				TypedOffers:     typedOffers,
 				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 				ProjectID:       endpoint.ProjectID,
 			})
