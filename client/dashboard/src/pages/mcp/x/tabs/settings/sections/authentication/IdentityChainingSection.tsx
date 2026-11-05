@@ -131,6 +131,7 @@ export function IdentityChainingSection({
     (credentials.status === "setup_incomplete" ||
       credentials.clients.some(
         (client) =>
+          client.enabled &&
           PER_PERSON_CREDENTIALS.has(client.clientType) &&
           !client.remoteSessionClientId,
       ));

@@ -29,7 +29,11 @@ const state = vi.hoisted(() => ({
   linked: [{ id: "client" }] as { id: string }[],
   registrations: [] as { id: string }[],
   clientFilters: [] as unknown[],
-  credentials: [] as { clientType?: string; remoteSessionClientId?: string }[],
+  credentials: [] as {
+    clientType?: string;
+    remoteSessionClientId?: string;
+    enabled?: boolean;
+  }[],
   credentialsStatus: "configured" as string,
   credentialsLoading: false,
   credentialsError: false,
@@ -297,7 +301,7 @@ describe("IdentityChainingSection", () => {
 
   it("reads the sign-in's registrations when a per-person credential names no registration", () => {
     state.upstreamAuth = "enforced";
-    state.credentials = [{ clientType: "remote_session" }];
+    state.credentials = [{ clientType: "remote_session", enabled: true }];
     render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen
@@ -305,6 +309,30 @@ describe("IdentityChainingSection", () => {
         .getAttribute("data-linked-clients"),
     ).toBe("client");
     expect(state.clientFilters).toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("ignores a disabled per-person credential that names no registration", () => {
+    state.upstreamAuth = "enforced";
+    // The organization-wide sign-in binds another server's registration.
+    state.linked = [{ id: "other-server" }];
+    state.registrations = [{ id: "own" }];
+    state.credentials = [
+      {
+        clientType: "remote_session",
+        enabled: true,
+        remoteSessionClientId: "own",
+      },
+      { clientType: "remote_session", enabled: false },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(state.clientFilters).not.toContainEqual({
       userSessionIssuerId: "issuer",
     });
   });
