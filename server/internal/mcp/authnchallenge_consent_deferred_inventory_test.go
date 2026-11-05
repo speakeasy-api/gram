@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -54,10 +58,13 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 
 	// The transport still answers "not connected"; the page flag is what
 	// turns that answer into the deferred state.
-	requireConsentInventoryConflict(t, fx)
+	requireConsentInventoryConflict(t, fx, uuid.Nil)
 }
 
-func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
+// requireConsentInventoryConflict asks the consent transport for tools as
+// authClient, or as the page's preselected credential when it is nil, and
+// requires the "not connected" answer.
+func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture, authClient uuid.UUID) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Accept", "application/json, text/event-stream")
@@ -65,6 +72,9 @@ func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
 	req.Header.Set("Gram-Consent-State", fx.stateID)
 	req.Header.Set("Gram-Consent-Csrf", "csrf-token")
 	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+	if authClient != uuid.Nil {
+		req.Header.Set("Gram-Consent-Auth-Client", authClient.String())
+	}
 	err := fx.ti.service.ServeConsentMCP(httptest.NewRecorder(), req, fx.endpoint)
 	var se *oops.ShareableError
 	require.ErrorAs(t, err, &se)
@@ -124,7 +134,7 @@ func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
 	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 
-	requireConsentInventoryConflict(t, fx)
+	requireConsentInventoryConflict(t, fx, uuid.Nil)
 	deferred := logRecords(t, logs, deferredConflictLog)
 	require.Len(t, deferred, 1)
 	require.Equal(t, "INFO", deferred[0]["level"])
@@ -139,7 +149,7 @@ func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
 
-	requireConsentInventoryConflict(t, fx)
+	requireConsentInventoryConflict(t, fx, uuid.Nil)
 	require.Empty(t, logRecords(t, logs, deferredConflictLog), "the page keeps blocking, so the conflict is not expected")
 	warned := logRecords(t, logs, realConflictLog)
 	require.Len(t, warned, 1)
@@ -155,7 +165,7 @@ func TestConsentInventory_AmbiguousBindingConflictStaysWarn(t *testing.T) {
 	// Governed but served by no single binding: the page renders no chained card.
 	g.governs = true
 
-	requireConsentInventoryConflict(t, fx)
+	requireConsentInventoryConflict(t, fx, uuid.Nil)
 	require.Empty(t, logRecords(t, logs, deferredConflictLog))
 	warned := logRecords(t, logs, realConflictLog)
 	require.Len(t, warned, 1)
@@ -185,7 +195,9 @@ func TestConsentPage_UnconnectedUnchainedServicesDoNotDefer(t *testing.T) {
 	require.Contains(t, page, inventoryNotDeferredAttr, "an unlinked, unchained service's 409 keeps blocking approval")
 }
 
-func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDefer(t *testing.T) {
+// Without a credential choice the inventory signs in through every service,
+// so the connected card's token serves it.
+func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDeferWithoutCredentialChoice(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-mixed-page")
@@ -196,6 +208,140 @@ func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDefer(t *testing.T) {
 	page := renderToolsIsland(t, fx)
 	require.Contains(t, page, consentManagedCopy, "card A stays chained")
 	require.Contains(t, page, inventoryNotDeferredAttr, "a connected card's 409 must not read as deferred")
+}
+
+// chainedCredentialChoices are the credentials a person chooses between on
+// seedChainedCredentialChoice's page.
+type chainedCredentialChoices struct {
+	// identityProvider signs in through the chained registration.
+	identityProvider uuid.UUID
+
+	// chainedPersonal is a personal client on the chained registration.
+	chainedPersonal uuid.UUID
+
+	// separatePersonal is a personal client on a registration identity
+	// chaining does not serve.
+	separatePersonal uuid.UUID
+}
+
+// seedChainedCredentialChoice is seedLoggedChainedConsent for an organization
+// whose people choose a typed auth client. Its page shows two services: the
+// chained registration, and a second one stored in the fixture's clientB.
+func seedChainedCredentialChoice(t *testing.T, tag string) (context.Context, consentActionFixture, chainedCredentialChoices, *syncBuffer) {
+	t.Helper()
+	ctx, fx, issuer, logs := seedLoggedChainedConsent(t, tag)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	fx.ti.service.manual = true
+	fx.ti.service.SetAuthClientPermitted(true)
+	_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-separate", "", []uuid.UUID{fx.shared})
+
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	offer := func(clientType string, registration uuid.UUID) uuid.UUID {
+		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: conv.ToNullUUID(fx.projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+		require.NoError(t, err)
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: id, Source: "admin"}))
+		return id
+	}
+	return ctx, fx, chainedCredentialChoices{
+		identityProvider: offer("ema", fx.clientA),
+		chainedPersonal:  offer("remote_session", fx.clientA),
+		separatePersonal: offer("remote_session", fx.clientB),
+	}, logs
+}
+
+// requirePageInventoryDeferral checks the tool island's deferral for the
+// credential the page preselects.
+func requirePageInventoryDeferral(t *testing.T, page string, deferred bool) {
+	t.Helper()
+	if deferred {
+		require.Regexp(t, regexp.MustCompile(`id="consent-tools-root"[^>]*`+inventoryDeferredAttr), page)
+		return
+	}
+	require.Regexp(t, regexp.MustCompile(`id="consent-tools-root"[^>]*`+inventoryNotDeferredAttr), page)
+}
+
+// requireCredentialInventoryDeferral checks whether choosing authClient on
+// the page defers the tool inventory.
+func requireCredentialInventoryDeferral(t *testing.T, page string, authClient uuid.UUID, deferred bool) {
+	t.Helper()
+	option := regexp.MustCompile(`id="auth-client-` + authClient.String() + `"[^>]*` + inventoryDeferredAttr)
+	require.Contains(t, page, `id="auth-client-`+authClient.String()+`"`)
+	if deferred {
+		require.Regexp(t, option, page)
+		return
+	}
+	require.NotRegexp(t, option, page)
+}
+
+func TestConsentPage_ChainedCredentialDefersBesideUnconnectedService(t *testing.T) {
+	t.Parallel()
+
+	_, fx, choices, _ := seedChainedCredentialChoice(t, "aim896-mixed-page")
+
+	page := renderToolsIsland(t, fx)
+	require.Contains(t, page, "0 of 2 connected")
+	require.Contains(t, page, `data-consent-enabled="true"`)
+	requirePageInventoryDeferral(t, page, true)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, true)
+	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, true)
+	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, false)
+}
+
+func TestConsentPage_ChainedCredentialStillDefersOnceAnotherServiceConnects(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, choices, _ := seedChainedCredentialChoice(t, "aim896-connected-page")
+	grant(t, ctx, fx, fx.clientB, consentChainedUpstream)
+
+	page := renderToolsIsland(t, fx)
+	require.Contains(t, page, `data-consent-enabled="true"`)
+	requirePageInventoryDeferral(t, page, true)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, true)
+	requireCredentialInventoryDeferral(t, page, choices.separatePersonal, false)
+}
+
+func TestConsentPage_StoredSelectionDoesNotDeferChainedCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, choices, logs := seedChainedCredentialChoice(t, "aim896-prefill-page")
+	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
+
+	page := renderToolsIsland(t, fx)
+	require.Contains(t, page, `data-prefill=`)
+	requirePageInventoryDeferral(t, page, false)
+	requireCredentialInventoryDeferral(t, page, choices.identityProvider, false)
+	requireCredentialInventoryDeferral(t, page, choices.chainedPersonal, false)
+
+	requireConsentInventoryConflict(t, fx, choices.identityProvider)
+	require.Empty(t, logRecords(t, logs, deferredConflictLog), "the page keeps blocking, so the conflict is not expected")
+	require.Len(t, logRecords(t, logs, realConflictLog), 1)
+}
+
+func TestConsentInventory_ChainedCredentialConflictLogsAtInfoBesideUnconnectedService(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		choose func(chainedCredentialChoices) uuid.UUID
+	}{
+		{name: "preselected identity provider", choose: func(chainedCredentialChoices) uuid.UUID { return uuid.Nil }},
+		{name: "identity provider", choose: func(c chainedCredentialChoices) uuid.UUID { return c.identityProvider }},
+		{name: "personal client on the chained registration", choose: func(c chainedCredentialChoices) uuid.UUID { return c.chainedPersonal }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, fx, choices, logs := seedChainedCredentialChoice(t, "aim896-log-deferred")
+
+			requireConsentInventoryConflict(t, fx, tc.choose(choices))
+			deferred := logRecords(t, logs, deferredConflictLog)
+			require.Len(t, deferred, 1)
+			require.Equal(t, "INFO", deferred[0]["level"])
+			require.Empty(t, logRecords(t, logs, realConflictLog))
+		})
+	}
 }
 
 func TestConsentPage_StoredSelectionDoesNotDeferToolInventory(t *testing.T) {

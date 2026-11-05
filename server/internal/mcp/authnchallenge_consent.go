@@ -943,6 +943,16 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
+	if upstreamAuth != nil {
+		// The chosen credential decides, as it does for approval. Each option
+		// carries its own answer so the page follows the person's pick.
+		inventoryDeferred = false
+		for i := range upstreamAuth.Options {
+			option := &upstreamAuth.Options[i]
+			option.InventoryDeferred = consentInventoryDeferred(consentCredentialCards(cards, option.registrationID), prefillAttr != "")
+			inventoryDeferred = inventoryDeferred || (option.Selected && option.InventoryDeferred)
+		}
+	}
 	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
 	var prefillDiscoveryMode metamcp.DiscoveryMode
 	if showDiscoveryMode {

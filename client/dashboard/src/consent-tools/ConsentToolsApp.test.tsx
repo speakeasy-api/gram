@@ -222,6 +222,50 @@ describe("ConsentToolsApp", () => {
     ).toBe("client-only");
   });
 
+  it("defers the inventory for the selected credential only", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" form="consent-approve-form" value="chained" data-inventory-deferred="true" checked>
+      <input type="radio" name="auth_client" form="consent-approve-form" value="personal">
+    `,
+    );
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    // The server renders the page flag for the credential it preselects.
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+
+    const select = (value: string) => {
+      const input = document.querySelector<HTMLInputElement>(
+        `input[value="${value}"]`,
+      )!;
+      input.checked = true;
+      fireEvent.change(input);
+    };
+    select("personal");
+    await screen.findByText("The upstream service is not connected.");
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+
+    select("chained");
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+  });
+
+  it("defers the inventory for a sole chained credential", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<input type="hidden" name="auth_client" form="consent-approve-form" value="client-only" data-inventory-deferred="true">',
+    );
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp();
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
+  });
+
   it("performs an MCP session with the consent headers and enables approval", async () => {
     const { button } = renderApp();
     await waitFor(() => expect(button.disabled).toBe(false));

@@ -28,9 +28,11 @@ export interface ConsentToolsAppProps {
   gateway?: boolean;
   gatewayInventory?: ConsentInventory & { attempt: string };
   /**
-   * Set by the server when every service is linked or reached through
-   * identity chaining: a "not connected" inventory then only means chaining
-   * runs after approval, so access is given with all tools.
+   * Set by the server when the credential the inventory signs in with is
+   * reached only through identity chaining: a "not connected" inventory then
+   * only means chaining runs after approval, so access is given with all
+   * tools. Where the page offers a credential choice, each `auth_client`
+   * control carries its own answer and the selected one decides instead.
    */
   inventoryDeferred: boolean;
   serverName: string;
@@ -125,8 +127,8 @@ const UNSUPPORTED_MESSAGE =
 /**
  * The consent page script raises this, and sets the matching attribute on
  * the document element, when any identity-chained service is refused. A
- * deferred page is chain-only, so its inventory can no longer load after
- * approval.
+ * deferred inventory signs in through identity chaining alone, so it can no
+ * longer load after approval.
  */
 export const CHAIN_REJECTED_EVENT = "gram:consent-chain-rejected";
 const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
@@ -217,7 +219,14 @@ function initialAccessMode(
   return gateway ? "cached" : "all";
 }
 
-function selectedAuthClient(formId: string): string {
+/** The credential the approve form submits, as its page control states it. */
+interface SelectedAuthClient {
+  id: string;
+  inventoryDeferred: boolean;
+}
+
+/** Null when the page offers no credential choice. */
+function selectedAuthClient(formId: string): SelectedAuthClient | null {
   for (const input of document.querySelectorAll<HTMLInputElement>(
     'input[name="auth_client"]',
   )) {
@@ -225,14 +234,17 @@ function selectedAuthClient(formId: string): string {
       (input.form?.id === formId || input.getAttribute("form") === formId) &&
       (input.type === "hidden" || (input.type === "radio" && input.checked))
     )
-      return input.value;
+      return {
+        id: input.value,
+        inventoryDeferred: input.dataset["inventoryDeferred"] === "true",
+      };
   }
-  return "";
+  return null;
 }
 
 export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
   const [authClient, setAuthClient] = useState(() =>
-    props.gateway ? "" : selectedAuthClient(props.formId),
+    props.gateway ? null : selectedAuthClient(props.formId),
   );
   useLayoutEffect(() => {
     if (props.gateway) return;
@@ -249,9 +261,12 @@ export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
   }, [props.formId, props.gateway]);
   return (
     <ConsentToolsSelection
-      key={authClient}
+      key={authClient?.id ?? ""}
       {...props}
-      authClient={authClient}
+      inventoryDeferred={
+        authClient ? authClient.inventoryDeferred : props.inventoryDeferred
+      }
+      authClient={authClient?.id ?? ""}
     />
   );
 }

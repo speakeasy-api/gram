@@ -18,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -448,7 +449,7 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
-			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
+			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState, auth) {
 				// Expected before approval: chaining mints the token afterwards.
 				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
 				return conflict
@@ -569,10 +570,13 @@ func (s *Service) serveConsentProxiedMCP(
 }
 
 // consentInventoryDeferred is the page's rule for loading tools only after
-// approval: every service is reachable only by identity chaining, which has
-// no upstream token before the grant exists, and no chain check has been
-// refused yet. A stored restrictive selection keeps blocking instead, since
-// deferring would replace it with all tools.
+// approval: every service the inventory's credential signs in through is
+// reachable only by identity chaining, which has no upstream token before the
+// grant exists, and no chain check has been refused yet. cards are those
+// services: consentCredentialCards' answer where the person chooses a typed
+// auth client, every service on the page otherwise. A stored restrictive
+// selection keeps blocking instead, since deferring would replace it with all
+// tools.
 func consentInventoryDeferred(cards []remoteSessionCard, hasPrefill bool) bool {
 	if len(cards) == 0 || hasPrefill {
 		return false
@@ -585,14 +589,32 @@ func consentInventoryDeferred(cards []remoteSessionCard, hasPrefill bool) bool {
 	return true
 }
 
+// consentCredentialCards is the service a typed auth client signs in
+// through: the card connecting its registration. A client with no
+// registration, or one the page shows no card for, signs in through none.
+func consentCredentialCards(cards []remoteSessionCard, registration uuid.NullUUID) []remoteSessionCard {
+	if !registration.Valid {
+		return nil
+	}
+	id := registration.UUID.String()
+	return slices.DeleteFunc(slices.Clone(cards), func(c remoteSessionCard) bool {
+		return c.ClientID != id
+	})
+}
+
 // consentTransportDeferred re-evaluates consentInventoryDeferred for the
 // transport's "not connected" answer, so only the conflict the page treats
-// as deferred is logged as expected. Any lookup fault reads as not deferred.
-func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) bool {
+// as deferred is logged as expected. auth is the typed auth client the
+// request signed in with, nil where the person chooses none. Any lookup fault
+// reads as not deferred.
+func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, auth *authClientResolution) bool {
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		logger.WarnContext(ctx, "build consent cards for inventory deferral", attr.SlogError(err))
 		return false
+	}
+	if auth != nil {
+		cards = consentCredentialCards(cards, auth.choice.clientID)
 	}
 	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
