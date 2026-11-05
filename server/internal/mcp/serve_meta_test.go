@@ -173,8 +173,9 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
-	// Instructions are deliberately generic: the member inventory belongs to
-	// list_servers, so neither the meta server's name nor its members appear.
+	// The caller's servers lead, so agents see the gateway's reach first.
+	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+"\n\n"), "instructions=%s", result.Instructions)
+	require.True(t, strings.HasSuffix(result.Instructions, metamcp.Instructions))
 	require.Contains(t, result.Instructions, "list_servers")
 	require.Contains(t, result.Instructions, "describe_tools")
 	// The two rules agents get wrong: guessing arguments, and reading an

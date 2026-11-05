@@ -1,15 +1,16 @@
 package metamcp
 
-import "strings"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
 
 // Instructions is the built-in server-instructions block answered by
 // initialize and server/discover when a gateway has no operator-authored
-// instructions of its own. Deliberately static and member-agnostic: clients
-// cache instructions from the handshake, and the member set is both mutable
-// and filtered per caller, so naming members here would go stale, contradict
-// list_servers, and disclose members a caller cannot reach. It teaches the
-// drill-down and the two rules agents get wrong; the inventory itself belongs
-// to list_servers alone.
+// instructions of its own. It stays static so the dashboard can ship a copy;
+// the caller's servers are prepended separately by WithMemberSummary.
 const Instructions = `This endpoint fronts a set of MCP servers as one, exposing a handful of tools instead of every member's full catalog.
 
 Work from the outside in:
@@ -47,4 +48,56 @@ func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
 		return "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
 	}
 	return Instructions
+}
+
+// memberSummaryLimit fits the summary in the one line Codex keeps for a
+// deferred MCP server: the first line, cut at 250 characters.
+const memberSummaryLimit = 250
+
+// MemberLabel names one server for the instructions summary.
+type MemberLabel struct {
+	Slug string
+	Name string
+}
+
+// WithMemberSummary prepends a one-line list of the caller's servers to
+// built-in instructions, so agents that see only the first line still learn
+// what the gateway reaches. Custom instructions and an empty member set are
+// returned unchanged.
+func WithMemberSummary(instructions string, custom *string, members []MemberLabel) string {
+	if len(members) == 0 || (custom != nil && strings.TrimSpace(*custom) != "") {
+		return instructions
+	}
+	return MemberSummary(members) + "\n\n" + instructions
+}
+
+// MemberSummary lists server names in at most memberSummaryLimit characters,
+// counting the ones that do not fit.
+func MemberSummary(members []MemberLabel) string {
+	const prefix = "Tools from these servers: "
+	summary := prefix
+	for i, member := range members {
+		label := member.Name
+		if label == "" {
+			label = member.Slug
+		}
+		// Quoting keeps operator labels from injecting new instruction lines.
+		next := summary
+		if i > 0 {
+			next += ", "
+		}
+		next += strconv.Quote(label)
+		rest := ""
+		if left := len(members) - i - 1; left > 0 {
+			rest = fmt.Sprintf(" and %d more", left)
+		}
+		if utf8.RuneCountInString(next+rest+".") > memberSummaryLimit {
+			if i == 0 {
+				return fmt.Sprintf("Tools from %d servers.", len(members))
+			}
+			return fmt.Sprintf("%s and %d more.", summary, len(members)-i)
+		}
+		summary = next
+	}
+	return summary + "."
 }
