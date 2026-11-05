@@ -884,6 +884,42 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
 }
 
+// A later client needing a re-link decides the response, but the refresh row still stands for the request.
+func TestFreshRefreshOutrankedByReconnectWritesOnlyTheRefreshRow(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
+	// Clients resolve in id order, and ids sort by creation millisecond.
+	time.Sleep(2 * time.Millisecond)
+	createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "fresh-outranked-unlinked-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
+
+	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
+	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
+	require.Error(t, wantErr)
+	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
+
+	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	var calls atomic.Int32
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	got, gotErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject), nil)
+	require.EqualValues(t, 1, calls.Load(), "the refreshing client must resolve first")
+	require.EqualError(t, gotErr, wantErr.Error())
+	require.Equal(t, want.Code, got.Code)
+	require.Equal(t, want.Body.String(), got.Body.String())
+	require.Equal(t, want.Header().Get("WWW-Authenticate"), got.Header().Get("WWW-Authenticate"))
+
+	rows := rec.Rows()[1:]
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+}
+
 // A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.
 func TestGatewayMemberSecurityOutcomeIgnoresDirectRules(t *testing.T) {
 	t.Parallel()

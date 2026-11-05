@@ -470,9 +470,9 @@ type UpstreamToken struct {
 	refreshFailureRecorded bool
 }
 
-// noTokenError is the ErrNoValidToken for an empty entry, keeping its recorded refresh.
-func (t UpstreamToken) noTokenError() error {
-	if t.refreshFailureRecorded {
+// noTokenError is ErrNoValidToken, keeping whether a refresh already wrote its row.
+func noTokenError(refreshRecorded bool) error {
+	if refreshRecorded {
 		return errors.Join(ErrNoValidToken, errRefreshFailureRecorded)
 	}
 	return ErrNoValidToken
@@ -705,7 +705,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				return nil, rerr
 			}
 			if reconnect {
-				return nil, ErrNoValidToken
+				return nil, noTokenError(RefreshFailureRecorded(err))
 			}
 			return nil, err
 		case errors.Is(err, errRefreshStoreFault) && skipUnusable:
@@ -719,7 +719,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, ErrNoValidToken)
 				continue
 			}
-			return nil, resolved.noTokenError()
+			return nil, noTokenError(resolved.refreshFailureRecorded)
 		default:
 			tokens[c.RemoteSessionIssuerID] = resolved
 		}
