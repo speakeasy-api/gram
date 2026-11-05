@@ -2132,6 +2132,7 @@ jobs:
   mise-type-check:
     name: mise-type-check
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     needs: [changes]
     if: |
       !cancelled() &&
@@ -2168,6 +2169,10 @@ jobs:
       # Run independently of client path filters so task-only PRs are checked.
       - name: Type check mise scripts
         run: aube exec tsc --noEmit
+
+      - name: Prune aube store
+        if: success()
+        run: aube store prune
 
   client-build-lint:
     name: client-build-lint
