@@ -16,6 +16,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -326,6 +327,50 @@ func TestRefreshReplayLookupOutage(t *testing.T) {
 	require.NotContains(t, w.Body.String(), "invalid_grant")
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
 	require.Len(t, rec.Rows(), 1)
+}
+
+// closedPool fails every query with a store error, without a database.
+func closedPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), "postgres://127.0.0.1:1/none")
+	require.NoError(t, err)
+	pool.Close()
+	return pool
+}
+
+func TestRefreshReplayResignLookupOutage(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service.db = closedPool(t)
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Contains(t, w.Body.String(), "temporarily_unavailable")
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, refreshReplayLookupFailed, row.SubReason)
+	require.Len(t, rec.Rows(), 1)
+}
+
+func TestRefreshReplayResignLookupClientDisconnectRecordsNothing(t *testing.T) {
+	t.Parallel()
+	service, endpoint, client, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service.db = closedPool(t)
+	rec := mcpconnectionattemptstest.New(t)
+	endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	w := httptest.NewRecorder()
+	err := service.writeRefreshTokenReplay(ctx, tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
+	tracker.Finish(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	rec.RequireNothing()
 }
 
 func TestRefreshReplayLookupClientDisconnectRecordsNothing(t *testing.T) {

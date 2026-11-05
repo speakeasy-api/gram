@@ -1772,15 +1772,8 @@ func (s *Service) writeRefreshTokenReplay(
 			check = s.replayLiveness
 		}
 		if reason, ok, checkErr := check(ctx, endpoint, payload.JTI); !ok {
-			if reason == "refresh_token_replay_lookup_failed" {
-				logger.WarnContext(ctx, "failed to check refreshed session before replay", attr.SlogError(checkErr))
-				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
-				writeErr := writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "could not check the refreshed session; retry shortly")
-				if ctx.Err() != nil {
-					tracker.Continue()
-					return writeErr
-				}
-				return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
+			if reason == refreshReplayLookupFailed {
+				return writeRefreshReplayLookupOutage(ctx, tracker, w, r, clientRow, presentedAuthMethod, payload.Subject, checkErr, logger)
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
@@ -1807,7 +1800,7 @@ func (s *Service) writeRefreshTokenReplay(
 				writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
 				return refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_revoked", mcpconnectionattempts.Subject(payload.Subject))
 			}
-			return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
+			return writeRefreshReplayLookupOutage(ctx, tracker, w, r, clientRow, presentedAuthMethod, payload.Subject, err, logger)
 		}
 		if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
 			replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
@@ -2505,7 +2498,32 @@ func replayLookupFailureReason(err error, missing string) string {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return missing
 	}
-	return "refresh_token_replay_lookup_failed"
+	return refreshReplayLookupFailed
+}
+
+// refreshReplayLookupFailed: the store could not say whether the refreshed session is still live.
+const refreshReplayLookupFailed = "refresh_token_replay_lookup_failed"
+
+// writeRefreshReplayLookupOutage answers a failed session lookup with a retryable 503; a client that left records nothing.
+func writeRefreshReplayLookupOutage(
+	ctx context.Context,
+	tracker *mcpconnectionattempts.Tracker,
+	w http.ResponseWriter,
+	r *http.Request,
+	clientRow *usersessions_repo.UserSessionClient,
+	presentedAuthMethod string,
+	subject *urn.SessionSubject,
+	lookupErr error,
+	logger *slog.Logger,
+) error {
+	logger.WarnContext(ctx, "failed to check refreshed session before replay", attr.SlogError(lookupErr))
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", refreshReplayLookupFailed)
+	writeErr := writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "could not check the refreshed session; retry shortly")
+	if ctx.Err() != nil {
+		tracker.Continue()
+		return writeErr
+	}
+	return refuseInboundRefresh(ctx, tracker, r, writeErr, refreshReplayLookupFailed, mcpconnectionattempts.Subject(subject))
 }
 
 // signInRevokedForGrant reports whether the sign-in a refused issuance linked
