@@ -1600,7 +1600,7 @@ func gatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app mcp
 // to this endpoint.
 func connectionScope(endpoint *ResolvedMcpEndpoint, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
 	switch {
-	case endpoint.MetaMcpServerID.Valid:
+	case endpoint.MetaMcpServerID.Valid, endpoint.IsOrganizationGateway() && endpoint.ProjectID == uuid.Nil:
 		return gatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.McpServerID.Valid:
 		return mcpconnectionattempts.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
