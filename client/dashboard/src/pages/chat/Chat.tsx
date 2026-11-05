@@ -410,13 +410,14 @@ function SeedComposerDraft({
   onSeeded: () => void;
 }): null {
   const aui = useAui();
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
   const seededRef = useRef(false);
   useEffect(() => {
-    if (seededRef.current || !value.trim()) return;
+    if (listLoading || seededRef.current || !value.trim()) return;
     seededRef.current = true;
     aui.composer().setText(value);
     onSeeded();
-  }, [aui, value, onSeeded]);
+  }, [aui, listLoading, value, onSeeded]);
   return null;
 }
 

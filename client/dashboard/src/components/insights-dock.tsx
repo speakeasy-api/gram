@@ -1768,11 +1768,14 @@ function FallbackDraftHandover({
   onHandedOver: () => void;
 }): null {
   const aui = useAui();
+  // Until the thread list loads, the composer belongs to a placeholder thread
+  // that drops anything written to it.
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
   useEffect(() => {
-    if (!value.trim()) return;
+    if (listLoading || !value.trim()) return;
     aui.composer().setText(value);
     onHandedOver();
-  }, [aui, value, onHandedOver]);
+  }, [aui, listLoading, value, onHandedOver]);
   return null;
 }
 

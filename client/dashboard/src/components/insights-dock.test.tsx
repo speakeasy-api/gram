@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   activeRoute: "detail" as "detail" | "new" | "home" | "page",
   assistantReady: true,
   composerSetText: vi.fn(),
+  threadsLoading: false,
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
     | undefined,
@@ -100,7 +101,18 @@ vi.mock("@assistant-ui/react", () => ({
     }),
     thread: () => ({ append: vi.fn() }),
   }),
-  useAuiState: () => false,
+  useAuiState: (
+    selector: (state: {
+      threads: { isLoading: boolean };
+      thread: { isRunning: boolean; isLoading: boolean; isDisabled: boolean };
+      composer: { text: string; dictation: null };
+    }) => unknown,
+  ) =>
+    selector({
+      threads: { isLoading: mocks.threadsLoading },
+      thread: { isRunning: false, isLoading: false, isDisabled: false },
+      composer: { text: "", dictation: null },
+    }),
   AuiConfig: () => ({}),
   AuiProvider: ({ children }: { children: ReactNode }) => children,
 }));
@@ -204,6 +216,7 @@ beforeEach(() => {
   mocks.activeRoute = "detail";
   mocks.assistantReady = true;
   mocks.composerSetText.mockClear();
+  mocks.threadsLoading = false;
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
 });
@@ -573,6 +586,23 @@ describe("InsightsProvider", () => {
 
       expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
       expect(screen.queryByLabelText("Ask the Project Assistant")).toBeNull();
+    });
+
+    it("holds a fallback draft until the thread list has loaded", () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(page());
+      fireEvent.change(screen.getByLabelText("Ask the Project Assistant"), {
+        target: { value: "why is usage up" },
+      });
+
+      mocks.assistantReady = true;
+      rerender(page());
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+
+      mocks.threadsLoading = false;
+      rerender(page());
+      expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
     });
   });
 });
