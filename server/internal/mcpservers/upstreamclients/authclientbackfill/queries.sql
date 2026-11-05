@@ -2306,11 +2306,14 @@ ORDER BY l.auth_client_id, l.project_id;
 -- name: ListServerAccessGrants :many
 -- Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 -- policies are provisioned separately. Like grant loading, effect is ignored.
+-- Temporary grants are skipped: a permanent default must not be derived from
+-- access that ends.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id;
 
 -- name: ListAgentRolePrincipals :many
@@ -2714,6 +2717,17 @@ ORDER BY kind, id;
 SELECT s.id FROM mcp_servers s
 JOIN projects p ON p.id = s.project_id
 WHERE s.id = @server_id::uuid AND p.organization_id = @organization_id::text
+FOR UPDATE OF s;
+
+-- name: LockServersForAuthClientSync :exec
+-- Locks the servers a synchronization is about to link in UUID order, which is
+-- the order LockEMAPreparationServer walks them in. The link insert takes a
+-- foreign-key lock on each server it records, and it records them in
+-- association order, so without this the two orders disagree and deadlock.
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY(@mcp_server_ids::uuid[]) AND p.organization_id = @organization_id::text
+ORDER BY s.id
 FOR UPDATE OF s;
 
 -- name: GetEMABindingLockScope :one

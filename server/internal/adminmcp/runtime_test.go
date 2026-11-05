@@ -152,6 +152,8 @@ func TestRuntimeInitializeCapabilitiesDisableToolListChanges(t *testing.T) {
 	require.JSONEq(t, `{}`, string(message.Result.Capabilities.Logging))
 	require.JSONEq(t, `{}`, string(message.Result.Capabilities.Tools))
 	require.NotContains(t, response.Body.String(), `"listChanged"`)
+	require.Contains(t, response.Body.String(), "Manual Stripe subscription linking and PAYG activation are dashboard-only")
+	require.Contains(t, response.Body.String(), "do not substitute whitelist or feature changes for billing activation")
 }
 
 func TestRuntimeSubscriptionForToolListChangesTerminatesPromptly(t *testing.T) {

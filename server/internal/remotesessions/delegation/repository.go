@@ -42,6 +42,7 @@ func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 		retryAfter:      row.RetryAfter.Time,
 		refusedAt:       row.OfflineAccessRefusedAt.Time,
 		requestConfig:   row.OfflineAccessRequestConfigHash.String,
+		updatedAt:       row.UpdatedAt.Time,
 	}
 }
 func (r *delegationRepository) load(ctx context.Context, b Binding) (delegationCredential, error) {

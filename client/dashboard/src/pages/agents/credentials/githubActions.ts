@@ -16,6 +16,13 @@ import { SUBJECT_CHOICE } from "./workloadCatalog";
 const ACTION = "speakeasy-api/device-agent-action";
 export const ACTION_DOCS = `https://github.com/${ACTION}`;
 
+/**
+ * The device agent action's minor tag. The action's release workflow moves it
+ * to each 0.1.x release, so the workflow shown here does not change with
+ * every release of the action.
+ */
+export const ACTION_TAG = "v0.1";
+
 export const OIDC_DOCS =
   "https://docs.github.com/en/actions/reference/security/oidc";
 
@@ -23,29 +30,29 @@ export const OIDC_DOCS =
 export const GITHUB_ACTIONS_KEY = "github-actions";
 
 /**
- * Every action the generated workflow uses, pinned to a commit rather than a
- * branch or tag: the job grants id-token: write, so each step can mint the
- * job's OIDC token, and a moved ref would run code nobody reviewed with the
- * agent's access. The tag or branch each commit was taken from is kept
+ * Every other action the generated workflow uses, pinned to a commit rather
+ * than a branch or tag: the job grants id-token: write, so each step can mint
+ * the job's OIDC token, and a moved ref would run code nobody reviewed with
+ * the agent's access. The tag or branch each commit was taken from is kept
  * beside it, so bumping one is a matter of looking that ref up again.
  *
- * speakeasyd is the deliberate exception. The device agent action installs
- * the latest stable release unless the step sets `version`, so a job picks
- * up a fix without its workflow being edited, and it checks every download,
- * pinned or not, against the stable release manifest in the same bucket.
- * That catches a download corrupted or tampered with in transit, not a
- * compromised bucket.
+ * Speakeasy's own device agent action is an exception: the workflow follows
+ * its minor tag (ACTION_TAG), so a job picks up each 0.1.x release of the
+ * action without its workflow being edited. A team that requires commit pins
+ * can pin a release commit instead, and the setup says so.
+ *
+ * speakeasyd is the other deliberate exception. The device agent action
+ * installs the latest stable release unless the step sets `version`, so a job
+ * picks up a fix without its workflow being edited, and it checks every
+ * download, pinned or not, against the stable release manifest in the same
+ * bucket. That catches a download corrupted or tampered with in transit, not
+ * a compromised bucket.
  */
 const PINNED_ACTIONS = {
   checkout: {
     uses: "actions/checkout",
     commit: "3d3c42e5aac5ba805825da76410c181273ba90b1",
     ref: "v7",
-  },
-  deviceAgent: {
-    uses: ACTION,
-    commit: "596e9f8598bf2896e6dda3c45eb098313b671962",
-    ref: "main",
   },
   claude: {
     uses: "anthropics/claude-code-action",
@@ -179,18 +186,24 @@ export function repositoryProblem(
 
 /**
  * The catalog's rules narrower than the whole repository, by their keys. Each
- * key is also the variable its template adds, which the catalog test pins.
+ * key but pull_request is also the variable its template adds, which the
+ * catalog test pins.
  */
-export const NARROWER_SCOPES = ["branch", "environment"] as const;
+export const NARROWER_SCOPES = [
+  "branch",
+  "environment",
+  "pull_request",
+] as const;
 
 /**
  * Which of the repository's jobs the rule admits, which the workflow has to
- * match: every job, the jobs on one branch, or the jobs that use one
- * environment.
+ * match: every job, the jobs on one branch, the jobs that use one
+ * environment, or pull request jobs.
  */
 export type JobScope =
   | { kind: "repository" }
-  | { kind: (typeof NARROWER_SCOPES)[number]; name: string };
+  | { kind: "pull_request" }
+  | { kind: "branch" | "environment"; name: string };
 
 /** The scope the setup's values choose; its name is empty until typed. */
 export function jobScope(values: Record<string, string>): JobScope {
@@ -198,6 +211,7 @@ export function jobScope(values: Record<string, string>): JobScope {
     (scope) => scope === values[SUBJECT_CHOICE],
   );
   if (kind === undefined) return { kind: "repository" };
+  if (kind === "pull_request") return { kind };
   return { kind, name: values[kind]?.trim() ?? "" };
 }
 
@@ -248,23 +262,15 @@ export function workflowYaml({
   if (problem !== null) return { yaml: null, problem };
   const controlPlane = trimmedControlPlane(controlPlaneUrl);
   const selected = WORKFLOW_AGENTS[agent];
-  // A rule narrower than the repository refuses a pull request's job, so only
-  // the whole repository's workflow runs on one, and only it needs the fork
-  // guard. Names are written as JSON strings, which YAML reads as they are.
-  const repository = scope.kind === "repository";
-  const branch =
-    scope.kind === "branch" ? branchFilter(scope.name || "BRANCH") : "main";
-  const pullRequest = repository ? ["  pull_request:"] : [];
-  const forkGuard = repository ? [FORK_GUARD] : [];
+  const on = triggers(scope);
+  const forkGuard = on.includes(PULL_REQUEST_TRIGGER) ? [FORK_GUARD] : [];
   const environment =
     scope.kind === "environment" ? [environmentKey(scope.name)] : [];
   const lines = [
     "name: Speakeasy",
     "",
     "on:",
-    "  push:",
-    `    branches: [${branch}]`,
-    ...pullRequest,
+    ...on,
     "",
     "jobs:",
     "  agent:",
@@ -285,7 +291,7 @@ export function workflowYaml({
     "      # Installs the latest stable speakeasyd; add version: <x.y.z> to pin one.",
     "      - name: Connect to Speakeasy",
     "        id: speakeasy",
-    `        uses: ${uses("deviceAgent")}`,
+    `        uses: ${ACTION}@${ACTION_TAG}`,
     "        with:",
     `          organization-id: ${organizationId || "SPEAKEASY_ORGANIZATION_ID"}`,
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
@@ -302,6 +308,33 @@ export function workflowYaml({
   ];
   return { yaml: lines.join("\n"), problem: null };
 }
+
+/**
+ * The events the workflow runs on, where the rule admits its jobs. A branch
+ * or environment rule refuses a pull request's job, and the pull request rule
+ * refuses every other job. Names are written as JSON strings, which YAML reads
+ * as they are.
+ */
+function triggers(scope: JobScope): string[] {
+  const push = (branch: string) => ["  push:", `    branches: [${branch}]`];
+  switch (scope.kind) {
+    case "repository":
+      return [...push("main"), PULL_REQUEST_TRIGGER];
+    case "branch":
+      return push(branchFilter(scope.name || "BRANCH"));
+    case "environment":
+      return push("main");
+    case "pull_request":
+      // GitHub's default three, and a draft being marked ready for review.
+      return [
+        PULL_REQUEST_TRIGGER,
+        "    types: [opened, synchronize, reopened, ready_for_review]",
+      ];
+  }
+}
+
+/** Runs the workflow on pull requests, which then needs the fork guard. */
+const PULL_REQUEST_TRIGGER = "  pull_request:";
 
 /** Skips a fork's pull request before any step of the job runs. */
 const FORK_GUARD =

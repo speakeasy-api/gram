@@ -2,6 +2,7 @@ package tunnelrouting
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,17 @@ import (
 // callers should surface this as an upstream-availability problem rather than
 // a platform fault.
 var ErrNoTunnelRoute = errors.New("tunnel has no live route")
+
+// routeCleanupError marks a failed cleanup as our store failing, unless the caller's own context ended it.
+func routeCleanupError(action string, err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return fmt.Errorf("%s: %w: %w", action, ErrRouteStoreUnavailable, err)
+}
+
+// ErrRouteStoreUnavailable marks a failure reading our own route store, not the tunnel or its provider.
+var ErrRouteStoreUnavailable = errors.New("tunnel route store unavailable")
 
 // maxForwardAttempts bounds the gateway failover loop for one request. Each
 // retried attempt excludes the gateway that refused, so the loop also ends
@@ -107,7 +119,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 	candidates, err := c.routes.Candidates(ctx, tunnelID)
 	if err != nil {
-		return nil, fmt.Errorf("list tunnel routes: %w", err)
+		return nil, fmt.Errorf("list tunnel routes: %w: %w", ErrRouteStoreUnavailable, err)
 	}
 
 	exclude := map[string]struct{}{}
@@ -135,10 +147,14 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			// so drop it from the store on the way past. Any later failure —
 			// the request is on the wire by then — is returned as-is.
 			if !isDeadGateway(err) {
-				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
+				// The request may have reached the provider, so an earlier cleanup failure must not mark it as never sent.
+				if unpublishErr != nil {
+					return nil, fmt.Errorf("forward request via tunnel: %w (earlier route cleanup failed: %s)", err, unpublishErr.Error())
+				}
+				return nil, fmt.Errorf("forward request via tunnel: %w", err)
 			}
 			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish unreachable tunnel route: %w", uerr))
+				unpublishErr = errors.Join(unpublishErr, routeCleanupError("unpublish unreachable tunnel route", uerr))
 			}
 			exclude[addr] = struct{}{}
 			dialErr = errors.Join(dialErr, fmt.Errorf("forward request via tunnel: %w", err))
@@ -152,7 +168,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		case wire.TunnelErrorNoLiveSession:
 			drainAndClose(resp)
 			if err := c.routes.Unpublish(ctx, tunnelID, addr); err != nil {
-				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w", err))
+				unpublishErr = errors.Join(unpublishErr, routeCleanupError("unpublish stale tunnel route", err))
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:

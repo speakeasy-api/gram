@@ -133,10 +133,24 @@ func (c foundationCheck) check() Check {
 func TestFoundationCompatibilityCorpus(t *testing.T) {
 	t.Parallel()
 
+	for _, fixture := range loadFoundationFixtures(t) {
+		t.Run(fixture.Name, func(t *testing.T) {
+			t.Parallel()
+			runFoundationCase(t, fixture)
+		})
+	}
+}
+
+// loadFoundationFixtures strictly decodes every fixture file and rejects
+// unnamed, uncontracted and duplicate cases.
+func loadFoundationFixtures(t *testing.T) []foundationFixture {
+	t.Helper()
+
 	paths, err := filepath.Glob(filepath.Join(foundationCompatibilityDir, "*.json"))
 	require.NoError(t, err)
 	require.NotEmpty(t, paths)
 
+	var fixtures []foundationFixture
 	names := map[string]string{}
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
@@ -154,13 +168,10 @@ func TestFoundationCompatibilityCorpus(t *testing.T) {
 				t.Fatalf("duplicate fixture name %q in %s and %s", fixture.Name, previous, path)
 			}
 			names[fixture.Name] = path
-
-			t.Run(fixture.Name, func(t *testing.T) {
-				t.Parallel()
-				runFoundationCase(t, fixture)
-			})
+			fixtures = append(fixtures, fixture)
 		}
 	}
+	return fixtures
 }
 
 func runFoundationCase(t *testing.T, f foundationFixture) {
@@ -400,8 +411,11 @@ func foundationContext(t *testing.T, engine *Engine, f foundationFixture) contex
 	case "scope_override_admin", "scope_override_member":
 		authCtx.IsAdmin = f.Caller == "scope_override_admin"
 		ctx = contextvalues.SetRBACScopeOverride(contextvalues.SetAuthContext(ctx, authCtx), f.Override)
+		// The engine honours the override header only for platform admins;
+		// a non-admin's override is ignored and their own grants apply.
+		_, honoured := engine.GetScopeOverrides(ctx)
+		require.Equal(t, authCtx.IsAdmin, honoured, "scope override honoured for admin only")
 		if !authCtx.IsAdmin {
-			// A non-admin's override is ignored; their own grants apply.
 			return GrantsToContext(ctx, grants)
 		}
 		prepared, err := engine.PrepareContext(ctx)
@@ -478,23 +492,31 @@ func TestFoundationCompatibilityCorpusCoversContract(t *testing.T) {
 		"mandatory_gates",
 		"selector_validation",
 		"lists",
+		"engine_free_helpers",
 	}
-	seen := map[string]bool{}
-	paths, err := filepath.Glob(filepath.Join(foundationCompatibilityDir, "*.json"))
-	require.NoError(t, err)
-	for _, path := range paths {
-		raw, err := os.ReadFile(path)
-		require.NoError(t, err)
-		var file foundationFixtureFile
-		require.NoError(t, json.Unmarshal(raw, &file))
-		for _, fixture := range file.Cases {
-			seen[fixture.Contract] = true
-		}
+	// Every operation runFoundationCase handles needs at least one fixture,
+	// so no branch of it goes unexercised.
+	operations := []string{
+		"require", "require_any", "require_any_unblocked", "evaluate", "filter", "find_matched",
+		"mandatory", "mandatory_server_admission",
+		"grants_authorize", "grants_satisfy", "grants_contain_selector",
+		"risk_policy_applies", "validate_selector", "role_grant_rows", "selector_from_row", "assistant_defaults",
+	}
+	seenContracts := map[string]bool{}
+	seenOperations := map[string]bool{}
+	for _, fixture := range loadFoundationFixtures(t) {
+		seenContracts[fixture.Contract] = true
+		seenOperations[fixture.Operation] = true
 	}
 	var missing []string
 	for _, contract := range required {
-		if !seen[contract] {
-			missing = append(missing, contract)
+		if !seenContracts[contract] {
+			missing = append(missing, "contract "+contract)
+		}
+	}
+	for _, operation := range operations {
+		if !seenOperations[operation] {
+			missing = append(missing, "operation "+operation)
 		}
 	}
 	slices.Sort(missing)

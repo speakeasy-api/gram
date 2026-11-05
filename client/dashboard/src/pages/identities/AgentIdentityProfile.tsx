@@ -25,6 +25,8 @@ import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
 import { IdentityToolLogsPanel } from "./IdentityToolLogs";
+import { useShowLocalTools } from "./identityLocalTools";
+import { LocalToolsSwitch } from "./LocalToolsSwitch";
 
 /**
  * Edit, for the page header's top right: it acts on the agent itself, not on
@@ -76,6 +78,9 @@ export function AgentIdentityProfile({
   // section, and because the links that used to name the retired
   // agent-management page carry it.
   const [params, setParams] = useSearchParams();
+  // One choice for the overview's Tool calls card and its Tool logs, so the
+  // chart and the rows under it always count the same calls.
+  const [showLocalTools, setShowLocalTools] = useShowLocalTools();
   // A federated agent authenticates by exchanging its platform's token, so
   // the page must not lead with, or insist on, a key it will never hold.
   const admissions = useAgentAdmissions(agent.id);
@@ -248,6 +253,12 @@ export function AgentIdentityProfile({
           title="Overview"
           timeRange
           meta="What this agent has been doing, and who answers for it"
+          action={
+            <LocalToolsSwitch
+              checked={showLocalTools}
+              onCheckedChange={setShowLocalTools}
+            />
+          }
         >
           {/* Who answers for it and whether it may act, as one line. The
               rest of what this card used to hold is said by the header above
@@ -256,7 +267,10 @@ export function AgentIdentityProfile({
           {/* What the agent has actually been doing, before what it is
               allowed to do: an overview is opened to find out whether
               something is wrong, and the policy is where you look next. */}
-          <AgentIdentityUsage agent={agent} />
+          <AgentIdentityUsage
+            agent={agent}
+            includeLocalTools={showLocalTools}
+          />
           {/* The sessions the agent's hooks recorded. Usage above can read
               empty for an agent that is plainly working, so this is the
               surest sign of what it has been doing. */}
@@ -283,7 +297,10 @@ export function AgentIdentityProfile({
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
           {/* Every call it made, under the usage summary's numbers. */}
-          <IdentityToolLogsPanel agentId={agent.id} />
+          <IdentityToolLogsPanel
+            agentId={agent.id}
+            includeLocalTools={showLocalTools}
+          />
         </IdentitySection>
       );
   }

@@ -564,6 +564,21 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
 	})
 
+	Method("setOrganizationProviderSetup", func() {
+		Description("Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.")
+		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationProviderSetupRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.providerSetup"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationProviderSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationProviderSetup"}`)
+	})
+
 	Method("setOrganizationFeature", func() {
 		Payload(func() {
 			Meta("openapi:typename", "SetOrganizationFeatureRequestBody")
@@ -1407,7 +1422,7 @@ var _ = Service("admin", func() {
 	signupOfferMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
-		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")
@@ -1430,7 +1445,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("setStripeSubscription", func() {
-		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Description("Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")

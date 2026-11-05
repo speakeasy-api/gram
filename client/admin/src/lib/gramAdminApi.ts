@@ -1,9 +1,9 @@
 import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
-import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/adminAuth";
 
-export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+export { isRedirectingToLogin } from "@/lib/adminAuth";
 
 // Speakeasy admin API client.
 //

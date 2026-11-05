@@ -116,6 +116,9 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"IsSharedAuthClientType":    categoryProjection,
 	"IsAgentKeyAuthClientType":  categoryProjection,
 	"ParseScopeOverrides":       categoryProjection,
+	"ScopeCatalog":              categoryProjection,
+	"ScopeEntryFor":             categoryProjection,
+	"Tasks":                     categoryProjection,
 
 	// Principal and grant loading, and request-context plumbing.
 	"LoadGrants":                     categoryLoader,
@@ -131,6 +134,8 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"ResolveOrganizationAdminEmails": categoryLoader,
 	"AdmittedWorkloadAgent":          categoryLoader,
 	"SelectorFromRow":                categoryLoader,
+	"WithDenialRecorder":             categoryLoader,
+	"RecordedDenial":                 categoryLoader,
 
 	// Stored grant writers and their validation.
 	"SeedSystemRoleGrants":            categoryWriter,
@@ -239,14 +244,17 @@ func TestFoundationInventory(t *testing.T) {
 	require.Empty(t, unknown, "classify these exported authz functions in consumerEntryPoints")
 
 	var unowned []string
+	decidingRules := map[string]bool{}
 	for i := range consumers {
-		consumers[i].Owner = foundationOwner(consumers[i])
-		if consumers[i].Owner == "" {
+		owner, rule := foundationOwner(consumers[i])
+		consumers[i].Owner = owner
+		decidingRules[rule] = true
+		if owner == "" {
 			unowned = append(unowned, consumers[i].File+" "+consumers[i].Function)
 		}
 	}
-	require.Empty(t, unowned, "assign these consumers to a Backend Revamp ticket in foundationOwners")
-	require.Empty(t, staleFoundationOwners(consumers), "remove owner rules that no longer match a consumer")
+	require.Empty(t, unowned, "assign these consumers to a migration batch in foundationOwners")
+	require.Empty(t, staleFoundationOwners(decidingRules), "remove owner rules that no longer decide any consumer's owner")
 
 	got := encodeInventory(t, consumers)
 	path := filepath.Join(foundationCompatibilityDir, "consumers.csv")
@@ -261,8 +269,13 @@ func TestFoundationInventory(t *testing.T) {
 func scanAuthorizationConsumers(t *testing.T, root string) ([]inventoryConsumer, []string) {
 	t.Helper()
 
-	byKey := map[string]*inventoryConsumer{}
-	unknownSet := map[string]struct{}{}
+	type sourceFile struct {
+		rel   string
+		alias string
+		file  *ast.File
+	}
+	var files []sourceFile
+	importingPackages := map[string]bool{}
 	fset := token.NewFileSet()
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -289,19 +302,32 @@ func scanAuthorizationConsumers(t *testing.T, root string) ([]inventoryConsumer,
 			return fmt.Errorf("parse %s: %w", rel, parseErr)
 		}
 		alias, ok := authzImportName(file)
-		if !ok {
-			return nil
+		if ok {
+			importingPackages[filepath.ToSlash(filepath.Dir(rel))] = true
 		}
-		for _, decl := range file.Decls {
+		files = append(files, sourceFile{rel: rel, alias: alias, file: file})
+		return nil
+	})
+	require.NoError(t, err)
+
+	// A file can call the engine through a struct field declared in another
+	// file of its package without importing authz itself, so every file in a
+	// package that imports authz is scanned. Files without the import have no
+	// alias and only match engine methods by name.
+	byKey := map[string]*inventoryConsumer{}
+	unknownSet := map[string]struct{}{}
+	for _, f := range files {
+		if !importingPackages[path.Dir(f.rel)] {
+			continue
+		}
+		for _, decl := range f.file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Body == nil {
 				continue
 			}
-			scanFunction(fset, rel, alias, fn, byKey, unknownSet)
+			scanFunction(fset, f.rel, f.alias, fn, byKey, unknownSet)
 		}
-		return nil
-	})
-	require.NoError(t, err)
+	}
 
 	consumers := make([]inventoryConsumer, 0, len(byKey))
 	for _, c := range byKey {
@@ -490,19 +516,15 @@ func encodeInventory(t *testing.T, consumers []inventoryConsumer) []byte {
 	return b.Bytes()
 }
 
-// staleFoundationOwners lists owner rules that match no consumer, so the rules
-// shrink as migrations remove call sites instead of silently rotting.
-func staleFoundationOwners(consumers []inventoryConsumer) []string {
-	used := map[string]bool{}
-	for _, c := range consumers {
-		used[path.Dir(c.File)] = true
-		used[c.File] = true
-		used[c.File+" "+c.Function] = true
-	}
+// staleFoundationOwners lists owner rules that decide no consumer's owner,
+// either because no consumer matches them or because a more specific rule
+// always wins, so the rules shrink as migrations remove call sites instead of
+// silently rotting.
+func staleFoundationOwners(decidingRules map[string]bool) []string {
 	var stale []string
 	for _, rules := range []map[string]string{foundationPackageOwners, foundationFileOwners, foundationFunctionOwners} {
 		for key := range rules {
-			if !used[key] {
+			if !decidingRules[key] {
 				stale = append(stale, key)
 			}
 		}

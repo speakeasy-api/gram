@@ -967,29 +967,52 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = $1
-ORDER BY deleted ASC, created_at DESC
+const listMetaMCPServerLabelsForTelemetry = `-- name: ListMetaMCPServerLabelsForTelemetry :many
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = $1
+  AND p.organization_id = $1
+  AND ms.id = ANY($2::uuid[])
 `
 
-type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
-	ID   uuid.UUID
-	Name string
+type ListMetaMCPServerLabelsForTelemetryParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
 }
 
-// Gateway names for telemetry labels, deleted gateways included.
-func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+type ListMetaMCPServerLabelsForTelemetryRow struct {
+	ID             uuid.UUID
+	Name           string
+	ProjectID      uuid.UUID
+	Deleted        bool
+	ProjectSlug    string
+	ProjectDeleted bool
+}
+
+// Names the stored gateways among telemetry ids, deleted gateways included: a
+// member's calls are logged in the member's project, which need not be the
+// gateway's. Ids that are not stored gateways (agent and organization gateways
+// stamp derived ids) simply match nothing. The project and deleted flags let a
+// label link to the gateway's page while it still has one, and say which
+// project the caller must be able to read to see the name.
+func (q *Queries) ListMetaMCPServerLabelsForTelemetry(ctx context.Context, arg ListMetaMCPServerLabelsForTelemetryParams) ([]ListMetaMCPServerLabelsForTelemetryRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerLabelsForTelemetry, arg.OrganizationID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	var items []ListMetaMCPServerLabelsForTelemetryRow
 	for rows.Next() {
-		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		var i ListMetaMCPServerLabelsForTelemetryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.Deleted,
+			&i.ProjectSlug,
+			&i.ProjectDeleted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1517,4 +1540,34 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateMetaMCPServerNetworkAccessMode = `-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+`
+
+type UpdateMetaMCPServerNetworkAccessModeParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) UpdateMetaMCPServerNetworkAccessMode(ctx context.Context, arg UpdateMetaMCPServerNetworkAccessModeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMetaMCPServerNetworkAccessMode,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

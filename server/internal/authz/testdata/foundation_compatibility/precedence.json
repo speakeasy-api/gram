@@ -660,6 +660,44 @@
           "selector": { "resource_kind": "project", "resource_id": "proj_1" }
         }
       ]
+    },
+    {
+      "name": "grants_authorize_denies_on_role_block",
+      "contract": "engine_free_helpers",
+      "operation": "grants_authorize",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "grants_satisfy_ignores_role_block",
+      "contract": "engine_free_helpers",
+      "operation": "grants_satisfy",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
     }
   ]
 }

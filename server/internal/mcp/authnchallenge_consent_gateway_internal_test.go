@@ -220,7 +220,7 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: true})
-	require.ErrorContains(t, err, "connect it from this gateway's sign-in page")
+	require.ErrorContains(t, err, "Ask your administrator to connect it")
 }
 
 func renderGatewayConsent(t *testing.T, data consentTemplateData) string {
@@ -268,7 +268,7 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 	require.NotContains(t, page, "data-gateway-server-page")
 	require.Contains(t, page, `id="consent-approve-button"`)
 	require.NotContains(t, page, "data-service-connections")
-	require.NotContains(t, page, "Connect a service above to enable access")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 }
 
 // A server's connect page shows its services with no approval: connecting is

@@ -991,6 +991,40 @@
         "client_type": "service_account",
         "connection_owner": "$represented_user"
       }
+    },
+    {
+      "name": "grants_contain_selector_rejects_candidate_dropping_a_dimension",
+      "contract": "engine_free_helpers",
+      "operation": "grants_contain_selector",
+      "checks": [{ "scope": "mcp:connect" }],
+      "selector": { "resource_kind": "mcp", "resource_id": "srv_1" },
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "*",
+            "tool": "tool_1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "grants_contain_selector_accepts_narrower_candidate",
+      "contract": "engine_free_helpers",
+      "operation": "grants_contain_selector",
+      "checks": [{ "scope": "mcp:connect" }],
+      "selector": { "resource_kind": "mcp", "resource_id": "srv_1" },
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        }
+      ]
     }
   ]
 }

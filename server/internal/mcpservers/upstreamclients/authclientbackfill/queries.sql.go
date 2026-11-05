@@ -3282,6 +3282,7 @@ FROM principal_grants
 WHERE organization_id = $1
   AND scope = ANY($2::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id
 `
 
@@ -3298,6 +3299,8 @@ type ListServerAccessGrantsRow struct {
 
 // Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 // policies are provisioned separately. Like grant loading, effect is ignored.
+// Temporary grants are skipped: a permanent default must not be derived from
+// access that ends.
 func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
 	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
 	if err != nil {
@@ -4215,6 +4218,28 @@ type LockServerOAuthClientsForSyncParams struct {
 
 func (q *Queries) LockServerOAuthClientsForSync(ctx context.Context, arg LockServerOAuthClientsForSyncParams) error {
 	_, err := q.db.Exec(ctx, lockServerOAuthClientsForSync, arg.OrganizationID, arg.RegistrationIds, arg.McpServerIds)
+	return err
+}
+
+const lockServersForAuthClientSync = `-- name: LockServersForAuthClientSync :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY($1::uuid[]) AND p.organization_id = $2::text
+ORDER BY s.id
+FOR UPDATE OF s
+`
+
+type LockServersForAuthClientSyncParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+// Locks the servers a synchronization is about to link in UUID order, which is
+// the order LockEMAPreparationServer walks them in. The link insert takes a
+// foreign-key lock on each server it records, and it records them in
+// association order, so without this the two orders disagree and deadlock.
+func (q *Queries) LockServersForAuthClientSync(ctx context.Context, arg LockServersForAuthClientSyncParams) error {
+	_, err := q.db.Exec(ctx, lockServersForAuthClientSync, arg.McpServerIds, arg.OrganizationID)
 	return err
 }
 

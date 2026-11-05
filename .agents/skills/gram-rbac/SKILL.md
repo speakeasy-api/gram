@@ -69,6 +69,8 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It also supplies unrestricted `assistant:read`/`assistant:write` defaults for the built-in Admin and Member role principals (`role:global:<id>`), because organizations seeded before the assistant scopes have no stored rows for them and system-role grants are immutable.
 
+**Temporary grants.** A `principal_grants` row with `expires_at` set is a temporary grant, given to one principal (member, `user:all`, role or active agent) through `access.createTemporaryGrant` and ended by its deadline or `access.revokeTemporaryGrant` (`server/internal/access/temporary_grants.go`). `ListTemporaryGrants` takes one principal and returns its active grants by default, at most 500, soonest deadline first; `include_expired` adds expired rows as history. Any new SQL that reads `principal_grants` for authorization or for showing current access must add `(expires_at IS NULL OR expires_at > clock_timestamp())` (only the temporary grant history list, `ListTemporaryGrants` with `include_expired`, reads expired rows); audience reads and deletes and anything that derives permanent configuration from grants (backfills, provisioning) must read `expires_at IS NULL` only. Permanent writes clear `expires_at` on conflict, and nothing but the temporary grant endpoints may delete a row by `expires_at`. See "Temporary grants" in docs/rbac.md.
+
 **Sync semantics.** `SyncGrants` distinguishes nil from empty: `RoleGrant{Selectors: nil}` writes a single wildcard row; `RoleGrant{Selectors: []Selector{}}` writes nothing (no access). Each non-nil selector is validated by `ValidateSelector` before insert.
 
 ### `access` package — the management API
@@ -167,6 +169,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 3. Choose the narrowest scope for the operation: `*:read` for GET/list, `*:write` for mutations, `*:connect` for runtime usage. Scope expansions mean write callers are still permitted to read.
 4. Use `RequireAny` instead of `Require` when a single handler legitimately satisfies multiple equivalent scopes.
 5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.Scope<Name>, resourceID))`. Construct grants with `authz.NewGrant` (or `authz.NewGrantWithSelector` for non-trivial selectors) — never set `Grant.Selector` by hand.
+6. A new authz call site changes the frozen consumer inventory, so `TestFoundationInventory` fails until you refresh it with `go test ./internal/authz -run TestFoundationInventory -update-foundation-inventory`. A consumer in a package with no owner rule also needs one in `server/internal/authz/foundation_owners_test.go`. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
 
 ### How to add a new scope to an existing resource type
 
@@ -182,7 +185,8 @@ Use this when the resource type is already represented (e.g. adding a new verb o
 8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
 9. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
 10. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
-11. Run `mise run lint:server` and `mise run test:server`.
+11. Refresh the frozen scope baselines, which a new scope changes on purpose: `go test ./internal/authz -run TestScopeTablesGolden -update-scope-tables` and `go test ./internal/agents/runtimepolicy -run TestRuntimeScopeDefinitionsGolden -update-runtime-scopes`. Review the golden diff, and refresh the consumer inventory as in step 6 of the handler checklist. See [docs/rbac-foundation-migration.md](../../../docs/rbac-foundation-migration.md).
+12. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to add a new resource type
 
