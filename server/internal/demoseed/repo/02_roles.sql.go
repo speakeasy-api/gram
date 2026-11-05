@@ -420,13 +420,13 @@ INSERT INTO device_agent_state_reports
    generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
    tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
    speakeasy_version, os, arch, auto_update, update_channel)
-VALUES ($1, $2, $3::text, $4::text, 1,
+VALUES ($1, $2, NULLIF($3::text, ''), $4::text, 1,
         now() - ($5::text)::interval,
         now() - ($5::text)::interval,
         $6::text, now() - ($7::text)::interval, FALSE,
         $8::jsonb, $9::integer,
         now() - interval '9 days', $10::text,
-        $10::text, 'darwin', 'arm64', 'automatic', 'stable')
+        $10::text, $11::text, $12::text, 'automatic', 'stable')
 `
 
 type RolesInsertDeviceAgentStateReportParams struct {
@@ -440,6 +440,8 @@ type RolesInsertDeviceAgentStateReportParams struct {
 	Tools             []byte
 	DegradedToolCount int32
 	SpeakeasydVersion string
+	Os                string
+	Arch              string
 }
 
 func (q *Queries) RolesInsertDeviceAgentStateReport(ctx context.Context, arg RolesInsertDeviceAgentStateReportParams) error {
@@ -454,6 +456,8 @@ func (q *Queries) RolesInsertDeviceAgentStateReport(ctx context.Context, arg Rol
 		arg.Tools,
 		arg.DegradedToolCount,
 		arg.SpeakeasydVersion,
+		arg.Os,
+		arg.Arch,
 	)
 	return err
 }

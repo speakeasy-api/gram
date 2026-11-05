@@ -11,8 +11,11 @@ import { Text } from "@/components/ui/Text";
 import { useEffect, type JSX } from "react";
 /**
  * Which of a server's shared credentials the key uses there. A server with
- * one or none needs no choice, so nothing is shown; with several the key
- * cannot be issued until one is picked.
+ * none needs no choice, so nothing is shown. Otherwise the credential is
+ * picked here: a key that names none is never served a shared credential. A
+ * server that offers only shared credentials cannot be issued a key until one
+ * is picked; one that also offers accounts keeps using the connected account
+ * unless a shared credential is picked.
  *
  * It renders its own wrapper, so a caller's spacing appears only when there
  * is something to show: an empty padded box would grow the row it sits in.
@@ -51,7 +54,7 @@ export function KeyCredentialChoice({
       </div>
     );
   }
-  if (options.length < 2) return null;
+  if (options.length === 0) return null;
   return (
     <div className={className}>
       <Select value={offered ? (value ?? "") : ""} onValueChange={onChange}>

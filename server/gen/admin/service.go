@@ -30,6 +30,10 @@ type Service interface {
 	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
 	// GetOrganizationFeatures implements getOrganizationFeatures.
 	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
+	// Enable or disable the temporary provider setup rollout for one organization.
+	// Staff only; disabled by default. Existing credential storage and OAuth flows
+	// are unaffected.
+	SetOrganizationProviderSetup(context.Context, *SetOrganizationProviderSetupPayload) (res *ProductFeatures, err error)
 	// SetOrganizationFeature implements setOrganizationFeature.
 	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
 	// GetOrganizationChatAnalysisSettings implements
@@ -335,13 +339,15 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
-	// Returns live Stripe subscription details for confirmation before recording
-	// the subscription on a PAYG organization that has a customer and no
-	// subscription.
+	// Returns eligible live Stripe subscription details before linking it to a
+	// free, PAYG, or unconverted enterprise trial organization with a matching
+	// Stripe customer.
 	GetStripeSubscriptionCandidate(context.Context, *GetStripeSubscriptionCandidatePayload) (res *AdminStripeSubscriptionCandidate, err error)
-	// Records a Stripe subscription ID on a PAYG organization when its
-	// subscription ID is empty, after verifying the subscription belongs to the
-	// organization's Stripe customer.
+	// Links an eligible existing Stripe subscription and atomically activates PAYG
+	// for free organizations or unconverted enterprise trials. Existing PAYG
+	// organizations retain their access policy. Verifies customer ownership,
+	// preserves existing subscription links and redeemed partner anchors, and
+	// accepts same-subscription retries.
 	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
 	// Returns estimated usage at current PAYG list prices for every active paying
 	// organization: enterprise organizations not on a running or ending trial, and
@@ -400,7 +406,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [104]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
+var MethodNames = [105]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
 
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
@@ -628,7 +634,8 @@ type AdminHookClientsResult struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganization
@@ -1468,6 +1475,14 @@ type AdminRegistryPromotionCandidate struct {
 	CreatedAt         string
 	CurationRevision  string
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuide
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	SourceRevision    string
 	Eligible          bool
@@ -1498,6 +1513,12 @@ type AdminRegistryPromotionCandidate struct {
 type AdminRegistryPromotionCandidates struct {
 	Candidates []*AdminRegistryPromotionCandidate
 	NextCursor *string
+}
+
+// A setup guide in the setup-docs export pinned in the server.
+type AdminRegistryPromotionSetupGuide struct {
+	Slug  string
+	Title string
 }
 
 // Untrusted observed metadata suggestions. Staff must edit and explicitly
@@ -1949,7 +1970,13 @@ type AuditLog struct {
 	ActingSurface string
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string
+	ActingClientID *string
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName *string
@@ -2958,6 +2985,9 @@ type ProductFeatureName string
 // ProductFeatures is the result type of the admin service
 // getOrganizationFeatures method.
 type ProductFeatures struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -3015,6 +3045,10 @@ type ProductFeatures struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 // PromoteRegistryCandidatePayload is the payload type of the admin service
@@ -3174,6 +3208,14 @@ type SetOrganizationOnboardingStackPayload struct {
 	MdmVendor string
 	// Required when mdm_vendor is other, ignored otherwise.
 	MdmVendorName *string
+}
+
+// SetOrganizationProviderSetupPayload is the payload type of the admin service
+// setOrganizationProviderSetup method.
+type SetOrganizationProviderSetupPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	Enabled           bool
 }
 
 // SetRegistryEntryPublishedPayload is the payload type of the admin service
@@ -3561,7 +3603,10 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.Pro
 // newProductFeatures converts projected type ProductFeatures to service type
 // ProductFeatures.
 func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
-	res := &ProductFeatures{}
+	res := &ProductFeatures{
+		ProviderSetupEnabled: vres.ProviderSetupEnabled,
+		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
+	}
 	if vres.LogsEnabled != nil {
 		res.LogsEnabled = *vres.LogsEnabled
 	}
@@ -3635,6 +3680,7 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 // type ProductFeaturesView using the "default" view.
 func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
 	vres := &adminviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             &res.LogsEnabled,
 		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
@@ -3657,6 +3703,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres
 }

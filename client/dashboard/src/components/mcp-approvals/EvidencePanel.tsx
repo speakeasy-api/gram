@@ -831,10 +831,6 @@ function ProvenanceFacts({
   if (provenance.specifier) {
     facts.push({ label: "Catalog entry", value: provenance.specifier });
   }
-  facts.push({
-    label: "Publisher vouched by the registry",
-    value: provenance.official ? "yes" : "no",
-  });
   if (provenance.status) {
     facts.push({ label: "Entry status", value: provenance.status });
   }

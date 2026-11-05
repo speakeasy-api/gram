@@ -25,6 +25,8 @@ import (
 
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -39,11 +41,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/overview"
@@ -2634,7 +2638,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error listing MCP servers for project overview")
 		}
-		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, *authCtx.ProjectID)
+		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, s.authz, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error listing gateways for project overview")
 		}
@@ -3487,6 +3491,13 @@ func toolUsageStatusStrings(statuses []telem_gen.ToolUsageStatus) []string {
 // builds the ClickHouse query parameters shared by the tool usage summary aggregate
 // and its per-panel endpoints. All returned errors are already oops-wrapped.
 func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters) (repo.GetToolUsageSummaryParams, error) {
+	return s.resolveToolUsageParamsWithOwners(ctx, f, nil)
+}
+
+// resolveToolUsageParamsWithOwners is resolveToolUsageParams reading the
+// organization's gateway owners through owners, so a request that also labels
+// gateways reads them once. Nil owners reads them afresh.
+func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUsageFilters, owners *gatewayOwners) (repo.GetToolUsageSummaryParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return repo.GetToolUsageSummaryParams{}, oops.C(oops.CodeUnauthorized)
@@ -3538,7 +3549,10 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	if owners == nil {
+		owners = newGatewayOwners(s.db, authCtx.ActiveOrganizationID)
+	}
+	metaMCPMatchers, err := loadMetaMCPMatchers(ctx, s.db, s.authz, owners, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
 	}
@@ -3908,13 +3922,12 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers").LogError(ctx, logger)
 	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
+	// One read of the organization's gateway owners serves the matchers here
+	// and the labels below.
+	owners := newGatewayOwners(s.db, authCtx.ActiveOrganizationID)
+	metaMCPMatchers, err := loadMetaMCPMatchers(ctx, s.db, s.authz, owners, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints").LogError(ctx, logger)
-	}
-	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, logger)
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
@@ -3959,13 +3972,25 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
+	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, dispatchGatewayIDs(rows))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, logger)
+	}
+
 	credentials, ownerNames := s.toolCallCredentials(ctx, authCtx.ActiveOrganizationID, params.projectID, rows)
-	return toToolUsageTracesResult(rows, nextCursor, gatewayNames, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows), credentials, ownerNames), nil
+	return toToolUsageTracesResult(rows, nextCursor, gatewayLabels, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows), credentials, ownerNames), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
-	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// One read of the organization's gateway owners serves the matchers and
+	// the gateway option labels.
+	owners := newGatewayOwners(s.db, authCtx.ActiveOrganizationID)
+	params, err := s.resolveToolUsageParamsWithOwners(ctx, toolUsageFilters{
 		From:               payload.From,
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
@@ -3981,26 +4006,28 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		Statuses:           toolUsageStatusStrings(payload.Statuses),
 		Query:              payload.Query,
 		Filters:            payload.Filters,
-	})
+	}, owners)
 	if err != nil {
 		return nil, err
-	}
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
 	}
 
 	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
 	}
+	gatewayIDs := make([]string, 0, len(options.Gateways))
+	for _, row := range options.Gateways {
+		gatewayIDs = append(gatewayIDs, row.MetaMCPServerID)
+	}
+	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, gatewayIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
+	}
 	if _, _, _, includeUsers, _ := toolUsageFilterOptionTypeSet(payload.OptionTypes); includeUsers {
 		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 
-	return toToolUsageFilterOptionsResult(options, params.HostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
+	return toToolUsageFilterOptionsResult(options, params.HostedMCPMatchers, gatewayLabels, payload.OptionTypes), nil
 }
 
 // mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs
@@ -4270,9 +4297,92 @@ func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uu
 	return ids, nil
 }
 
-// LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
-// that classify hook-observed calls; host-anchored custom-domain suffixes go first.
-func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
+// agentGatewayPathPrefix is the path an agent gateway is served under,
+// followed by the agent id.
+const agentGatewayPathPrefix = "/agent-mcp/"
+
+// agentGatewayName names the gateway that serves an agent.
+func agentGatewayName(agentName string) string {
+	return agentName + " gateway"
+}
+
+// gatewayOwners reads, at most once per request and only when asked, what an
+// organization's derived gateways are named after: the organization, its
+// projects and its agents. The URL matchers and the gateway labels of one
+// request share it.
+type gatewayOwners struct {
+	db             *pgxpool.Pool
+	organizationID string
+	organization   *orgsRepo.OrganizationMetadatum
+	projects       []projectsRepo.ListProjectNamesIncludingDeletedRow
+	projectsLoaded bool
+	agents         []agentsRepo.ListAgentNamesIncludingDeletedRow
+	agentsLoaded   bool
+}
+
+func newGatewayOwners(db *pgxpool.Pool, organizationID string) *gatewayOwners {
+	return &gatewayOwners{
+		db:             db,
+		organizationID: organizationID,
+		organization:   nil,
+		projects:       nil,
+		projectsLoaded: false,
+		agents:         nil,
+		agentsLoaded:   false,
+	}
+}
+
+// Organization is the organization the gateways belong to.
+func (o *gatewayOwners) Organization(ctx context.Context) (orgsRepo.OrganizationMetadatum, error) {
+	if o.organization != nil {
+		return *o.organization, nil
+	}
+	organization, err := orgsRepo.New(o.db).GetOrganizationMetadata(ctx, o.organizationID)
+	if err != nil {
+		return orgsRepo.OrganizationMetadatum{}, fmt.Errorf("get organization: %w", err)
+	}
+	o.organization = &organization
+	return organization, nil
+}
+
+// Projects is every project of the organization, deleted ones included.
+func (o *gatewayOwners) Projects(ctx context.Context) ([]projectsRepo.ListProjectNamesIncludingDeletedRow, error) {
+	if o.projectsLoaded {
+		return o.projects, nil
+	}
+	projects, err := projectsRepo.New(o.db).ListProjectNamesIncludingDeleted(ctx, o.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization projects: %w", err)
+	}
+	o.projects, o.projectsLoaded = projects, true
+	return projects, nil
+}
+
+// Agents is every agent of the organization, deleted ones included.
+func (o *gatewayOwners) Agents(ctx context.Context) ([]agentsRepo.ListAgentNamesIncludingDeletedRow, error) {
+	if o.agentsLoaded {
+		return o.agents, nil
+	}
+	agents, err := agentsRepo.New(o.db).ListAgentNamesIncludingDeleted(ctx, o.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list organization agents: %w", err)
+	}
+	o.agents, o.agentsLoaded = agents, true
+	return agents, nil
+}
+
+// LoadMetaMCPMatchers loads the gateway URL suffixes (gram.mcp.server_url)
+// that classify hook-observed calls; host-anchored custom-domain suffixes go
+// first. The project's stored gateway endpoints come with the gateways every
+// project of the organization can call: each agent gateway, the organization
+// gateway and each project gateway. Those have no endpoint row, and a call
+// reaches them by URL from whichever project its hook is logged in. A gateway
+// the caller may not read is labelled as LoadGatewayLabels labels it.
+func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, engine *authz.Engine, organizationID string, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
+	return loadMetaMCPMatchers(ctx, db, engine, newGatewayOwners(db, organizationID), projectID)
+}
+
+func loadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, engine *authz.Engine, owners *gatewayOwners, projectID uuid.UUID) ([]repo.MetaMCPMatcher, error) {
 	endpoints, err := metamcpRepo.New(db).ListMetaMCPEndpointsForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
@@ -4321,20 +4431,333 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 			anchoredMatchers = append(anchoredMatchers, matcher)
 		}
 	}
+	organizationMatchers, err := organizationGatewayMatchers(ctx, engine, owners)
+	if err != nil {
+		return nil, err
+	}
+	platformMatchers = append(platformMatchers, organizationMatchers...)
 	return append(anchoredMatchers, platformMatchers...), nil
 }
 
-// LoadMetaMCPNames maps gateway ids to names, deleted gateways included.
-func LoadMetaMCPNames(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) (map[string]string, error) {
-	rows, err := metamcpRepo.New(db).ListMetaMCPServerNamesForTelemetryByProjectID(ctx, projectID)
+// organizationGatewayMatchers matches the URLs of the gateways that have no
+// endpoint row: /agent-mcp/<agent id> for each agent, deleted ones included
+// because an agent id is never reused and its past calls keep their gateway,
+// and /mcp/gateway/<organization slug>, plus /projects/<project slug> for each
+// live project, for the organization and project gateways. Each is labelled
+// the way LoadGatewayLabels labels the gateway id it carries, so a gateway in
+// a project, or serving an agent, the caller may not read gets the neutral
+// name.
+func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owners *gatewayOwners) ([]repo.MetaMCPMatcher, error) {
+	organization, err := owners.Organization(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list project gateways: %w", err)
+		return nil, err
 	}
-	names := make(map[string]string, len(rows))
+	projects, err := owners.Projects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	agents, err := owners.Agents(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	organizationPath := "/" + mcproute.OrganizationGateway.String() + "/" + organization.Slug
+	candidates := make([]gatewayCandidate, 0, len(agents)+len(projects)+1)
+	suffixes := make([]string, 0, len(agents)+len(projects)+1)
+	for _, agent := range agents {
+		candidates = append(candidates, agentGatewayCandidate(authCtx, agent))
+		suffixes = append(suffixes, agentGatewayPathPrefix+agent.ID.String())
+	}
+	candidates = append(candidates, organizationGatewayCandidate(owners.organizationID, organization))
+	suffixes = append(suffixes, organizationPath)
+	// A deleted project's slug can be taken again. Its URL names its gateway
+	// only while no other project, live or deleted, has the same slug.
+	slugs := make(map[string]int, len(projects))
+	for _, project := range projects {
+		slugs[project.Slug]++
+	}
+	for _, project := range projects {
+		if project.Deleted && slugs[project.Slug] > 1 {
+			continue
+		}
+		candidates = append(candidates, projectGatewayCandidate(owners.organizationID, project))
+		suffixes = append(suffixes, organizationPath+"/projects/"+project.Slug)
+	}
+
+	readableProjects, readableAgents, err := readableGatewayOwners(ctx, engine, candidates)
+	if err != nil {
+		return nil, err
+	}
+	matchers := make([]repo.MetaMCPMatcher, 0, len(candidates))
+	for i, candidate := range candidates {
+		matchers = append(matchers, repo.MetaMCPMatcher{
+			URLSuffix:    suffixes[i],
+			TargetID:     candidate.id.String(),
+			TargetLabel:  visibleGatewayLabel(candidate, readableProjects, readableAgents).Name,
+			HostAnchored: false,
+		})
+	}
+	return matchers, nil
+}
+
+// unknownGatewayName labels a gateway id that resolves to no gateway of the
+// organization, so a trace never shows a raw id in place of a name.
+const unknownGatewayName = "Unknown gateway"
+
+// The kinds of gateway a trace can be dispatched through. Each has its own
+// page in the dashboard, so the kind says which one a label links to.
+const (
+	gatewayKindProject      = "project"
+	gatewayKindOrganization = "organization"
+	gatewayKindAgent        = "agent"
+)
+
+// GatewayLabel names a gateway and says where its page is.
+type GatewayLabel struct {
+	Name string
+	// Kind says which page shows the gateway. Empty when it has none: the
+	// gateway, its project, or its agent is deleted, or the caller may not
+	// read it.
+	Kind string
+	// ProjectSlug is the project whose page shows the gateway: the project of
+	// a stored gateway, or the project an organization gateway is restricted
+	// to. Empty when the gateway has no page, and for the organization gateway
+	// that serves the whole organization.
+	ProjectSlug string
+	// AgentID is the agent an agent gateway serves, empty when the gateway has
+	// no page.
+	AgentID string
+}
+
+// gatewayInAnotherProjectName labels a gateway the caller may not read: its
+// project, or the agent it serves, is not one they can see, so neither its
+// name nor where it lives is shown.
+const gatewayInAnotherProjectName = "Gateway in another project"
+
+// gatewayCandidate is a label resolved for a gateway id, before the caller's
+// right to see it is checked.
+type gatewayCandidate struct {
+	id    uuid.UUID
+	label GatewayLabel
+	// projectID is the project the caller must be able to read to see the
+	// label, uuid.Nil when the gateway belongs to no project.
+	projectID uuid.UUID
+	// agentID is the agent the caller must be able to read to see the label,
+	// uuid.Nil when the gateway serves no agent.
+	agentID uuid.UUID
+	// ownedAgent says the caller owns the agent, which shows it to them
+	// whatever their grants.
+	ownedAgent bool
+}
+
+// dispatchGatewayIDs is the gateway each dispatch to a member went through;
+// a call on the gateway itself is the gateway and needs no label.
+func dispatchGatewayIDs(rows []repo.ToolUsageTraceSummary) []string {
+	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
-		names[row.ID.String()] = row.Name
+		if row.MetaMCPServerID == "" || row.TargetType == repo.ToolUsageTargetTypeMetaMCP {
+			continue
+		}
+		ids = append(ids, row.MetaMCPServerID)
 	}
-	return names, nil
+	return ids
+}
+
+// LoadGatewayLabels labels the given gateway ids, which telemetry carries. A
+// member's calls are logged in the member's project, so a stored gateway can
+// sit in any project of the organization, and deleted gateways keep their
+// names. Agent and organization gateways have no row and stamp a derived id,
+// so each is named after the agent, organization, or project it serves; the
+// projects and agents are listed only while some id is still unresolved. A
+// gateway in a project, or serving an agent, the caller may not read gets a
+// neutral name and no page. An id that resolves to no gateway is left out.
+func LoadGatewayLabels(ctx context.Context, db *pgxpool.Pool, engine *authz.Engine, organizationID string, gatewayIDs []string) (map[string]GatewayLabel, error) {
+	return loadGatewayLabels(ctx, db, engine, newGatewayOwners(db, organizationID), gatewayIDs)
+}
+
+func loadGatewayLabels(ctx context.Context, db *pgxpool.Pool, engine *authz.Engine, owners *gatewayOwners, gatewayIDs []string) (map[string]GatewayLabel, error) {
+	organizationID := owners.organizationID
+	pending := make(map[uuid.UUID]bool, len(gatewayIDs))
+	for _, id := range gatewayIDs {
+		parsed, err := uuid.Parse(id)
+		// Client-stamped on the OTLP path: an id that is not a canonical uuid
+		// names no gateway.
+		if err != nil || parsed.String() != id {
+			continue
+		}
+		pending[parsed] = true
+	}
+	labels := make(map[string]GatewayLabel, len(pending))
+	if len(pending) == 0 {
+		return labels, nil
+	}
+
+	candidates := make([]gatewayCandidate, 0, len(pending))
+	resolve := func(candidate gatewayCandidate) {
+		delete(pending, candidate.id)
+		candidates = append(candidates, candidate)
+	}
+
+	ids := make([]uuid.UUID, 0, len(pending))
+	for id := range pending {
+		ids = append(ids, id)
+	}
+	stored, err := metamcpRepo.New(db).ListMetaMCPServerLabelsForTelemetry(ctx, metamcpRepo.ListMetaMCPServerLabelsForTelemetryParams{
+		OrganizationID: organizationID,
+		Ids:            ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list gateways: %w", err)
+	}
+	for _, row := range stored {
+		label := GatewayLabel{Name: row.Name, Kind: "", ProjectSlug: "", AgentID: ""}
+		// A deleted gateway, or one in a deleted project, has no page.
+		if !row.Deleted && !row.ProjectDeleted {
+			label.Kind = gatewayKindProject
+			label.ProjectSlug = row.ProjectSlug
+		}
+		resolve(gatewayCandidate{id: row.ID, label: label, projectID: row.ProjectID, agentID: uuid.Nil, ownedAgent: false})
+	}
+
+	if organizationGatewayID := orggateway.GatewayID(organizationID); pending[organizationGatewayID] {
+		organization, err := owners.Organization(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resolve(organizationGatewayCandidate(organizationID, organization))
+	}
+
+	if len(pending) > 0 {
+		projects, err := owners.Projects(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, project := range projects {
+			if candidate := projectGatewayCandidate(organizationID, project); pending[candidate.id] {
+				resolve(candidate)
+			}
+		}
+	}
+
+	if len(pending) > 0 {
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		agents, err := owners.Agents(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, agent := range agents {
+			if candidate := agentGatewayCandidate(authCtx, agent); pending[candidate.id] {
+				resolve(candidate)
+			}
+		}
+	}
+
+	readableProjects, readableAgents, err := readableGatewayOwners(ctx, engine, candidates)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range candidates {
+		labels[candidate.id.String()] = visibleGatewayLabel(candidate, readableProjects, readableAgents)
+	}
+	return labels, nil
+}
+
+// organizationGatewayCandidate is the organization gateway, named after the
+// organization. It belongs to no project, so every caller may see it.
+func organizationGatewayCandidate(organizationID string, organization orgsRepo.OrganizationMetadatum) gatewayCandidate {
+	return gatewayCandidate{
+		id:         orggateway.GatewayID(organizationID),
+		label:      GatewayLabel{Name: organization.Name, Kind: gatewayKindOrganization, ProjectSlug: "", AgentID: ""},
+		projectID:  uuid.Nil,
+		agentID:    uuid.Nil,
+		ownedAgent: false,
+	}
+}
+
+// projectGatewayCandidate is a project's organization gateway, named after
+// the project. The gateway of a deleted project keeps its name but has no
+// page.
+func projectGatewayCandidate(organizationID string, project projectsRepo.ListProjectNamesIncludingDeletedRow) gatewayCandidate {
+	label := GatewayLabel{Name: project.Name, Kind: "", ProjectSlug: "", AgentID: ""}
+	if !project.Deleted {
+		label.Kind = gatewayKindOrganization
+		label.ProjectSlug = project.Slug
+	}
+	return gatewayCandidate{id: orggateway.ProjectGatewayID(organizationID, project.ID), label: label, projectID: project.ID, agentID: uuid.Nil, ownedAgent: false}
+}
+
+// agentGatewayCandidate is an agent's gateway, named after the agent.
+func agentGatewayCandidate(authCtx *contextvalues.AuthContext, agent agentsRepo.ListAgentNamesIncludingDeletedRow) gatewayCandidate {
+	label := GatewayLabel{Name: agentGatewayName(agent.Name), Kind: "", ProjectSlug: "", AgentID: ""}
+	if !agent.Deleted {
+		label.Kind = gatewayKindAgent
+		label.AgentID = agent.ID.String()
+	}
+	// The agent visibility rule: an owner who is not awaiting reassignment
+	// sees their own agent whatever their grants.
+	owned := authCtx != nil && agent.OwnerUserID == authCtx.UserID && !agent.OwnerReassignmentRequiredAt.Valid
+	return gatewayCandidate{id: agentgateway.GatewayID(agent.ID), label: label, projectID: uuid.Nil, agentID: agent.ID, ownedAgent: owned}
+}
+
+// visibleGatewayLabel is the candidate's label when the caller may read its
+// project and agent, and the neutral label with no page otherwise.
+func visibleGatewayLabel(candidate gatewayCandidate, readableProjects, readableAgents map[string]bool) GatewayLabel {
+	projectReadable := candidate.projectID == uuid.Nil || readableProjects[candidate.projectID.String()]
+	agentReadable := candidate.agentID == uuid.Nil || candidate.ownedAgent || readableAgents[candidate.agentID.String()]
+	if !projectReadable || !agentReadable {
+		return GatewayLabel{Name: gatewayInAnotherProjectName, Kind: "", ProjectSlug: "", AgentID: ""}
+	}
+	return candidate.label
+}
+
+// readableGatewayOwners says which of the candidates' projects and agents the
+// caller may read. The telemetry endpoints only check the project being
+// viewed, while a gateway can live in any project of the organization.
+func readableGatewayOwners(ctx context.Context, engine *authz.Engine, candidates []gatewayCandidate) (map[string]bool, map[string]bool, error) {
+	projectChecks := make([]authz.Check, 0, len(candidates))
+	agentChecks := make([]authz.Check, 0, len(candidates))
+	seen := make(map[uuid.UUID]bool, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.projectID != uuid.Nil && !seen[candidate.projectID] {
+			seen[candidate.projectID] = true
+			projectChecks = append(projectChecks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: candidate.projectID.String(), Dimensions: nil})
+		}
+		if candidate.agentID != uuid.Nil && !candidate.ownedAgent && !seen[candidate.agentID] {
+			seen[candidate.agentID] = true
+			agentChecks = append(agentChecks, authz.Check{Scope: authz.ScopeAgentRead, ResourceKind: authz.ResourceKindAgent, ResourceID: candidate.agentID.String(), Dimensions: nil})
+		}
+	}
+
+	readableProjects, err := filterReadable(ctx, engine, projectChecks)
+	if err != nil {
+		return nil, nil, fmt.Errorf("filter readable gateway projects: %w", err)
+	}
+	readableAgents, err := filterReadable(ctx, engine, agentChecks)
+	if err != nil {
+		return nil, nil, fmt.Errorf("filter readable gateway agents: %w", err)
+	}
+	return readableProjects, readableAgents, nil
+}
+
+// filterReadable is the set of resource ids the checks allow. The engine
+// allows every check when RBAC is not enforced for the request; a nil engine
+// allows none.
+func filterReadable(ctx context.Context, engine *authz.Engine, checks []authz.Check) (map[string]bool, error) {
+	readable := make(map[string]bool, len(checks))
+	// Without an engine nothing is readable, so labels fall back to the
+	// neutral name rather than naming what may be hidden.
+	if len(checks) == 0 || engine == nil {
+		return readable, nil
+	}
+	allowed, err := engine.Filter(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("filter: %w", err)
+	}
+	for _, id := range allowed {
+		readable[id] = true
+	}
+	return readable, nil
 }
 
 func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {
@@ -4358,18 +4781,19 @@ func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
 	return startTimeUnixNano, parts[1], nil
 }
 
-func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string, authorizerLabels map[string]string, credentials map[string]repo.ToolCallCredential, ownerNames map[string]string) *telem_gen.ListToolUsageTracesResult {
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayLabels map[string]GatewayLabel, authorizerLabels map[string]string, credentials map[string]repo.ToolCallCredential, ownerNames map[string]string) *telem_gen.ListToolUsageTracesResult {
 	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
 	for _, row := range rows {
 		// Only a dispatch to a member is routed through a gateway; a call on the gateway is the gateway.
 		var viaGatewayID, viaGatewayName *string
+		var viaGateway GatewayLabel
 		if row.MetaMCPServerID != "" && row.TargetType != repo.ToolUsageTargetTypeMetaMCP {
 			viaGatewayID = conv.PtrEmpty(row.MetaMCPServerID)
-			name := gatewayNames[row.MetaMCPServerID]
-			if name == "" {
-				name = row.MetaMCPServerID
+			viaGateway = gatewayLabels[row.MetaMCPServerID]
+			viaGatewayName = conv.PtrEmpty(viaGateway.Name)
+			if viaGateway.Name == "" {
+				viaGatewayName = conv.PtrEmpty(unknownGatewayName)
 			}
-			viaGatewayName = conv.PtrEmpty(name)
 		}
 		credential := credentials[row.TraceID]
 		trace := &telem_gen.ToolUsageTraceSummary{
@@ -4379,35 +4803,38 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
 				Value: row.LogGroupValue,
 			},
-			StartTimeUnixNano:     strconv.FormatInt(row.StartTimeUnixNano, 10),
-			LogCount:              row.LogCount,
-			GramUrn:               row.GramURN,
-			ToolName:              row.ToolName,
-			TargetType:            telem_gen.ToolUsageTargetType(row.TargetType),
-			TargetKind:            telem_gen.ToolUsageTargetKind(row.TargetKind),
-			TargetID:              row.TargetID,
-			TargetLabel:           row.TargetLabel,
-			McpServerID:           conv.PtrEmpty(row.MCPServerID),
-			UserKey:               row.UserKey,
-			UserLabel:             row.UserLabel,
-			UserKind:              telem_gen.ToolUsageUserKind(row.UserKind),
-			AuthorizerUserID:      conv.PtrEmpty(row.AuthorizerUserID),
-			AuthorizerLabel:       conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
-			AuthClientType:        conv.PtrEmpty(credential.AuthClientType),
-			AuthClientID:          conv.PtrEmpty(credential.AuthClientID),
-			ConnectionOwnerUserID: conv.PtrEmpty(credential.ConnectionOwnerUserID),
-			ConnectionOwnerLabel:  conv.PtrEmpty(ownerNames[credential.ConnectionOwnerUserID]),
-			HookSource:            row.HookSource,
-			EventSource:           row.EventSource,
-			HTTPStatusCode:        row.HTTPStatusCode,
-			HookStatus:            row.HookStatus,
-			BlockReason:           row.BlockReason,
-			AccountType:           row.AccountType,
-			ViaMetaMcpServerID:    viaGatewayID,
-			ViaMetaMcpServerName:  viaGatewayName,
-			ClientKey:             row.ClientKey,
-			ClientLabel:           row.ClientLabel,
-			ClientVersion:         row.ClientVersion,
+			StartTimeUnixNano:           strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:                    row.LogCount,
+			GramUrn:                     row.GramURN,
+			ToolName:                    row.ToolName,
+			TargetType:                  telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:                  telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:                    row.TargetID,
+			TargetLabel:                 row.TargetLabel,
+			McpServerID:                 conv.PtrEmpty(row.MCPServerID),
+			UserKey:                     row.UserKey,
+			UserLabel:                   row.UserLabel,
+			UserKind:                    telem_gen.ToolUsageUserKind(row.UserKind),
+			AuthorizerUserID:            conv.PtrEmpty(row.AuthorizerUserID),
+			AuthorizerLabel:             conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
+			AuthClientType:              conv.PtrEmpty(credential.AuthClientType),
+			AuthClientID:                conv.PtrEmpty(credential.AuthClientID),
+			ConnectionOwnerUserID:       conv.PtrEmpty(credential.ConnectionOwnerUserID),
+			ConnectionOwnerLabel:        conv.PtrEmpty(ownerNames[credential.ConnectionOwnerUserID]),
+			HookSource:                  row.HookSource,
+			EventSource:                 row.EventSource,
+			HTTPStatusCode:              row.HTTPStatusCode,
+			HookStatus:                  row.HookStatus,
+			BlockReason:                 row.BlockReason,
+			AccountType:                 row.AccountType,
+			ViaMetaMcpServerID:          viaGatewayID,
+			ViaMetaMcpServerName:        viaGatewayName,
+			ViaMetaMcpServerKind:        conv.PtrEmpty(viaGateway.Kind),
+			ViaMetaMcpServerProjectSlug: conv.PtrEmpty(viaGateway.ProjectSlug),
+			ViaMetaMcpServerAgentID:     conv.PtrEmpty(viaGateway.AgentID),
+			ClientKey:                   row.ClientKey,
+			ClientLabel:                 row.ClientLabel,
+			ClientVersion:               row.ClientVersion,
 		}
 		traces = append(traces, trace)
 	}
@@ -4418,7 +4845,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 	}
 }
 
-func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, gatewayNames map[string]string, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
+func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, gatewayLabels map[string]GatewayLabel, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
 	includeHostedServers, includeShadowServers, includeGateways, includeUsers, includeClients := toolUsageFilterOptionTypeSet(optionTypes)
 	if options == nil {
 		return &telem_gen.GetToolUsageFilterOptionsResult{
@@ -4485,13 +4912,13 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 	if includeGateways {
 		// meta_mcp_server_id is client-stamped on the OTLP path; unknown ids are not offered.
 		for _, row := range options.Gateways {
-			name, known := gatewayNames[row.MetaMCPServerID]
+			label, known := gatewayLabels[row.MetaMCPServerID]
 			if !known {
 				continue
 			}
 			gateways = append(gateways, &telem_gen.ToolUsageGatewayFilterOption{
 				MetaMcpServerID: row.MetaMCPServerID,
-				Name:            name,
+				Name:            label.Name,
 				EventCount:      uint64ToInt64(row.EventCount),
 			})
 		}

@@ -116,6 +116,7 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	CatalogChanges *catalogChanges
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -141,9 +142,7 @@ type consentTemplateData struct {
 	RedirectURI        string
 	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
-	// ConsentEnabled gates the "Give Access" button. True when there are no
-	// remote-session challenges, or when at least one challenge has been
-	// completed (a card is Connected). Cancel is always available.
+	// ConsentEnabled gates the "Give Access" button; the service cards, a typed choice or a gateway's inventory decide it.
 	ConsentEnabled bool
 	// ApprovalError blocks approval while keeping Cancel available.
 	ApprovalError *consentApprovalError
@@ -338,6 +337,12 @@ type remoteSessionCard struct {
 	TokenExpiresAt string
 	TokenExpiresIn string
 
+	// Unavailable: an outage on record stops this connection's expired credential being renewed.
+	Unavailable bool
+
+	// UnavailableTunnel: the outage is on a tunnel, which reconnecting also goes through.
+	UnavailableTunnel bool
+
 	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
@@ -390,7 +395,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.Unavailable || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -558,15 +563,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return s.completeFederatedBrowserHandoff(w, r, challengeState)
 	}
 
-	// First-party challenges (minted by ServeFirstPartyConnect) have no
-	// DCR-registered client; the connect page is the dashboard linking the
-	// user's own upstream sessions. Skip the client lookup and label the page
-	// generically.
+	catalogReview := challengeState.CodeReconnect.reviewReady()
+	if catalogReview {
+		challengeState.ClientID = challengeState.CodeReconnect.ClientID
+	}
 	clientName := "Speakeasy"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty || catalogReview {
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -621,10 +626,33 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if outage := r.URL.Query().Get("refresh_unavailable"); outage != "" {
+		for i := range cards {
+			if cards[i].ClientID == outage {
+				cards[i].ValidationNotice = refreshUnavailableNotice
+			}
+		}
+	}
+	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
+		for i := range cards {
+			// An Unavailable card already says so, from stored state.
+			if cards[i].ClientID == unfinished && !cards[i].Unavailable {
+				cards[i].ValidationNotice = validationUnfinishedNotice
+			}
+		}
+	}
 	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
 		for i := range cards {
 			if cards[i].ClientID == limited {
 				cards[i].ValidationNotice = validationLimitedNotice
+			}
+		}
+	}
+	if failed := r.URL.Query().Get("validate_failed"); failed != "" {
+		for i := range cards {
+			// An expired or unconnected card already names its action.
+			if cards[i].ClientID == failed && cards[i].Connected {
+				cards[i].ValidationNotice = noWorkingSignInMessage
 			}
 		}
 	}
@@ -638,6 +666,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	focusServer := ""
 	if endpoint.MetaMcpServerID.Valid {
 		focus := challengeState.FocusServer
+		if catalogReview {
+			focus = ""
+		}
 		if challengeState.CodeReconnect == nil && r.URL.Query().Has("server") {
 			focus = r.URL.Query().Get("server")
 		}
@@ -655,24 +686,28 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	catalogFallback := challengeState.CodeReconnect != nil && r.URL.Query().Get("catalog_reconnect") == "required"
+	if challengeState.CodeReconnect.catalogPending() && !catalogReview && !catalogFallback {
+		for i := range cards {
+			cards[i].Connected = false
+			cards[i].AttachmentReconnect = true
+		}
+	}
+
 	upstreamAuth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, uuid.Nil)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "read upstream credential choices").LogError(ctx, logger)
 	}
 
 	connectedCardCount := 0
-	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
-		if c.Connected || c.ChainCheck == chainCheckConnected {
+		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
+		if (c.Connected && !c.Unavailable) || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
-		}
-		if c.Chained {
-			chainedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -681,7 +716,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Gateway capture below decides whether any member can be approved.
-	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	consentEnabled := gateway != nil || consentCardsApprovable(cards)
 	if upstreamAuth != nil {
 		// The chosen credential decides, not whether some service card is
 		// connected: a shared credential needs no connection at all.
@@ -764,8 +799,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
-	if len(agentOptions) == 0 && autoConnect {
+	if len(agentOptions) == 0 && autoConnect && !catalogFallback && !catalogReview {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
@@ -791,7 +827,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// Modern single-server endpoints offer optional tool selection. Gateways
 	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
-	if !challengeState.FirstParty && focusServer == "" {
+	if (!challengeState.FirstParty || catalogReview) && focusServer == "" {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -800,6 +836,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
+	if catalogFallback {
+		approvalError = &consentApprovalError{Message: "Session expired. Please reconnect.", ActionURL: "", ActionLabel: ""}
+	}
 	if showToolsIsland && gateway != nil {
 		lockedDown, lockErr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if lockErr != nil {
@@ -886,6 +925,23 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 		}
 	}
+	var changes *catalogChanges
+	if catalogReview && approvalError == nil {
+		policy, previous, readErr := s.loadReconnectConnection(ctx, usersessions_repo.New(s.db), endpoint, challengeState, time.Now())
+		if readErr != nil {
+			return readErr
+		}
+		inventory, readErr := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, "", endpointToolSelectionResource(endpoint)))
+		if readErr != nil {
+			return fmt.Errorf("read captured review inventory: %w", readErr)
+		}
+		diff, diffErr := compareCatalogInventory(previous, inventory)
+		if diffErr != nil {
+			return fmt.Errorf("compare tool definitions: %w", diffErr)
+		}
+		changes = &diff
+		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
+	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
 	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
 	var prefillDiscoveryMode metamcp.DiscoveryMode
@@ -937,10 +993,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentEnabled:          consentEnabled,
 		ApprovalError:           approvalError,
 		SelfApprovalError:       selfApprovalError,
-		FirstParty:              challengeState.FirstParty,
+		FirstParty:              challengeState.FirstParty && !catalogReview,
+		CatalogChanges:          changes,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
-		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		AutoClose:               !challengeState.CodeReconnect.catalogPending() && shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
@@ -1031,6 +1088,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
+	catalogReview := challengeState.CodeReconnect.reviewReady()
+	if catalogReview {
+		if action == "deny" {
+			completed := *challengeState.CodeReconnect
+			completed.CatalogComplete = true
+			if err := s.updateCodeReconnect(ctx, challengeState, completed); err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, err := w.Write([]byte("<!doctype html><title>Connection unchanged</title><p>No tool changes were approved. You can close this tab.</p>"))
+			if err != nil {
+				return fmt.Errorf("write cancelled review: %w", err)
+			}
+			return nil
+		}
+		if action != "approve" || r.PostForm.Get("agent_id") != "" {
+			return oops.E(oops.CodeBadRequest, nil, "approve or cancel this gateway review")
+		}
+	}
 	reuse := action == "reuse"
 	if reuse {
 		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {
@@ -1130,7 +1206,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
+				}
+				return outage
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
@@ -1144,7 +1224,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Gateway approval always binds to a complete attempt, including live
 	// discovery: only successfully discovered members may be authorized.
-	materializeGateway := endpoint.MetaMcpServerID.Valid && !challengeState.FirstParty && selectedAgentID == ""
+	materializeGateway := endpoint.MetaMcpServerID.Valid && (!challengeState.FirstParty || catalogReview) && selectedAgentID == ""
 	var boundInventory *consentToolInventory
 	if reuse {
 		boundInventory, err = s.consentReuseInventory(ctx, endpoint, challengeState, r.PostForm.Get("tool_inventory_id"))
@@ -1213,6 +1293,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeBadRequest, nil, "Specific tools requires a cached catalog").LogWarn(ctx, logger)
 		}
 	}
+	if catalogReview {
+		return s.approveCodeReconnect(w, r, endpoint, challengeState, boundInventory, toolSelection, catalogMode)
+	}
 	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"))
 	if err != nil {
 		return err
@@ -1280,14 +1363,27 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
+		if errors.Is(err, errConsentNoUsableConnection) {
+			// Keeps the challenge, so the person can connect and approve.
+			logger.InfoContext(ctx, "consent approval refused", attr.SlogError(err))
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnavailable, err, "read upstream credential choice").LogError(ctx, logger)
 	}
 
+	if err := s.validateDirectConsentInventory(ctx, endpoint, boundInventory, authClientPicks); err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview before approving.").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnavailable, err, "validate consent inventory credential").LogError(ctx, logger)
+	}
+
 	if materializeGateway {
-		reference, err := s.publishConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
+		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
 		if err != nil {
 			if errors.Is(err, errConnectionCatalogTooLarge) {
 				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)
@@ -1377,6 +1473,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
+		Attempt:                     challengeState.connectionAttempt(endpoint),
 		UserSessionIssuerID:         endpoint.UserSessionIssuerID,
 		UserSessionClientID:         clientRow.ID,
 		ClientID:                    challengeState.ClientID,
@@ -1444,11 +1541,7 @@ func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *Resolv
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token")
 	}
-	// First-party challenges have no MCP client to grant to: linking the
-	// cards is terminal, so there is no approve/deny POST. The template
-	// omits the form; reject any crafted submission rather than falling into
-	// the client-grant path with an empty ClientID.
-	if challengeState.FirstParty {
+	if challengeState.FirstParty && !challengeState.CodeReconnect.reviewReady() {
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step")
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
@@ -1571,6 +1664,30 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
+func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (unavailable, tunnel bool) {
+	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutage(ctx, subject, clientID)
+	switch {
+	case !known:
+		// Can't tell, and a green card could auto-close the tab a reconnect link opened.
+		return true, tunnelID.Valid
+	case kind == remotesessions.RefreshOutageTunnel:
+		return true, true
+	case tunnelID.Valid && s.tunnelKnownDown(ctx, tunnelID.UUID):
+		return true, true
+	}
+	return kind == remotesessions.RefreshOutageProvider, false
+}
+
+// tunnelKnownDown reports a route table that answered with no route; a table that can't answer says nothing.
+func (s *Service) tunnelKnownDown(ctx context.Context, tunnelID uuid.UUID) bool {
+	if s.tunnelManager == nil || s.tunnelManager.routes == nil {
+		return false
+	}
+	candidates, err := s.tunnelManager.routes.Candidates(ctx, tunnelID.String())
+	return err == nil && len(candidates) == 0
+}
+
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
 // connected and each probe-capable connection is verified. The runtime gate
@@ -1585,7 +1702,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.Unavailable || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1958,6 +2075,10 @@ func (s *Service) buildRemoteSessionCards(
 		if chained {
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
+		unavailable, unavailableTunnel := false, false
+		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
+			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		requested = slices.Clone(requested)
 		slices.Sort(requested)
@@ -2004,6 +2125,8 @@ func (s *Service) buildRemoteSessionCards(
 			TokenActive:            tokenActive,
 			TokenExpiresAt:         tokenExpiresAt,
 			TokenExpiresIn:         tokenExpiresIn,
+			Unavailable:            unavailable,
+			UnavailableTunnel:      unavailableTunnel,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
 			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,

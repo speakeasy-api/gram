@@ -327,6 +327,39 @@ func BuildBeginPayload(slackDirectoryConnectionsBeginBody string, slackDirectory
 	return v, nil
 }
 
+// BuildSetDefaultProjectPayload builds the payload for the
+// slackDirectoryConnections setDefaultProject endpoint from CLI flags.
+func BuildSetDefaultProjectPayload(slackDirectoryConnectionsSetDefaultProjectBody string, slackDirectoryConnectionsSetDefaultProjectSessionToken string) (*slackdirectoryconnections.SetDefaultProjectPayload, error) {
+	var err error
+	var body SetDefaultProjectRequestBody
+	{
+		err = json.Unmarshal([]byte(slackDirectoryConnectionsSetDefaultProjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsSetDefaultProjectSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsSetDefaultProjectSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.SetDefaultProjectPayload{
+		ID:        body.ID,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDisconnectPayload builds the payload for the slackDirectoryConnections
 // disconnect endpoint from CLI flags.
 func BuildDisconnectPayload(slackDirectoryConnectionsDisconnectBody string, slackDirectoryConnectionsDisconnectSessionToken string) (*slackdirectoryconnections.DisconnectPayload, error) {

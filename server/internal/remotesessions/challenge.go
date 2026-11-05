@@ -49,12 +49,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -70,6 +72,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// TypedAuthorization pins the server, typed client, registration, tenant and
+// subject whose permission started a remote login. It is stored only in trusted
+// login state; callbacks revalidate it before accepting a grant.
+type TypedAuthorization struct {
+	OrganizationID        string             `json:"organization_id"`
+	ProjectID             uuid.UUID          `json:"project_id"`
+	ServerID              uuid.UUID          `json:"server_id"`
+	AuthClientID          uuid.UUID          `json:"auth_client_id"`
+	RemoteSessionClientID uuid.UUID          `json:"remote_session_client_id"`
+	Subject               urn.SessionSubject `json:"subject"`
+}
+
 // ParentChallenge projects the in-flight user-session AuthnChallengeState
 // into the fields the remote leg needs. mcp/ builds this from its
 // AuthnChallengeState; remotesessions/ never imports mcp/.
@@ -83,6 +97,7 @@ import (
 // RouteBase is the surface the parent challenge was minted under. Drives
 // the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
+	TypedAuthorization *TypedAuthorization
 	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
 	ConnectionPopup     bool
 	ID                  string
@@ -123,12 +138,17 @@ type ParentChallenge struct {
 	// from the host holding the parent challenge's callback cookie.
 	BrowserCookieID string
 	BrowserHash     string
+	// Attempt is the connection attempt this login belongs to. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
+	// TypedAuthorization records the exact typed binding that authorized this login.
+	// Absent state always uses the legacy issuer binding check.
+	TypedAuthorization *TypedAuthorization `json:"typed_authorization,omitempty"`
 	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
 	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
@@ -192,12 +212,21 @@ type RemoteLoginState struct {
 	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
 	BrowserHash     string    `json:"browser_hash,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Attempt joins this login to the connection attempt that led to it. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
+	// ResourceMcpServerID is the gateway member this login qualified to.
+	ResourceMcpServerID uuid.NullUUID `json:"resource_mcp_server_id,omitzero"`
+	// ProviderHost is the normalized host of the issuer this login went to.
+	ProviderHost string `json:"provider_host,omitempty"`
+	// RemoteSessionIssuerID is the issuer this login went to.
+	RemoteSessionIssuerID uuid.UUID `json:"remote_session_issuer_id,omitzero"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
 // callback can mint a sibling leg for the same login.
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
+		TypedAuthorization:  s.TypedAuthorization,
 		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
@@ -212,13 +241,34 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
-		// The retry leg reuses the first leg's scopes, so it reads no resource.
-		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Carried so the retry leg's row names the member. Its scopes come from the first leg.
+		ResourceMcpServerID: s.ResourceMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
 		BrowserHash:         s.BrowserHash,
+		Attempt:             s.Attempt,
 	}
+}
+
+// recordSignInStep records the end of a provider sign-in. A login with a final
+// destination ends its attempt here. One returning to consent does not, because
+// the person can still finish connecting.
+func (m *ChallengeManager) recordSignInStep(ctx context.Context, r *http.Request, state RemoteLoginState, what mcpconnectionattempts.Happened, remoteSessionID uuid.UUID) {
+	record := m.connections.Step
+	if state.FinalRedirectURI != "" {
+		record = m.connections.End
+	}
+	record(ctx, state.Attempt, mcpconnectionattempts.StepProviderSignIn, what,
+		mcpconnectionattempts.Provider(state.ProviderHost),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+		mcpconnectionattempts.Member(state.ResourceMcpServerID.UUID),
+		mcpconnectionattempts.RemoteSessionIssuer(state.RemoteSessionIssuerID),
+		mcpconnectionattempts.UserSessionIssuer(state.UserSessionIssuerID),
+		mcpconnectionattempts.RemoteSessionClient(state.RemoteSessionClientID),
+		mcpconnectionattempts.Subject(state.Subject),
+		mcpconnectionattempts.FromRequest(r),
+	)
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -228,15 +278,16 @@ func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	enc       *encryption.Client
-	policy    *guardian.Policy
-	tunnels   *tunnelrouting.HTTPClient
-	cache     cache.TypedCacheObject[RemoteLoginState]
-	locks     cache.Cache
-	refresher *RefreshService
-	serverURL *url.URL
+	connections *mcpconnectionattempts.Recorder
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	enc         *encryption.Client
+	policy      *guardian.Policy
+	tunnels     *tunnelrouting.HTTPClient
+	cache       cache.TypedCacheObject[RemoteLoginState]
+	locks       cache.Cache
+	refresher   *RefreshService
+	serverURL   *url.URL
 
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
@@ -267,7 +318,8 @@ type ChallengeManager struct {
 
 	// privateAuthorityValidator is injected at construction. The callback package
 	// owns state mechanics; the caller owns endpoint resolution.
-	privateAuthorityValidator PrivateAuthorityValidator
+	privateAuthorityValidator   PrivateAuthorityValidator
+	typedAuthorizationValidator TypedAuthorizationValidator
 
 	// idTokens verifies the ID token a code exchange or refresh returns.
 	idTokens IDTokenVerifier
@@ -336,6 +388,30 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 	}
 }
 
+// TypedAuthorizationValidator revalidates the recorded typed binding and
+// subject permission without a remotesessions -> mcp dependency.
+type TypedAuthorizationValidator func(context.Context, RemoteLoginState) error
+
+// WithTypedAuthorizationValidator installs the live typed binding authorizer.
+func WithTypedAuthorizationValidator(validator TypedAuthorizationValidator) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.typedAuthorizationValidator = validator }
+}
+
+// SetTypedAuthorizationValidator wires the owning MCP service before serving requests.
+func (m *ChallengeManager) SetTypedAuthorizationValidator(validator TypedAuthorizationValidator) {
+	m.typedAuthorizationValidator = validator
+}
+
+func (m *ChallengeManager) validateTypedAuthorization(ctx context.Context, state RemoteLoginState) error {
+	if state.TypedAuthorization == nil {
+		return nil
+	}
+	if m.typedAuthorizationValidator == nil {
+		return errors.New("typed authorization validator is unavailable")
+	}
+	return m.typedAuthorizationValidator(ctx, state)
+}
+
 // WithRegistrationAuditLogger records automatic client registration rotations
 // in the organization's audit feed, credited to the system principal.
 func WithRegistrationAuditLogger(auditLogger *audit.Logger) ChallengeManagerOption {
@@ -366,6 +442,11 @@ func WithTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) Chall
 // the server URL.
 func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.origins = origins }
+}
+
+// WithConnectionRecorder records provider sign-in steps. Without it nothing is recorded.
+func WithConnectionRecorder(recorder *mcpconnectionattempts.Recorder) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.connections = recorder }
 }
 
 // WithProtectedResourceProber lets logins read, and when the organization is
@@ -401,6 +482,7 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:          cacheImpl,
+		connections:    nil,
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
@@ -409,18 +491,19 @@ func NewChallengeManager(
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
-		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
-		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
-		protectedResources:        nil,
-		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
-		privateAuthorityValidator: nil,
-		idTokens:                  NoIDTokenVerifier(),
-		enricher:                  nil,
-		auditLogger:               audit.NewLogger(),
-		rotator:                   nil,
-		assertions:                unavailableTokenEndpointAssertionSigner{},
-		clientCredentials:         unconfiguredClientCredentialSource{},
-		clientCredentialBuilder:   nil,
+		metrics:                     remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		scopeMetrics:                remotesessionmetrics.NewScopeResolution(logger, meterProvider),
+		protectedResources:          nil,
+		registrationTelemetry:       registration.NewMetrics(logger, meterProvider),
+		privateAuthorityValidator:   nil,
+		typedAuthorizationValidator: nil,
+		idTokens:                    NoIDTokenVerifier(),
+		enricher:                    nil,
+		auditLogger:                 audit.NewLogger(),
+		rotator:                     nil,
+		assertions:                  unavailableTokenEndpointAssertionSigner{},
+		clientCredentials:           unconfiguredClientCredentialSource{},
+		clientCredentialBuilder:     nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -1013,6 +1096,23 @@ type RemoteSessionState struct {
 	ValidationReason string
 }
 
+// ConnectionOutage reads the outage on record for subject's grant on clientID, and
+// the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
+func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	queries := remotesessions_repo.New(m.db)
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return RefreshOutageNone, none, false
+	}
+	kind, known := m.refresher.RecordedOutage(ctx, sess)
+	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	if err != nil {
+		return kind, none, false
+	}
+	return kind, client.TunneledMcpServerID, known
+}
+
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
 // `subject`'s remote_session on every client bound to the requesting
 // `userSessionIssuerID`. Clients with no non-deleted session are omitted
@@ -1167,6 +1267,11 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	}
 
 	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual)
+}
+
+// DrainRefreshes waits for request-path refreshes that outlived their callers.
+func (m *ChallengeManager) DrainRefreshes(ctx context.Context) error {
+	return m.refresher.DrainRefreshes(ctx)
 }
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its
@@ -1392,6 +1497,7 @@ func (m *ChallengeManager) mintAuthorization(
 	state := RemoteLoginState{
 		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
+		TypedAuthorization:    parent.TypedAuthorization,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
 		OrganizationID:        parent.OrganizationID,
@@ -1421,6 +1527,10 @@ func (m *ChallengeManager) mintAuthorization(
 		BrowserCookieID:       parent.BrowserCookieID,
 		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
+		Attempt:               parent.Attempt,
+		ResourceMcpServerID:   parent.ResourceMcpServerID,
+		ProviderHost:          mcpconnectionattempts.NormalizeProviderHost(client.IssuerURL),
+		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -1495,6 +1605,7 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	result, err := m.CompleteRemoteLogin(r)
 	if err != nil {
+		TagExternalOutage(w, err)
 		return err
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
@@ -1571,6 +1682,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
+			m.recordSignInStep(ctx, r, state, mcpconnectionattempts.CodeProviderDenied, uuid.Nil)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {
@@ -1591,6 +1703,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
+		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
+		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state))
+		}
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1622,6 +1738,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
+	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+	}
+
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
@@ -1632,6 +1752,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
+	// Retain provider metadata before the exchange. An administrative change
+	// while the token endpoint responds must not reinterpret its granted scopes.
+	exchangeIssuer, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+	if err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "load token exchange issuer").LogError(ctx, logger)
+	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
@@ -1660,13 +1786,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	assertionIssuer := state.AssertionIssuer
 	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
 		// Rolling-deploy compatibility: the prior binary could mint a login state
-		// without AssertionIssuer. The scoped client read above established
-		// authority; this id-only joined read only recovers its issuer metadata.
-		joined, jerr := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
-		if jerr != nil {
-			return none, oops.E(oops.CodeUnexpected, jerr, "load the remote session client's assertion issuer").LogError(ctx, logger)
-		}
-		assertionIssuer = clientAssertionIssuer(joined.IssuerMetadata, joined.IssuerUrl)
+		// without AssertionIssuer. Use the pre-exchange issuer metadata.
+		assertionIssuer = clientAssertionIssuer(exchangeIssuer.IssuerMetadata, exchangeIssuer.IssuerUrl)
 	}
 	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
@@ -1687,7 +1808,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		if !exchangeFailureIsProviderOutage(failure, err) {
+			return none, failure
+		}
+		return none, providerOutageError(failure, m.providerLabel(ctx, state))
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1759,7 +1884,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	// RFC 6749 §5.1: a response that omits scope granted exactly what was
 	// requested, so the requested set is what the session records.
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(exchangeIssuer.IssuerUrl)
 	if !tok.ScopeReported() {
 		if jwtAccess.ok() && jwtAccess.scopePresent {
 			scopes = jwtAccess.scopes
@@ -1777,20 +1902,28 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		autoRefresh = *state.AutoRefresh
 	}
 
-	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Speakeasy stores it. The
-	// client-row lock serializes the write against the issuer-delete orphan
-	// cascade, which locks the same row before sweeping the client's
-	// sessions: a callback that acquires the lock after that cascade
-	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke. A rejected
-	// callback leaves the revocation armed above still standing.
+	// Recheck subject permission after the exchange, before taking database
+	// locks. The exact typed binding is then locked through grant commit below.
+	if err := m.validateTypedAuthorization(ctx, state); err != nil {
+		return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid").LogWarn(ctx, logger)
+	}
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
+
+	// Typed writers lock the server before the issuer and registration. Keep
+	// legacy callbacks unchanged, but follow that order for typed logins too.
+	if a := state.TypedAuthorization; a != nil {
+		if _, err := txQueries.LockTypedRemoteLoginServer(ctx, remotesessions_repo.LockTypedRemoteLoginServerParams{McpServerID: a.ServerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return none, oops.E(oops.CodeUnauthorized, err, "typed connection server is no longer valid").LogWarn(ctx, logger)
+			}
+			return none, oops.E(oops.CodeUnexpected, err, "lock typed connection server").LogError(ctx, logger)
+		}
+	}
 
 	// Issuer first, before the client row, so this transaction and an issuer
 	// migration acquire locks in the same order. A login whose issuer was
@@ -1805,28 +1938,51 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
 	}
 
+	// The upstream exchange has already happened, so the token pair exists
+	// either way; this transaction decides whether Speakeasy stores it. The
+	// client-row lock serializes the write against the issuer-delete orphan
+	// cascade, which locks the same row before sweeping the client's
+	// sessions: a callback that acquires the lock after that cascade
+	// committed re-reads the binding as dead and is rejected here, instead
+	// of resurrecting a grant no live issuer can reach or revoke. A rejected
+	// callback leaves the revocation armed above still standing.
+	//
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 
-	// Deliberately the issuer this login started from, not "any live binding
-	// on the client": the consent that produced this code was given on that
-	// issuer's surface, so its deletion ends the login rather than quietly
-	// re-homing the grant onto a sibling the user was never shown. The user
-	// re-authorizes through the surviving surface instead.
-	bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
-		RemoteSessionClientID: state.RemoteSessionClientID,
-		UserSessionIssuerID:   state.UserSessionIssuerID,
-		ProjectID:             state.ProjectID,
-		OrganizationID:        state.OrganizationID,
-	})
-	if err != nil {
-		return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
-	}
-	if !bound {
-		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+	if state.TypedAuthorization != nil {
+		a := state.TypedAuthorization
+
+		if _, err := txQueries.LockTypedRemoteLoginAuthorization(ctx, remotesessions_repo.LockTypedRemoteLoginAuthorizationParams{
+			AuthClientID: a.AuthClientID, OrganizationID: state.OrganizationID, ProjectID: state.ProjectID,
+			RemoteSessionClientID: state.RemoteSessionClientID, McpServerID: a.ServerID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return none, oops.E(oops.CodeUnauthorized, err, "typed connection binding is no longer valid").LogWarn(ctx, logger)
+			}
+			return none, oops.E(oops.CodeUnexpected, err, "lock typed connection binding").LogError(ctx, logger)
+		}
+	} else {
+		// Deliberately the issuer this login started from, not "any live binding
+		// on the client": the consent that produced this code was given on that
+		// issuer's surface, so its deletion ends the login rather than quietly
+		// re-homing the grant onto a sibling the user was never shown. The user
+		// re-authorizes through the surviving surface instead.
+		bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+			RemoteSessionClientID: state.RemoteSessionClientID,
+			UserSessionIssuerID:   state.UserSessionIssuerID,
+			ProjectID:             state.ProjectID,
+			OrganizationID:        state.OrganizationID,
+		})
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
+		}
+		if !bound {
+			return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+		}
 	}
 
 	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
@@ -1860,6 +2016,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
+	m.recordSignInStep(ctx, r, state, mcpconnectionattempts.ResultSignedIn, storedSession.ID)
 
 	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 	if err != nil {
@@ -1959,6 +2116,46 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 	)
 }
 
+// ErrProviderOutageExternal marks a provider-caused 5xx at sign-in that shouldn't alert on-call.
+var ErrProviderOutageExternal = errors.New("sign-in provider outage")
+
+// TagExternalOutage marks the response to err as caused outside Speakeasy.
+func TagExternalOutage(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrProviderOutageExternal) {
+		w.Header().Set(constants.HeaderProxiedResponse, "1")
+	}
+}
+
+// providerOutageError presents a provider outage as one to try again shortly.
+func providerOutageError(err *oops.ShareableError, provider string) error {
+	presented := oops.WithBrowserProvider(oops.WithBrowserReason(err, oauthui.ReasonProviderUnavailable), provider)
+	return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
+}
+
+// providerLabel is the issuer's host; a tunneled provider's host stays off the page.
+func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginState) string {
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, state.RemoteSessionClientID)
+	if err != nil || row.TunneledMcpServerID.Valid {
+		return ""
+	}
+	parsed, err := url.Parse(row.IssuerUrl)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
+func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return false
+	}
+	if _, signing := errors.AsType[*tokenEndpointSigningError](err); signing {
+		return false
+	}
+	return failure.Code == oops.CodeUnavailable || failure.Code == oops.CodeGatewayError
+}
+
 // retryWithoutResource mints one resource-less leg of the same login after
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
@@ -1974,7 +2171,16 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
-	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
+	var clients []Client
+	var err error
+	if state.TypedAuthorization != nil {
+		if err = m.validateTypedAuthorization(ctx, state); err != nil {
+			return none, oops.E(oops.CodeUnauthorized, err, "typed connection authorization is no longer valid")
+		}
+		clients, err = m.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})
+	} else {
+		clients, err = m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
+	}
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
 	}
@@ -2123,6 +2329,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
 		}
+		if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+			reason = "Speakeasy could not read the MCP tunnel's routes"
+		}
 		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2156,12 +2365,30 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 }
 
+// exchangeRefusalCodes judge the request, so they stay a refusal under any status; other codes leave it to the status.
+var exchangeRefusalCodes = map[string]bool{
+	oautherr.CodeAccessDenied:         true,
+	oautherr.CodeInvalidClient:        true,
+	oautherr.CodeInvalidGrant:         true,
+	oautherr.CodeInvalidRequest:       true,
+	oautherr.CodeInvalidScope:         true,
+	oautherr.CodeInvalidTarget:        true,
+	oautherr.CodeUnauthorizedClient:   true,
+	oautherr.CodeUnsupportedGrantType: true,
+}
+
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
-	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+	case oauthCode == oautherr.CodeTemporarilyUnavailable:
 		return oops.CodeUnavailable
-	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+	case oauthCode == oautherr.CodeServerError:
+		return oops.CodeGatewayError
+	case exchangeRefusalCodes[oauthCode]:
+		return oops.CodeUnauthorized
+	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
+		return oops.CodeUnavailable
+	case status >= http.StatusInternalServerError:
 		return oops.CodeGatewayError
 	default:
 		return oops.CodeUnauthorized

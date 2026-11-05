@@ -6,9 +6,44 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
+
+func TestConnectionRouteFailure(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m"}
+	for _, tc := range []struct {
+		name         string
+		err          error
+		want         string
+		instructions string
+		canConnect   bool
+	}{
+		{name: "outage with no connection behind it", err: metaMemberClientCredentialError(member, remotesessions.ErrRemoteSessionUnavailable), want: "unreachable", instructions: "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support.", canConnect: true},
+		{name: "not connected", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required", instructions: "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution.", canConnect: true},
+		{name: "not connected, and tools.connect isn't offered", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required", instructions: "This server needs a sign-in, which can't be started from here. Ask your administrator.", canConnect: false},
+		{name: "grant gone", err: remotesessions.ErrNoValidToken, want: "reauth_required", instructions: "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution.", canConnect: true},
+		{name: "misconfigured", err: metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured), want: "unknown", instructions: "Connection verification could not complete; try again later.", canConnect: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, instructions := connectionRouteFailure(tc.err, tc.canConnect)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.instructions, instructions)
+		})
+	}
+}
+
+func TestConnectionRouteFailureSelfCredentialOffersNoConnect(t *testing.T) {
+	t.Parallel()
+
+	got, instructions := connectionRouteFailure(metaMemberClientCredentialError(metaMember{slug: "m"}, remotesessions.ErrClientCredentialUnavailable), true)
+	require.Equal(t, "unreachable", got)
+	require.NotContains(t, instructions, "tools.connect")
+}
 
 func TestCodeVerificationLimiterFailureIsNotAThrottle(t *testing.T) {
 	t.Parallel()

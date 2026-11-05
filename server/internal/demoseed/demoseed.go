@@ -63,8 +63,9 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	const lockName = "gram-demo-seed"
-	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
+	lockQueries := repo.New(conn)
+	locked, err := lockQueries.TryAcquireSeedLock(ctx, lockName)
+	if err != nil {
 		// Cancellation can surface after PostgreSQL acquired the session lock.
 		// Destroy the uncertain session instead of returning it to the pool.
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
@@ -82,8 +83,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
 		defer cancel()
 
-		var unlocked bool
-		unlockErr := conn.QueryRow(unlockCtx, "SELECT pg_advisory_unlock(hashtext($1))", lockName).Scan(&unlocked)
+		unlocked, unlockErr := lockQueries.ReleaseSeedLock(unlockCtx, lockName)
 		if unlockErr == nil && unlocked {
 			conn.Release()
 			return

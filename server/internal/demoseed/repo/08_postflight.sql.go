@@ -52,6 +52,25 @@ func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountAgentOnlyDeviceSyncs = `-- name: PostflightCountAgentOnlyDeviceSyncs :one
+SELECT count(*)
+FROM device_agent_device_syncs d
+WHERE d.organization_id = $1::text
+  AND NOT EXISTS (
+    SELECT 1 FROM mdm_devices m
+    WHERE m.organization_id = d.organization_id
+      AND LOWER(m.serial_number) = LOWER(d.serial_number)
+  )
+`
+
+// Machines only their agents list: serials no MDM device holds.
+func (q *Queries) PostflightCountAgentOnlyDeviceSyncs(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAgentOnlyDeviceSyncs, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountApprovals = `-- name: PostflightCountApprovals :one
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -145,8 +164,9 @@ const postflightCountDeviceAgentStateReports = `-- name: PostflightCountDeviceAg
 SELECT count(*) FROM device_agent_state_reports WHERE organization_id = $1::text
 `
 
-// State reports: one attested machine and one enforcing an older policy.
-// Without them every active device reads unreported.
+// State reports: three attested machines (one only its agent lists, one a
+// Windows desktop that reports no serial) and one enforcing an older policy. Without them every active device reads
+// unreported.
 func (q *Queries) PostflightCountDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountDeviceAgentStateReports, orgID)
 	var count int64
@@ -253,6 +273,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = $1::text AND project_id <> $2::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
 ) x
 `
 
@@ -733,6 +755,19 @@ func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightCountMCPReviews = `-- name: PostflightCountMCPReviews :one
+SELECT count(*) FROM mcp_approval_requests
+WHERE organization_id = $1::text AND deleted IS FALSE AND status = 'requested'
+`
+
+// The MCP reviews queue needs its one seeded request awaiting a decision.
+func (q *Queries) PostflightCountMCPReviews(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPReviews, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountMCPSkillLinks = `-- name: PostflightCountMCPSkillLinks :one
 SELECT count(*)
 FROM mcp_skill_links l
@@ -944,6 +979,18 @@ WHERE m.project_id = $1::uuid AND m.deleted IS TRUE
 
 func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountRemovedGatewayMembers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountSecurityAuditLogs = `-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = $1::text
+`
+
+func (q *Queries) PostflightCountSecurityAuditLogs(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountSecurityAuditLogs, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

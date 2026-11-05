@@ -249,6 +249,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		)
 		if refreshErr != nil {
 			switch {
+			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
+				logger.WarnContext(ctx, "manual refresh did not finish", attr.SlogError(refreshErr))
+				http.Redirect(w, r, backURL+"&refresh_unavailable="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+				return nil
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
@@ -270,9 +274,17 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			return cerr
 		}
 		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		// A notice lives on the cards, which saved consent's short page doesn't show.
+		noticeURL := backURL + "&consent=required"
 		switch {
 		case errors.Is(err, errValidationRateLimited):
-			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errRemoteSessionNoUsableCredential):
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errValidationUnfinished):
+			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
 			return err
@@ -393,7 +405,18 @@ func (s *Service) buildRemoteConnectURL(
 	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
 		loginProjectID = resourceMember.projectID
 	}
+	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
+	if err != nil {
+		if errors.Is(err, errTypedLoginDenied) {
+			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		}
+		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
+	}
+	if typedAuthorization != nil {
+		loginProjectID = typedAuthorization.ProjectID
+	}
 	parent := remotesessions.ParentChallenge{
+		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,
@@ -413,6 +436,7 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
+		Attempt:             challengeState.connectionAttempt(endpoint),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)

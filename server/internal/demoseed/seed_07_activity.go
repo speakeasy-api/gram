@@ -60,6 +60,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := s.q.ActivityDeleteAuditLogs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo audit logs: %w", err)
 	}
+	if err := s.q.ActivityDeleteSecurityAuditLogs(ctx, org); err != nil {
+		return fmt.Errorf("delete demo security audit logs: %w", err)
+	}
 	for i := 12; i >= 1; i-- {
 		u := demoUsers[i%6]
 		subject := "Acme Support Tools"
@@ -220,14 +223,14 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return fmt.Errorf("insert demo claude tag session link: %w", err)
 	}
 
-	// One dashboard session per assistant: the bound one names its agent and the
-	// member it acted for; the legacy one links to the assistant itself.
-	sessions := []struct{ fixture, title string }{
-		{"bound", "Weekly project activity summary"},
-		{"legacy", "Open risk findings recap"},
+	// The Slackbot session names its agent and the member it acted for; the
+	// legacy dashboard session links to the assistant itself.
+	sessions := []struct{ fixture, title, surface string }{
+		{"bound", "Weekly project activity summary from Slack", "speakeasy-slack"},
+		{"legacy", "Open risk findings recap", ""},
 	}
 	for _, sess := range sessions {
-		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, activityNull, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
+		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, pgtype.Text{String: sess.surface, Valid: sess.surface != ""}, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
 			return err
 		}
 	}
@@ -249,11 +252,16 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}
 	}
 	for _, fixture := range []string{"bound", "legacy"} {
+		sourceKind := "dashboard"
+		if fixture == "bound" {
+			sourceKind = "speakeasy_slack"
+		}
 		if err := s.q.ActivityInsertAssistantThread(ctx, repo.ActivityInsertAssistantThreadParams{
 			ID:            s.det("assistant-thread-" + fixture),
 			AssistantID:   s.det("assistant-" + fixture),
 			ProjectID:     proj,
-			CorrelationID: "demo-dashboard-" + fixture,
+			CorrelationID: "demo-" + sourceKind + "-" + fixture,
+			SourceKind:    sourceKind,
 			ChatID:        s.det("assistant-session-" + fixture),
 		}); err != nil {
 			return fmt.Errorf("insert demo assistant thread %s: %w", fixture, err)
@@ -327,6 +335,37 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		SubjectID:      s.det("killswitch-expired").String(),
 	}); err != nil {
 		return fmt.Errorf("insert demo killswitch expired audit log: %w", err)
+	}
+
+	// Security activity: managed-agent-4's runtime admits and withdraws its
+	// workload identity on each start and teardown, with one admission by
+	// another agent in between, so the feed shows both a grouped run and a
+	// lone entry. Inserted oldest first, since the feed orders by insertion.
+	securityRows := []struct {
+		key, agent, runtime, action string
+		age                         pgtype.Interval
+	}{
+		{"runtime-1-admit", "managed-agent-4", "runtime-1", "workload-admission:admit", activityHours(9)},
+		{"runtime-1-withdraw", "managed-agent-4", "runtime-1", "workload-admission:withdraw", activityHours(7)},
+		{"runtime-2-admit", "managed-agent-1", "runtime-2", "workload-admission:admit", activityHours(6)},
+		{"runtime-3-admit", "managed-agent-4", "runtime-3", "workload-admission:admit", activityHours(5)},
+		{"runtime-3-withdraw", "managed-agent-4", "runtime-3", "workload-admission:withdraw", activityHours(3)},
+		{"runtime-4-admit", "managed-agent-4", "runtime-4", "workload-admission:admit", activityHours(2)},
+	}
+	for _, r := range securityRows {
+		account := s.det("security-" + r.runtime + "-account")
+		if err := s.q.ActivityInsertSecurityAuditLog(ctx, repo.ActivityInsertSecurityAuditLogParams{
+			ID:                 s.det("audit-security-" + r.key),
+			OrganizationID:     org,
+			ProjectID:          proj,
+			ActorID:            s.det(r.agent).String(),
+			Action:             r.action,
+			SubjectID:          s.det("security-" + r.runtime + "-admission").String(),
+			SubjectDisplayName: fmt.Sprintf("system:serviceaccount:assistants:kit-%x", account[:8]),
+			Age:                r.age,
+		}); err != nil {
+			return fmt.Errorf("insert demo security audit log %s: %w", r.key, err)
+		}
 	}
 
 	// Spend rules calibrated to the seeded ClickHouse usage (top spenders in

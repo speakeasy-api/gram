@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
 )
 
 // metaCodeBackend retains admission identity; the runner cannot choose routing
@@ -178,7 +179,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 		return ctx, nil, nil, b.revoke()
 	}
 	// The authenticated reference is unchanged, so reuse this execution's
-	// immutable consent record without another Redis read or upstream discovery.
+	// consent snapshot without another Redis read or upstream discovery.
 	expired := b.gate.catalogRecoveryOnly || (b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt))
 	if expired && !recovery {
 		return ctx, nil, nil, codemode.ErrConsentRequired
@@ -189,7 +190,11 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	if expired {
 		gate.catalog = nil
 	}
-	gate.execute = execute
+	// Helpers read the live choice so they agree with a call, and write nothing.
+	gate.execute = true
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = !execute || recovery
+	}
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)
 	if err != nil {
@@ -219,10 +224,14 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	return ctx, gate, permitted, nil
 }
 
-// codeHelperFailure keeps a member that needs a new consent distinguishable
-// from one that is merely unavailable.
-func codeHelperFailure(err error) error {
-	if _, consent := errors.AsType[catalogConsentError](err); consent {
+// helperFailure keeps a member that needs a new consent, or someone else's fix,
+// distinguishable from one that is merely unavailable.
+func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+		message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: reconnect}
+	}
+	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired
 	}
 	return codemode.ErrToolUnavailable
@@ -282,9 +291,9 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	result := &codemode.Catalog{Tools: make([]codemode.Tool, 0, len(catalog.entries)), Incomplete: catalog.incomplete}
 	for _, entry := range catalog.entries {
@@ -297,6 +306,21 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 		result.Tools = append(result.Tools, codemode.Tool{Path: path, Name: entry.Name, Description: entry.Description, Definition: definition, Fingerprint: codeToolFingerprint(member, definition)})
 	}
 	return result, nil
+}
+
+// describe loads a member's catalog over the execution's shared sessions,
+// retrying a transient failure as a Direct listing does. The catalog host
+// already bounds concurrent member listings, so this describe takes its own
+// slot, and a member waiting to retry keeps the host's.
+func (b *metaCodeBackend) describe(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
+	described := b.service.describeMetaMemberWithRetry(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member, semaphore.NewWeighted(1))
+	if described.err != nil {
+		return nil, described.err
+	}
+	if described.catalog == nil {
+		return nil, codemode.ErrToolUnavailable
+	}
+	return described.catalog, nil
 }
 
 func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.Tool, error) {
@@ -312,9 +336,12 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+			b.service.noteStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		}
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {
@@ -351,7 +378,11 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	callGate := *gate
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
-			if _, consent := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, &callGate, member)); consent {
+			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
+				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
+				return nil, b.helperFailure(ctx, &callGate, member, stale)
+			}
+			if needsNewConsent(b.service.validateCatalogMember(ctx, &callGate, member)) {
 				return nil, codemode.ErrConsentRequired
 			}
 		}
@@ -402,9 +433,10 @@ type metaCodeInvocationKey struct{}
 // One invocation owns this state; it is never shared across parallel callbacks.
 type metaCodeInvocation struct {
 	dispatched bool
-	// rejected marks a call refused unexecuted for a reason the program can
-	// fix: the member's own unknown-tool or invalid-params error, a hosted
-	// lookup refusal before dispatch, or hosted input-schema validation.
+	// rejected marks a call refused unexecuted: the member's own unknown-tool
+	// or invalid-params error, a hosted lookup refusal before dispatch, hosted
+	// input-schema validation, or a stale no-auth choice. A program can fix
+	// all but the stale choice.
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string

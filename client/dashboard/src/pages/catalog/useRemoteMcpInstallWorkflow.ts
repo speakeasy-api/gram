@@ -6,12 +6,14 @@ import {
 } from "@/lib/mcpEndpoints";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import {
+  useCatalogInstallations,
+  type CatalogServer,
+} from "@/pages/catalog/hooks";
 import {
   collectibleHeaders,
   getRemoteDisplayInfo,
   isFigmaCatalogServer,
-  normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import {
   configureCreatedRemoteMcpIdentity,
@@ -29,16 +31,10 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import {
-  invalidateAllRemoteMcpServers,
-  useRemoteMcpServers,
-} from "@gram/client/react-query/remoteMcpServers.js";
+import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import {
-  invalidateAllUnproxiedMcpServers,
-  useUnproxiedMcpServers,
-} from "@gram/client/react-query/unproxiedMcpServers.js";
+import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,9 +44,7 @@ import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import {
   buildServerGuardrailRequest,
   catalogPresetState,
-  isDestructiveTool,
   type ServerGuardrailState,
-  type ServerTool,
 } from "@/pages/security/server-guardrails/server-guardrail-policy";
 
 export const ISSUER_LOOKUP_FAILED_MESSAGE =
@@ -64,7 +58,7 @@ type InstallPhaseName =
   | "complete";
 
 export interface ServerConfig {
-  server: PulseMCPServer;
+  server: CatalogServer;
   name: string;
   /** Remote endpoints to install — one remote MCP server is created per URL. */
   remotes: ExternalMCPRemote[];
@@ -78,7 +72,7 @@ export interface ServerConfig {
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
 interface MultiRemoteServerConfig {
-  server: PulseMCPServer;
+  server: CatalogServer;
   name: string;
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
@@ -93,7 +87,7 @@ export interface ServerInstallStatus {
   key: string;
   name: string;
   /** The catalog entry this server was installed from, for its logo. */
-  server?: PulseMCPServer;
+  server?: CatalogServer;
   status: "pending" | "creating" | "completed" | "failed";
   /** mcp_servers row id — used by callers that bundle installs (e.g. plugins). */
   mcpServerId?: string;
@@ -108,6 +102,9 @@ export interface ServerInstallStatus {
    * that tally results, but the dialog shows it as a next step, not an error.
    */
   setupRequired?: string;
+  identityMode?: RemoteMcpCreationIdentity;
+  /** Exact remote endpoint selected for this installed server. */
+  remoteUrl?: string;
 }
 
 interface WorkflowBase {
@@ -117,7 +114,7 @@ interface WorkflowBase {
    * catalog server's endpoint URLs. Informational only — installing again just
    * creates another server.
    */
-  isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
+  isServerAlreadyInstalled: (server: CatalogServer) => boolean;
   reset: () => void;
 }
 
@@ -181,14 +178,12 @@ export interface GuardrailServerSummary {
   name: string;
   registrySpecifier: string;
   iconUrl?: string;
-  toolCount: number;
-  destructiveTools: string[];
   oauth: boolean;
 }
 
 export interface GuardrailsPhase extends WorkflowBase {
   phase: "guardrails";
-  /** The guardrail being drafted, pre-filled from the servers' tool annotations. */
+  /** The guardrail being drafted, pre-filled with the catalog preset. */
   guardrail: ServerGuardrailState;
   updateGuardrail: (
     update: (state: ServerGuardrailState) => ServerGuardrailState,
@@ -231,7 +226,7 @@ export type RemoteMcpInstallWorkflow =
   | CompletePhase;
 
 interface UseRemoteMcpInstallWorkflowOptions {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   projectSlug?: string;
   serverNameSuffix?: string;
   /**
@@ -255,7 +250,7 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
 }
 
 function buildServerConfig(
-  server: PulseMCPServer,
+  server: CatalogServer,
   serverNameSuffix = "",
 ): ServerConfig {
   return {
@@ -275,7 +270,7 @@ function buildServerConfig(
  * tellable apart.
  */
 interface InstallTarget {
-  server: PulseMCPServer;
+  server: CatalogServer;
   remote: ExternalMCPRemote;
   name: string;
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
@@ -451,35 +446,13 @@ export function useRemoteMcpInstallWorkflow({
   const issuerQuery = useEffectiveUserSessionIssuers({});
   const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
-  // Informational "already installed" signal: a remote MCP server with a
-  // matching URL already exists in the target project. Unproxied servers
-  // (e.g. Figma, installed via installUnproxiedTarget) live in a separate
-  // resource entirely, so their URLs are checked alongside the remote ones.
-  const { data: remoteServersData } = useRemoteMcpServers(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
-  const { data: unproxiedServersData } = useUnproxiedMcpServers(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
-  const installedUrls = useMemo(
-    () =>
-      new Set(
-        [
-          ...(remoteServersData?.remoteMcpServers ?? []),
-          ...(unproxiedServersData?.unproxiedMcpServers ?? []),
-        ].map((server) => normalizeRemoteUrl(server.url)),
-      ),
-    [
-      remoteServersData?.remoteMcpServers,
-      unproxiedServersData?.unproxiedMcpServers,
-    ],
-  );
+  // Same check as the catalog card, including toolset-backed installs.
+  // Use the workflow's project when the caller is installing somewhere other
+  // than the route's project.
+  const { installState } = useCatalogInstallations(projectSlug);
   const isServerAlreadyInstalled = useCallback(
-    (server: PulseMCPServer) =>
-      (server.remotes ?? []).some((remote) =>
-        installedUrls.has(normalizeRemoteUrl(remote.url)),
-      ),
-    [installedUrls],
+    (server: CatalogServer) => installState(server) === "added",
+    [installState],
   );
 
   const [phase, setPhase] = useState<InstallPhaseName>("configure");
@@ -963,6 +936,8 @@ export function useRemoteMcpInstallWorkflow({
             result.identityConfiguration?.status === "setup-required";
           setStatusAt(index, {
             status: identitySetupRequired ? "failed" : "completed",
+            identityMode: target.identityMode,
+            remoteUrl: target.remote.url,
             mcpServerId: result.mcpServer.id,
             mcpServerParam: mcpServerRouteParam(result.mcpServer),
             mcpEndpointUrl: result.mcpEndpointUrl,
@@ -1093,16 +1068,10 @@ export function useRemoteMcpInstallWorkflow({
     (options?: { configureSkipped?: boolean }) => {
       if (!canInstall || phaseRef.current !== "configure") return;
       setConfigureSkipped(options?.configureSkipped === true);
-      setGuardrail(
-        catalogPresetState(
-          serverConfigs
-            .filter((config) => !isFigmaCatalogServer(config.server))
-            .flatMap((config) => serverToolsForPreset(config.server)),
-        ),
-      );
+      setGuardrail(catalogPresetState([]));
       setPhase("guardrails");
     },
-    [canInstall, serverConfigs],
+    [canInstall],
   );
 
   const backToConfigure = useCallback(() => {
@@ -1181,37 +1150,13 @@ export function useRemoteMcpInstallWorkflow({
 }
 
 function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
-  const tools = serverToolsForPreset(config.server);
   return {
     key: config.server.registrySpecifier,
     name: config.name,
     registrySpecifier: config.server.registrySpecifier,
     ...(config.server.iconUrl ? { iconUrl: config.server.iconUrl } : {}),
-    toolCount: tools.length || config.server.toolCount,
-    destructiveTools: tools
-      .filter((tool) => tool.destructive)
-      .map((tool) => tool.name),
     oauth: supportsAutomaticOAuth(config.server),
   };
-}
-
-/** The annotated tools of a catalog server, for pre-filling its guardrail.
- *  Empty until the catalog detail enrichment has loaded them. */
-function serverToolsForPreset(server: PulseMCPServer): ServerTool[] {
-  return (server.tools ?? []).flatMap((tool) =>
-    tool.name
-      ? [
-          {
-            name: tool.name,
-            destructive: isDestructiveTool(
-              tool.annotations as
-                | { destructiveHint?: boolean; readOnlyHint?: boolean }
-                | undefined,
-            ),
-          },
-        ]
-      : [],
-  );
 }
 
 /** One guardrail covers every server in the install, so the name names the

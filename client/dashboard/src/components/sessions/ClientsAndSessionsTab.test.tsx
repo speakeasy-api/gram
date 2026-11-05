@@ -70,18 +70,6 @@ vi.mock("@/components/ui/MoreActions", () => ({
   ),
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      href: () => "/identities",
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}` },
-        access: { href: (urn: string) => `/identities/${urn}/access` },
-      },
-    },
-  }),
-}));
-
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
     canAccess: true,
@@ -134,6 +122,7 @@ vi.mock("./RevokeClientDialog", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: listAgents } }),
   useProjectSlugForRequests: () => "project-1",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-1" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -377,7 +366,7 @@ describe("ClientsAndSessionsTab", () => {
       (
         await screen.findByRole("link", { name: /Killswitch active/ })
       ).getAttribute("href"),
-    ).toBe("/identities/user%3Au1/access");
+    ).toBe("/org/projects/project-1/identities/user%3Au1/access");
     expect(screen.getByText("View killswitches")).toBeDefined();
     fireEvent.click(screen.getByText("New killswitch…"));
     expect(revokeSessionMutate).not.toHaveBeenCalled();
@@ -387,7 +376,7 @@ describe("ClientsAndSessionsTab", () => {
         .getByRole("link", { name: "New killswitch…" })
         .getAttribute("href"),
     ).toBe(
-      "/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
+      "/org/projects/project-1/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
     );
   });
 
@@ -430,7 +419,9 @@ describe("ClientsAndSessionsTab", () => {
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
     const link = await screen.findByRole("link", { name: "Release assistant" });
-    expect(link.getAttribute("href")).toBe("/identities/agent%3Aagent-1");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project-1/identities/agent%3Aagent-1/overview",
+    );
     expect(listAgents).toHaveBeenCalledTimes(1);
     fireEvent.click(
       screen.getByRole("button", { name: "Expand Release assistant" }),

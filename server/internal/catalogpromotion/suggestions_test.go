@@ -22,6 +22,21 @@ func TestSuggestedMetadataUsesObservedResource(t *testing.T) {
 	require.Empty(t, result.Description)
 }
 
+func TestSuggestedMetadataReusesTheGuideForADocumentedEndpoint(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Team Chat Tools", Url: "https://mcp.slack.com/mcp"})
+	require.Equal(t, "slack", result.DocsSlug)
+	require.Equal(t, "com.slack.mcp/team-chat-tools", result.Name, "the registry name still comes from the title")
+}
+
+func TestSuggestedMetadataFallsBackToTheTitleSlugWithoutAGuide(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Slack", Url: "https://mcp.example.com/mcp"})
+	require.Equal(t, "slack", result.DocsSlug, "a title that happens to match a guide is still only a title")
+	result = suggestedMetadata(repo.GetSourceRow{ResourceName: "Team Chat Tools", Url: "https://mcp.example.com/mcp"})
+	require.Equal(t, "team-chat-tools", result.DocsSlug)
+}
+
 func TestSuggestedMetadataOmitsUnsafeEndpoints(t *testing.T) {
 	t.Parallel()
 	for _, endpoint := range []string{"https://mcp.example.com/mcp?token=EXAMPLE", "https://user:EXAMPLE@mcp.example.com/mcp", "https://mcp.example.com/mcp#EXAMPLE", "https://mcp.example.com/private/EXAMPLE", "https://mcp.example.com/%6dcp", "http://mcp.example.com/mcp", "https://127.0.0.1/mcp"} {

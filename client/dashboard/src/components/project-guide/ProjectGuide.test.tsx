@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { ProjectGuideRun } from "./ProjectGuideRun";
@@ -59,11 +60,6 @@ vi.mock("./projectGuideStores", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => slugs.current,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    home: { href: () => "/org/projects/project-guide-test" },
-  }),
-}));
 
 vi.mock("./useMcpGuideOperations", () => ({
   MCP_GUIDE_CLIENTS: ["claude", "codex", "cursor"],
@@ -79,7 +75,8 @@ vi.mock("./useSecretGuideOperations", () => ({
   useSecretGuideOperations: () => secretOperations.current,
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({
     children,
     to,
@@ -100,9 +97,11 @@ import { ProjectGuide } from "./ProjectGuide";
 function render(ui: React.ReactNode) {
   return baseRender(ui, {
     wrapper: ({ children }) => (
-      <ConfigProvider theme="light" setTheme={() => undefined}>
-        {children}
-      </ConfigProvider>
+      <MemoryRouter>
+        <ConfigProvider theme="light" setTheme={() => undefined}>
+          {children}
+        </ConfigProvider>
+      </MemoryRouter>
     ),
   });
 }
@@ -132,7 +131,6 @@ const catalogServer = {
   version: "1.0.0",
   title: "Linear",
   meta: {},
-  toolCount: 2,
   isReadOnly: true,
   supportsDcr: true,
   remotes: [
@@ -385,7 +383,7 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+        "The catalog lists curated MCP servers. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
     expect(
@@ -482,7 +480,7 @@ describe("ProjectGuide", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: /Linear.*2 tools/,
+          name: "Linear",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -1514,7 +1512,7 @@ describe("ProjectGuide", () => {
       screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Linear.*2 tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Linear" }));
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );

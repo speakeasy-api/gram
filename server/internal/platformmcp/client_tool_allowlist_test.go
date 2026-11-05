@@ -113,6 +113,9 @@ func TestRuntimeInitializeDropsInstructionsForToolsHiddenFromChatGPT(t *testing.
 	allowlistRPC(t, handler, runtime, testOtherClientID, initialize, &other)
 
 	require.Contains(t, other.Instructions, "distribute_mcp_to_plugin", "other clients keep every instruction")
+	require.Contains(t, other.Instructions, "When a user asks to create or share a session handoff link")
+	require.Contains(t, other.Instructions, "concise numbered chooser")
+	require.Contains(t, other.Instructions, "exact clamped lifetime")
 	require.Less(t, len(chatGPT.Instructions), len(other.Instructions))
 	require.Contains(t, chatGPT.Instructions, "attach_platform_mcp_identity_provider", "golden-path guidance stays")
 	require.Contains(t, chatGPT.Instructions, "no plugin is needed for that", "self-serve guidance stays")

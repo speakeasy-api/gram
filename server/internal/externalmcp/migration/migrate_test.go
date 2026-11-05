@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -400,4 +401,38 @@ func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
 			require.Empty(t, endpoints)
 		})
 	}
+}
+
+// TestRunRecordsTypedAuthClientsForCopiedHeaders proves the migration leaves no
+// typed work behind: the credential headers it copies onto the new source are
+// modelled as auth clients in the same transaction, so the migrated server
+// offers them without waiting for the offline backfill.
+func TestRunRecordsTypedAuthClientsForCopiedHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{
+		slug: "typed-headers", remoteURL: "https://mcp.example.com/mcp", requiresOAuth: false,
+		headers: []byte(`[{"name":"Authorization","isSecret":true}]`),
+	})
+	require.NoError(t, repo.New(ti.conn).SeedToolsetEnvironmentFixture(ctx, repo.SeedToolsetEnvironmentFixtureParams{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, Slug: "typed-headers-env",
+		EntryName: "FIXTURE_TOKEN", EntryValue: "stored-value", ToolsetID: server.toolset.ID,
+	}))
+
+	outcomes := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+
+	offered, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, outcomes[0].McpServerID)
+	require.NoError(t, err)
+	require.NotEmpty(t, offered,
+		"the copied credential headers are offered through a typed auth client")
+	types := make([]string, 0, len(offered))
+	for _, id := range offered {
+		row, err := authclientbackfill.New(ti.conn).GetAuthClientFixture(ctx, id)
+		require.NoError(t, err)
+		types = append(types, row.ClientType)
+	}
+	require.Contains(t, types, "pass_through",
+		"the copied request header is modelled as a pass-through credential")
 }

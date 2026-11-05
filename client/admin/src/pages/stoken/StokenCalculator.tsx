@@ -536,12 +536,12 @@ function MethodSection(): JSX.Element {
         </p>
       </div>
 
-      <p className="flex flex-wrap items-baseline gap-3 border-t pt-4 text-sm">
+      <div className="flex flex-wrap items-baseline gap-3 border-t pt-4 text-sm">
         <SectionIndex>Anthropic example</SectionIndex>
         <code className="font-mono">
           120M provider tokens at R = 1.20–1.60 → 25M–50M s-tokens.
         </code>
-      </p>
+      </div>
 
       <p className="border-t pt-4 text-sm font-medium">
         Quote estimate, not measured usage. This band combines the outer

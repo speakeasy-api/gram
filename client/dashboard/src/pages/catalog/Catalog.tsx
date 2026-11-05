@@ -11,13 +11,12 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  type PulseMCPServer,
-  useIsCatalogServerInstalled,
+  type CatalogServer,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import { McpTabs } from "@/pages/mcp/McpTabs";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
@@ -41,7 +40,6 @@ import { ServerTableRow } from "./ServerTableRow";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "popular", label: "Most Popular" },
   { value: "recent", label: "Recently Released" },
   { value: "updated", label: "Last Updated" },
   { value: "alphabetical", label: "A → Z" },
@@ -106,10 +104,9 @@ function CatalogInner() {
     }
   };
 
-  // Category + sort stay page state (no UI to change category today; sort is the
-  // SortDropdown). The five granular filters now run through the unified filter
-  // system, which reads/writes the same URL params, so existing links keep
-  // working. We bridge its value object back to the catalog's `FilterValues`
+  // Sort stays page state (the SortDropdown). The granular filters run through
+  // the unified filter system, which reads/writes the same URL params, so
+  // existing links keep working. We bridge its value object back to the catalog's `FilterValues`
   // shape so `filterAndSortServers` is reused unchanged.
   const pageState = useFilterState();
   const dimensionFilters = useDimensionFilters(CATALOG_FILTERS);
@@ -118,12 +115,12 @@ function CatalogInner() {
     [dimensionFilters.values],
   );
   const filterState = useMemo(
-    () => ({ category: pageState.category, sort: pageState.sort, filters }),
-    [pageState.category, pageState.sort, filters],
+    () => ({ sort: pageState.sort, filters }),
+    [pageState.sort, filters],
   );
 
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
+  const [addingServers, setAddingServers] = useState<CatalogServer[]>([]);
 
   const {
     data,
@@ -131,21 +128,11 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  // Legacy installs live on the deployment's external MCP attachments; new
-  // installs are remote MCP servers matched by endpoint URL. Both mark a
-  // catalog entry as added.
-  const { data: deploymentResult } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-  const externalMcps = deployment?.externalMcps ?? [];
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-  const isServerAdded = (server: PulseMCPServer) =>
-    externalMcps.some(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    ) || isInstalledByUrl(server);
+  const { installState } = useCatalogInstallations();
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
 
@@ -167,7 +154,7 @@ function CatalogInner() {
   // One server at a time: the card's own Add button opens the install dialog
   // for that server. The dialog still takes a list, so a future bulk path can
   // reuse it unchanged.
-  const handleAdd = (server: PulseMCPServer) => {
+  const handleAdd = (server: CatalogServer) => {
     setAddingServers([server]);
   };
 
@@ -177,8 +164,8 @@ function CatalogInner() {
         title="MCP Catalog"
         description={
           <>
-            Discover and import official third-party MCP servers to your
-            project. Powered by the official{" "}
+            Discover and import third-party MCP servers to your project. Powered
+            by the{" "}
             <a
               href="https://www.speakeasy.com/product/mcp-gateway/catalog"
               target="_blank"
@@ -234,7 +221,7 @@ function CatalogInner() {
                   detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
-                  isAdded={isServerAdded(server)}
+                  installState={installState(server)}
                   onAdd={() => handleAdd(server)}
                 />
               );
@@ -248,7 +235,6 @@ function CatalogInner() {
                 { label: "Name" },
                 { label: "Version" },
                 { label: "Description" },
-                { label: "Tools" },
                 { label: "" },
               ]}
             >
@@ -261,7 +247,7 @@ function CatalogInner() {
                     detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
-                    isAdded={isServerAdded(server)}
+                    installState={installState(server)}
                     onAdd={() => handleAdd(server)}
                   />
                 );
@@ -273,16 +259,11 @@ function CatalogInner() {
         {/* Empty state */}
         {!isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
-            hasFilters={
-              hasActiveFilters ||
-              filterState.category !== "all" ||
-              searchQuery !== ""
-            }
+            hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {
               setSearchQuery("");
-              // clearFilters resets category + sort + every filter param in
-              // a single URL update (the unified state re-reads from it),
-              // so a category-filtered empty state isn't left stuck.
+              // clearFilters resets sort + every filter param in a single
+              // URL update (the unified state re-reads from it).
               pageState.clearFilters();
             }}
           />
@@ -290,6 +271,7 @@ function CatalogInner() {
       </ResourceListPage>
 
       <AddServerDialog
+        openProviderSetup={!attachToGatewayId}
         servers={addingServers}
         projectSlug={project.slug}
         open={addingServers.length > 0}

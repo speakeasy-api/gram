@@ -56,6 +56,9 @@ import (
 // be obtained, or was requested for another resource, answers with the
 // member-scoped remedy rather than an anonymous call.
 //
+// A subject's connection in an outage answers retryably and returns its entry
+// for chaining. A usable credential for the same upstream outranks it.
+//
 // A tunneled member is routed by identity alone: only the entry keyed by its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
 // that grant is unqualified or names this member's recorded resource
@@ -69,6 +72,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if member.tunneledServerID.Valid {
 		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
 		if err != nil {
+			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() {
+				return entry, metaMemberClientCredentialError(member, err)
+			}
 			return none, metaMemberClientCredentialError(member, err)
 		}
 		return routed, nil
@@ -76,9 +82,16 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if want == "" {
 		return none, nil
 	}
-	var matched remotesessions.UpstreamToken
+	var matched, outage remotesessions.UpstreamToken
 	found := 0
 	for issuerID, entry := range tokens {
+		if entry.SessionUnavailable() {
+			// A grant from before resources were recorded still names its member by issuer.
+			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
+				outage = entry
+			}
+			continue
+		}
 		if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) {
 			matched = entry
 			found++
@@ -86,6 +99,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
+		if outage.SessionUnavailable() {
+			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
+		}
 		if member.remoteSessionIssuerID.Valid {
 			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {
 				return none, &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential issued for a different resource; contact the MCP server administrator", member.slug)}
@@ -151,13 +167,13 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 	case dial.anonymous && dial.connectURL != "":
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}}
 	case dial.anonymous:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and has no credential for this caller. Ask your administrator to connect it", member.slug)}}
 	case dial.clientCredential:
 		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.connectURL != "":
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}}
 	}
-	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}}
+	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask your administrator to reconnect it", member.slug)}}
 }
 
 // memberCredentialError is a member failure the caller fixes by connecting or
@@ -165,6 +181,56 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 type memberCredentialError struct{ *metaMemberError }
 
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
+
+// memberUnavailableError is an outage: discovery records it like any member it couldn't list.
+type memberUnavailableError struct {
+	memberDiscoveryError
+
+	// session is the refresh failure when the outage hit a person's connection.
+	session error
+}
+
+func (e memberUnavailableError) Unwrap() error { return e.memberDiscoveryError }
+
+func newMemberUnavailableError(message string, session error) memberUnavailableError {
+	return memberUnavailableError{
+		memberDiscoveryError: memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: 0, retryable: false, retryAfter: 0},
+		session:              session,
+	}
+}
+
+// memberCredentialLoadError says retry only when a retry can help: a broken query needs a fix.
+func memberCredentialLoadError(member metaMember, err error) error {
+	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
+		return newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil)
+	}
+	return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+}
+
+// chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
+func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
+	outage := routed.SessionUnavailable()
+	if outage {
+		routeErr = withMemberConnectLink(routeErr, member, gate.memberReconnectURL(member))
+	}
+	if (routeErr != nil && !outage) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
+		return routed, routed.Token, routeErr
+	}
+	chained, err := gate.chainUpstream(ctx, member, resource)
+	if outage && chained == "" {
+		return routed, "", routeErr
+	}
+	var none remotesessions.UpstreamToken
+	return none, chained, err
+}
+
+// memberStaleChoiceError is a member whose no-auth choice predates its sign-in setup.
+type memberStaleChoiceError struct {
+	memberCredentialError
+	reason string
+}
+
+func (e memberStaleChoiceError) Unwrap() error { return e.memberCredentialError }
 
 // dialMetaMember routes a member for dispatch and counts the routing outcome.
 func (s *Service) dialMetaMember(
@@ -175,7 +241,7 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity)
-	dial.connectURL = gate.memberConnectURL(member)
+	dial.connectURL = gate.memberReconnectURL(member)
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
 		s.metrics.RecordMetaMemberDispatch(ctx, backend, mcpmetrics.MetaDispatchAmbiguous)
@@ -240,9 +306,7 @@ func (s *Service) routeMetaMember(
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
 			return memberDial{}, "remote", agentMemberCredentialError(member)
 		}
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
-			upstreamToken, terr = gate.chainUpstream(ctx, member, remoteServer.Url)
-		}
+		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, remoteServer.Url, routed, terr)
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
@@ -274,9 +338,7 @@ func (s *Service) routeMetaMember(
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
 			return memberDial{}, "tunneled", agentMemberCredentialError(member)
 		}
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
-			upstreamToken, terr = gate.chainUpstream(ctx, member, member.tunneledResourceIdentifier)
-		}
+		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, member.tunneledResourceIdentifier, routed, terr)
 		if terr != nil {
 			return memberDial{}, "tunneled", terr
 		}
@@ -467,8 +529,10 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			message := s.memberFailureMessage(ctx, logger, gate, member, err)
+			failMetaToolCall(ctx, metaMemberErrorStatus(err), message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
@@ -485,6 +549,9 @@ func (s *Service) executeProxiedMemberTool(
 		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
+		// The gateway logs this failure only when the call never reached
+		// the upstream interceptor.
+		failMetaToolCall(ctx, metaMemberErrorStatus(err), err.Error())
 		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 
@@ -520,11 +587,18 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 	})
 	if err != nil {
 		ms.fail(ctx)
-		if ms.unsent() && ctx.Err() == nil {
+		unsent := ms.unsent()
+		if unsent && ctx.Err() == nil {
 			return nil, true, err
+		}
+		// A call that left the gateway is logged by the upstream interceptor.
+		if !unsent {
+			markMetaToolCallProxied(ctx)
 		}
 		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
+	// The upstream interceptor wrote this call's row.
+	markMetaToolCallProxied(ctx)
 	return upstreamResult, false, nil
 }
 
@@ -612,7 +686,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			NextCursor string           `json:"nextCursor"`
 		}
 		if uerr := json.Unmarshal(upstreamResult, &listing); uerr != nil {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
@@ -636,7 +710,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			break
 		}
 		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor

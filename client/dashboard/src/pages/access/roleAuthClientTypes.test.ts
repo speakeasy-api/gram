@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   clientTypeGrantChanges,
   clientTypeRulesFromRole,
+  rebaseClientTypeRules,
 } from "./roleAuthClientTypes";
 
 function role(grants: Role["grants"]): Role {
@@ -158,5 +159,55 @@ describe("role upstream credential rules", () => {
     expect(
       clientTypeGrantChanges(current, clientTypeRulesFromRole(current)),
     ).toEqual({ addGrants: [], removeGrants: [] });
+  });
+});
+
+describe("following the role after it is read again", () => {
+  it("takes the stored rule for every type nobody chose for", () => {
+    const next = rebaseClientTypeRules({
+      current: { remote_session: "allow", service_account: "unset" },
+      baseline: { remote_session: "unset", service_account: "unset" },
+      stored: { service_account: "block", static_credential: "allow" },
+    });
+
+    // Chosen here, so it stands and still decides what the save removes.
+    expect(next.remote_session).toBe("allow");
+    // Not chosen here, so the role's own rules come through.
+    expect(next.service_account).toBe("block");
+    expect(next.static_credential).toBe("allow");
+    expect(next.ema).toBe("unset");
+  });
+
+  it("lets a choice that matches the role again settle back", () => {
+    const next = rebaseClientTypeRules({
+      current: { remote_session: "allow" },
+      baseline: { remote_session: "allow" },
+      stored: {},
+    });
+
+    expect(next.remote_session).toBe("unset");
+  });
+
+  it("does not remove a type the role gained elsewhere when saving", () => {
+    const refreshed = role([
+      {
+        scope: "mcp:auth",
+        selectors: [
+          {
+            resourceKind: "mcp_auth_client",
+            resourceId: "*",
+            clientType: "service_account",
+          },
+        ],
+      },
+    ]);
+    const next = rebaseClientTypeRules({
+      current: { remote_session: "allow" },
+      baseline: {},
+      stored: clientTypeRulesFromRole(refreshed),
+    });
+
+    const { removeGrants } = clientTypeGrantChanges(refreshed, next);
+    expect(removeGrants).toEqual([]);
   });
 });

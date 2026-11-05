@@ -20,6 +20,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -63,7 +64,9 @@ import {
 import {
   formatDateHeader,
   formatTimeOnly,
+  groupConsecutiveByActor,
   groupLogsByDate,
+  type ActorRun,
 } from "@/lib/audit-log-feed";
 import { cn, getServerURL } from "@/lib/utils";
 
@@ -328,6 +331,88 @@ function AuditLogRow({
   );
 }
 
+type AuditCategory = "configuration" | "security";
+
+const CATEGORY_OPTIONS: {
+  value: AuditCategory;
+  label: string;
+  tooltip: string;
+}[] = [
+  {
+    value: "configuration",
+    label: "Configuration",
+    tooltip: "Changes people and the Speakeasy team made to settings",
+  },
+  {
+    value: "security",
+    label: "Security activity",
+    tooltip:
+      "Machine access, such as an agent's runtime admitting its workload identity",
+  },
+];
+
+/**
+ * A collapsed run of consecutive security entries by one actor, typically an
+ * agent's runtime admitting and withdrawing its workload identity on every
+ * start and teardown. Expanding it shows each entry.
+ */
+function ActorRunRow({
+  run,
+  expanded,
+  onToggle,
+  identities,
+  projectSlug,
+  timestampMode,
+  highlightMatch,
+  children,
+}: {
+  run: ActorRun;
+  expanded: boolean;
+  onToggle: () => void;
+  identities: ReturnType<typeof useAuditPrincipals>;
+  projectSlug?: string;
+  timestampMode: "utc" | "local";
+  highlightMatch?: (text: string) => React.ReactNode;
+  children: ReactNode;
+}) {
+  const latest = run.logs[0]!;
+  const earliest = run.logs[run.logs.length - 1]!;
+  return (
+    <div>
+      <div className="border-border bg-card group flex items-center gap-3 border-b px-4 py-2.5">
+        <ActionIconTile action={latest.action} />
+        <div className="min-w-0 flex-1 text-sm leading-5">
+          <StrongName>
+            <AuditPrincipalLink
+              projectSlug={projectSlug}
+              principal={auditActorPrincipal(latest)}
+              identities={identities}
+              fallback={getActorLabel(latest)}
+              renderLabel={highlightMatch}
+            />
+          </StrongName>{" "}
+          <span className="text-muted-foreground">
+            {run.logs.length} security events
+          </span>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onToggle}
+            className="text-link-primary ml-2 text-xs hover:underline"
+          >
+            {expanded ? "Hide ▴" : "Show ▾"}
+          </button>
+        </div>
+        <span className="text-muted-foreground shrink-0 text-right font-mono text-xs whitespace-nowrap tabular-nums">
+          {formatTimeOnly(earliest.createdAt, timestampMode)}–
+          {formatTimeOnly(latest.createdAt, timestampMode)}
+        </span>
+      </div>
+      {expanded && <div className="bg-card pl-8">{children}</div>}
+    </div>
+  );
+}
+
 /**
  * Wraps the audit logs page in an InsightsProvider so the AI Insights
  * trigger appears in the breadcrumb bar. Uses the org's first project
@@ -468,9 +553,19 @@ function OrgAuditLogsInner() {
   const selectedAction = filterValues.action ?? "all";
   const selectedActor = filterValues.actor ?? "all";
   const selectedSurface = filterValues.surface ?? "all";
+  const hasActiveFilters =
+    selectedProjectSlug !== "all" ||
+    selectedAction !== "all" ||
+    selectedActor !== "all" ||
+    selectedSurface !== "all";
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
+  const [selectedCategory, setSelectedCategory] = useQueryState("category", {
+    defaultValue: "configuration",
+  });
+  const category: AuditCategory =
+    selectedCategory === "security" ? "security" : "configuration";
 
   const tsMode = (timestampMode === "local" ? "local" : "utc") as
     | "utc"
@@ -485,6 +580,7 @@ function OrgAuditLogsInner() {
   const { data: facetsData } = useAuditLogFacets!({
     projectSlug:
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
+    category,
   });
 
   const actionOptions = useMemo(
@@ -519,6 +615,7 @@ function OrgAuditLogsInner() {
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
     actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
+    category,
   });
 
   const logs = useMemo(
@@ -531,6 +628,37 @@ function OrgAuditLogsInner() {
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
   );
+
+  // Security entries from one actor arrive in bursts (a runtime writes one on
+  // every start and teardown), so each day groups consecutive entries by actor.
+  // Configuration changes stay one row each.
+  const dateRuns = useMemo(
+    () =>
+      dateGroups.map((group) => ({
+        ...group,
+        runs:
+          category === "security"
+            ? groupConsecutiveByActor(group.logs)
+            : group.logs.map((log) => ({
+                key: log.id,
+                actorId: log.actorId,
+                actorType: log.actorType,
+                logs: [log],
+              })),
+      })),
+    [dateGroups, category],
+  );
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleRun = useCallback((key: string) => {
+    setExpandedRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Feed current page state to the AI Insights sidebar as context.
   const insightsContext = useMemo(() => {
@@ -552,6 +680,11 @@ function OrgAuditLogsInner() {
         `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
       );
     }
+    parts.push(
+      category === "security"
+        ? "Showing security activity: machine access such as agents' runtimes admitting their workload identity."
+        : "Showing configuration changes.",
+    );
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
       const firstDate = dateGroups[0]!.date!;
@@ -568,6 +701,7 @@ function OrgAuditLogsInner() {
     selectedAction,
     selectedActor,
     selectedSurface,
+    category,
     logs.length,
     dateGroups,
     tsMode,
@@ -633,6 +767,33 @@ function OrgAuditLogsInner() {
     searchMatchIndices.length > 0
       ? Math.min(currentSearchIndex, searchMatchIndices.length - 1)
       : 0;
+
+  // Keyboard navigation and search move through every entry, including ones
+  // inside a collapsed run, so landing on one opens its run and scrolls to it.
+  const collapsibleRunByIndex = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const group of dateRuns) {
+      for (const run of group.runs) {
+        if (run.logs.length < 2) continue;
+        for (const log of run.logs) {
+          const idx = logFlatIndices.get(log.id);
+          if (idx !== undefined) map.set(idx, run.key);
+        }
+      }
+    }
+    return map;
+  }, [dateRuns, logFlatIndices]);
+  useEffect(() => {
+    if (currentLogIndex === null) return;
+    const key = collapsibleRunByIndex.get(currentLogIndex);
+    if (!key || expandedRuns.has(key)) return;
+    setExpandedRuns((prev) => new Set(prev).add(key));
+    requestAnimationFrame(() => {
+      logRefs.current
+        .get(currentLogIndex)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [currentLogIndex, collapsibleRunByIndex, expandedRuns]);
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
@@ -806,7 +967,7 @@ function OrgAuditLogsInner() {
     <ResourceListPage
       scope="org:read"
       title="Audit Logs"
-      description="Review organization-wide and project-level actions in chronological order. Search by project, actions, or actor."
+      description="Review changes to your organization's configuration, and security activity such as agents' runtimes admitting their workload identity. Filter by project, action, or actor."
     >
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />
@@ -822,6 +983,21 @@ function OrgAuditLogsInner() {
           }}
         >
           <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              <SegmentedControl
+                ariaLabel="Audit log category"
+                value={category}
+                onChange={(value) => {
+                  // Actions, actors and surfaces differ between categories, so
+                  // a filter chosen in one would leave the other empty.
+                  void setSelectedCategory(value);
+                  clearFilterValue("action");
+                  clearFilterValue("actor");
+                  clearFilterValue("surface");
+                }}
+                options={CATEGORY_OPTIONS}
+              />
+            </Page.Toolbar.Leading>
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={handleSearchChange}
@@ -943,44 +1119,87 @@ function OrgAuditLogsInner() {
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Text className="font-medium">No audit logs found</Text>
+                <Text className="font-medium">
+                  {category === "security"
+                    ? "No security activity found"
+                    : "No audit logs found"}
+                </Text>
                 <Text muted small>
-                  {selectedProjectSlug === "all" &&
-                  selectedAction === "all" &&
-                  selectedActor === "all"
-                    ? "Activity will appear here as changes are made across your organization."
-                    : "No audit logs match the selected filters."}
+                  {hasActiveFilters
+                    ? "No audit logs match the selected filters."
+                    : category === "security"
+                      ? "Machine access appears here, such as an agent's runtime admitting its workload identity."
+                      : "Activity will appear here as changes are made across your organization."}
                 </Text>
               </div>
             ) : (
               <div>
-                {dateGroups.map((group) => (
+                {dateRuns.map((group) => (
                   <React.Fragment key={group.key}>
                     <DateGroupHeader date={group.date} mode={tsMode} />
-                    {group.logs.map((log) => {
-                      const idx = logFlatIndices.get(log.id) ?? 0;
+                    {group.runs.map((run) => {
+                      const rows = run.logs.map((log) => {
+                        const idx = logFlatIndices.get(log.id) ?? 0;
+                        return (
+                          <AuditLogRow
+                            key={log.id}
+                            log={log}
+                            identities={identities}
+                            projectSlug={
+                              log.projectSlug ||
+                              (selectedProjectSlug === "all"
+                                ? undefined
+                                : selectedProjectSlug)
+                            }
+                            orgSlug={orgSlug ?? ""}
+                            timestampMode={tsMode}
+                            isHighlighted={idx === currentLogIndex}
+                            rowRef={(el) => {
+                              if (el) logRefs.current.set(idx, el);
+                              else logRefs.current.delete(idx);
+                            }}
+                            highlightMatch={
+                              searchQuery ? highlightMatch : undefined
+                            }
+                          />
+                        );
+                      });
+                      // A lone entry is returned as its own keyed row, not an
+                      // array, so a new entry at the top doesn't remount it.
+                      if (run.logs.length < 2) return rows[0];
                       return (
-                        <AuditLogRow
-                          key={log.id}
-                          log={log}
+                        <ActorRunRow
+                          key={run.key}
+                          run={run}
+                          expanded={expandedRuns.has(run.key)}
+                          onToggle={() => {
+                            // Collapsing the run that holds the selected entry
+                            // clears the selection; otherwise the selection
+                            // would open the run again straight away.
+                            if (
+                              expandedRuns.has(run.key) &&
+                              currentLogIndex !== null &&
+                              collapsibleRunByIndex.get(currentLogIndex) ===
+                                run.key
+                            ) {
+                              setCurrentLogIndex(null);
+                            }
+                            toggleRun(run.key);
+                          }}
                           identities={identities}
                           projectSlug={
-                            log.projectSlug ||
+                            run.logs[0]!.projectSlug ||
                             (selectedProjectSlug === "all"
                               ? undefined
                               : selectedProjectSlug)
                           }
-                          orgSlug={orgSlug ?? ""}
                           timestampMode={tsMode}
-                          isHighlighted={idx === currentLogIndex}
-                          rowRef={(el) => {
-                            if (el) logRefs.current.set(idx, el);
-                            else logRefs.current.delete(idx);
-                          }}
                           highlightMatch={
                             searchQuery ? highlightMatch : undefined
                           }
-                        />
+                        >
+                          {rows}
+                        </ActorRunRow>
                       );
                     })}
                   </React.Fragment>

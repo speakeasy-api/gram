@@ -2131,6 +2131,47 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
+const serversPickGatewayGitHubCredential = `-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1::uuid
+  AND ac.organization_id = $2::text
+  AND sel.project_id = $3::uuid
+  AND sel.organization_id = $2::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY($4::uuid[])
+  AND sel.mcp_server_id = $5::uuid
+  AND sel.deleted IS FALSE
+`
+
+type ServersPickGatewayGitHubCredentialParams struct {
+	AuthClientID  uuid.UUID
+	OrgID         string
+	ProjectID     uuid.UUID
+	CredentialIds []uuid.UUID
+	McpServerID   uuid.UUID
+}
+
+// Sets the organization gateway's seeded GitHub choices to the caller's own
+// GitHub token. The server offers two credentials, so a choice that names
+// neither resolves to no credential under enforcement.
+func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.CredentialIds,
+		arg.McpServerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1::uuid

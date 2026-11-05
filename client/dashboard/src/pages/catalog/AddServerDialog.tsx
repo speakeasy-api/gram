@@ -1,4 +1,7 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
+import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import { useNavigate } from "react-router";
 import { catalogLogoClassName } from "./logo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -25,7 +28,7 @@ import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCat
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -62,7 +65,7 @@ import {
 } from "./remotes";
 
 export interface AddServerDialogProps {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
@@ -80,6 +83,8 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
+  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  openProviderSetup?: boolean;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -92,10 +97,10 @@ export interface AddServerDialogProps {
  * strip their headers, so the details call is the authoritative source for the
  * endpoint data the install flow needs.
  */
-const EMPTY_SERVERS: PulseMCPServer[] = [];
+const EMPTY_SERVERS: CatalogServer[] = [];
 
 function useEnrichedServers(
-  servers: PulseMCPServer[],
+  servers: CatalogServer[],
   open: boolean,
   targetProjectSlug?: string,
 ) {
@@ -138,11 +143,7 @@ function useEnrichedServers(
                 return current;
               })
             : details.remotes;
-          return filterToHttpRemotes({
-            ...server,
-            tools: details.tools,
-            remotes,
-          });
+          return filterToHttpRemotes({ ...server, remotes });
         }),
       ),
   });
@@ -184,9 +185,15 @@ export function AddServerDialog({
   onInstallFinished,
   projectSlug,
   bulk,
+  openProviderSetup = false,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
+  const setupHandoffRef = useRef(false);
+
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -224,6 +231,7 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setupHandoffRef.current = false;
       releaseState.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
@@ -325,6 +333,38 @@ export function AddServerDialog({
       document.body.style.removeProperty("pointer-events");
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      providerSetupRollout !== "enabled" ||
+      !openProviderSetup ||
+      !open ||
+      headless ||
+      autoStartInstall ||
+      setupHandoffRef.current ||
+      releaseState.phase !== "complete"
+    )
+      return;
+    const target = providerSetupInstallTarget(
+      enrichedServers,
+      releaseState.statuses,
+    );
+    if (!target) return;
+    setupHandoffRef.current = true;
+    onOpenChange(false);
+    void navigate(routes.mcp.details.setup.href(target));
+  }, [
+    providerSetupRollout,
+    openProviderSetup,
+    open,
+    headless,
+    autoStartInstall,
+    releaseState,
+    enrichedServers,
+    onOpenChange,
+    navigate,
+    routes,
+  ]);
 
   // Notify parent when all installs are done
   const allInstallsDone =
@@ -496,7 +536,8 @@ export function AddServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="gap-2">
+      {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
+      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>

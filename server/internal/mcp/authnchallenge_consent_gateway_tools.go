@@ -46,7 +46,8 @@ type consentMemberOutcome struct {
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
-		CompletedAt: time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
+		DirectAuthClient: nil,
+		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, reservation); err != nil {
 		return "", fmt.Errorf("%w: reserve gateway capture: %w", errConsentInventoryUnavailable, err)
@@ -208,7 +209,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
-	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		if member.typedAuthClient {
 			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -230,9 +231,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	unavailableMembers := []unavailableMember{}
 	captured := map[string]*memberCatalog{}
-	inventory, err := s.collectGatewayTools(ctx, logger, gate, members, &unavailableMembers, captured)
+	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -276,7 +276,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, Auth: nil}).StatusLabel()})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}).StatusLabel()})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

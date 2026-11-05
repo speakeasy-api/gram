@@ -357,21 +357,21 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 	}
 	searchTool := &mcp.Tool{
 		Name:  searchMyToolsName,
-		Title: "Search My MCP Server Tools",
+		Title: "Search Tools in My MCP Servers",
 		Description: "Find the right tool across all of the user's MCP servers in one call, by describing the task in plain words (for example: create a ticket, look up a customer by email). " +
 			"Returns ranked tools with their server, tool name, description and input_schema, ready for execute_tool. Use it whenever the user wants something done in another system; narrow with server when you already know it.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	describeTool := &mcp.Tool{
 		Name:  describeToolsName,
-		Title: "Describe My MCP Server Tools",
+		Title: "Get Tool Details from My MCP Servers",
 		Description: "Describe the tools of one server from list_my_servers. Omit tools to list every tool's name and description. " +
 			"Pass tool names to get their input_schema, which you need before calling execute_tool.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	executeTool := &mcp.Tool{
 		Name:  executeToolName,
-		Title: "Run My MCP Server Tool",
+		Title: "Run a Tool from My MCP Servers",
 		Description: "Call one tool on one server from list_my_servers, as you, with arguments matching its input_schema from describe_tools. " +
 			"Returns the server's answer unchanged: is_error is true when the server or tool refused, with the reason in content. The tool may change data in the system behind the server.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), OpenWorldHint: new(true)},

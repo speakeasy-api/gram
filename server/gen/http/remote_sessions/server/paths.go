@@ -32,6 +32,11 @@ func DetachBindingRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.detachBinding"
 }
 
+// TestServerConnectionRemoteSessionsPath returns the URL path to the remoteSessions service testServerConnection HTTP endpoint.
+func TestServerConnectionRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.testServerConnection"
+}
+
 // CommitServerIdentityConfigurationRemoteSessionsPath returns the URL path to the remoteSessions service commitServerIdentityConfiguration HTTP endpoint.
 func CommitServerIdentityConfigurationRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.commitServerIdentityConfiguration"

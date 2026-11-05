@@ -1,16 +1,18 @@
-import {
-  PageTabsList,
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-} from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useState, type JSX } from "react";
 import { CodeBlock } from "./CodeBlock";
+import { PanelTab, PanelTabs } from "./PanelTabs";
 import { WizardStepHeader } from "./WizardChrome";
 import { isCredentialSafe } from "./gateway";
+
+/** The ways the agent's runtime can be handed its key. */
+const INSTALL_TABS = [
+  { value: "one-line", label: "One-line setup" },
+  { value: "manual", label: "Manual" },
+  { value: "programmatic", label: "Programmatic" },
+];
 
 /**
  * The step that hands the runtime its credential. One command for a machine
@@ -151,222 +153,188 @@ export function StepInstall({
           whole box states that once rather than three times, and stops a
           reader copying a template with a placeholder where the key goes. */}
       <div className="relative">
-        <div
+        <PanelTabs
+          aria-label="Setup method"
+          value={tab}
+          onValueChange={setTab}
+          tabs={INSTALL_TABS}
           className={cn(
-            "border-border border",
             !secret && "pointer-events-none select-none blur-[2px]",
           )}
           aria-hidden={!secret}
           inert={!secret ? true : undefined}
         >
-          <Tabs value={tab} onValueChange={setTab} className="gap-0">
-            <div className="border-border bg-muted/30 border-b px-4">
-              <PageTabsList>
-                <PageTabsTrigger value="one-line">
-                  One-line setup
-                </PageTabsTrigger>
-                <PageTabsTrigger value="manual">Manual</PageTabsTrigger>
-                <PageTabsTrigger value="programmatic">
-                  Programmatic
-                </PageTabsTrigger>
-              </PageTabsList>
+          <PanelTab value="one-line">
+            <Text muted small>
+              For runtimes with a shell: OpenClaw, Claude Code and Codex. Run
+              once on the machine the agent lives on.
+            </Text>
+            {command ? (
+              <CodeBlock
+                value={command}
+                label="setup command"
+                language="shell"
+              />
+            ) : (
+              <Text muted small>
+                {minting ? "Preparing the setup command…" : ""}
+              </Text>
+            )}
+            <div className="space-y-2">
+              <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+                The script
+              </span>
+              <ol className="space-y-1 text-sm">
+                {[
+                  "Exchanges the setup code for this agent's API key.",
+                  `Configures the MCP clients it finds on PATH with the agent's gateway (${reachPhrase}).`,
+                  "Leaves the key out of your shell history: the code expires after 15 minutes.",
+                  "Reports what it configured, and exits non-zero if it found no client.",
+                ].map((line, index) => (
+                  <li key={line} className="flex gap-3">
+                    <span className="text-muted-foreground font-mono text-xs">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
-
-            <TabsContent
-              value="one-line"
-              forceMount
-              className="data-[state=inactive]:hidden"
-            >
-              <div className="space-y-4 p-4">
-                <Text muted small>
-                  For runtimes with a shell: OpenClaw, Claude Code and Codex.
-                  Run once on the machine the agent lives on.
-                </Text>
-                {command ? (
-                  <CodeBlock
-                    value={command}
-                    label="setup command"
-                    language="shell"
-                  />
-                ) : (
-                  <Text muted small>
-                    {minting ? "Preparing the setup command…" : ""}
-                  </Text>
-                )}
-                <div className="space-y-2">
-                  <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-                    The script
-                  </span>
-                  <ol className="space-y-1 text-sm">
-                    {[
-                      "Exchanges the setup code for this agent's API key.",
-                      `Configures the MCP clients it finds on PATH with the agent's gateway (${reachPhrase}).`,
-                      "Leaves the key out of your shell history: the code expires after 15 minutes.",
-                      "Reports what it configured, and exits non-zero if it found no client.",
-                    ].map((line, index) => (
-                      <li key={line} className="flex gap-3">
-                        <span className="text-muted-foreground font-mono text-xs">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span>{line}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-                {/* Only alongside a link there is one of: regenerating
+            {/* Only alongside a link there is one of: regenerating
                   without a key to wrap is an action with nothing behind it,
                   and an underlined word that silently does nothing reads as
                   broken rather than as unavailable. */}
-                {secret && (
-                  <Text muted small>
-                    The setup link expires in 15 minutes.{" "}
-                    <button
-                      type="button"
-                      className="underline disabled:no-underline disabled:opacity-60"
-                      disabled={minting}
-                      onClick={onRegenerate}
-                    >
-                      Regenerate
-                    </button>
-                  </Text>
-                )}
-                {command && (
-                  <Text muted small>
-                    Piping to a shell runs whatever this deployment returns. To
-                    read it first, fetch it to a file and run that instead. The
-                    code stays valid for 15 minutes, so you can rerun it. The
-                    saved file carries the key: delete it once you have run it.
-                  </Text>
-                )}
-                {commandError && (
-                  <Text role="alert" small>
-                    {commandError}
-                  </Text>
-                )}
-              </div>
-            </TabsContent>
+            {secret && (
+              <Text muted small>
+                The setup link expires in 15 minutes.{" "}
+                <button
+                  type="button"
+                  className="underline disabled:no-underline disabled:opacity-60"
+                  disabled={minting}
+                  onClick={onRegenerate}
+                >
+                  Regenerate
+                </button>
+              </Text>
+            )}
+            {command && (
+              <Text muted small>
+                Piping to a shell runs whatever this deployment returns. To read
+                it first, fetch it to a file and run that instead. The code
+                stays valid for 15 minutes, so you can rerun it. The saved file
+                carries the key: delete it once you have run it.
+              </Text>
+            )}
+            {commandError && (
+              <Text role="alert" small>
+                {commandError}
+              </Text>
+            )}
+          </PanelTab>
 
-            <TabsContent
-              value="manual"
-              forceMount
-              className="data-[state=inactive]:hidden"
-            >
-              <div className="space-y-4 p-4">
-                <Text muted small>
-                  For a runtime you configure by hand. Each block is the whole
-                  configuration for that client — paste it, with the key in the
-                  environment as <code className="text-xs">{KEY_ENV}</code>.
-                </Text>
-                <div className="space-y-2">
-                  <CodeBlock
-                    value={key}
-                    label="API key — shown once"
-                    language="shell"
-                    breakAnywhere
-                  />
-                  <Text muted small>
-                    Put it where that runtime reads its secrets. The blocks
-                    below name it rather than carry it, so they are safe to
-                    paste into a repository.
-                  </Text>
-                </div>
-                <CodeBlock
-                  value={[
-                    // No "# Claude Code" comment: the block is labelled that.
-                    `claude mcp add --transport http gram ${gatewayURL} \\`,
-                    `  --header "Authorization: Bearer $${KEY_ENV}"`,
-                  ].join("\n")}
-                  label="Claude Code"
-                  language="shell"
-                />
-                <CodeBlock
-                  value={[
-                    "# ~/.codex/config.toml",
-                    "[mcp_servers.gram]",
-                    `url = "${gatewayURL}"`,
-                    `bearer_token_env_var = "${KEY_ENV}"`,
-                  ].join("\n")}
-                  label="Codex"
-                  language="toml"
-                />
-                <CodeBlock
-                  value={[
-                    // Single quotes keep the key out of argv and out of the
-                    // config: OpenClaw saves the `${VAR}` reference and fills it
-                    // in from its own environment when it connects. `add`'s
-                    // pre-save check does not, hence --no-probe. The entry is
-                    // named `speakeasy` like the one-line setup's.
-                    `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
-                    "  --transport streamable-http --no-probe \\",
-                    `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
-                  ].join("\n")}
-                  // The oldest release verified to take --no-probe and
-                  // resolve the ${VAR} reference at connect time.
-                  label="OpenClaw 2026.10.6 or later"
-                  language="shell"
-                />
-                <CodeBlock
-                  value={JSON.stringify(
-                    {
-                      mcpServers: {
-                        gram: {
-                          type: "http",
-                          url: gatewayURL,
-                          headers: {
-                            Authorization: `Bearer \${env:${KEY_ENV}}`,
-                          },
-                        },
+          <PanelTab value="manual">
+            <Text muted small>
+              For a runtime you configure by hand. Each block is the whole
+              configuration for that client — paste it, with the key in the
+              environment as <code className="text-xs">{KEY_ENV}</code>.
+            </Text>
+            <div className="space-y-2">
+              <CodeBlock
+                value={key}
+                label="API key — shown once"
+                language="shell"
+                breakAnywhere
+              />
+              <Text muted small>
+                Put it where that runtime reads its secrets. The blocks below
+                name it rather than carry it, so they are safe to paste into a
+                repository.
+              </Text>
+            </div>
+            <CodeBlock
+              value={[
+                // No "# Claude Code" comment: the block is labelled that.
+                `claude mcp add --transport http gram ${gatewayURL} \\`,
+                `  --header "Authorization: Bearer $${KEY_ENV}"`,
+              ].join("\n")}
+              label="Claude Code"
+              language="shell"
+            />
+            <CodeBlock
+              value={[
+                "# ~/.codex/config.toml",
+                "[mcp_servers.gram]",
+                `url = "${gatewayURL}"`,
+                `bearer_token_env_var = "${KEY_ENV}"`,
+              ].join("\n")}
+              label="Codex"
+              language="toml"
+            />
+            <CodeBlock
+              value={[
+                // Single quotes keep the key out of argv and out of the
+                // config: OpenClaw saves the `${VAR}` reference and fills it
+                // in from its own environment when it connects. `add`'s
+                // pre-save check does not, hence --no-probe. The entry is
+                // named `speakeasy` like the one-line setup's.
+                `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
+                "  --transport streamable-http --no-probe \\",
+                `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
+              ].join("\n")}
+              // The oldest release verified to take --no-probe and
+              // resolve the ${VAR} reference at connect time.
+              label="OpenClaw 2026.10.6 or later"
+              language="shell"
+            />
+            <CodeBlock
+              value={JSON.stringify(
+                {
+                  mcpServers: {
+                    gram: {
+                      type: "http",
+                      url: gatewayURL,
+                      headers: {
+                        Authorization: `Bearer \${env:${KEY_ENV}}`,
                       },
                     },
-                    null,
-                    2,
-                  )}
-                  label="mcp.json — Cursor, Windsurf, and others"
-                  language="json"
-                />
-                <Text muted small>
-                  {reachClause} behind that one endpoint. Changing what this
-                  agent may reach changes what it finds there, without
-                  reconnecting.
-                </Text>
-              </div>
-            </TabsContent>
+                  },
+                },
+                null,
+                2,
+              )}
+              label="mcp.json — Cursor, Windsurf, and others"
+              language="json"
+            />
+            <Text muted small>
+              {reachClause} behind that one endpoint. Changing what this agent
+              may reach changes what it finds there, without reconnecting.
+            </Text>
+          </PanelTab>
 
-            <TabsContent
-              value="programmatic"
-              forceMount
-              className="data-[state=inactive]:hidden"
-            >
-              <div className="space-y-4 p-4">
-                <Text muted small>
-                  The endpoint speaks MCP over HTTP, so any SDK that takes an
-                  MCP server takes this one. Read the key from the environment;
-                  never commit it.
-                </Text>
-                <CodeBlock
-                  value={vercel}
-                  label="Vercel AI SDK"
-                  language="typescript"
-                />
-                <CodeBlock
-                  value={mastra}
-                  label="Mastra"
-                  language="typescript"
-                />
-                <CodeBlock
-                  value={python}
-                  label="OpenAI Agents SDK — Python"
-                  language="python"
-                />
-                <Text muted small>
-                  LangGraph, CrewAI and the Claude and OpenAI APIs take the same
-                  pair — the URL and an Authorization header — in whatever shape
-                  their own MCP client expects.
-                </Text>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+          <PanelTab value="programmatic">
+            <Text muted small>
+              The endpoint speaks MCP over HTTP, so any SDK that takes an MCP
+              server takes this one. Read the key from the environment; never
+              commit it.
+            </Text>
+            <CodeBlock
+              value={vercel}
+              label="Vercel AI SDK"
+              language="typescript"
+            />
+            <CodeBlock value={mastra} label="Mastra" language="typescript" />
+            <CodeBlock
+              value={python}
+              label="OpenAI Agents SDK — Python"
+              language="python"
+            />
+            <Text muted small>
+              LangGraph, CrewAI and the Claude and OpenAI APIs take the same
+              pair — the URL and an Authorization header — in whatever shape
+              their own MCP client expects.
+            </Text>
+          </PanelTab>
+        </PanelTabs>
         {!secret && (
           <div className="absolute inset-0 flex items-center justify-center p-6">
             <div className="bg-card border-border max-w-md space-y-3 border p-5 text-center shadow-sm">

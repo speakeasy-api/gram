@@ -38,6 +38,9 @@ type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
 // GetProductFeaturesResponseBody is the type of the "features" service
 // "getProductFeatures" endpoint HTTP response body.
 type GetProductFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -95,6 +98,10 @@ type GetProductFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -664,6 +671,7 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *featuresviews.ProductFeaturesView) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -686,6 +694,7 @@ func NewGetProductFeaturesResponseBody(res *featuresviews.ProductFeaturesView) *
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }

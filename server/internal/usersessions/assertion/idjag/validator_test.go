@@ -13,6 +13,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -58,6 +59,7 @@ func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source,
 
 type testGuard struct {
 	claimed map[string]bool
+	owners  map[string]string
 	calls   int
 }
 
@@ -70,6 +72,28 @@ func (g *testGuard) Reserve(_ context.Context, key replay.Key, _ time.Time) (boo
 	}
 	g.claimed[key.ID] = true
 	return true, nil
+}
+
+func (g *testGuard) ReserveOwned(_ context.Context, key replay.Key, _ time.Time, owner string) (bool, error) {
+	g.calls++
+	if g.owners == nil {
+		g.owners = map[string]string{}
+	}
+	if current, held := g.owners[key.ID]; held {
+		return current == owner, nil
+	}
+	if g.claimed[key.ID] {
+		return false, nil
+	}
+	g.owners[key.ID] = owner
+	return true, nil
+}
+
+func (g *testGuard) Release(_ context.Context, key replay.Key, owner string) error {
+	if g.owners[key.ID] == owner {
+		delete(g.owners, key.ID)
+	}
+	return nil
 }
 
 type testAssertion struct {
@@ -146,6 +170,57 @@ func TestValidateAcceptsProvisionedIDJAGAndRejectsReplay(t *testing.T) {
 	require.Equal(t, 1, guard.calls)
 	_, err = validator.Validate(t.Context(), raw, request)
 	require.Equal(t, ReasonReplayed, ReasonOf(err))
+}
+
+func TestIsOutage(t *testing.T) {
+	t.Parallel()
+
+	down := &pgconn.PgError{Code: "57P01"}
+	broken := &pgconn.PgError{Code: "42P01"}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "directory down", err: reject(ReasonSubjectUnavailable, down), want: true},
+		{name: "directory query broken", err: reject(ReasonSubjectUnavailable, broken), want: false},
+		{name: "replay store down", err: reject(ReasonReplayStoreUnavailable, down), want: true},
+		{name: "keys down", err: reject(ReasonKeyUnresolvable, errors.New("jwks")), want: true},
+		{name: "local key budget spent", err: reject(ReasonKeyBudgetExhausted, errors.New("budget")), want: true},
+		{name: "key store down", err: reject(ReasonKeyStoreUnavailable, down), want: true},
+		{name: "key store query broken", err: reject(ReasonKeyStoreUnavailable, broken), want: false},
+		{name: "unusable keys", err: reject(ReasonKeyUnusable, errors.New("alg mismatch")), want: false},
+		{name: "trust read down", err: reject(ReasonTrustUnavailable, down), want: true},
+		{name: "trust query broken", err: reject(ReasonTrustUnavailable, broken), want: false},
+		{name: "no trust link", err: reject(ReasonTrustUnavailable, ErrNoTrustedIssuer), want: false},
+		{name: "trust link has no keys", err: reject(ReasonTrustUnavailable, ErrTrustedIssuerHasNoJWKS), want: false},
+		{name: "replayed", err: reject(ReasonReplayed, errors.New("jti")), want: false},
+		{name: "bad signature", err: reject(ReasonSignatureInvalid, errors.New("sig")), want: false},
+		{name: "misconfigured", err: reject(ReasonVerifierMisconfigured, errors.New("cfg")), want: false},
+		{name: "another error", err: errors.New("other"), want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, IsOutage(tc.err))
+		})
+	}
+}
+
+// Spending our own fetch budget isn't the customer's outage, so its reason stays apart from theirs.
+func TestValidateMapsFetchBudgetApartFromKeySetOutage(t *testing.T) {
+	t.Parallel()
+
+	require.NotEqual(t, ReasonKeyUnresolvable, ReasonKeyBudgetExhausted)
+	require.True(t, IsOutage(reject(ReasonKeyBudgetExhausted, jwks.ErrFetchRateLimited)))
+}
+
+func TestIsStoreFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "42P01"})))
+	require.False(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "57P01"})), "an outage")
+	require.False(t, IsStoreFault(reject(ReasonTrustUnavailable, ErrNoTrustedIssuer)), "configuration")
+	require.False(t, IsStoreFault(reject(ReasonSignatureInvalid, errors.New("sig"))), "the assertion")
 }
 
 func TestValidateChecksTypeBeforeKeys(t *testing.T) {

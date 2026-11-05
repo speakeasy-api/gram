@@ -63,6 +63,7 @@ const log = (extra: Partial<AuditLog> = {}): AuditLog => ({
   id: "event",
   action: "user_session:revoke",
   actingSurface: "dashboard",
+  category: "configuration",
   actorType: "user",
   actorId: "revoker",
   actorDisplayName: "Administrator",
