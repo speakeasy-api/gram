@@ -106,7 +106,7 @@ func (s *AccessRoleMutationService) ConfigureMemory(ctx context.Context, princip
 	}
 	// Only memory grants change here, so role delivery cannot gain MCP Use
 	// access and needs no administrator exposure-approval marker.
-	summary, sensitiveScopesAdded, receipt, current, err := s.updateRoleGrants(ctx, principal, project, workosOrgID, operationConfigureMemoryAccessRole, roleID, input.RoleReference, input.ExpectedVersion, input.IdempotencyKey, normalized, addGrants, removeGrants)
+	summary, sensitiveScopesAdded, receipt, current, err := s.updateRoleGrants(ctx, principal, project, roleGrantDelta{WorkosOrgID: workosOrgID, Operation: operationConfigureMemoryAccessRole, RoleID: roleID, RoleReference: input.RoleReference, ExpectedVersion: input.ExpectedVersion, IdempotencyKey: input.IdempotencyKey, Normalized: normalized, AddGrants: addGrants, RemoveGrants: removeGrants})
 	if err != nil {
 		return ConfigureMemoryAccessRoleOutput{}, err
 	}

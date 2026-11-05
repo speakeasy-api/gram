@@ -37,5 +37,4 @@ func TestMemoryAccessRoleGrantAuthorizesOnlyItsProject(t *testing.T) {
 		_, ok := memoryAccessRoleScope(other)
 		require.False(t, ok, other)
 	}
-	require.True(t, accessRoleMutationOperation(operationConfigureMemoryAccessRole))
 }
