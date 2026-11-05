@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -306,7 +307,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// are adopted instead of double-POSTing, and a definitive upstream
 	// invalid_grant clears only the dead refresh grant so a still-working
 	// access token remains connected.
-	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual)
+	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, RefreshIn(mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty)))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.

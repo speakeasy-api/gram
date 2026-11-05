@@ -1071,3 +1071,69 @@ func TestRecord_APanicNeverReachesTheRequest(t *testing.T) {
 
 	require.Equal(t, int64(1), recorder.dropped(t, dropPanic))
 }
+
+func TestShutdownAndWait_CancelsIOAndDiscardsBacklog(t *testing.T) {
+	t.Parallel()
+	for _, blocked := range []string{"logs", "insert"} {
+		t.Run(blocked, func(t *testing.T) {
+			t.Parallel()
+			cfg := testConfig()
+			cfg.maxBatch = 1
+			cfg.logsCheckTimeout = time.Minute
+			cfg.insertTimeout = time.Minute
+			conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
+			check := &logsCheck{enabled: true, err: nil, block: nil, panics: false, checks: atomic.Int64{}}
+			if blocked == "logs" {
+				check.block = make(chan struct{})
+			} else {
+				conn.block = make(chan struct{})
+			}
+			r := newTestRecorderWithLogs(t, conn, check.check, cfg)
+			for i := range 30 {
+				scope := testScope()
+				scope.organizationID = fmt.Sprintf("org-drain-%d", i)
+				r.Step(t.Context(), Begin(scope), StepInboundAuthorize, ResultAccepted)
+			}
+			require.Eventually(t, func() bool {
+				if blocked == "logs" {
+					return check.checks.Load() > 0
+				}
+				return conn.prepares.Load() > 0
+			}, time.Second, time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+			defer cancel()
+			started := time.Now()
+			require.ErrorIs(t, r.ShutdownAndWait(ctx), context.DeadlineExceeded)
+			require.Less(t, time.Since(started), 3*time.Second)
+			select {
+			case <-r.done:
+			default:
+				t.Fatal("writer still running after shutdown")
+			}
+			require.Zero(t, r.unfinished.Load())
+			require.Empty(t, r.queue)
+			require.LessOrEqual(t, conn.prepares.Load(), int64(1))
+			require.LessOrEqual(t, check.checks.Load(), int64(1))
+		})
+	}
+}
+
+func TestRecorderOnceReportsAdmission(t *testing.T) {
+	t.Parallel()
+	var absent *Recorder
+	require.False(t, absent.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	rec := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return true, nil })
+	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	require.False(t, rec.Once(t.Context(), Scope{}, StepProviderRefresh, CodeProviderServerError))
+	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, func(context.Context, string) (bool, error) { return false, nil })
+	require.False(t, disabled.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	panics := NewCapturing(func(Row) { panic("capture failed") }, func(context.Context, string) (bool, error) { return true, nil })
+	require.False(t, panics.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	rec.capture = nil
+	rec.queue = make(chan Row, 1)
+	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+	<-rec.queue
+	rec.stopped = true
+	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+}

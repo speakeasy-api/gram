@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,8 +88,8 @@ type validationTarget struct {
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
 func (s *Service) validateRemoteSession(
 	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
-	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
@@ -103,7 +104,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, fromRequest, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -112,6 +113,7 @@ func (s *Service) validateRemoteSession(
 // keepalive through its claim lease and per-host limiter.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
+	attribution remotesessions.RefreshAttribution,
 	logger *slog.Logger,
 	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
@@ -134,7 +136,7 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
@@ -411,10 +413,12 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		fromRequest:   mcpconnectionattempts.FromRequest(nil),
-		discoveryMode: "progressive",
-		projectID:     endpoint.ProjectID,
-		metaServerID:  endpoint.MetaMcpServerID.UUID,
+		fromRequest:      mcpconnectionattempts.FromRequest(nil),
+		skippedUpstreams: nil,
+		request:          nil,
+		discoveryMode:    "progressive",
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent keys reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: endpoint.IsOrganizationGateway(),

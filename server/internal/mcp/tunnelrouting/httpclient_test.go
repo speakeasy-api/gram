@@ -398,6 +398,26 @@ func TestHTTPClientBlockedGatewayAddressIsNotUnpublished(t *testing.T) {
 	require.Equal(t, []string{gateway.URL}, candidates)
 }
 
+func TestHTTPClientLocalConfigurationFailure(t *testing.T) {
+	t.Parallel()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", "://invalid", time.Minute))
+	for name, client := range map[string]*HTTPClient{
+		"nil client":     nil,
+		"missing routes": newTestHTTPClient(t, nil),
+		"missing token":  {routes: routes},
+		"invalid route":  newTestHTTPClient(t, routes),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			resp, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
+			require.ErrorIs(t, err, ErrTransportConfiguration)
+			require.NotErrorIs(t, err, ErrNoTunnelRoute)
+		})
+	}
+}
+
 // Routes are picked at random, so repeat until both orders have run.
 func TestHTTPClientMixedGatewayRefusalsIgnoreRouteOrder(t *testing.T) {
 	t.Parallel()

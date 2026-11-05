@@ -48,7 +48,7 @@ func TestResolveAuthorization_WorkloadOwner(t *testing.T) {
 	profile := contextvalues.PrincipalCredential{DelegatedGrants: encoded, DelegatedGrantsVersion: int32(runtimepolicy.CurrentDelegatedPolicyVersion)}
 	workloadCtx := contextvalues.WithPrincipalCredentialAuthorization(ctx, auth, actor, profile)
 	resolve := func(c context.Context, subject urn.SessionSubject) (remotesessions.ResolvedAuthorization, error) {
-		return manager.ResolveAuthorization(c, projectID, organizationID, userIssuer, remoteIssuer, subject, "")
+		return manager.ResolveAuthorization(c, remotesessions.RefreshAttribution{}, projectID, organizationID, userIssuer, remoteIssuer, subject, "")
 	}
 	// No assignment must never fall back to a workload's own or an arbitrary user's session.
 	_, err = resolve(workloadCtx, caller)
@@ -67,7 +67,7 @@ func TestResolveAuthorization_WorkloadOwner(t *testing.T) {
 	reconnect, err := manager.RemoteSessionsNeedReconnect(workloadCtx, projectID, organizationID, userIssuer, caller)
 	require.NoError(t, err)
 	require.False(t, reconnect)
-	unscoped, err := manager.ResolveAccessToken(workloadCtx, clientID, urn.NewUserSubject(auth.UserID), "")
+	unscoped, err := manager.ResolveAccessToken(workloadCtx, remotesessions.RefreshAttribution{}, clientID, urn.NewUserSubject(auth.UserID), "")
 	require.NoError(t, err)
 	require.Empty(t, unscoped, "workloads cannot impersonate an owner through unscoped resolution")
 	currentActor, ok := contextvalues.AuthenticatedActor(workloadCtx)

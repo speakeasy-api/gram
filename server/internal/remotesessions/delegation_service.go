@@ -31,7 +31,9 @@ var (
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil))}
+	dependencies := delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil)
+	dependencies.Connections = manager.connections
+	return &DelegationService{service: delegation.New(db, enc, dependencies)}
 }
 
 func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), paused func(context.Context, *FederatedProvider) bool, now func() time.Time) delegation.Dependencies {
@@ -47,13 +49,13 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return delegationProvider{p}, nil
 		}
 	}
-	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshPaused: func(ctx context.Context, provider delegation.Provider) bool {
+	return delegation.Dependencies{Connections: nil, Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshPaused: func(ctx context.Context, provider delegation.Provider) bool {
 		p, ok := provider.(delegationProvider)
 		return ok && paused(ctx, p.p)
 	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
-			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup, RetryAfter: 0}
+			return nil, &delegation.RefreshError{Kind: delegation.RefreshSetup, SigningFailure: false, RetryAfter: 0}
 		}
 		result, err := refresh(ctx, p.p, token, subject, nonce)
 		if result == nil {
@@ -70,6 +72,9 @@ func delegationConfigurationError(err error) error {
 	if errors.Is(err, ErrFederatedConfiguration) {
 		return ErrDelegationConfiguration
 	}
+	if errors.Is(err, ErrFederatedUnavailable) && !errors.Is(err, ErrFederatedSigning) && !errors.Is(err, context.Canceled) {
+		return errors.Join(delegation.ErrProviderUnavailable, err)
+	}
 	return err
 }
 func delegationRefreshError(err error) error {
@@ -78,7 +83,7 @@ func delegationRefreshError(err error) error {
 	}
 	var failure *FederatedRefreshError
 	if !errors.As(err, &failure) {
-		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous, RetryAfter: 0}
+		return &delegation.RefreshError{Kind: delegation.RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 	}
 	kind := delegation.RefreshAmbiguous
 	switch failure.Kind {
@@ -100,7 +105,7 @@ func delegationRefreshError(err error) error {
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
 	}
-	return &delegation.RefreshError{Kind: kind, RetryAfter: failure.RetryAfter}
+	return &delegation.RefreshError{Kind: kind, SigningFailure: errors.Is(err, ErrFederatedSigning), RetryAfter: failure.RetryAfter}
 }
 
 type delegationProvider struct{ p *FederatedProvider }
