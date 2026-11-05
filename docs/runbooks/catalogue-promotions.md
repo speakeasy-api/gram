@@ -66,6 +66,26 @@ documentation references require staff input; the form does not invent them.
 Suggestions never overwrite edits on refresh. Guide status and retry information
 remain visible through the Published filter after promotion.
 
+When the shared endpoint matches exactly one existing setup guide, the form
+suggests that guide's slug. Under the slug field, the form shows one of three
+messages as the slug is edited:
+
+- **Neutral note:** the slug is the guide for this server's endpoint.
+  Publishing links to that guide and requests no new one, which is expected.
+- **Amber warning:** another guide already uses the slug. Publishing would
+  still link to that guide and request no new one, so keep the slug only if it
+  is the same provider.
+- **Muted hint:** no guide uses the slug, so publishing requests a new guide.
+  The hint names the pinned guides version.
+
+The check uses the guides embedded in the server (`setupguides.PinnedVersion`),
+so it can lag the docs repository's `main`; delivery rechecks GitHub before
+requesting a guide. The Admin MCP promotion preview runs the same exact-slug
+check as an "Existing setup guide" row, but with only two messages: any slug
+that already belongs to a guide gets the warning wording, including this
+server's own endpoint guide, and a free slug gets the pinned-version note.
+Neither blocks publication.
+
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
 and include `promote_registry_candidate`, `retry_registry_promotion_docs`, and
@@ -141,7 +161,8 @@ promoting the same provider. Existing native catalogue rollout remains unchanged
 The checks exist because the factory researches and rewrites a whole guide on
 every trigger. A guide written outside promotion (for example, alongside the
 catalogue change itself) must use the same slug staff choose at promotion, or
-promotion requests a second guide.
+promotion requests a second guide. The review form's slug warning helps staff
+pick the existing slug.
 
 `existing_guide` is final: promotion never refreshes an existing guide. Refreshes
 go through the setup docs repository's `guide:stale` sweep. `guide_in_review`
