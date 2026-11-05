@@ -531,7 +531,7 @@ func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, 
 	}
 	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
-		logger.WarnContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
+		logger.DebugContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
 		return ""
 	}
 	return row.ClientName
