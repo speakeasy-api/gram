@@ -1269,6 +1269,7 @@ func newStartCommand() *cli.Command {
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
+			assistantsCore.SetMCPAuthSessionVerifier(usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), chatSessionsManager)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
