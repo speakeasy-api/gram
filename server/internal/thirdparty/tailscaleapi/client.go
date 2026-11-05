@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/oauth2"
 	tailscale "tailscale.com/client/tailscale/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -33,11 +34,23 @@ const (
 )
 
 var (
-	// ErrUnauthorized means the OAuth client was rejected or lacks a scope.
+	// ErrUnauthorized means the OAuth client was rejected or lacks a
+	// permission. ErrForbidden wraps it to tell the two apart.
 	ErrUnauthorized = errors.New("tailscale api: credentials rejected")
+
+	// ErrForbidden means the OAuth client authenticated but lacks a scope, or
+	// may not act on the tag or service. It also matches ErrUnauthorized.
+	ErrForbidden = fmt.Errorf("%w: permission denied", ErrUnauthorized)
 
 	// ErrNotFound means the device or service does not exist.
 	ErrNotFound = errors.New("tailscale api: not found")
+
+	// ErrRateLimited means Tailscale throttled the call (HTTP 429).
+	ErrRateLimited = errors.New("tailscale api: rate limited")
+
+	// ErrUnavailable means Tailscale could not be reached, timed out, or
+	// failed on its side (HTTP 5xx).
+	ErrUnavailable = errors.New("tailscale api: unavailable")
 )
 
 // Credentials is a Tailscale OAuth client.
@@ -282,17 +295,52 @@ func (c *HTTPClient) DeleteService(ctx context.Context, creds Credentials, name 
 
 func mapError(operation string, err error) error {
 	if apiErr, ok := errors.AsType[tailscale.APIError](err); ok {
-		switch apiErr.Status {
-		case http.StatusUnauthorized, http.StatusForbidden:
-			return fmt.Errorf("%s: %w", operation, ErrUnauthorized)
-		case http.StatusNotFound:
-			return fmt.Errorf("%s: %w", operation, ErrNotFound)
+		if sentinel := statusError(apiErr.Status); sentinel != nil {
+			return fmt.Errorf("%s: %w", operation, sentinel)
 		}
+		return fmt.Errorf("%s: %w", operation, err)
 	}
-	// The OAuth token exchange surfaces client rejection as an oauth2 error
-	// rather than an APIError.
+	// The OAuth token exchange fails with an oauth2 error rather than an
+	// APIError, wrapped in the HTTP client's url.Error.
+	if retrieveErr, ok := errors.AsType[*oauth2.RetrieveError](err); ok {
+		if retrieveErr.ErrorCode == "invalid_client" {
+			return fmt.Errorf("%s: %w", operation, ErrUnauthorized)
+		}
+		if retrieveErr.Response != nil {
+			if sentinel := statusError(retrieveErr.Response.StatusCode); sentinel != nil {
+				return fmt.Errorf("%s: %w", operation, sentinel)
+			}
+		}
+		return fmt.Errorf("%s: %w", operation, err)
+	}
 	if strings.Contains(err.Error(), "oauth2") && (strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "invalid_client")) {
 		return fmt.Errorf("%s: %w", operation, ErrUnauthorized)
 	}
+	// A transport failure or our own request timeout means Tailscale was
+	// unreachable. A caller's cancellation is not Tailscale's fault.
+	if !errors.Is(err, context.Canceled) {
+		if _, ok := errors.AsType[*url.Error](err); ok || errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("%s: %w: %w", operation, ErrUnavailable, err)
+		}
+	}
 	return fmt.Errorf("%s: %w", operation, err)
+}
+
+// statusError maps an HTTP status from Tailscale to a sentinel, or nil when
+// the status has no specific meaning to callers.
+func statusError(status int) error {
+	switch {
+	case status == http.StatusUnauthorized:
+		return ErrUnauthorized
+	case status == http.StatusForbidden:
+		return ErrForbidden
+	case status == http.StatusNotFound:
+		return ErrNotFound
+	case status == http.StatusTooManyRequests:
+		return ErrRateLimited
+	case status >= http.StatusInternalServerError:
+		return ErrUnavailable
+	default:
+		return nil
+	}
 }
