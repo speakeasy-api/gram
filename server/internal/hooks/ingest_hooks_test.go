@@ -1671,6 +1671,129 @@ func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	require.Equal(t, "custom-adapter", toolResult.Source.String)
 }
 
+func TestIngest_KeepsClaudePromptIDOnEveryRowOfTheTurn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	promptID := uuid.NewString()
+	toolCallID := "toolu_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	toolName := "Bash"
+
+	prompt := "run the probe"
+	promptPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	promptPayload.Session.TurnID = new(promptID)
+	promptPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, promptPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	requestPayload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	requestPayload.Session.TurnID = new(promptID)
+	requestPayload.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &toolCallID, Name: &toolName, Input: map[string]any{"command": "echo probe"},
+	}}
+	res, err = ti.service.Ingest(ctx, requestPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	resultPayload := canonicalIngestPayload("claude", "tool.completed", sessionID)
+	resultPayload.Session.TurnID = new(promptID)
+	resultPayload.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &toolCallID, Name: &toolName, Output: map[string]any{"stdout": "probe"},
+	}}
+	res, err = ti.service.Ingest(ctx, resultPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	reply := "probe"
+	replyPayload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	replyPayload.Session.TurnID = new(promptID)
+	replyPayload.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &reply}}
+	res, err = ti.service.Ingest(ctx, replyPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 4)
+	for _, msg := range msgs {
+		require.Equal(t, promptID, msg.MessageID.String, "%s row must carry the prompt id", msg.Role)
+		require.Zero(t, msg.Generation, "a prompt id must not split chat.load generations")
+	}
+}
+
+func TestIngest_IgnoresClaudeTurnIDThatIsNotAPromptID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	prompt := "run the probe"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.TurnID = new("turn-1")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.False(t, msgs[0].MessageID.Valid)
+}
+
+func TestIngest_CodexPromptsKeepTheHashedCorrelationKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	prompt := "run the probe"
+	payload := canonicalIngestPayload("codex", "prompt.submitted", sessionID)
+	payload.Session.TurnID = new(uuid.NewString())
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, agentPromptCorrelationID(payload), msgs[0].MessageID.String)
+	require.True(t, strings.HasPrefix(msgs[0].MessageID.String, agentPromptCorrelationPrefix))
+}
+
 // Codex PermissionRequest normalizes to tool.requested but is only a
 // pre-approval preview — it may be denied or followed by the real request,
 // so it must not create tool_calls rows in the captured transcript.
