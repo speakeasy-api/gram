@@ -28,6 +28,22 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
+function wildcardResource(kind: unknown): string {
+  if (kind === "mcp") return "every server";
+  if (kind === "mcp_auth_client") return "every upstream credential";
+  return "all resources";
+}
+
+/** A wildcard scoped to one project names it, so it does not read as org-wide. */
+function projectQualifier(
+  selector: Record<string, unknown>,
+  names: AgentChangeNames,
+): string {
+  const projectId = selector.project_id;
+  if (typeof projectId !== "string" || projectId === "") return "";
+  return ` in ${names.project(projectId) ?? `project ${shortId(projectId)}`}`;
+}
+
 function grantResource(
   selector: Record<string, unknown>,
   names: AgentChangeNames,
@@ -36,9 +52,7 @@ function grantResource(
   const id = selector.resource_id;
   if (kind === "org") return "the organization";
   if (typeof id !== "string" || id === "*") {
-    if (kind === "mcp") return "every server";
-    if (kind === "mcp_auth_client") return "every upstream credential";
-    return "all resources";
+    return `${wildcardResource(kind)}${projectQualifier(selector, names)}`;
   }
   if (kind === "mcp") return names.server(id) ?? `server ${shortId(id)}`;
   if (kind === "project") return names.project(id) ?? `project ${shortId(id)}`;

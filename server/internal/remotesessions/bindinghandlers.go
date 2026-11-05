@@ -155,10 +155,12 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 		return nil, oops.E(oops.CodeUnexpected, err, "validate attachment candidate")
 	}
 	var generation int64
+	var account string
 	var sessionView *types.RemoteSession
 	for _, candidate := range candidates {
 		if candidate.RemoteSession.ID == sessionID {
 			generation = candidate.RemoteSession.GrantGeneration
+			account = upstreamAccount(candidate.RemoteSession)
 			sessionView = mv.BuildRemoteSessionView(candidate.RemoteSession, conv.FromPGText[string](candidate.SubjectDisplayName), conv.FromPGText[string](candidate.SubjectEmail))
 			break
 		}
@@ -178,8 +180,7 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	if row.GrantGeneration != generation {
 		return nil, oops.E(oops.CodeConflict, nil, "session changed while attaching; retry")
 	}
-	upstreamAccount := conv.PtrValOr(sessionView.UpstreamEmail, conv.PtrValOr(sessionView.UpstreamDisplayName, ""))
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, upstreamAccount); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, account); err != nil {
 		return nil, err
 	}
 	if err := op.tx.Commit(ctx); err != nil {
@@ -209,13 +210,22 @@ func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingP
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach remote session")
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, id, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, ""); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, id, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, row.UpstreamAccount); err != nil {
 		return err
 	}
 	if err := op.tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit remote session detachment")
 	}
 	return nil
+}
+
+// upstreamAccount names the account a connection signed in as: its email, or
+// its display name when the upstream reports no email.
+func upstreamAccount(session repo.RemoteSession) string {
+	if session.UpstreamEmail.Valid {
+		return session.UpstreamEmail.String
+	}
+	return session.UpstreamDisplayName.String
 }
 
 func bindingView(id, principalID, issuerID, clientID, sessionID uuid.UUID) *gen.PrincipalRemoteSessionBinding {

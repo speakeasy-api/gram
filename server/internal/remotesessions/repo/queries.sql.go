@@ -2858,7 +2858,13 @@ SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE b.project_id = $1 AND b.organization_id = $2
   AND b.principal_id = $3 AND b.user_session_issuer_id = $4
   AND b.id = $5 AND b.revoked_at IS NULL
-RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation
+RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation,
+  -- The account the connection signed in as, for the detach audit entry.
+  COALESCE((
+    SELECT COALESCE(s.upstream_email, s.upstream_display_name)
+    FROM remote_sessions AS s
+    WHERE s.id = b.remote_session_id
+  ), '')::text AS upstream_account
 `
 
 type DetachPrincipalRemoteSessionBindingParams struct {
@@ -2873,6 +2879,7 @@ type DetachPrincipalRemoteSessionBindingRow struct {
 	RemoteSessionID       uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	GrantGeneration       int64
+	UpstreamAccount       string
 }
 
 func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg DetachPrincipalRemoteSessionBindingParams) (DetachPrincipalRemoteSessionBindingRow, error) {
@@ -2884,7 +2891,12 @@ func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg D
 		arg.ID,
 	)
 	var i DetachPrincipalRemoteSessionBindingRow
-	err := row.Scan(&i.RemoteSessionID, &i.RemoteSessionClientID, &i.GrantGeneration)
+	err := row.Scan(
+		&i.RemoteSessionID,
+		&i.RemoteSessionClientID,
+		&i.GrantGeneration,
+		&i.UpstreamAccount,
+	)
 	return i, err
 }
 

@@ -27,7 +27,7 @@ const (
 	ActionAgentConnectionBlockCreate Action = "agent:connection_block_create"
 	ActionAgentConnectionBlockDelete Action = "agent:connection_block_delete"
 	// A person attached their own connection to an agent, or detached it.
-	// Recorded alongside remote_session:attach and remote_session:detach,
+	// Recorded alongside remote-session:attach and remote-session:detach,
 	// whose subject is the connection, so the agent's own history shows it.
 	ActionAgentConnectionAttach Action = "agent:connection_attach"
 	ActionAgentConnectionDetach Action = "agent:connection_detach"
@@ -188,6 +188,7 @@ func (l *Logger) LogAgentConnection(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:           metadata,
 		ActingSurface:      conv.ToPGTextEmpty(""),
 		ActingClientID:     conv.ToPGTextEmpty(""),
+		IsInternal:         false,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AgentV1})

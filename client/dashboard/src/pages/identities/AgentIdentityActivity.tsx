@@ -76,10 +76,15 @@ export function AgentIdentityAudit({
   // from the row itself. Resolving in both modes paid for the agent and
   // member inventories to fill a column that mode does not render.
   const identities = useAuditPrincipals(subject ? rows : NO_LOGS);
-  // Server and project names say what a grant change touched; the lists load
-  // only when a grant change is listed.
+  // Server and project names say what a grant or connection block touched;
+  // the lists load only when one is listed.
   const maps = useResourceLinkMaps(
-    subject && rows.some((log) => log.action.startsWith("agent:policy_grant")),
+    subject &&
+      rows.some(
+        (log) =>
+          log.action.startsWith("agent:policy_grant") ||
+          log.action.startsWith("agent:connection_block"),
+      ),
   );
   const names = {
     server: (id: string) =>

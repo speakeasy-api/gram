@@ -45,6 +45,36 @@ describe("agentChangeSummary", () => {
       want: "mcp:connect · every server",
     },
     {
+      case: "a grant on every server in one project",
+      log: {
+        action: "agent:policy_grant_create",
+        afterSnapshot: {
+          scope: "mcp:connect",
+          selector: {
+            resource_kind: "mcp",
+            resource_id: "*",
+            project_id: "project-default",
+          },
+        },
+      },
+      want: "mcp:connect · every server in Default",
+    },
+    {
+      case: "a grant on every upstream credential in an unknown project",
+      log: {
+        action: "agent:policy_grant_create",
+        afterSnapshot: {
+          scope: "mcp:auth",
+          selector: {
+            resource_kind: "mcp_auth_client",
+            resource_id: "*",
+            project_id: "0123456789abcdef",
+          },
+        },
+      },
+      want: "mcp:auth · every upstream credential in project 01234567…",
+    },
+    {
       case: "an unknown server by its short id",
       log: {
         action: "agent:policy_grant_create",

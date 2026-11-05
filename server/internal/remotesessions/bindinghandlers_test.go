@@ -218,6 +218,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mine.ID.String(), attachMetadata["remote_session_id"])
 	require.Equal(t, binding.ID, attachMetadata["binding_id"])
+	require.Equal(t, "existing-account@example.com", attachMetadata["upstream_account"])
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	locked, err := repo.New(tx).LockPrincipalRemoteSessionBindings(ctx, repo.LockPrincipalRemoteSessionBindingsParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config,
@@ -346,6 +347,52 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, binding.ID, rebound.ID)
 	require.Equal(t, replacement.ID.String(), rebound.RemoteSessionID)
+}
+
+// A detach names the account the connection signed in as, falling back to the
+// upstream display name when the upstream reports no email.
+func TestDetachBindingRecordsUpstreamAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Detach account agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "detach-account-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "detach-account-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "detach-account-client")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+	_, err = testrepo.New(ti.conn).SetAttachmentSourceIdentityFixture(ctx, testrepo.SetAttachmentSourceIdentityFixtureParams{ID: session.ID, UpstreamEmail: pgtype.Text{}, UpstreamDisplayName: conv.ToPGText("Display-only account"), IdentitySource: conv.ToPGText(remotesessions.IdentitySourceIDToken), UserSessionIssuerID: config})
+	require.NoError(t, err)
+
+	binding, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+	attached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	attachMetadata, err := audittest.DecodeAuditData(attached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "Display-only account", attachMetadata["upstream_account"])
+
+	require.NoError(t, ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: binding.ID}))
+	detached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionDetach, agent.ID.String())
+	require.NoError(t, err)
+	detachMetadata, err := audittest.DecodeAuditData(detached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, binding.ID, detachMetadata["binding_id"])
+	require.Equal(t, "Display-only account", detachMetadata["upstream_account"])
 }
 
 // Exercise delegated edit and authorize permissions independently.
