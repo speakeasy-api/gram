@@ -68,4 +68,18 @@ func TestMcpServer_EnvironmentBindingRequiresEnvironmentRead(t *testing.T) {
 
 	_, err = update(writer, created.ID, next)
 	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// Keeping the bound environment while pointing the server at another
+	// backend hands its values to that backend, so it needs the same grant.
+	otherRemoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	moveBackend := func(ctx context.Context) (*types.McpServer, error) {
+		return ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+			ID: created.ID, EnvironmentID: &current, RemoteMcpServerID: &otherRemoteID,
+			Visibility: types.McpServerVisibility("disabled"),
+		})
+	}
+	_, err = moveBackend(writer)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = moveBackend(reader)
+	require.NoError(t, err)
 }

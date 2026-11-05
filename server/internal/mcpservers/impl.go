@@ -801,7 +801,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, err
 		}
 	}
-	if ids.EnvironmentID != existing.EnvironmentID {
+	// A bound environment's values reach whatever backend the server runs, so
+	// pointing a server that keeps its environment at a different backend is
+	// as much a new selection as choosing a different environment.
+	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID ||
+		ids.TunneledMcpServerID != existing.TunneledMcpServerID ||
+		ids.ToolsetID != existing.ToolsetID ||
+		ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
+	if ids.EnvironmentID != existing.EnvironmentID || backendChanged {
 		if err := s.requireReadableEnvironment(ctx, *authCtx.ProjectID, ids.EnvironmentID); err != nil {
 			return nil, err
 		}
@@ -833,7 +840,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			}
 		}
 	}
-	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
 	if payload.Visibility != VisibilityDisabled && (backendChanged || existing.Visibility == VisibilityDisabled) {
 		proposedURL := ""
 		if ids.RemoteMcpServerID.Valid {
