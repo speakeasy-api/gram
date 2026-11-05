@@ -103,7 +103,11 @@ func TestDuplicateClient_CopiesConfigurationAndSecret(t *testing.T) {
 		OrganizationID:        activeOrganizationID(t, ctx),
 	})
 	require.NoError(t, err)
+	forward := true
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: sourceID, ForwardClientName: &forward})
+	require.NoError(t, err)
 	source := storedOrganizationClient(t, ctx, ti, sourceID)
+	require.True(t, source.ForwardClientName)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDuplicate)
 	require.NoError(t, err)

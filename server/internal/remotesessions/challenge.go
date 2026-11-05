@@ -1732,6 +1732,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if state.Resource != "" {
 		logger = logger.With(attr.SlogOAuthResource(state.Resource))
 	}
+	if state.ClientName != "" {
+		logger = logger.With(attr.SlogOAuthForwardedClientName(true), attr.SlogRemoteSessionClientID(state.RemoteSessionClientID.String()))
+	}
 
 	// RFC 9207 §2.4: iss must be present and match before anything in the
 	// response is trusted, denial included.
@@ -1767,9 +1770,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 		t.Refuse(ctx, providerErrorHappened(errCode), mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode)))
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
-		if state.ClientName != "" {
-			logger = logger.With(attr.SlogOAuthForwardedClientName(true), attr.SlogRemoteSessionClientID(state.RemoteSessionClientID.String()))
-		}
 		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
 		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
 			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state))
