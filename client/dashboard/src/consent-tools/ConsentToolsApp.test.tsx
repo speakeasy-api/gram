@@ -249,8 +249,9 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(true);
     expect(formFieldValues("tool_filtering")).toEqual([]);
 
+    // Approval is available as soon as the deferred credential is picked.
     select("chained");
-    await screen.findByText(/Tools load after you give access/);
+    expect(screen.getByText(/Tools load after you give access/)).toBeTruthy();
     expect(button.disabled).toBe(false);
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
   });
@@ -390,6 +391,49 @@ describe("ConsentToolsApp", () => {
     expect(screen.queryByText("Retry")).toBeNull();
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("shows a deferred inventory without waiting for the request", async () => {
+    let finish!: (value: { tools: { name: string }[] }) => void;
+    listTools.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { button } = renderApp({ inventoryDeferred: true });
+    expect(screen.getByText(/Tools load after you give access/)).toBeTruthy();
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+
+    // The person signed in separately, so the tools do load.
+    await waitFor(() => expect(listTools).toHaveBeenCalledOnce());
+    await act(async () => finish({ tools: [{ name: "get_thing" }] }));
+    await screen.findByRole("radio", { name: /All tools/ });
+    expect(screen.queryByText(/Tools load after you give access/)).toBeNull();
+    expect(formFieldValues("tool_inventory_id")).toHaveLength(1);
+  });
+
+  it("shows loading again when the person asks a deferred inventory to load", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const user = userEvent.setup();
+    const { button } = renderApp({ inventoryDeferred: true });
+    await waitFor(() => expect(connect).toHaveBeenCalledOnce());
+
+    let fail!: (reason: unknown) => void;
+    connect.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+    );
+    await user.click(screen.getByRole("button", { name: "Load tools" }));
+    await screen.findByText("Loading available tools…");
+    expect(button.disabled).toBe(true);
+
+    await act(async () => fail(new StreamableHTTPError(409, "not connected")));
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
   });
 
   it("never defers over a stored narrower selection", async () => {

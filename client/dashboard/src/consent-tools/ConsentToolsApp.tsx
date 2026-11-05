@@ -29,8 +29,8 @@ export interface ConsentToolsAppProps {
   gatewayInventory?: ConsentInventory & { attempt: string };
   /**
    * Set by the server when the credential the inventory signs in with is
-   * reached only through identity chaining: a "not connected" inventory then
-   * only means chaining runs after approval, so access is given with all
+   * reached only through identity chaining: chaining runs after approval, so
+   * the inventory is "not connected" until then and access is given with all
    * tools. Where the page offers a credential choice, each `auth_client`
    * control carries its own answer and the selected one decides instead.
    */
@@ -285,7 +285,14 @@ function ConsentToolsSelection({
   prefill,
   authClient,
 }: ConsentToolsAppProps & { authClient: string }): JSX.Element {
-  const [loadPhase, setPhase] = useState<ConsentPhase>({ name: "loading" });
+  // A stored narrower selection must never be replaced by all tools.
+  const canDefer = !gateway && inventoryDeferred && prefill === null;
+  // The server already decided these tools load after approval, so that
+  // state shows at once. The request below still replaces it when the tools
+  // do load, or when a failure needs the person to act.
+  const [loadPhase, setPhase] = useState<ConsentPhase>(
+    canDefer ? { name: "deferred" } : { name: "loading" },
+  );
   const [attemptID, setAttemptID] = useState(
     () => gatewayInventory?.attempt ?? crypto.randomUUID(),
   );
@@ -305,7 +312,9 @@ function ConsentToolsSelection({
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    setPhase({ name: "loading" });
+    setPhase((current) =>
+      canDefer && current.name === "deferred" ? current : { name: "loading" },
+    );
     const load = async () => {
       let inventory: ConsentInventory;
       if (gateway) {
@@ -355,15 +364,8 @@ function ConsentToolsSelection({
       setPhase({ name: "ready", inventory });
     };
     load().catch((err: unknown) => {
-      // A stored narrower selection must never be replaced by all tools.
       if (!cancelled) {
-        setPhase(
-          errorPhase(
-            err,
-            !gateway && inventoryDeferred && prefill === null,
-            prefill !== null,
-          ),
-        );
+        setPhase(errorPhase(err, canDefer, prefill !== null));
       }
     });
     return () => {
@@ -377,7 +379,7 @@ function ConsentToolsSelection({
     state,
     csrfToken,
     prefill,
-    inventoryDeferred,
+    canDefer,
     gateway,
     gatewayInventory,
   ]);
@@ -470,7 +472,10 @@ function ConsentToolsSelection({
           Signed in to the service separately?{" "}
           <button
             type="button"
-            onClick={() => setAttemptID(crypto.randomUUID())}
+            onClick={() => {
+              setPhase({ name: "loading" });
+              setAttemptID(crypto.randomUUID());
+            }}
             className="text-primary hover:underline"
           >
             Load tools
