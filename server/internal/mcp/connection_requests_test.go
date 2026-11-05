@@ -884,8 +884,8 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
 }
 
-// A later client needing a re-link decides the response, but the refresh row still stands for the request.
-func TestFreshRefreshOutrankedByReconnectWritesOnlyTheRefreshRow(t *testing.T) {
+// A later client needing a re-link decides the response, so it keeps its own row beside the refresh row.
+func TestFreshRefreshOutrankedByReconnectKeepsTheReconnectRow(t *testing.T) {
 	t.Parallel()
 	rec := mcpconnectionattemptstest.New(t)
 	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
@@ -919,8 +919,10 @@ func TestFreshRefreshOutrankedByReconnectWritesOnlyTheRefreshRow(t *testing.T) {
 	require.Equal(t, want.Header().Get("WWW-Authenticate"), got.Header().Get("WWW-Authenticate"))
 
 	rows := rec.Rows()[1:]
-	require.Len(t, rows, 1)
+	require.Len(t, rows, 2)
 	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[1].Reason)
 }
 
 // A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.
