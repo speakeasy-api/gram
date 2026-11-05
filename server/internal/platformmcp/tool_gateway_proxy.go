@@ -163,7 +163,7 @@ func (s *GatewayProxyService) call(ctx context.Context, principal Principal, too
 	var zero proxiedToolResult
 	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCPGatewayProxy, principal.OrganizationID, nil)
 	if err != nil || !enabled {
-		return zero, gatewayProxyUnavailable("Using your MCP servers through this Speakeasy connection is not switched on for your organization yet.")
+		return zero, gatewayProxyUnavailable(gatewayProxyOff)
 	}
 	gateway, err := s.gateway.getForPlatformMCP(ctx, principal)
 	if err != nil {
@@ -209,6 +209,14 @@ func proxiedResultText(result proxiedToolResult) string {
 	}
 	return "The server returned an error with no message."
 }
+
+// gatewayProxyOff is the refusal when the flag is off or cannot be read. It
+// does not claim a cause the server cannot see, and names the path that works
+// instead, so an agent does not send the user to an organization setting that
+// does not exist: connecting the server to the app directly.
+const gatewayProxyOff = "Running tools on your MCP servers through this Speakeasy connection (list_my_servers, search_my_tools, describe_tools and execute_tool) is not available for your organization right now. " +
+	"Speakeasy controls whether it is available; it is not an organization setting, so an administrator cannot switch it on. " +
+	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's project_id, its mcp_id or the registration_id setup returned, and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
 
 func gatewayProxyUnavailable(message string) error {
 	payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayProxyFeature, Message: message})
