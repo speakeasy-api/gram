@@ -310,6 +310,10 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 			outage := &SessionOutageError{err: err}
 			return unavailableSessionCredential(selectedID, clientID, selectedResource, outage), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
+			if RefreshFailureRecorded(err) {
+				// Keep the bare remedy; only the already-recorded fact travels.
+				return zero, errors.Join(ErrRemoteSessionMisconfigured, errRefreshFailureRecorded)
+			}
 			return zero, ErrRemoteSessionMisconfigured
 		}
 		return zero, nil

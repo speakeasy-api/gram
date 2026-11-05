@@ -756,6 +756,27 @@ func TestFreshRefreshSuppressesOnlyDuplicateGateRow(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
 }
 
+func TestFreshMisconfiguredRefreshWritesOnlyTheRefreshRow(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-misconfigured")
+	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+	_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, err)
+	rows := rec.Rows()
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+}
+
 func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 	t.Parallel()
 	for _, oauth := range []bool{false, true} {

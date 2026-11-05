@@ -92,10 +92,16 @@ func (e *RefreshError) Error() string { return e.err.Error() }
 
 func (e *RefreshError) Unwrap() error { return e.err }
 
+// errRefreshFailureRecorded marks a collapsed refresh error whose row was already written.
+var errRefreshFailureRecorded = errors.New("refresh failure recorded")
+
 // RefreshFailureRecorded reports whether this fresh refresh error already submitted
 // a standalone failed provider_refresh row. Cached/deferred errors and carried steps
 // do not qualify. Acceptance is into the recorder queue, not a persistence guarantee.
 func RefreshFailureRecorded(err error) bool {
+	if errors.Is(err, errRefreshFailureRecorded) {
+		return true
+	}
 	failure, ok := errors.AsType[*RefreshError](err)
 	return ok && failure != nil && failure.failureRecorded
 }
