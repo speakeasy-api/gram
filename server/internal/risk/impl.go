@@ -1562,7 +1562,8 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 // UnmaskRiskResult returns the plaintext match for one risk result. Chat-backed
 // findings reconstruct it from chat data; MCP findings read encrypted evidence.
 // Both require chat:read for the result's chat, or that the member owns the
-// chat (see requireChatRead); successful reveals are audited as access events.
+// chat or owns or edits its agent (see requireChatRead); successful reveals are
+// audited as access events.
 func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskResultPayload) (*gen.RiskUnmaskResultResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

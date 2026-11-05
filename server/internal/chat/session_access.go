@@ -39,6 +39,11 @@ func (a *SessionAccess) AnswersForSession(ctx context.Context, chatID uuid.UUID)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return false, nil
 	}
+	// Impersonation bypasses RBAC, so the owner rule answers nothing for a
+	// support or legacy-impersonated session, as loadAuthorizedChat refuses.
+	if authz.CheckSensitiveContentAccess(ctx) != nil {
+		return false, nil
+	}
 
 	chat, err := a.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	switch {
