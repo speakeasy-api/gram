@@ -110,6 +110,7 @@ func TestGatewayProxyRefusesWhenFlagIsOff(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
 	require.Equal(t, gatewayProxyFeature, payload.Feature)
 	require.Contains(t, payload.Message, "not available for your organization right now")
+	require.Contains(t, payload.Message, "Speakeasy controls whether it is available")
 	require.Contains(t, payload.Message, "not an organization setting")
 	require.Contains(t, payload.Message, "get_my_install_instructions")
 	require.Empty(t, proxy.calls)
