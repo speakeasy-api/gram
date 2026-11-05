@@ -471,7 +471,7 @@ func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authenticatio
 		if client.connection.authorizer {
 			subject = urn.NewUserSubject(client.connection.owner)
 		}
-		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, client.id, skipUnusable)
+		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, client.id, skipUnusable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve agent key client: %w", err)
 		}
@@ -534,6 +534,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			Subject:             tokenSubject(ctx, authentication.subject, authentication.authorizerOwner),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
+			Attribution:         authentication.refreshAttribution(ctx),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("resolve auth client: %w", err)
@@ -541,20 +542,20 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
-		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
+		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
 		return tokens, nil
 	}
 	if skipUnusable {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 		if err != nil {
 			return nil, fmt.Errorf("resolve available clients: %w", err)
 		}
 		return tokens, nil
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 	if err != nil {
 		return nil, fmt.Errorf("resolve bound clients: %w", err)
 	}
@@ -639,7 +640,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		readOnly:     false,
 		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return s.resolveChosenMemberTokens(ctx, endpoint, authentication.subject, enforced, member)
+			return s.resolveChosenMemberTokens(ctx, authentication.refreshAttribution(ctx), endpoint, authentication.subject, enforced, member)
 		},
 		mu:       sync.Mutex{},
 		byServer: map[uuid.UUID]*memberTokens{},
@@ -648,7 +649,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 
 // resolveChosenMemberTokens resolves one gateway member's credential from its
 // chosen client for subject.
-func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, enforced bool, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, enforced bool, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	// Under enforcement the connection a member's permit was decided
 	// for binds its tokens, typed or handed back to the upstream
 	// client choice. Without its token the member fails: an empty
@@ -665,13 +666,14 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 			Subject:             tokenSubject(ctx, subject, authorizerOwner),
 			RegistrationID:      member.chosenClientID.UUID,
 			SkipUnusable:        true,
+			Attribution:         attribution,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 		}
 		return pinAttachedSession(tokens, pinned, false)
 	}
-	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(subject, authorizerOwner), member.chosenClientID.UUID, true)
+	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(subject, authorizerOwner), member.chosenClientID.UUID, true)
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		return nil, fmt.Errorf("resolve chosen client: %w", err)
@@ -945,7 +947,8 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 				}
 				// An existing connection needs no Connect.
 				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
-					ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
+					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
+					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
 					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
 				})
 				if err != nil {
@@ -1141,7 +1144,7 @@ func memberNeedsSignIn(member metaMember) bool {
 // up with a credential for through that credential, where typed auth client
 // resolution is enforced. It is nil for any other caller, before enforcement,
 // and for a key with no choices, so the gateway keeps its path.
-func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID) (*memberChoices, error) {
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, attribution remotesessions.RefreshAttribution) (*memberChoices, error) {
 	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
@@ -1176,6 +1179,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 			endpoint := &ResolvedMcpEndpoint{
 				AudienceURN:               "",
 				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+				clientInfoScope:           "",
 				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				IsPublic:                  false,
 				idJAGConfigured:           false,
@@ -1193,7 +1197,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				OrganizationID:            organizationID,
 				UserSessionIssuerID:       issuerID,
 			}
-			tokens, err := s.resolveChosenMemberTokens(ctx, endpoint, subject, true, member)
+			tokens, err := s.resolveChosenMemberTokens(ctx, attribution, endpoint, subject, true, member)
 			if err != nil {
 				return nil, err
 			}

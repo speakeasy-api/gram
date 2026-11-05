@@ -135,7 +135,7 @@ func TestResolveAccessTokens_SelfClientPresentsClientCredential(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-resolve")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-resolve-user"))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-resolve-user"))
 	require.NoError(t, err)
 
 	require.Len(t, tokens, 1)
@@ -160,7 +160,7 @@ func TestResolveAccessTokens_SelfClientRequestsAttachedUpstream(t *testing.T) {
 	fx := seedSelfClient(t, ctx, ti.conn, "self-upstream")
 	attachRemoteMcpServerToIssuer(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "self-upstream", "https://upstream.example.com/mcp")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-upstream-user"))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-upstream-user"))
 	require.NoError(t, err)
 	require.Equal(t, "https://upstream.example.com/mcp", tokens[fx.remoteIssuerID].Resource, "the token records the audience it was minted for")
 
@@ -178,7 +178,7 @@ func TestResolveAccessTokens_SelfClientServesAgentWithoutAttachment(t *testing.T
 	fx := seedSelfClient(t, ctx, ti.conn, "self-agent")
 
 	// No principal binding exists: no subject owns a self credential.
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()))
 	require.NoError(t, err)
 	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
 }
@@ -193,7 +193,7 @@ func TestResolveAccessTokens_SelfClientServesAnonymousCaller(t *testing.T) {
 
 	// A public endpoint admits anonymous callers; the MCP server's own
 	// credential serves them as it serves everyone else.
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAnonymousSubject(uuid.NewString()))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAnonymousSubject(uuid.NewString()))
 	require.NoError(t, err)
 	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
 }
@@ -206,7 +206,7 @@ func TestResolveAccessTokens_SelfClientRejectedIsMisconfigured(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-rejected")
 
-	_, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-rejected-user"))
+	_, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-rejected-user"))
 	require.ErrorIs(t, err, remotesessions.ErrClientCredentialMisconfigured)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -220,7 +220,7 @@ func TestResolveAccessTokens_SelfClientUnreachableIsUnavailable(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-unreachable")
 
-	_, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-unreachable-user"))
+	_, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-unreachable-user"))
 	require.ErrorIs(t, err, remotesessions.ErrClientCredentialUnavailable)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
@@ -233,7 +233,7 @@ func TestResolveAccessTokens_SelfClientWithoutSourceIsMisconfigured(t *testing.T
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	fx := seedSelfClient(t, ctx, ti.conn, "self-no-source")
 
-	_, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-no-source-user"))
+	_, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-no-source-user"))
 	require.ErrorIs(t, err, remotesessions.ErrClientCredentialMisconfigured)
 }
 
@@ -245,7 +245,7 @@ func TestResolveAvailableAccessTokens_KeepsUnavailableSelfClient(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-available")
 
-	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-available-user"))
+	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-available-user"))
 	require.NoError(t, err)
 
 	got, ok := tokens[fx.remoteIssuerID]
@@ -264,7 +264,7 @@ func TestCheckAccessTokens_SkipsSelfClient(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-check")
 
-	err := mgr.CheckAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()))
+	err := mgr.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()))
 	require.NoError(t, err)
 
 	requests, _ := source.recorded()
@@ -292,7 +292,7 @@ func TestResolveAuthorization_SelfClient(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-authorization")
 
-	authorization, err := mgr.ResolveAuthorization(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, fx.remoteIssuerID, urn.NewUserSubject("self-authorization-user"), "https://provider.example.com/mcp")
+	authorization, err := mgr.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, fx.remoteIssuerID, urn.NewUserSubject("self-authorization-user"), "https://provider.example.com/mcp")
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.ResolvedAuthorization{
 		AccessToken:            "self-token",
@@ -315,7 +315,7 @@ func TestRenewClientCredential_ReplacesForgottenCredential(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-renew")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-renew-user"))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-renew-user"))
 	require.NoError(t, err)
 
 	renewed, ok, err := mgr.RenewClientCredential(ctx, tokens[fx.remoteIssuerID])
@@ -338,7 +338,7 @@ func TestRenewClientCredential_KeepsCredentialSourceRetains(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-renew-final")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-renew-final-user"))
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-renew-final-user"))
 	require.NoError(t, err)
 
 	_, ok, err := mgr.RenewClientCredential(ctx, tokens[fx.remoteIssuerID])

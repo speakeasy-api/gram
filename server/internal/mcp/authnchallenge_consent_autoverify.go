@@ -188,7 +188,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, fro
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, logger, fromRequest, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
+	if err := s.probeRemoteSession(ctx, consentRefreshAttribution(nil, endpoint, challengeState), logger, fromRequest, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }

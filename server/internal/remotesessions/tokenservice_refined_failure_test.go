@@ -60,7 +60,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	_, firstErr := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, firstErr := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, firstErr, remotesessions.ErrRemoteSessionUnavailable)
 	require.ErrorIs(t, firstErr, remotesessions.ErrNoValidToken, "callers that only ask for a usable token still read it as absent")
 
@@ -72,7 +72,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, active.RefreshTokenEncrypted.Valid)
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 1, refreshAttempts.Load(), "the retry inside the cooldown never reaches the provider")
 	require.Equal(t, 30*time.Second, remotesessions.RetryAfter(firstErr).Round(30*time.Second))
@@ -81,7 +81,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(active)))
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 2, refreshAttempts.Load())
 }
@@ -94,7 +94,7 @@ func TestResolveAccessTokens_ProviderRetryAfterExtendsTheCooldown(t *testing.T) 
 		w.WriteHeader(http.StatusTooManyRequests)
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, 2*time.Minute, remotesessions.RetryAfter(err))
 }
@@ -121,7 +121,7 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 
 	late := make(chan error, 1)
 	go func() {
-		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		late <- err
 	}()
 	<-entered
@@ -145,7 +145,7 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 	require.ErrorIs(t, lateErr, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, 5*time.Minute, remotesessions.RetryAfter(lateErr))
 
-	tokens, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	tokens, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	for _, token := range tokens {
@@ -180,12 +180,12 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	}
 	require.Equal(t, remotesessions.RefreshOutageNone, outage())
 
-	_, err := env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual)
+	_, err := env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageProvider, outage())
 
 	down.Store(false)
-	_, err = env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutageNone, outage(), "a successful refresh clears the record")
 
@@ -194,7 +194,7 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
 		ID: expired.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
-	_, err = env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = env.refresher.RefreshNow(ctx, active(), "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageProvider, outage())
 
@@ -240,7 +240,7 @@ func TestConnectionOutage_TunneledProviderRecordsTunnel(t *testing.T) {
 		ID: env.session.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	kind, tunnel, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
@@ -275,7 +275,7 @@ func TestConnectionOutage_ProviderBehindLiveTunnelRecordsTunnel(t *testing.T) {
 	}))
 	down.Store(true)
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, remotesessions.OutageKindOf(err))
 	kind, tunnel, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
@@ -294,7 +294,7 @@ func TestConnectionOutage_TunnelTransportMissingIsRecorded(t *testing.T) {
 	})
 	bindIssuerToTunnel(t, env)
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
@@ -312,13 +312,13 @@ func TestRefreshNow_ManualRefreshSkipsTheCooldown(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 1, refreshAttempts.Load())
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 2, refreshAttempts.Load())
 }
@@ -342,7 +342,7 @@ func TestRefreshNow_CancellationIsNotAnOutage(t *testing.T) {
 	callCtx, cancel := context.WithCancel(ctx)
 	result := make(chan error, 1)
 	go func() {
-		_, err := env.refresher.RefreshNow(callCtx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+		_, err := env.refresher.RefreshNow(callCtx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 		result <- err
 	}()
 	<-entered
@@ -373,7 +373,7 @@ func TestResolveAccessTokens_CanceledCallerIsNotAnOutage(t *testing.T) {
 	callCtx, cancel := context.WithCancel(ctx)
 	result := make(chan error, 1)
 	go func() {
-		_, err := env.mgr.ResolveAccessTokens(callCtx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(callCtx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		result <- err
 	}()
 	<-entered
@@ -399,7 +399,7 @@ func TestRefreshNow_LockContentionIsNotAProviderOutage(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, held)
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 	require.True(t, remotesessions.RefreshBusy(err))
@@ -424,7 +424,7 @@ func TestRefreshNow_UnusableProviderAnswerIsAProviderOutage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, env := newExpiredRefreshEnv(t, "refresh-unusable-"+strings.ReplaceAll(name, " ", "-"), handler)
-			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 			require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 			require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
 			require.Positive(t, remotesessions.RetryAfter(err))
@@ -444,7 +444,7 @@ func TestResolveAccessTokens_StoreFaultFailsOnlyThatMember(t *testing.T) {
 		_, _ = w.Write([]byte(`{"access_token":"refreshed","refresh_token":"rotated","expires_in":3600,"scope":"read\u0000write"}`))
 	})
 
-	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err, "a gateway keeps serving its other members")
 	require.Len(t, tokens, 1)
 	for _, entry := range tokens {
@@ -453,7 +453,7 @@ func TestResolveAccessTokens_StoreFaultFailsOnlyThatMember(t *testing.T) {
 		require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(entry.ClientCredentialErr))
 	}
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "a single credential stays a 500")
 }
@@ -473,13 +473,13 @@ func TestRefreshNow_InvalidGrantClearsTheOutageRecord(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageProvider, kind)
 
 	dead.Store(true)
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.Error(t, err)
 	kind, _, _ = env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageNone, kind)
@@ -492,7 +492,7 @@ func TestRefreshNow_CooldownWithoutRecordHasNoKind(t *testing.T) {
 	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-no-record", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
 
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -501,7 +501,7 @@ func TestRefreshNow_CooldownWithoutRecordHasNoKind(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshOutageKey(active)))
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 	require.Positive(t, remotesessions.RetryAfter(err), "still paced")
@@ -525,7 +525,7 @@ func TestRefreshNow_RouteStoreFailureIsNotATunnelOutage(t *testing.T) {
 		ID: env.session.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 	require.Equal(t, 30*time.Second, remotesessions.RetryAfter(err), "the client is told when to retry")
@@ -552,9 +552,9 @@ func TestRefreshNow_CooldownKeepsTheOutageKind(t *testing.T) {
 	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-kind", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
 }
 
@@ -569,7 +569,7 @@ func TestRefreshNow_UnrecordedOutageHasNoKind(t *testing.T) {
 	require.NoError(t, broken.Close())
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NewRedisCacheAdapter(broken))
 
-	_, err := refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err := refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 }
@@ -581,7 +581,7 @@ func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	})
 
-	token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err, "the single-client primitive reports every unusable token as empty")
 	require.Empty(t, token)
 }
@@ -593,7 +593,7 @@ func TestResolveAvailableAccessTokens_UpstreamServerErrorKeepsOutageEntry(t *tes
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	for _, entry := range tokens {
@@ -618,7 +618,7 @@ func TestResolveAccessTokens_UnauthorizedClientStaysMisconfigured(t *testing.T) 
 	// The upstream refused the client's request, not the grant, so the grant
 	// stays stored and every request reports the same administrator remedy.
 	for range 2 {
-		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	}
 	require.EqualValues(t, 2, refreshAttempts.Load())
@@ -639,7 +639,7 @@ func TestResolveAccessTokens_InvalidClientNeedsReconnect(t *testing.T) {
 
 	// invalid_client marks the client for re-registration at the next login
 	// and clears the grant, so re-linking is the repair.
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -658,7 +658,7 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -696,7 +696,7 @@ func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
@@ -747,7 +747,7 @@ func TestResolveAccessTokens_ReconnectOutranksUnavailableWithOneRefresh(t *testi
 	// A second upstream bound to the same issuer that the subject never linked.
 	seedActiveClient(t, ctx, env.db, env.projectID, env.session.UserSessionIssuerID, env.organizationID, "rank-unlinked-"+uuid.NewString()[:8])
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "the user can repair the unlinked upstream, so it must win")
 	require.LessOrEqual(t, refreshAttempts.Load(), int32(1))
@@ -771,14 +771,14 @@ func TestResolveAccessTokens_WaiterDuringOutageDoesNotPost(t *testing.T) {
 
 	holder := make(chan error, 1)
 	go func() {
-		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		holder <- err
 	}()
 	<-entered
 
 	waiter := make(chan error, 1)
 	go func() {
-		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		_, err := env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 		waiter <- err
 	}()
 	close(release)

@@ -500,7 +500,8 @@ func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesess
 // binding when one was captured at code exchange. Rows minted before the
 // resource column existed fall back to callerResource, and then to the
 // client's own derivation — one derivation rule for every refresh path.
-// trigger names the caller on the upstream-refresh metric.
+// trigger names the caller on the upstream-refresh metric; attribution says
+// where its connection row goes.
 //
 // Every call records exactly one upstream-refresh metric sample. A non-nil
 // error is always a *RefreshError wrapping either an operator-actionable
@@ -511,7 +512,7 @@ func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesess
 //
 // A request-path caller stops waiting when ctx ends, but a POST already started
 // runs on and stores its result; other triggers wait for it.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
@@ -532,7 +533,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
 	if trigger != remotesessionmetrics.RefreshTriggerRequest {
-		return s.refreshNow(ctx, q, client, sess, callerResource, trigger)
+		return s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
 	}
 
 	type refreshed struct {
@@ -550,7 +551,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: RefreshOutageNone, err: err}}
 			}
 		}()
-		result, err := s.refreshNow(ctx, q, client, sess, callerResource, trigger)
+		result, err := s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
 		var refreshErr *RefreshError
 		if ctx.Err() != nil && errors.As(err, &refreshErr) && refreshErr.Outcome != remotesessionmetrics.RefreshOutcomeCanceled {
 			// The caller that would have logged this has gone. A cancel before the POST is routine.
@@ -586,7 +587,7 @@ func (s *RefreshService) DrainRefreshes(ctx context.Context) error {
 }
 
 // refreshNow is RefreshNow's body, on whichever goroutine the trigger requires.
-func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.Queries, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.Queries, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (RefreshResult, error) {
 	var zero RefreshResult
 
 	kind := RefreshOutageProvider

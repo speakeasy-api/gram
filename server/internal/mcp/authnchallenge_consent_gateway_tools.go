@@ -142,9 +142,11 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
-		fromRequest:  mcpconnectionattempts.FromRequest(r),
-		projectID:    endpoint.ProjectID,
-		metaServerID: endpoint.MetaMcpServerID.UUID,
+		fromRequest:      mcpconnectionattempts.FromRequest(r),
+		skippedUpstreams: nil,
+		request:          nil,
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent gateways reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: organizationGateway,
@@ -215,10 +217,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		if member.typedAuthClient {
 			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true,
+				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
 			})
 		}
-		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {

@@ -536,6 +536,7 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
+		request:               nil,
 		projectID:             projectID,
 		organizationID:        toolset.OrganizationID,
 		toolset:               toolset.Slug,

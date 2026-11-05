@@ -243,6 +243,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
+			consentRefreshAttribution(r, endpoint, challengeState),
 			subject,
 			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,
@@ -275,7 +276,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
 		switch {

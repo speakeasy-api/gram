@@ -159,7 +159,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretPost(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, externalCID := setupRefreshFixture(t, "client_secret_post", clientSecret, &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -175,7 +175,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, _ := setupRefreshFixture(t, "client_secret_basic", "basic-secret", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -195,7 +195,7 @@ func TestResolveAccessToken_RefreshMissingSecretForBasicFailsFast(t *testing.T) 
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, _ := setupRefreshFixture(t, "client_secret_basic", "", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err, "misconfiguration is a no-token signal, not a transport error")
 	require.Empty(t, tok, "no token must be resolved for a misconfigured client")
 	require.Nil(t, spy.form, "the upstream token endpoint must not be contacted")
@@ -210,7 +210,7 @@ func TestResolveAccessToken_RefreshNoMethodNoSecretIsPublic(t *testing.T) {
 	var spy upstreamSpy
 	ctx, mgr, clientID, subject, externalCID := setupRefreshFixture(t, "", "", &spy)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

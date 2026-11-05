@@ -219,6 +219,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 
 	authorization, err := a.sessions.ResolveAuthorization(
 		ctx,
+		remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(request.OrganizationID, request.ProjectID, mcpconnectionattempts.AppFirstParty)),
 		request.ProjectID,
 		request.OrganizationID,
 		request.UserSessionIssuerID,
