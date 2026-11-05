@@ -348,7 +348,7 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 	}
 	now := p.cfg.Now()
 	observation := k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending}
-	seen, failed := false, false
+	seen, failed, unapproved := false, false, false
 	for _, node := range nodes {
 		if node.RetiredAt.Valid || !node.LastSeenAt.Valid {
 			continue
@@ -365,10 +365,17 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 			}
 		case fresh && (node.Status == string(NodeStatusError) || node.Status == string(NodeStatusNeedsLogin)):
 			failed = true
+		case fresh && node.Status == string(NodeStatusAwaitingApproval):
+			unapproved = true
 		}
 	}
 	if observation.Status == k8s.NetworkIngressStatusOnline {
 		return observation, nil
+	}
+	// Connected but unapproved hosts are something the customer can fix in
+	// their tailnet, so that takes precedence over a generic failure.
+	if unapproved {
+		return errorObservation(k8s.NetworkIngressErrorProviderServiceNotApproved), nil
 	}
 	if failed {
 		return errorObservation(""), nil

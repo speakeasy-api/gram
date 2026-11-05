@@ -426,6 +426,28 @@ func TestProvisionerReportsSlotWaitingForLoginAsError(t *testing.T) {
 	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a slot waiting for login is not healthy")
 }
 
+func TestProvisionerReportsHostsAwaitingApproval(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovapproval")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusAwaitingApproval, "nONE")
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusError, "")
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status)
+	require.Equal(t, k8s.NetworkIngressErrorProviderServiceNotApproved, observation.ErrorCode, "the fixable cause wins over a generic failure")
+	require.Empty(t, observation.DNSName, "an unapproved host gets no traffic, so no name is published")
+
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusOnline, "nTWO")
+	observation, err = f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusOnline, observation.Status, "one approved host is enough to serve")
+	require.Equal(t, "private.example.ts.net", observation.DNSName)
+}
+
 type fakeOperator struct {
 	deleteCalls int
 	observe     k8s.NetworkIngressObservation

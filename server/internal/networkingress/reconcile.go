@@ -326,7 +326,8 @@ func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.Netw
 	code := observation.ErrorCode
 	switch code {
 	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
-		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable:
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
+		k8s.NetworkIngressErrorProviderServiceNotApproved:
 	default:
 		code = "provider_error"
 		failure = reconcileFailure(code)
