@@ -89,6 +89,22 @@ func seedScopedChat(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proje
 	return chatID
 }
 
+// demoteScopedChat lands a human turn on an agent-only chat, the path UpsertChat
+// demotes to the empty-string no-author shape neither the owner nor the human may open.
+func demoteScopedChat(t *testing.T, ctx context.Context, conn *pgxpool.Pool, project ResolvedProject, organizationID string, chatID uuid.UUID, userID string) {
+	t.Helper()
+	_, err := chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+		ExternalUserID: pgtype.Text{},
+		AgentID:        uuid.NullUUID{},
+		Title:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+}
+
 // platformMemberContext is the context the external Platform MCP endpoint
 // prepares for a member: their auth context, the acting surface, exactly the
 // grants given, and the principal.

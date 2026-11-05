@@ -4098,9 +4098,10 @@ ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
 LIMIT @row_limit::integer;
 
 -- name: GetPlatformChatSearchChat :one
--- external_user_id and agent_id decide whether a member without chat:read may
--- read the chat: their own session, or an agent-only session of an agent they own.
-SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(c.external_user_id, '')::text AS external_user_id, c.agent_id,
+-- agent_only is the shape the search predicate above admits for an owner: a NULL
+-- user_id, not the empty string UpsertChat leaves on a demoted mixed session.
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, c.agent_id,
+       (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id IS NOT NULL)::boolean AS agent_only,
        COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title, c.title_manually_set
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE

@@ -10,9 +10,9 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// refusesLogReadOnly admits project reads but refuses log:read, as a non-human
-// caller without log:read is treated: API keys, the assistant runtime and
-// embedded chat sessions get no own-scope fallback.
+// refusesLogReadOnly admits project reads but refuses the log scope outright,
+// whoever the principal is; it stands in for any reader that refuses rather
+// than falling back to an own scope.
 func refusesLogReadOnly() refusingProjectReader {
 	return refusingProjectReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}, projectErr: nil, logReadErr: ErrForbidden, mcpErr: nil}
 }
@@ -28,7 +28,9 @@ func (r ownScopeProjectReader) ResolveProjectLogScope(context.Context, Principal
 	return ResolvedProject{}, r.scope, nil
 }
 
-func TestSearchToolCallsRefusesNonHumanCallersBeforeSpendingBudget(t *testing.T) {
+// A refused scope resolution stops the search before any row is read or any
+// budget is spent, whatever the reason for the refusal.
+func TestSearchToolCallsRefusesWithoutScopeBeforeSpendingBudget(t *testing.T) {
 	t.Parallel()
 
 	search := &recordingToolCallSearchReader{}

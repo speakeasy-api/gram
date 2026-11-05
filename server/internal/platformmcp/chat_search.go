@@ -195,14 +195,13 @@ func (a chatAccess) projectWide() bool {
 }
 
 // covers reports whether a chat is readable in the member's own scope: their
-// own session, or an agent-only session (no human identity at all) of an agent
-// they own. A session that also carries a human identity stays that human's.
+// own session, or an agent-only session of an agent they own. AgentOnly is
+// decided in SQL: a demoted mixed session has an empty user id, not a NULL one.
 func (a chatAccess) covers(chat platformrepo.GetPlatformChatSearchChatRow) bool {
 	if a.projectWide() || chat.OwnerUserID == a.ownUserID {
 		return true
 	}
-	agentOnly := chat.AgentID.Valid && chat.OwnerUserID == "" && chat.ExternalUserID == ""
-	return agentOnly && slices.Contains(a.ownedAgentIDs, chat.AgentID.UUID)
+	return chat.AgentOnly && slices.Contains(a.ownedAgentIDs, chat.AgentID.UUID)
 }
 
 func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string) (chatAccess, error) {

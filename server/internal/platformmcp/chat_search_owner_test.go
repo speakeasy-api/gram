@@ -22,8 +22,9 @@ type ownerScopeChats struct {
 	own, ownAgent uuid.UUID
 	// other belongs to someone else; latchedAgent and foreignAgent are
 	// agent-only sessions nobody, or somebody else, answers for; ownAgentForOther
-	// is somebody else's session the member's agent took part in.
-	other, latchedAgent, foreignAgent, ownAgentForOther uuid.UUID
+	// is somebody else's session the member's agent took part in; demotedAgent
+	// was the member's agent's session until a human turn made it mixed.
+	other, latchedAgent, foreignAgent, ownAgentForOther, demotedAgent uuid.UUID
 }
 
 func (c ownerScopeChats) visible() []uuid.UUID {
@@ -31,7 +32,7 @@ func (c ownerScopeChats) visible() []uuid.UUID {
 }
 
 func (c ownerScopeChats) hidden() []uuid.UUID {
-	return []uuid.UUID{c.other, c.latchedAgent, c.foreignAgent, c.ownAgentForOther}
+	return []uuid.UUID{c.other, c.latchedAgent, c.foreignAgent, c.ownAgentForOther, c.demotedAgent}
 }
 
 func seedOwnerScopeChats(t *testing.T, ctx context.Context, f chatSearchFixture, content string, at time.Time) ownerScopeChats {
@@ -40,6 +41,8 @@ func seedOwnerScopeChats(t *testing.T, ctx context.Context, f chatSearchFixture,
 	seed := func(userID string, agentID uuid.UUID) uuid.UUID {
 		return seedScopedChat(t, ctx, f.db, f.project, f.principal.OrganizationID, userID, agentID, content, at)
 	}
+	demoted := seed("", agents.own)
+	demoteScopedChat(t, ctx, f.db, f.project, f.principal.OrganizationID, demoted, agents.otherOwner)
 	return ownerScopeChats{
 		agents:           agents,
 		own:              seed(f.principal.UserID, uuid.Nil),
@@ -48,6 +51,7 @@ func seedOwnerScopeChats(t *testing.T, ctx context.Context, f chatSearchFixture,
 		latchedAgent:     seed("", agents.latched),
 		foreignAgent:     seed("", agents.foreign),
 		ownAgentForOther: seed(agents.otherOwner, agents.own),
+		demotedAgent:     demoted,
 	}
 }
 
@@ -86,7 +90,7 @@ func TestChatSearchMemberSeesOwnAndOwnedAgentChatsOnly(t *testing.T) {
 	// Own-scope reads are audited like any other transcript access.
 	count, err := audittest.AuditLogCountByAction(admin, f.db, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
-	require.EqualValues(t, 4, count, "two chats found by the search and two reads")
+	require.EqualValues(t, 4, count, "two chats found by the search and two reads; refused reads record nothing")
 
 	// The unrestricted grant sees everything, and the organization admin role
 	// alone does not.
