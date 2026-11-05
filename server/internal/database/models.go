@@ -938,6 +938,8 @@ type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	IsInternal bool
+	// @access: confidential
 	Seq int64
 	// @access: confidential
 	OrganizationID string
@@ -6269,6 +6271,8 @@ type RiskResult struct {
 type SecurityAuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	IsInternal bool
 	// @access: confidential
 	Seq int64
 	// @access: confidential
