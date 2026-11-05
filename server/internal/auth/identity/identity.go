@@ -103,7 +103,7 @@ type WorkOSClient interface {
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
@@ -916,7 +916,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
+	membership, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
 	if err != nil {
 		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
@@ -925,7 +925,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		WorkOSOrganizationID: created.WorkOSOrganizationID,
 		GramOrganizationID:   created.GramOrganizationID,
 		WorkOSUserID:         user.WorkosID.String,
-		WorkOSMembershipID:   membershipID,
+		WorkOSMembershipID:   membership.ID,
 	}, nil
 }
 

@@ -113,9 +113,9 @@ func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgI
 	return "workos_org_" + name, nil
 }
 
-func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error) {
 	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
-	return "om_mock_" + workosUserID, nil
+	return &workos.Member{ID: "om_mock_" + workosUserID, RoleSlugs: []string{roleSlug}}, nil
 }
 
 func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, workosOrgID string) (*workos.Member, error) {

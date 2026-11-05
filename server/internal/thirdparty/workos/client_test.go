@@ -25,6 +25,7 @@ import (
 // fakeWorkOS is a lightweight HTTP handler that mimics the WorkOS API endpoints
 // used by Client. It stores state in memory.
 type fakeWorkOS struct {
+	// mu protects shared fixtures accessed by concurrent HTTP handlers.
 	mu             sync.Mutex
 	roles          map[string][]roles.Role // orgID → roles
 	memberships    []usermanagement.OrganizationMembership
@@ -87,14 +88,36 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.mu.Lock()
-		defer f.mu.Unlock()
+		var found *usermanagement.OrganizationMembership
 		for _, membership := range f.memberships {
 			if membership.UserID == opts.UserID && membership.OrganizationID == opts.OrganizationID {
-				writeJSON(w, membership)
-				return
+				found = &membership
+				break
 			}
 		}
-		http.Error(w, "membership fixture not found", http.StatusNotFound)
+		f.mu.Unlock()
+		if found == nil {
+			http.Error(w, "membership fixture not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, found)
+
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/user_management/organization_memberships/"):
+		membershipID := strings.TrimPrefix(path, "/user_management/organization_memberships/")
+		f.mu.Lock()
+		var found *usermanagement.OrganizationMembership
+		for _, membership := range f.memberships {
+			if membership.ID == membershipID {
+				found = &membership
+				break
+			}
+		}
+		f.mu.Unlock()
+		if found == nil {
+			http.Error(w, "membership fixture not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, found)
 
 	// SDK: PUT /user_management/organization_memberships/{id}
 	case r.Method == http.MethodPut && strings.HasPrefix(path, "/user_management/organization_memberships/"):
@@ -937,12 +960,96 @@ func TestRoleClient_CreateOrganizationMembership_AppliesRoleToExistingMembership
 	}}
 	client, _ := newTestClient(t, fake)
 
-	id, err := client.CreateOrganizationMembership(t.Context(), "user_1", "org_1", "admin")
+	created, err := client.CreateOrganizationMembership(t.Context(), "user_1", "org_1", "admin")
 	require.NoError(t, err)
-	require.Equal(t, "mem_1", id)
+	require.Equal(t, "mem_1", created.ID)
+	require.ElementsMatch(t, []string{"member", "builder", "admin"}, created.RoleSlugs)
 	member, err := client.GetOrgMembership(t.Context(), "user_1", "org_1")
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"member", "builder", "admin"}, member.RoleSlugs)
+}
+
+func TestRoleClient_CreateOrganizationMembership_RefreshesRoles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		createRole   string
+		freshRoles   []string
+		readStatus   int
+		updateStatus int
+		wantRoles    []string
+		wantError    string
+		wantReads    int
+		wantUpdates  int
+	}{
+		{name: "preserves roles added after create", createRole: "member", freshRoles: []string{"member", "builder"}, wantRoles: []string{"member", "builder", "admin"}, wantReads: 1, wantUpdates: 1},
+		{name: "skips update when refresh includes role", createRole: "member", freshRoles: []string{"member", "admin", "builder"}, wantRoles: []string{"member", "admin", "builder"}, wantReads: 1},
+		{name: "skips refresh when create includes role", createRole: "admin", wantRoles: []string{"admin"}},
+		{name: "propagates create failure", wantError: "create organization membership"},
+		{name: "propagates refresh failure", createRole: "member", readStatus: http.StatusBadRequest, wantError: "refresh organization membership", wantReads: 1},
+		{name: "propagates update failure", createRole: "member", freshRoles: []string{"member"}, updateStatus: http.StatusBadRequest, wantError: "apply requested membership role", wantReads: 1, wantUpdates: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var mu sync.Mutex
+			reads, updates := 0, 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				membership := usermanagement.OrganizationMembership{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", Role: common.RoleResponse{Slug: tc.createRole}}
+				switch r.Method {
+				case http.MethodPost:
+					if tc.createRole == "" {
+						http.Error(w, "create refused", http.StatusBadRequest)
+						return
+					}
+				case http.MethodGet:
+					reads++
+					if tc.readStatus != 0 {
+						http.Error(w, "read refused", tc.readStatus)
+						return
+					}
+					for _, slug := range tc.freshRoles {
+						membership.Roles = append(membership.Roles, common.RoleResponse{Slug: slug})
+					}
+				case http.MethodPut:
+					updates++
+					if tc.updateStatus != 0 {
+						http.Error(w, "update refused", tc.updateStatus)
+						return
+					}
+					var opts usermanagement.UpdateOrganizationMembershipOpts
+					if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+					for _, slug := range opts.RoleSlugs {
+						membership.Roles = append(membership.Roles, common.RoleResponse{Slug: slug})
+					}
+				}
+				writeJSON(w, membership)
+			}))
+			t.Cleanup(srv.Close)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			client := workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: srv.URL, ClientID: "test-client-id"})
+
+			member, err := client.CreateOrganizationMembership(t.Context(), "user_1", "org_1", "admin")
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				require.Nil(t, member)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "mem_1", member.ID)
+				require.ElementsMatch(t, tc.wantRoles, member.RoleSlugs)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			require.Equal(t, tc.wantReads, reads)
+			require.Equal(t, tc.wantUpdates, updates)
+		})
+	}
 }
 
 func TestRoleClient_UpdateMemberRoles(t *testing.T) {
