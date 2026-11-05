@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -139,4 +140,52 @@ func TestServePublic_DestructiveBlockAppliesToListingOfToolMissingFromCatalog(t 
 	result := decodeMCPResult(t, w.Body.Bytes())
 	require.Empty(t, result["tools"], "the blocked tool must be dropped from the same listing that records it")
 	require.True(t, storedDestructiveHint(t, ctx, ti, endpoint.mcpServerID))
+}
+
+func TestServePublic_InspectedListingMarksToolsTheCallerCannotUse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	ti.clientCredentials.use(&scriptedClientCredentials{tokens: []string{"self-token"}})
+	upstream, _ := newDestructiveToolUpstream(t)
+	endpoint := newSelfClientEndpointWithEmptyCatalog(t, ctx, ti, upstream.URL)
+	seedDestructiveBlock(t, ctx, ti, endpoint.mcpServerID)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	selectors, err := authz.NewSelector(authz.ScopeMCPRead, endpoint.mcpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID),
+		Scope:          string(authz.ScopeMCPRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/list",
+		"params":  map[string]any{"_meta": map[string]any{remotemcp.ToolsListInspectMetaKey: true}},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, body, endpoint.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "tools/list: %s", w.Body.String())
+
+	result := decodeMCPResult(t, w.Body.Bytes())
+	tools, ok := result["tools"].([]any)
+	require.True(t, ok, "tools: %s", w.Body.String())
+	require.Len(t, tools, 1, "the blocked tool stays listed for a management caller")
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	meta, ok := tool["_meta"].(map[string]any)
+	require.True(t, ok, "tool: %s", w.Body.String())
+	require.Equal(t, true, meta[remotemcp.ToolUnavailableMetaKey])
+
+	plain, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, makeToolsListBody(), endpoint.token, nil)
+	require.NoError(t, err)
+	require.Empty(t, decodeMCPResult(t, plain.Body.Bytes())["tools"], "an ordinary listing still drops it")
 }
