@@ -192,6 +192,7 @@ function client(
     tokenEndpointAuthMethod: method,
     jsonWebKeySetId: "set-1",
     legacyCallbackUrl: false,
+    forwardClientName: false,
     ...overrides,
   } as RemoteSessionClient;
 }

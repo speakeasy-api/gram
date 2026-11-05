@@ -1003,7 +1003,7 @@ test("real mise persists with isolated trust and preserves comments and unrelate
   );
   const saved = readFileSync(f.path, "utf8");
   assert.match(saved, /# Keep this comment/);
-  assert.deepEqual(parseTOML(saved).env, {
+  assert.deepEqual(parseTOML<{ env: Record<string, string> }>(saved).env, {
     UNRELATED: "preserve",
     STRIPE_API_KEY: "sk_test_synthetic",
     STRIPE_PUBLISHABLE_KEY: "",

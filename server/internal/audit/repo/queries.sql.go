@@ -90,7 +90,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   $1,
   $2,
@@ -107,7 +108,8 @@ INSERT INTO audit_logs (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 RETURNING id, organization_id
 `
@@ -129,6 +131,7 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
+	IsInternal         bool
 }
 
 type InsertAuditLogRow struct {
@@ -154,6 +157,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
+		arg.IsInternal,
 	)
 	var i InsertAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -168,6 +172,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -187,8 +192,8 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -215,6 +220,7 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
+    AND NOT is_internal
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
@@ -274,8 +280,8 @@ type ListAuditActorFacetsRow struct {
 	IsAdminActor bool
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
 // Scoped through this organization's memberships for the same reason
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
 // read by whoever can read the feed.
@@ -338,32 +344,34 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
+  -- Internal activity is visible only to the private staff caller.
+  AND ($8::boolean OR NOT a.is_internal)
   AND (
-    $8::text IS NULL
-    OR a.subject_id = $8::text
+    $9::text IS NULL
+    OR a.subject_id = $9::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($9::text[]), 0) = 0
-    OR a.subject_id = ANY($9::text[])
+    coalesce(cardinality($10::text[]), 0) = 0
+    OR a.subject_id = ANY($10::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $10::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $10::text
+    $11::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $11::text
   )
   -- Half-open window, so consecutive ranges neither double-count a row nor
   -- drop one that lands exactly on a boundary.
   AND (
-    $11::timestamptz IS NULL
-    OR a.created_at >= $11::timestamptz
+    $12::timestamptz IS NULL
+    OR a.created_at >= $12::timestamptz
   )
   AND (
-    $12::timestamptz IS NULL
-    OR a.created_at < $12::timestamptz
+    $13::timestamptz IS NULL
+    OR a.created_at < $13::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -377,6 +385,7 @@ type ListAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
+	IncludeInternalEvents  bool
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
@@ -435,6 +444,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
+		arg.IncludeInternalEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
@@ -490,6 +500,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -509,8 +520,8 @@ type ListAuditSurfaceFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs).
+// Assistant activity and internal events are excluded:
+// facets power the platform audit feed, which hides them (see ListAuditLogs).
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
 // omitting an organization's older history.

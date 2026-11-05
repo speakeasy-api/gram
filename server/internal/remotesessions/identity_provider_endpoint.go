@@ -24,7 +24,8 @@ type IdentityProviderEndpoint struct {
 // LoadIdentityProviderEndpoint resolves an organization's trusted identity
 // provider registration with live discovery and host validation. keys verifies
 // what the provider signs. Configuration failures are ErrFederatedConfiguration
-// or ErrFederatedSigning; other errors are transient.
+// or ErrFederatedSigning alone; anything joined with ErrFederatedUnavailable,
+// including a signer outage, and other errors are transient.
 func (m *ChallengeManager) LoadIdentityProviderEndpoint(ctx context.Context, keys *jwks.KeyResolver, organizationID string, issuerID, clientID uuid.UUID) (*IdentityProviderEndpoint, error) {
 	p, err := m.LoadFederatedProvider(ctx, organizationID, issuerID, clientID)
 	if err != nil {

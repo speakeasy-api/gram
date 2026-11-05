@@ -116,12 +116,13 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	ticket := AuthnChallengeState{ //nolint:exhaustruct // The entry ticket carries only routing and identity binding; browser login supplies consent state.
 		ID: uuid.NewString(), UserSessionIssuerID: gate.userSessionIssuerID,
 		Endpoint: ref, CreatedAt: now, FirstParty: true,
-		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, ReviewReady: false},
+		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, CatalogCanceled: false, ReviewReady: false},
 	}
 	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached &&
 		member.backend == metaMemberBackendProxied {
 		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
 			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
+			// The browser has not started an attempt yet; a fallback is not a failed sign-in.
 			needsConsent = true
 		}
 	}

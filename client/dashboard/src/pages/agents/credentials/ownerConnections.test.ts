@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import type { McpServerAuthentication } from "@gram/client/models/components/mcpserverauthentication.js";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { subjectHref } from "./subject-href";

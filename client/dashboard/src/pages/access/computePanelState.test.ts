@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { computePanelState } from "./computePanelState";
 import type { Selector } from "@gram/client/models/components/selector.js";

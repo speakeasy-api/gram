@@ -224,7 +224,7 @@ func TestOnboardingPlaybookWriteGoesStaleWhenThePlaybookChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	// Staff reorder the playbook's steps between approval and execution.
-	_, err = organizations.UpdateOnboardingPlaybook(t.Context(), f.db, uuid.MustParse(seeds.defaultID), "staff-authored default name", "private description", true, []string{"platform-mcp", "identity-provider"})
+	_, err = organizations.UpdateOnboardingPlaybook(t.Context(), f.db, uuid.MustParse(seeds.defaultID), nil, "staff-authored default name", "private description", true, []string{"platform-mcp", "identity-provider"})
 	require.NoError(t, err)
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)

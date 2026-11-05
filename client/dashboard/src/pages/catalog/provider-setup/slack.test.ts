@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { slackAppManifest, slackAppCreationUrl } from "./slack";
 import { initialState } from "./state";

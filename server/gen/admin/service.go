@@ -408,6 +408,43 @@ const ServiceName = "admin"
 // MethodKey key.
 var MethodNames = [105]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
 
+type AdminAuditLog struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID *string
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName *string
+	SubjectSlug        *string
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
+	Metadata           map[string]any
+	// The creation date of the audit log.
+	CreatedAt string
+}
+
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
 type AdminBackfillMCPAuthGrantsResult struct {
@@ -731,7 +768,7 @@ type AdminListExternalMcpMigrationCandidatesResult struct {
 // listOrganizationActivity method.
 type AdminListOrganizationActivityResult struct {
 	// List of organization activity.
-	Logs []*AuditLog
+	Logs []*AdminAuditLog
 	// Cursor for the next page of results.
 	NextCursor *string
 }
@@ -1953,39 +1990,6 @@ type AssignOrganizationOnboardingPlaybookPayload struct {
 	OrganizationID    string
 	// Omit to clear the assignment.
 	PlaybookID *string
-}
-
-type AuditLog struct {
-	ID               string
-	ProjectID        *string
-	ProjectSlug      *string
-	ActorID          string
-	ActorType        string
-	ActorDisplayName *string
-	ActorSlug        *string
-	Action           string
-	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
-	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
-	// present.
-	ActingSurface string
-	// The registered OAuth client the call authenticated as, when it had one.
-	// Absent for calls that carried no OAuth client.
-	ActingClientID *string
-	// What kind of event the entry records: 'configuration' for a change to the
-	// platform's configuration, 'security' for machine access and other
-	// security-relevant activity that is not a configuration decision. Always
-	// present in responses; optional in the schema so clients built against it
-	// still read responses from servers that predate it.
-	Category           *string
-	SubjectID          string
-	SubjectType        string
-	SubjectDisplayName *string
-	SubjectSlug        *string
-	BeforeSnapshot     json.RawMessage
-	AfterSnapshot      json.RawMessage
-	Metadata           map[string]any
-	// The creation date of the audit log.
-	CreatedAt string
 }
 
 // BackfillMcpAuthGrantsPayload is the payload type of the admin service
@@ -3479,10 +3483,13 @@ type UpdateGlobalIssuerPayload struct {
 type UpdateOnboardingPlaybookPayload struct {
 	AdminSessionToken *string
 	PlaybookID        string
-	Name              string
-	Description       *string
-	IsDefault         *bool
-	StepSlugs         []string
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string
+	Name           string
+	Description    *string
+	IsDefault      *bool
+	StepSlugs      []string
 }
 
 // UpdateOnboardingUseCasePayload is the payload type of the admin service

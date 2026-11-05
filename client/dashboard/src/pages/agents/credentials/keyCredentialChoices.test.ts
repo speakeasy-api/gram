@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Gram as SpeakeasySDK } from "@gram/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { keyCredentialChoices } from "./keyCredentialChoices";

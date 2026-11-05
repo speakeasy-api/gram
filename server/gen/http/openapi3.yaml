@@ -28691,7 +28691,7 @@ paths:
             x-speakeasy-name-override: revoke
     /rpc/cliAuth.authorize:
         post:
-            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
             operationId: cliAuthAuthorize
             parameters:
                 - allowEmptyValue: true
@@ -28776,7 +28776,7 @@ paths:
             x-speakeasy-name-override: authorize
     /rpc/cliAuth.redeem:
         post:
-            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
+            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
             operationId: cliAuthRedeem
             requestBody:
                 content:
@@ -96054,6 +96054,66 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminAuditLog:
+            type: object
+            properties:
+                acting_client_id:
+                    type: string
+                    description: The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+                acting_surface:
+                    type: string
+                    description: 'How the change was made: ''dashboard'', ''api_key'', ''platform_mcp'', ''project_assistant'', or ''unknown'' when no surface was identifiable. Always present.'
+                action:
+                    type: string
+                actor_display_name:
+                    type: string
+                actor_id:
+                    type: string
+                actor_slug:
+                    type: string
+                actor_type:
+                    type: string
+                after_snapshot: {}
+                before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
+                created_at:
+                    type: string
+                    description: The creation date of the audit log.
+                    format: date-time
+                id:
+                    type: string
+                is_internal:
+                    type: boolean
+                    description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+                metadata:
+                    type: object
+                    additionalProperties: true
+                project_id:
+                    type: string
+                project_slug:
+                    type: string
+                subject_display_name:
+                    type: string
+                subject_id:
+                    type: string
+                subject_slug:
+                    type: string
+                subject_type:
+                    type: string
+            required:
+                - id
+                - actor_id
+                - actor_type
+                - action
+                - subject_id
+                - subject_type
+                - acting_surface
+                - created_at
         AdminBackfillMCPAuthGrantsResult:
             type: object
             properties:
@@ -96659,7 +96719,7 @@ components:
                 logs:
                     type: array
                     items:
-                        $ref: '#/components/schemas/AuditLog'
+                        $ref: '#/components/schemas/AdminAuditLog'
                     description: List of organization activity.
                 next_cursor:
                     type: string
@@ -101628,9 +101688,16 @@ components:
                     description: PKCE challenge method. Only S256 is supported.
                     enum:
                         - S256
+                key_scope:
+                    type: string
+                    description: The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+                    default: agent_user
+                    enum:
+                        - agent_user
+                        - producer
                 project_slug:
                     type: string
-                    description: Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+                    description: Optional project slug. For agent_user keys it is the project the key is scoped to; for producer keys it is only reported back to the CLI as its default project. Defaults to the org's default (first) project when omitted.
             required:
                 - code_challenge
                 - code_challenge_method
@@ -121740,7 +121807,7 @@ components:
             properties:
                 access_token:
                     type: string
-                    description: The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+                    description: The raw gram_ API key, carrying the scope requested at authorize. Returned exactly once.
                 project_slug:
                     type: string
                     description: Slug of the project the key is scoped to.
@@ -122167,6 +122234,9 @@ components:
                     type: string
                     description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
                     format: uri
+                forward_client_name:
+                    type: boolean
+                    description: Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
                 grant_types:
                     type: array
                     items:
@@ -122234,6 +122304,7 @@ components:
                 - user_session_issuer_ids
                 - client_id
                 - legacy_callback_url
+                - forward_client_name
                 - credential_owner
                 - created_at
                 - updated_at
@@ -134622,6 +134693,9 @@ components:
                     type: boolean
                 name:
                     type: string
+                organization_id:
+                    type: string
+                    description: When provided, require the playbook to belong to this organization. Omit for global library edits.
                 playbook_id:
                     type: string
                 step_slugs:
@@ -134902,6 +134976,9 @@ components:
                     type: string
                     description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
                     maxLength: 200
+                forward_client_name:
+                    type: boolean
+                    description: Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
                 id:
                     type: string
                     description: The remote_session_client id.
@@ -137950,7 +138027,7 @@ tags:
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
-      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
     - name: dashboards
       description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
     - name: dataExports

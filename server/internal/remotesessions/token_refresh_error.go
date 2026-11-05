@@ -33,9 +33,11 @@ type TokenRefreshError struct {
 	code         string
 	upstreamCode string
 	statusCode   int
-	remedy       refreshRemedy
+	// tunnelError is the tunnel gateway's error status when the gateway, not the provider, answered.
+	tunnelError string
+	remedy      refreshRemedy
 
-	// retryAfter is the upstream's Retry-After, zero when it sent none.
+	// retryAfter is the upstream Retry-After, zero when absent.
 	retryAfter time.Duration
 }
 
@@ -82,7 +84,7 @@ func (e *TokenRefreshError) Unwrap() error { return e.cause }
 func (e *TokenRefreshError) UpstreamCode() string { return e.upstreamCode }
 
 func newTokenRefreshError(reason string, cause error, remedy refreshRemedy) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, remedy: remedy, retryAfter: 0}
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, tunnelError: "", remedy: remedy, retryAfter: 0}
 }
 
 // invalidGrant reports whether the upstream answered with RFC 6749 §5.2
@@ -142,6 +144,7 @@ func newTokenRefreshErrorFromSuccessBody(statusCode int, status string, body []b
 		code:         parsed.Code,
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
+		tunnelError:  "",
 		remedy:       refreshRemedyUnset,
 		retryAfter:   0,
 	}, true
@@ -168,6 +171,7 @@ func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *T
 		code:         code,
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
+		tunnelError:  "",
 		remedy:       refreshRemedyUnset,
 		retryAfter:   0,
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,9 +29,39 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
+// ConnectionCatalogKey exposes where an approved catalog is stored.
+func ConnectionCatalogKey(organizationID string, id uuid.UUID) string {
+	return connectionCatalogKey(organizationID, id)
+}
+
+// InflateConsentInventory makes a completed capture too big to freeze into a catalog.
+func (s *Service) InflateConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) error {
+	inventory, found, err := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt)
+	if err != nil {
+		return err
+	}
+	if !found || len(inventory.Tools) == 0 || inventory.Tools[0].Definition == nil {
+		return fmt.Errorf("no completed capture for attempt %s", attempt)
+	}
+	inventory.Tools[0].Definition.Description = strings.Repeat("x", connectionCatalogMaxBytes)
+	inventory.Tools[0].DefinitionHash = consentEvidenceHash(inventory.Tools[0].Definition)
+	if err := s.consentToolInventoryCache.Store(ctx, inventory); err != nil {
+		return fmt.Errorf("store inflated capture: %w", err)
+	}
+	return nil
+}
+
+// DrainConnectionEndings waits for once-only endings in flight.
+func (s *Service) DrainConnectionEndings(ctx context.Context) error {
+	return s.attemptEndings.drain(ctx)
+}
+
 // SetConnectionRecorder replaces the connection attempt recorder.
 func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
 	s.connections = recorder
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.Connections = recorder
+	}
 }
 
 // ConnectionAttempt exposes the state's connection attempt.
@@ -73,7 +104,7 @@ func AdmitWorkloadAssertion(
 
 // VerifyRemoteGrant exposes the grant hook to tests.
 func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
-	return s.verifyRemoteGrant(ctx, grant)
+	return s.verifyRemoteGrant(ctx, mcpconnectionattempts.FromRequest(nil), grant)
 }
 
 // VerifyRemoteGrantOn runs the probe step against an endpoint the test resolved itself.
@@ -84,7 +115,7 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return
 	}
-	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+	s.probeRemoteGrant(ctx, s.logger, mcpconnectionattempts.FromRequest(nil), endpoint, challengeState, grant)
 }
 
 // LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
@@ -250,7 +281,7 @@ func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *Reso
 		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
 		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
 	}
-	return s.connectionRecoveryError(ctx, authentication)
+	return s.connectionRecoveryError(ctx, authentication, nil)
 }
 
 type callerRecordingPermitter struct {

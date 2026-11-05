@@ -800,3 +800,20 @@ func TestUpdateIssuer_KeepsTokenEndpointForSelfClients(t *testing.T) {
 		require.Nil(t, updated.TokenEndpoint)
 	})
 }
+
+func TestUpdateClient_SelfClientRefusesForwardClientName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createTokenEndpointOnlyIssuer(t, ctx, ti, "self-forward-name-issuer", "https://tenant.example.com", "https://tenant.example.com/token")
+	created, err := ti.service.CreateClient(ctx, newSelfCreateClientPayload(issuerID, new(oauthwire.AuthMethodClientSecretPost), new("tenant-secret"), nil))
+	require.NoError(t, err)
+
+	on, off := true, false
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: created.ID, ForwardClientName: &on})
+	require.ErrorContains(t, err, "cannot send the MCP client's name")
+
+	updated, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: created.ID, ForwardClientName: &off})
+	require.NoError(t, err)
+	require.False(t, updated.ForwardClientName)
+}

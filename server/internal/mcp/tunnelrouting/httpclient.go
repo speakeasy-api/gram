@@ -32,6 +32,9 @@ func routeCleanupError(action string, err error) error {
 // ErrRouteStoreUnavailable marks a failure reading our own route store, not the tunnel or its provider.
 var ErrRouteStoreUnavailable = errors.New("tunnel route store unavailable")
 
+// ErrTransportConfiguration marks a local forwarding setup failure, not a tenant tunnel outage.
+var ErrTransportConfiguration = errors.New("tunnel transport configuration invalid")
+
 // maxForwardAttempts bounds the gateway failover loop for one request. Each
 // retried attempt excludes the gateway that refused, so the loop also ends
 // when candidates run out.
@@ -97,10 +100,10 @@ func NewHTTPClient(routes route.Store, forwardToken string, policy *guardian.Pol
 // transport's default connect window.
 func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, error) {
 	if c == nil || c.routes == nil {
-		return nil, fmt.Errorf("tunnel forwarding is not configured")
+		return nil, fmt.Errorf("tunnel forwarding is not configured: %w", ErrTransportConfiguration)
 	}
 	if c.forwardToken == "" {
-		return nil, fmt.Errorf("tunnel forward token is not configured")
+		return nil, fmt.Errorf("tunnel forward token is not configured: %w", ErrTransportConfiguration)
 	}
 	ctx := req.Context()
 
@@ -125,18 +128,19 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 	exclude := map[string]struct{}{}
 	var unpublishErr error
 	var dialErr error
+	var gatewayStatus string
 	for range maxForwardAttempts {
 		addr, ok := SelectRoute("", candidates, exclude)
 		if !ok {
-			return nil, errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr)
+			return nil, withGatewayStatus(errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr), gatewayStatus)
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("build tunnel route URL: %w", err), unpublishErr)
+			return nil, errors.Join(fmt.Errorf("build tunnel route URL: %w: %w", ErrTransportConfiguration, err), unpublishErr)
 		}
 		forward, err := buildForward(req, body, gatewayURL, tunnelID, c.forwardToken)
 		if err != nil {
-			return nil, errors.Join(err, unpublishErr)
+			return nil, errors.Join(ErrTransportConfiguration, err, unpublishErr)
 		}
 
 		resp, err := c.client.Do(forward)
@@ -172,6 +176,10 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			}
 			exclude[addr] = struct{}{}
 		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:
+			// A failed availability check is ours, so it outranks a busy gateway in any route order.
+			if gatewayStatus != wire.TunnelErrorActiveCheckFailed {
+				gatewayStatus = resp.Header.Get(ErrorHeader)
+			}
 			drainAndClose(resp)
 			exclude[addr] = struct{}{}
 		default:
@@ -179,11 +187,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 		}
 	}
 
-	return nil, errors.Join(
+	return nil, withGatewayStatus(errors.Join(
 		fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute),
 		dialErr,
 		unpublishErr,
-	)
+	), gatewayStatus)
 }
 
 // isDeadGateway reports whether err means this gateway is definitively gone:
@@ -237,4 +245,20 @@ func buildForward(req *http.Request, body []byte, gatewayURL, tunnelID, forwardT
 func drainAndClose(resp *http.Response) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 	_ = resp.Body.Close()
+}
+
+// gatewayStatusError keeps a gateway refusal after failover exhausted every route.
+// Its error text and error matching remain those of the original transport failure.
+type gatewayStatusError struct {
+	cause  error
+	status string
+}
+
+func (e *gatewayStatusError) Error() string { return e.cause.Error() }
+func (e *gatewayStatusError) Unwrap() error { return e.cause }
+func withGatewayStatus(err error, status string) error {
+	if status == "" {
+		return err
+	}
+	return &gatewayStatusError{cause: err, status: status}
 }

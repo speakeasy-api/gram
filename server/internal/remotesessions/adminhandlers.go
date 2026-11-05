@@ -1092,6 +1092,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:           issuerID,

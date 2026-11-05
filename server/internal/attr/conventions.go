@@ -568,9 +568,10 @@ const (
 	// — the ones Speakeasy emits across DCR registration, /authorize, /token, and
 	// /revoke, and the ones an upstream authorization server answers Speakeasy
 	// with (IdP and remote-login callbacks, token refresh).
-	OAuthErrorKey            = attribute.Key("gram.oauth.error")
-	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
-	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
+	OAuthErrorKey               = attribute.Key("gram.oauth.error")
+	OAuthForwardedClientNameKey = attribute.Key("gram.oauth.forwarded_client_name")
+	OAuthErrorDescriptionKey    = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey       = attribute.Key("gram.oauth.failure_reason")
 	// OAuthFlowIDKey is the stable correlation identifier for a single
 	// user-facing OAuth flow. Minted once at /authorize and threaded through
 	// every handler in the flow (idp_callback, consent, token) so the whole
@@ -2468,6 +2469,9 @@ func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
 
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+func SlogOAuthForwardedClientName(v bool) slog.Attr {
+	return slog.Bool(string(OAuthForwardedClientNameKey), v)
+}
 
 func OAuthFlowID(v string) attribute.KeyValue { return OAuthFlowIDKey.String(v) }
 func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthFlowIDKey), v) }

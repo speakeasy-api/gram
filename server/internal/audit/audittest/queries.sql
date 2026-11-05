@@ -108,3 +108,15 @@ WHERE action = @action;
 UPDATE security_audit_logs
 SET created_at = @created_at
 WHERE id = @id;
+
+-- name: GetAuditLogInternalBySubject :one
+SELECT is_internal FROM audit_logs WHERE subject_id = @subject_id;
+
+-- name: GetSecurityAuditLogInternal :one
+SELECT is_internal FROM security_audit_logs WHERE id = @id;
+
+-- name: CountPublishOutboxByOrg :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = @organization_id;
+
+-- name: CountPublishOutboxByOrgAndEvent :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = @organization_id AND attributes->>'event_type' = @event_type::text;
