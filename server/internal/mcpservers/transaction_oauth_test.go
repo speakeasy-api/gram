@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -93,6 +94,9 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 			// bound, so the client is its own.
 			first := create("Configured server", "https://mcp.example.com/configured")
 			_, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
+			captureTx := testenv.BeginTx(t, ctx, ti.conn)
+			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, captureTx, auth.ActiveOrganizationID, *auth.ProjectID, []uuid.UUID{uuid.MustParse(issuer)}))
+			require.NoError(t, captureTx.Commit(ctx))
 			typedClient := backfill.OAuthClientID(auth.ActiveOrganizationID, remoteClient, backfill.TypeRemoteSession)
 			links, err := fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)
