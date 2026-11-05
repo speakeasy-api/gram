@@ -15,6 +15,9 @@ import (
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
+	"tailscale.com/ipn/ipnstate"
+	"tailscale.com/tailcfg"
+	"tailscale.com/tailcfg/nodecap"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/logger"
 
@@ -168,6 +171,7 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		srv:                srv,
 		ln:                 ln,
 		lc:                 lc,
+		service:            tailcfg.ServiceName(spec.ServiceName),
 		fqdn:               ln.FQDN,
 		logger:             hostLogger,
 		shutdownTimeout:    r.shutdownTimeout,
@@ -227,6 +231,7 @@ type tsnetNode struct {
 	srv                *tsnet.Server
 	ln                 *tsnet.ServiceListener
 	lc                 *local.Client
+	service            tailcfg.ServiceName
 	fqdn               string
 	logger             *slog.Logger
 	shutdownTimeout    time.Duration
@@ -278,23 +283,51 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	n.mu.Unlock()
 
 	if serveErr != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
 	}
 
 	st, err := n.lc.Status(ctx)
 	if err != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
 	}
 
+	running := st.BackendState == ipn.Running.String()
+	approved := hostsService(st.Self, n.service)
 	state := NodeState{
-		Online: st.BackendState == ipn.Running.String(), BackendState: st.BackendState,
-		NeedsLogin: st.BackendState == ipn.NeedsLogin.String(), NodeID: "", FQDN: n.fqdn,
+		Online: running && approved, BackendState: st.BackendState,
+		NeedsLogin:       st.BackendState == ipn.NeedsLogin.String(),
+		AwaitingApproval: running && !approved,
+		NodeID:           "", FQDN: n.fqdn,
 	}
 	if st.Self != nil {
 		state.NodeID = string(st.Self.ID)
 	}
 
 	return state, nil
+}
+
+// hostsService reports whether control has approved this node to host the
+// service. Advertising a service is not enough: control only assigns the
+// service's addresses, through the service-host capability, once the policy
+// auto-approves the host or an admin approves it, and it withdraws them when
+// approval is revoked. A Running node that advertises a missing, misnamed, or
+// unapproved service gets no error and no traffic, so this is the only signal.
+func hostsService(self *ipnstate.PeerStatus, service tailcfg.ServiceName) bool {
+	if self == nil {
+		return false
+	}
+
+	mappings, err := tailcfg.UnmarshalNodeCapJSON[tailcfg.ServiceIPMappings](self.CapMap, nodecap.ServiceHost)
+	if err != nil {
+		return false
+	}
+	for _, mapping := range mappings {
+		if addrs, ok := mapping[service]; ok && len(addrs) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (n *tsnetNode) WhoIs(ctx context.Context, peer netip.Addr) (*apitype.WhoIsResponse, error) {

@@ -480,3 +480,28 @@ func TestNetworkIngressExecutorBlocksCleanupOnMissingPermission(t *testing.T) {
 	require.NotNil(t, result.Ingress.LastError)
 	require.Equal(t, k8s.NetworkIngressErrorProviderCredentialsRejected, *result.Ingress.LastError, "the dashboard shows the cleanup-blocked state")
 }
+
+func TestNetworkIngressExecutorRecordsUnapprovedService(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	provider := lifecycleProvider{
+		apply: func(context.Context, k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+			return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusError, DNSName: "", ErrorCode: k8s.NetworkIngressErrorProviderServiceNotApproved, ConnectedAt: nil}, nil
+		},
+		observe: nil,
+		delete:  nil,
+	}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{
+		Queue: "test-network-ingress", AttestorRequired: false, CanApply: func(context.Context) error { return nil },
+	})
+
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err, "a customer-side approval gap is reported, not retried")
+	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, "error", row.Status)
+	require.Equal(t, k8s.NetworkIngressErrorProviderServiceNotApproved, row.LastError.String)
+}

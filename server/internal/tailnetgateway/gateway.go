@@ -545,6 +545,9 @@ func (g *Gateway) heartbeat(ctx context.Context, h *host) bool {
 	case state.NeedsLogin:
 		next = NodeStatusNeedsLogin
 		message = state.BackendState
+	case state.AwaitingApproval:
+		next = NodeStatusAwaitingApproval
+		message = "the tailnet has not approved this node to host " + ServiceName(h.ingress.label)
 	default:
 		message = state.BackendState
 	}
@@ -570,7 +573,11 @@ func (g *Gateway) heartbeat(ctx context.Context, h *host) bool {
 			h.authKeyCleared = true
 		}
 	}
-	if (previous == NodeStatusOnline) != (next == NodeStatusOnline) {
+	// Wake the reconciler when the host starts or stops serving, and when it
+	// starts waiting for approval, so the customer sees the reason promptly
+	// rather than on the next sweep.
+	enteredAwaiting := next == NodeStatusAwaitingApproval && previous != NodeStatusAwaitingApproval
+	if (previous == NodeStatusOnline) != (next == NodeStatusOnline) || enteredAwaiting {
 		g.wakeReconciler(ctx, h.ingress)
 	}
 	return next == NodeStatusNeedsLogin

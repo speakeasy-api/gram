@@ -38,6 +38,7 @@ type fakeNode struct {
 	mu         sync.Mutex
 	spec       tailnetgateway.NodeSpec
 	online     bool
+	unapproved bool
 	needsLogin bool
 	closeDelay time.Duration
 	fqdn       string
@@ -64,7 +65,11 @@ func (n *fakeNode) Status(context.Context) (tailnetgateway.NodeState, error) {
 	case n.online:
 		state = "Running"
 	}
-	return tailnetgateway.NodeState{Online: n.online && !n.needsLogin, BackendState: state, NeedsLogin: n.needsLogin, NodeID: n.nodeID, FQDN: n.fqdn}, nil
+	running := n.online && !n.needsLogin
+	return tailnetgateway.NodeState{
+		Online: running && !n.unapproved, BackendState: state, NeedsLogin: n.needsLogin,
+		AwaitingApproval: running && n.unapproved, NodeID: n.nodeID, FQDN: n.fqdn,
+	}, nil
 }
 
 func (n *fakeNode) WhoIs(context.Context, netip.Addr) (*apitype.WhoIsResponse, error) {
@@ -91,6 +96,14 @@ func (n *fakeNode) Close(ctx context.Context) error {
 	defer n.mu.Unlock()
 	n.closed = true
 	return nil
+}
+
+// setApproved simulates the tailnet approving or revoking this node as a host
+// of its service.
+func (n *fakeNode) setApproved(approved bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.unapproved = !approved
 }
 
 // setNeedsLogin simulates control refusing the node's identity, as when the
@@ -152,7 +165,7 @@ func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (ta
 	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
 		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
-	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, needsLogin: false, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
+	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, unapproved: false, needsLogin: false, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
 	r.nodes = append(r.nodes, node)
 	return node, nil
 }
@@ -555,6 +568,54 @@ func TestGatewayStopsHostsConcurrently(t *testing.T) {
 	elapsed := time.Since(started)
 	require.Empty(t, f.gateway.Hosts())
 	require.Less(t, elapsed, 2*closeDelay, "three stops cost about one close, not three")
+}
+
+func TestGatewayReportsHostsAwaitingApproval(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayapproval", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-approval")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	wakes := func() int {
+		messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+		require.NoError(t, err)
+		return len(messages)
+	}
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+
+	// Connected, but the tailnet has not approved the host for the service.
+	node.setOnline("nWAITING")
+	node.setApproved(false)
+	f.gateway.Poll(ctx)
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusAwaitingApproval), row.Status)
+	require.Contains(t, row.LastError.String, "svc:private")
+	require.False(t, row.ConnectedSince.Valid, "an unapproved host is not serving")
+	require.Equal(t, 1, wakes(), "the reconciler learns about the missing approval right away")
+	require.True(t, row.AuthKeyEncrypted.Valid, "the key is only cleared once the host is online")
+
+	f.gateway.Poll(ctx)
+	require.Equal(t, 1, wakes(), "staying unapproved does not wake the reconciler again")
+
+	// An admin approves the host: it comes online without a restart.
+	node.setApproved(true)
+	f.gateway.Poll(ctx)
+	row = f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusOnline), row.Status)
+	require.True(t, row.ConnectedSince.Valid)
+	require.Equal(t, 2, wakes())
+
+	// Approval revoked while running: the host stops counting as online.
+	node.setApproved(false)
+	f.gateway.Poll(ctx)
+	row = f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusAwaitingApproval), row.Status)
+	require.Equal(t, 3, wakes())
+	require.Len(t, f.gateway.Hosts(), 1, "the node stays up so a later approval takes effect")
+	require.Len(t, f.runtime.started(), 1)
 }
 
 func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {

@@ -36,6 +36,9 @@ const (
 	NetworkIngressErrorProviderRateLimited = "provider_rate_limited"
 	// The provider API was unreachable or failed on its side; it is retried.
 	NetworkIngressErrorProviderAPIUnavailable = "provider_api_unavailable"
+	// The hosts are connected but the customer's tailnet has not approved
+	// them to host the service, so clients cannot reach it.
+	NetworkIngressErrorProviderServiceNotApproved = "provider_service_not_approved"
 )
 
 var (

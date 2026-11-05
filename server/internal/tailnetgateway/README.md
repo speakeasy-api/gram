@@ -29,6 +29,14 @@ per-ingress attestor pods.
   the attestor did.
 - Each pod heartbeats its slot rows; the reconciler reports the ingress online
   when any slot has a fresh `online` heartbeat.
+- A slot is `online` only when its node is connected **and** the tailnet has
+  approved it to host `svc:<label>`, which control signals through the
+  node's `service-host` capability. Advertising alone is not enough: a node
+  whose service is unapproved, missing or misnamed connects without error but
+  gets no traffic. Such a slot reports `awaiting_approval`, and the ingress
+  shows `provider_service_not_approved` until the customer approves the host
+  or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
+  approving or revoking a host takes effect without a restart.
 
 ## Which ingresses use it
 

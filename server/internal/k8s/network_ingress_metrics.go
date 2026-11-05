@@ -223,7 +223,8 @@ func classifyNetworkIngressError(err error, observationCode string) string {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
 		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
-		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable:
+		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved:
 		return observationCode
 	default:
 		return networkIngressErrorCodeInternal
@@ -268,7 +269,8 @@ func clampNetworkIngressErrorCode(value string) string {
 		NetworkIngressErrorKubernetes,
 		NetworkIngressErrorProviderForbidden,
 		NetworkIngressErrorProviderRateLimited,
-		NetworkIngressErrorProviderAPIUnavailable:
+		NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved:
 		return value
 	default:
 		return networkIngressErrorCodeInternal
