@@ -1489,7 +1489,10 @@ export function ChatTranscript({
                 ref={virtualizer.measureElement}
                 className={cn(
                   "absolute top-0 left-0 w-full transition-colors",
-                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                  // `bg-warning` is near-white in light mode, so a 10% wash of it
+                  // rendered as no highlight at all.
+                  focused &&
+                    "bg-warning-softest ring-1 ring-[var(--border-warning-softest)] ring-inset",
                 )}
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
