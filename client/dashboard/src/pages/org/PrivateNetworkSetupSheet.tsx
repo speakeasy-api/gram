@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/Sheet";
 
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
 import { Switch } from "@/components/ui/Switch";
@@ -19,21 +20,28 @@ import { useCreateNetworkIngressMutation } from "@gram/client/react-query/create
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-const TAILSCALE_POLICY_SNIPPET = `"tagOwners": {
+const DEFAULT_HOSTNAME = "speakeasy";
+
+// Mirrors the server's rule: a lowercase DNS label of at most 63 characters.
+const HOSTNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+function tailscalePolicySnippet(hostname: string): string {
+  return `"tagOwners": {
   "tag:speakeasy": ["autogroup:admin"]
 },
 "autoApprovers": {
   "services": {
-    "svc:speakeasy": ["tag:speakeasy"]
+    "svc:${hostname}": ["tag:speakeasy"]
   }
 },
 "grants": [
   {
     "src": ["autogroup:member"],
-    "dst": ["svc:speakeasy"],
+    "dst": ["svc:${hostname}"],
     "ip": ["tcp:443"]
   }
 ]`;
+}
 
 export function PrivateNetworkSetupSheet({
   open,
@@ -43,6 +51,7 @@ export function PrivateNetworkSetupSheet({
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const [hostname, setHostname] = useState(DEFAULT_HOSTNAME);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [identityRequired, setIdentityRequired] = useState(false);
@@ -56,6 +65,7 @@ export function PrivateNetworkSetupSheet({
     gcTime: 0,
     onSuccess: async () => {
       resetCredentials();
+      setHostname(DEFAULT_HOSTNAME);
       setIdentityRequired(false);
       await invalidateAllNetworkIngress(queryClient);
       onOpenChange(false);
@@ -77,8 +87,15 @@ export function PrivateNetworkSetupSheet({
     onOpenChange(false);
   };
 
+  const hostnameValid = HOSTNAME_PATTERN.test(hostname);
+  // The snippet always names a valid service, even mid-edit.
+  const serviceLabel = hostnameValid ? hostname : DEFAULT_HOSTNAME;
+
   const canSubmit =
-    clientId.trim() !== "" && clientSecret !== "" && !create.isPending;
+    hostnameValid &&
+    clientId.trim() !== "" &&
+    clientSecret !== "" &&
+    !create.isPending;
 
   return (
     <Sheet
@@ -98,7 +115,30 @@ export function PrivateNetworkSetupSheet({
         </SheetHeader>
         <div className="flex-1 space-y-6 overflow-y-auto px-4">
           <div className="space-y-2">
-            <Text variant="subheading">1. Check the tailnet prerequisites</Text>
+            <Text variant="subheading">1. Choose a private hostname</Text>
+            <Input
+              id="private-hostname"
+              aria-label="Private hostname"
+              value={hostname}
+              onChange={(value) => setHostname(value.trim().toLowerCase())}
+              placeholder={DEFAULT_HOSTNAME}
+              validate={(value) =>
+                HOSTNAME_PATTERN.test(value.trim().toLowerCase()) ||
+                "Use lowercase letters, numbers, and hyphens, up to 63 characters."
+              }
+              autoComplete="off"
+            />
+            <Text small muted>
+              Your private MCP servers will be at{" "}
+              <code>{serviceLabel}.&lt;your tailnet&gt;.ts.net</code>. One
+              hostname serves the whole organization, and each MCP server keeps
+              its own path on it. Pick a durable name that no device or service
+              on your tailnet already uses.
+            </Text>
+          </div>
+
+          <div className="space-y-2">
+            <Text variant="subheading">2. Check the tailnet prerequisites</Text>
             <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
               <li>MagicDNS is enabled.</li>
               <li>HTTPS certificates are enabled.</li>
@@ -108,12 +148,12 @@ export function PrivateNetworkSetupSheet({
               </li>
               <li>
                 The policy owns a <code>tag:speakeasy</code> tag, auto-approves
-                the <code>svc:speakeasy</code> service for it, and grants your
-                users access to that service.
+                the <code>svc:{serviceLabel}</code> service for it, and grants
+                your users access to that service.
               </li>
             </ul>
             <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
-              <code>{TAILSCALE_POLICY_SNIPPET}</code>
+              <code>{tailscalePolicySnippet(serviceLabel)}</code>
             </pre>
             <Text small muted>
               Keep the tag dedicated to Speakeasy. Replace{" "}
@@ -123,7 +163,7 @@ export function PrivateNetworkSetupSheet({
           </div>
 
           <div className="space-y-2">
-            <Text variant="subheading">2. Create a Tailscale OAuth client</Text>
+            <Text variant="subheading">3. Create a Tailscale OAuth client</Text>
             <Text small muted>
               Grant Auth Keys, Devices Core, and Services write scopes, then
               apply the <code>tag:speakeasy</code> tag. Speakeasy uses it only
@@ -139,17 +179,6 @@ export function PrivateNetworkSetupSheet({
             onClientIdChange={setClientId}
             onClientSecretChange={setClientSecret}
           />
-          <div className="space-y-2">
-            <Text variant="subheading">Private hostname</Text>
-            <Text small>
-              <code>speakeasy.&lt;your tailnet&gt;.ts.net</code>
-            </Text>
-            <Text small muted>
-              One hostname serves the whole organization. MCP servers opt in
-              separately and keep their own endpoint paths on the shared
-              hostname.
-            </Text>
-          </div>
           <div className="flex items-start justify-between gap-6 border p-4">
             <div className="space-y-1">
               <Label id="identity-required-label">Require user identity</Label>
@@ -183,6 +212,7 @@ export function PrivateNetworkSetupSheet({
                     provider: "tailscale",
                     oauthClientId: clientId.trim(),
                     oauthClientSecret: clientSecret,
+                    hostname,
                     identityRequired,
                   },
                 },
