@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -14,7 +16,8 @@ import (
 // ToolsListMCPConnectFilterInterceptor drops tools the caller is not
 // authorized for via the per-tool `mcp:connect` RBAC dimension, mirroring at
 // tools/list response time the refinement [ToolsCallAuthzInterceptor] enforces
-// on tools/call, so the caller never sees a tool they couldn't invoke.
+// on tools/call, so an ordinary listing never shows a tool the caller couldn't
+// invoke.
 //
 // Attached only for private-visibility servers, matching
 // [ToolsCallAuthzInterceptor]'s gate in [ProxyManager.BuildTarget]. Public
@@ -22,10 +25,14 @@ import (
 // be a no-op against grants that don't constrain the caller.
 //
 // Each per-tool check carries the `disposition` dimension, resolved from
-// admin-authored tool metadata via the injected [ToolDispositionResolver] so
-// the filter matches disposition-scoped grants the same way the paired
-// tools/call enforcement does. A tool with no recorded metadata resolves to
-// the empty disposition, leaving a pure tool-name match.
+// the tool catalog via the injected [ToolDispositionResolver] so the filter
+// matches disposition-scoped grants the same way the paired tools/call
+// enforcement does. With a [toolCatalogSync] attached, tools missing from the
+// catalog are recorded from this response before filtering. Without one, they
+// resolve to the empty disposition, leaving a pure tool-name match.
+//
+// An inspected listing (see [toolsListInspection]) keeps the tools this filter
+// would drop and marks them instead.
 //
 // The filter leaves cache labelling to the proxy, which marks every tools/list
 // result relayed through a chain with this filter attached caller-varying with
@@ -47,6 +54,7 @@ import (
 type ToolsListMCPConnectFilterInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
+	catalog     *toolCatalogSync
 	mcpServerID string
 	projectID   string
 	logger      *slog.Logger
@@ -64,6 +72,7 @@ func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver
 	return &ToolsListMCPConnectFilterInterceptor{
 		authz:       authzEngine,
 		resolver:    resolver,
+		catalog:     nil,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
 		logger:      logger,
@@ -79,7 +88,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 // It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
 // [authz.Engine.FindMatched] for per-tool match indicators (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
-// keeping only authorized entries.
+// keeping only authorized entries, or marking the rest in an inspected listing.
 //
 // A response carrying a JSON-RPC error rather than a result is left alone: it
 // holds no inventory to filter. An empty filtered result is a valid outcome,
@@ -97,6 +106,12 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return nil
 	}
 
+	if i.catalog != nil {
+		if err := i.catalog.recordListed(ctx, list); err != nil {
+			return fmt.Errorf("record listed tools: %w", err)
+		}
+	}
+
 	// Fail closed: if disposition resolution fails, surface the error rather
 	// than filtering on the empty disposition, which would leak tools an
 	// annotation-scoped grant is meant to withhold. One lookup covers the
@@ -109,8 +124,8 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
 		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: dispositions[t.Name],
+			Tool:        strings.TrimSpace(t.Name),
+			Disposition: dispositions[strings.TrimSpace(t.Name)],
 			ProjectID:   i.projectID,
 		})
 	}
@@ -120,17 +135,33 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}
 
+	inspection := toolsListInspection{authz: i.authz, mcpServerID: i.mcpServerID, projectID: i.projectID}
+	inspecting := false
+	if slices.Contains(matched, false) && inspection.requested(list) {
+		inspecting, err = inspection.allowed(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	allowed := make([]*mcp.Tool, 0, len(tools))
+	unchanged := true
 	for idx, t := range tools {
-		if matched[idx] {
+		switch {
+		case matched[idx]:
 			allowed = append(allowed, t)
+		case inspecting:
+			allowed = append(allowed, markToolUnavailable(t))
+			unchanged = false
+		default:
+			unchanged = false
 		}
 	}
 
 	// Replacing an unchanged catalog is not free: SetTools re-marshals every
 	// kept tool through mcp.Tool, dropping per-tool members the SDK does not
 	// model. Leave it alone so the tools member keeps its original values.
-	if len(allowed) == len(tools) {
+	if unchanged {
 		return nil
 	}
 

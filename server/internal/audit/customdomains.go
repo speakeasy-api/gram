@@ -55,6 +55,7 @@ func (l *Logger) LogCustomDomainUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -82,6 +83,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 	action := ActionCustomDomainsCreate
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -120,6 +122,7 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 	action := ActionCustomDomainsDelete
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -141,6 +142,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
+		fromRequest:      mcpconnectionattempts.FromRequest(r),
 		skippedUpstreams: nil,
 		request:          nil,
 		projectID:        endpoint.ProjectID,

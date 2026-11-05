@@ -40,6 +40,7 @@ func (l *Logger) LogMcpServerPromoteCatalogue(ctx context.Context, dbtx repo.DBT
 		return fmt.Errorf("encode catalogue promotion audit: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionMcpServerPromoteCatalogue), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
@@ -84,6 +85,7 @@ type LogMcpServerCreateEvent struct {
 func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
 	action := ActionMcpServerCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -136,6 +138,7 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -188,6 +191,7 @@ func (l *Logger) LogMcpServerToolMetadataUpdate(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -227,6 +231,7 @@ type LogMcpServerDeleteEvent struct {
 func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
 	action := ActionMcpServerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -292,6 +297,7 @@ func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

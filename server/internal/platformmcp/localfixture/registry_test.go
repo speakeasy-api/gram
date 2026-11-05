@@ -3,6 +3,7 @@ package localfixture
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,13 +51,18 @@ func TestRegistryHTTPServesReviewedCatalogContract(t *testing.T) {
 	require.Len(t, candidates, 1)
 	require.Equal(t, ProviderKey, candidates[0].ProviderKey)
 	require.Equal(t, CanonicalRef, candidates[0].CatalogRef)
-	require.Equal(t, 1, candidates[0].ToolCount)
+	require.Nil(t, candidates[0].ToolCount)
+	require.True(t, candidates[0].SupportsDCR)
+	require.Equal(t, "dcr", candidates[0].AuthSetup)
 
 	details, err := catalog.Inspect(t.Context(), ProviderKey, CanonicalRef)
 	require.NoError(t, err)
 	require.Equal(t, CanonicalRef, details.CatalogRef)
 	require.Equal(t, "streamable-http", details.Transport)
-	require.Equal(t, []string{fixtureToolName}, details.ToolNames)
+	require.Nil(t, details.ToolNames)
+	require.Nil(t, details.ToolCount)
+	require.True(t, details.SupportsDCR)
+	require.Equal(t, "dcr", details.AuthSetup)
 }
 
 func TestDynamicRegistryCatalogReloadsServerOwnedDescriptors(t *testing.T) {
@@ -157,4 +163,22 @@ func TestRegistryHTTPRejectsUnexpectedRoutesAndListQueries(t *testing.T) {
 	unknownResponse := httptest.NewRecorder()
 	handler.ServeHTTP(unknownResponse, unknown)
 	require.Equal(t, http.StatusNotFound, unknownResponse.Code)
+}
+
+func TestRegistryEntryUsesNativeAuthAndStandardLifecycleWithoutToolClaims(t *testing.T) {
+	t.Parallel()
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	entry := NewRegistryHTTP(config).entry()
+	require.Equal(t, map[string]any{
+		"io.modelcontextprotocol.registry/official": map[string]any{"status": "active", "isLatest": true},
+		"com.speakeasy.ai/catalog":                  map[string]any{"authSetup": "dcr", "supportsDcr": true},
+	}, entry["_meta"])
+	raw, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), `"tools"`)
+	require.NotContains(t, string(raw), `"tool_count"`)
+	require.NotContains(t, string(raw), `"is_read_only"`)
 }

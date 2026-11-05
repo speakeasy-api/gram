@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,7 +49,9 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
-	projectID uuid.UUID
+	// fromRequest is what the request says about its client, for connection rows.
+	fromRequest mcpconnectionattempts.Option
+	projectID   uuid.UUID
 	// metaServerID is a stored meta_mcp_servers row for an operator-built
 	// gateway, and a synthetic per-agent id (agentgateway.GatewayID) for an
 	// agent gateway. Treat it as a telemetry grouping key, never as
@@ -216,7 +219,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
-	admission := metaGateAdmission{bearer: httpheaders.AuthorizationBearerToken(r), baseURL: s.BaseURLForRequest(r), sessionID: parseMcpSessionID(r.Header), clientSessionID: r.Header.Get("Mcp-Session-Id"), chatID: r.Header.Get("Gram-Chat-ID"), resolution: resolution}
+	admission := metaGateAdmission{fromRequest: mcpconnectionattempts.FromRequest(r), bearer: httpheaders.AuthorizationBearerToken(r), baseURL: s.BaseURLForRequest(r), sessionID: parseMcpSessionID(r.Header), clientSessionID: r.Header.Get("Mcp-Session-Id"), chatID: r.Header.Get("Gram-Chat-ID"), resolution: resolution}
 	ctx, gate, err := s.admitMetaGate(ctx, w, r, logger, mcpEndpoint, metaServer, membership, resolvedEndpoint, admission)
 	if err != nil {
 		return err
@@ -490,7 +493,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 	tools := make([]*toolListEntry, 0, len(contract))
 	for _, tool := range contract {
 		tools = append(tools, &toolListEntry{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: tool.Title, OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
@@ -723,6 +726,7 @@ func (s *Service) handleMetaListServersCall(
 type metaGateAdmission struct {
 	bearer          string
 	baseURL         string
+	fromRequest     mcpconnectionattempts.Option
 	sessionID       string
 	clientSessionID string
 	chatID          string
@@ -822,6 +826,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 	gate := &metaGateContext{
+		fromRequest:      request.fromRequest,
 		skippedUpstreams: skipped,
 		request:          r,
 		projectID:        mcpEndpoint.ProjectID,

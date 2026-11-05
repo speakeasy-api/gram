@@ -1105,6 +1105,110 @@ func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testin
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
+// A rule naming a deleted agent is left out of the audience, so the page
+// never sends it back, and the next save removes its grant.
+func TestService_SetResourceAudience_HidesAndRemovesRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Retired assistant",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: agentPrincipal.String(), Level: "blocked", Tools: nil, Dispositions: []string{"destructive"}},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	for _, entry := range listed.Entries {
+		require.NotEqual(t, agentPrincipal.String(), entry.PrincipalUrn, "deleted agent's rule should be hidden")
+	}
+
+	// The page saves what it shows, plus the edit.
+	userURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userURN, Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: listed.Version,
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{agentPrincipal})
+	require.NoError(t, err)
+	require.Empty(t, grants)
+}
+
+// A deleted agent with no rule on this server still cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Gone assistant",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAccessService(t)

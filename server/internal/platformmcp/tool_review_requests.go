@@ -88,7 +88,7 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_mcp_review_request",
-		Title:       "Get My MCP Review Request",
+		Title:       "Check My MCP Review Request",
 		Description: "Check the status of one MCP review request you submitted. It returns only your own privacy-minimized request state, never other requesters, notes, evidence, research, or administrator rationale.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPReviewRequestInput) (*mcp.CallToolResult, GetMyMCPReviewRequestOutput, error) {
@@ -177,7 +177,7 @@ func registerUnavailableReviewRequestTools(reg *Registrar) {
 		readOnly                 bool
 	}{
 		{"request_mcp_review", "Request Review of an MCP Server", "Ask an administrator to review an MCP server. This is not switched on for your organization yet.", false},
-		{"get_my_mcp_review_request", "Get My MCP Review Request", "Check one MCP review request you submitted. This is not switched on for your organization yet.", true},
+		{"get_my_mcp_review_request", "Check My MCP Review Request", "Check one MCP review request you submitted. This is not switched on for your organization yet.", true},
 	} {
 		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
 		manifest.Annotations = requestMCPReviewAnnotations()

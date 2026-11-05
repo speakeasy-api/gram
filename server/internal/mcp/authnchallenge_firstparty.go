@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -144,20 +145,28 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
 	}
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
+	attempt := challengeState.connectionAttempt(endpoint)
+	t.Attach(attempt)
+	t.Consumed()
 	defer func() {
 		if retErr != nil && codeReconnect != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 		}
 	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	s.connections.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		t.Refuse(ctx, federatedHappened(err))
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
@@ -166,6 +175,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 		}
 		idpURL, err = s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
@@ -179,6 +189,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 	}
@@ -187,10 +198,12 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if codeReconnect != nil {
 		claimed, err := s.codeReconnectTicket(r, endpoint, true)
 		if err != nil {
+			t.Refuse(ctx, ticketClaimHappened(err))
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return err
 		}
 		if claimed == nil || *claimed != *codeReconnect {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
 		}
@@ -198,6 +211,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if attemptID != "" {
 		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return fmt.Errorf("start attachment refresh: %w", err)
 		}
 	}
@@ -207,6 +221,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 
 	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
+	t.Continue()
 	http.Redirect(w, r, idpURL.String(), http.StatusFound)
 	return nil
 }

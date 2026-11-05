@@ -89,6 +89,7 @@ require (
 	github.com/tidwall/gjson v1.19.0
 	github.com/tiktoken-go/tokenizer v0.10.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/workos/workos-go/v6 v6.5.0
 	github.com/zricethezav/gitleaks/v8 v8.30.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
@@ -318,7 +319,6 @@ require (
 	github.com/ulikunitz/xz v0.5.14 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.19 // indirect
 	github.com/vmihailenco/go-tinylfu v0.2.2 // indirect
-	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wasilibs/go-re2 v1.9.0 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect

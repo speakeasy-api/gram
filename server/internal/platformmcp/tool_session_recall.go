@@ -33,14 +33,14 @@ func listMySessionsTool() *mcp.Tool {
 	return &mcp.Tool{Name: "list_my_sessions", Title: "List My Sessions", Description: listMySessionsDescription, Annotations: readOnlyAnnotations()}
 }
 func continueSessionTool() *mcp.Tool {
-	return &mcp.Tool{Name: "continue_session", Title: "Continue Session", Description: continueSessionDescription, Annotations: continueSessionAnnotations()}
+	return &mcp.Tool{Name: "continue_session", Title: "Resume a Session", Description: continueSessionDescription, Annotations: continueSessionAnnotations()}
 }
 func createSessionHandoffLinkTool() *mcp.Tool {
-	return &mcp.Tool{Name: "create_session_handoff_link", Title: "Create Session Handoff Link", Description: createSessionHandoffLinkDescription, Annotations: createSessionHandoffLinkAnnotations()}
+	return &mcp.Tool{Name: "create_session_handoff_link", Title: "Get a Link to Continue a Session", Description: createSessionHandoffLinkDescription, Annotations: createSessionHandoffLinkAnnotations()}
 }
 
 func unavailableCreateSessionHandoffLinkTool() *mcp.Tool {
-	return &mcp.Tool{Name: "create_session_handoff_link", Title: "Create Session Handoff Link", Description: "Session handoff link creation is unavailable on this deployment. Use an external authenticated Platform MCP connection where this capability is available.", Annotations: createSessionHandoffLinkAnnotations()}
+	return &mcp.Tool{Name: "create_session_handoff_link", Title: "Get a Link to Continue a Session", Description: "Session handoff link creation is unavailable on this deployment. Use an external authenticated Platform MCP connection where this capability is available.", Annotations: createSessionHandoffLinkAnnotations()}
 }
 
 func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {

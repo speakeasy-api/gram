@@ -27,11 +27,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -504,16 +506,20 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		revokeAtApproval  bool
 		commitFailure     bool
 		completionFailure bool
+		cancelAfterCommit bool
 		cancel            bool
+		cancelReadFailure bool
 	}{
 		{name: "all tools"},
 		{name: "commit failure preserves catalogue", commitFailure: true},
 		{name: "completion failure can retry", completionFailure: true},
+		{name: "cancel after a committed approval is not a cancel", completionFailure: true, cancelAfterCommit: true},
 		{name: "selected tools", selection: []string{"other-tracker--tool_000"}},
 		{name: "typed auth client", typedAuth: true},
 		{name: "revoked during consent", revoke: true},
 		{name: "catalogue evicted during consent", evictCatalog: true},
 		{name: "cancel preserves catalogue", cancel: true},
+		{name: "cancel that cannot read the approval leaves the review open", cancel: true, cancelReadFailure: true},
 		{name: "revoked while reviewing", revokeAtApproval: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -616,6 +622,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.False(t, action.ClientReconnectRequired)
 			require.Empty(t, handoff.ToolCalls)
 			upstream.requireNeverCarried(t, "Bearer reconnected-token")
+			rec := recordConnections(t, ti)
+			remotesessions.WithConnectionRecorder(rec.Recorder)(ti.service.RemoteChallengeManager())
 			route := chi.NewRouteContext()
 			route.URLParams.Add("mcpSlug", slug)
 			entry := httptest.NewRequest(http.MethodGet, action.AuthorizationURL, nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
@@ -666,6 +674,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, redirect.String(), nil).WithContext(ctx), endpoint))
 				require.Contains(t, page.Body.String(), "Session expired. Please reconnect.")
 				require.NotContains(t, page.Body.String(), "data-auto-close")
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeConnectionCatalogExpired)
 				return
 			}
 			if tc.revoke {
@@ -680,6 +690,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback), "no longer active")
 				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
 				require.Equal(t, before, after, "revoked credentials cannot expand a catalogue")
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeRefreshTokenRevoked)
 				return
 			}
 			require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
@@ -700,6 +712,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.Contains(t, reviewPage, "Review updated tools")
 			require.Contains(t, reviewPage, "other-tracker")
 			require.Contains(t, reviewPage, "other-tracker--tool_002")
+			rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown)
+			rec.RequireNotEnded()
 			if tc.cancel {
 				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
 				var before, after []byte
@@ -707,11 +721,33 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
 				req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.cancelReadFailure {
+					_, err := ti.conn.Exec(ctx, `UPDATE user_sessions SET tool_selection = '{"version":"unreadable"}' WHERE credential_id = $1 OR id = $1`, sessionPolicy.CredentialID)
+					require.NoError(t, err)
+				}
 				response := httptest.NewRecorder()
 				require.NoError(t, ti.service.ServeConsent(response, req, endpoint))
 				require.Contains(t, response.Body.String(), "No tool changes were approved")
+				if tc.cancelReadFailure {
+					require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+					rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+					rec.RequireNotEnded()
+					pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+					require.NoError(t, err)
+					require.False(t, pending.CodeReconnect.CatalogComplete)
+					require.False(t, pending.CodeReconnect.CatalogCanceled)
+					return
+				}
 				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
 				require.Equal(t, before, after)
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+				row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled)
+				require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
+				consentGetPageWithContext(t, ctx, ti, slug, stateID)
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+				for _, recorded := range rec.Rows() {
+					require.NotEqual(t, mcpconnectionattempts.ResultComplete.String(), recorded.StepResult, "a canceled review never reads as complete")
+				}
 				return
 			}
 			inventory := gatewayInventoryFromPage(t, reviewPage)
@@ -732,6 +768,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				var after []byte
 				require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &after))
 				require.Equal(t, originalCatalog, after)
+				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeRefreshTokenRevoked)
 				return
 			}
 			if tc.commitFailure {
@@ -745,6 +783,8 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				afterPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
 				require.NoError(t, err)
 				require.Equal(t, sessionPolicy.ToolSelection, afterPolicy.ToolSelection)
+				rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+				rec.RequireNotEnded()
 				return
 			}
 			if tc.completionFailure {
@@ -755,6 +795,16 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 				require.NoError(t, err)
 				require.False(t, pending.CodeReconnect.CatalogComplete)
+				if tc.cancelAfterCommit {
+					form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
+					req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					require.NoError(t, ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint))
+					require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+					row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+					require.Equal(t, "approved_before_cancel", row.SubReason)
+					return
+				}
 				// Reloading and retrying must finish the committed approval, not replace it.
 				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
 				require.Contains(t, retryPage, `id="consent-approve-button"`)
@@ -797,6 +847,9 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			completedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 			require.NoError(t, err)
 			require.True(t, completedState.CodeReconnect.CatalogComplete)
+			require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+			require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
 			page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
 			require.Contains(t, page, "data-auto-close")
 			require.NotContains(t, page, ">other-tracker</span>")
