@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -22,10 +23,11 @@ import (
 // be a no-op against grants that don't constrain the caller.
 //
 // Each per-tool check carries the `disposition` dimension, resolved from
-// admin-authored tool metadata via the injected [ToolDispositionResolver] so
-// the filter matches disposition-scoped grants the same way the paired
-// tools/call enforcement does. A tool with no recorded metadata resolves to
-// the empty disposition, leaving a pure tool-name match.
+// the tool catalog via the injected [ToolDispositionResolver] so the filter
+// matches disposition-scoped grants the same way the paired tools/call
+// enforcement does. With a [toolCatalogSync] attached, tools missing from the
+// catalog are recorded from this response before filtering. Without one, they
+// resolve to the empty disposition, leaving a pure tool-name match.
 //
 // The filter leaves cache labelling to the proxy, which marks every tools/list
 // result relayed through a chain with this filter attached caller-varying with
@@ -47,6 +49,7 @@ import (
 type ToolsListMCPConnectFilterInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
+	catalog     *toolCatalogSync
 	mcpServerID string
 	projectID   string
 	logger      *slog.Logger
@@ -64,6 +67,7 @@ func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver
 	return &ToolsListMCPConnectFilterInterceptor{
 		authz:       authzEngine,
 		resolver:    resolver,
+		catalog:     nil,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
 		logger:      logger,
@@ -97,6 +101,12 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return nil
 	}
 
+	if i.catalog != nil {
+		if err := i.catalog.recordListed(ctx, list); err != nil {
+			return fmt.Errorf("record listed tools: %w", err)
+		}
+	}
+
 	// Fail closed: if disposition resolution fails, surface the error rather
 	// than filtering on the empty disposition, which would leak tools an
 	// annotation-scoped grant is meant to withhold. One lookup covers the
@@ -109,8 +119,8 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
 		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: dispositions[t.Name],
+			Tool:        strings.TrimSpace(t.Name),
+			Disposition: dispositions[strings.TrimSpace(t.Name)],
 			ProjectID:   i.projectID,
 		})
 	}

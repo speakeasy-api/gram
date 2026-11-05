@@ -85,6 +85,77 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const addMissingMCPServerToolMetadata = `-- name: AddMissingMCPServerToolMetadata :many
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    $1,
+    $2,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements($3::jsonb) AS elem
+ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+`
+
+type AddMissingMCPServerToolMetadataParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Tools       []byte
+}
+
+// Records tools the catalog has no live entry for, leaving existing entries
+// untouched. Used when the proxy discovers tools from the upstream, where
+// concurrent requests routinely race to record the same tool, so a conflict
+// means another request got there first rather than a stale caller. RETURNING
+// yields only the rows actually inserted. See SetMCPServerToolMetadata for why
+// the payload is unpacked with ->> rather than jsonb_to_recordset.
+func (q *Queries) AddMissingMCPServerToolMetadata(ctx context.Context, arg AddMissingMCPServerToolMetadataParams) ([]McpServerToolMetadatum, error) {
+	rows, err := q.db.Query(ctx, addMissingMCPServerToolMetadata, arg.ProjectID, arg.McpServerID, arg.Tools)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServerToolMetadatum
+	for rows.Next() {
+		var i McpServerToolMetadatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolName,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countEMAClientHeadersFixture = `-- name: CountEMAClientHeadersFixture :one
 SELECT count(*) FROM mcp_auth_client_headers
 WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted
