@@ -15,6 +15,12 @@ fi
 
 export MEMORYEVAL_RUNS="${usage_runs:-${MEMORYEVAL_RUNS:-3}}"
 if [ -n "${usage_out:-}" ]; then
+  # The task runs from server/, so resolve a relative path against the
+  # directory mise was started from.
+  case "$usage_out" in
+  /*) ;;
+  *) usage_out="${MISE_ORIGINAL_CWD:-$PWD}/$usage_out" ;;
+  esac
   out_dir="$(dirname "$usage_out")"
   if [ ! -d "$out_dir" ]; then
     echo "--out directory does not exist: $out_dir" >&2

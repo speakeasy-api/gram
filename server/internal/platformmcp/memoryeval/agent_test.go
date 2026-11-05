@@ -150,7 +150,7 @@ func systemPrompt(corpus *memoryeval.Corpus, a arm) string {
 		b.WriteString(a.instructions + "\n")
 		b.WriteString("Cite every session you rely on as [chat:<chat_id>].\n")
 	}
-	b.WriteString("When a decision changed over time, give the current one. ")
+	b.WriteString("When a decision changed over time, give the one in force now, unless the question asks about an earlier moment; then give the one in force at that moment. ")
 	b.WriteString("If the team's history does not answer the question, reply exactly \"Not found\" and nothing else. Do not guess.")
 	return b.String()
 }
@@ -183,9 +183,13 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 		}
 		messages = append(messages, assistantToolCallMessage(response))
 		for _, call := range response.ToolCalls {
-			output, err := a.call(ctx, call.Function.Name, call.Function.Arguments)
-			if err != nil {
-				output = "error: " + err.Error()
+			output := "error: unknown tool"
+			if a.call != nil && slices.ContainsFunc(a.tools, func(t armTool) bool { return t.name == call.Function.Name }) {
+				out, err := a.call(ctx, call.Function.Name, call.Function.Arguments)
+				if err != nil {
+					out = "error: " + err.Error()
+				}
+				output = out
 			}
 			toolOutput.WriteString(output)
 			toolOutput.WriteByte('\n')
@@ -389,7 +393,9 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 		for _, secret := range corpus.Leaks(ans.toolOutput + "\n" + ans.text) {
 			s.leaks[secret.Name] = true
 		}
-		for _, canary := range corpus.IsolationViolations(ans.toolOutput + "\n" + ans.text) {
+		// Only what the tools returned counts: an answer can name a canary
+		// phrase ("nothing about parental leave") without having seen it.
+		for _, canary := range corpus.IsolationViolations(ans.toolOutput) {
 			s.isolation[canary] = true
 		}
 		if graded && ans.question.Kind == memoryeval.QuestionNegative {
@@ -439,8 +445,13 @@ func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, run
 		if s.answerable > 0 && len(a.tools) > 0 {
 			citations = fmt.Sprintf("%.0f%%", 100*float64(s.validCited)/float64(s.answerable))
 		}
-		hardCorrect := s.correctByKind[memoryeval.QuestionTemporal] + s.correctByKind[memoryeval.QuestionSynthesis]
-		hardTotal := s.totalByKind[memoryeval.QuestionTemporal] + s.totalByKind[memoryeval.QuestionSynthesis]
+		hardCorrect, hardTotal := 0, 0
+		for k, total := range s.totalByKind {
+			if k.Hard() {
+				hardCorrect += s.correctByKind[k]
+				hardTotal += total
+			}
+		}
 		fmt.Fprintf(&b, "| %s | %.0f%% (%.0f–%.0f%%) | %.0f%% | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d |\n",
 			a.name, 100*mean, 100*lo, 100*hi, 100*float64(hardCorrect)/float64(max(hardTotal, 1)),
 			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal),

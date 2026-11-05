@@ -146,7 +146,6 @@ type chatSpec struct {
 	project  ProjectKey
 	owner    string
 	daysAgo  int
-	hour     int
 	title    string
 	private  bool
 	canaries []string
@@ -156,17 +155,17 @@ type chatSpec struct {
 // team builds a team chat in the main project. Turns alternate between the
 // user and the assistant, starting with the user.
 func team(key, owner string, daysAgo int, title string, turns ...string) chatSpec {
-	return chatSpec{key: key, project: ProjectMain, owner: owner, daysAgo: daysAgo, hour: 0, title: title, private: false, canaries: nil, turns: turns}
+	return chatSpec{key: key, project: ProjectMain, owner: owner, daysAgo: daysAgo, title: title, private: false, canaries: nil, turns: turns}
 }
 
 // private builds a private session in the main project.
 func private(key, owner string, daysAgo int, title string, canaries []string, turns ...string) chatSpec {
-	return chatSpec{key: key, project: ProjectMain, owner: owner, daysAgo: daysAgo, hour: 0, title: title, private: true, canaries: canaries, turns: turns}
+	return chatSpec{key: key, project: ProjectMain, owner: owner, daysAgo: daysAgo, title: title, private: true, canaries: canaries, turns: turns}
 }
 
 // other builds a team chat in the other project.
 func other(key, owner string, daysAgo int, title string, canaries []string, turns ...string) chatSpec {
-	return chatSpec{key: key, project: ProjectOther, owner: owner, daysAgo: daysAgo, hour: 0, title: title, private: false, canaries: canaries, turns: turns}
+	return chatSpec{key: key, project: ProjectOther, owner: owner, daysAgo: daysAgo, title: title, private: false, canaries: canaries, turns: turns}
 }
 
 var users = []User{
@@ -201,10 +200,7 @@ func (s chatSpec) build(now time.Time, ordinal int, secrets []Secret) Chat {
 		firstHour    = 9
 		workingHours = 9
 	)
-	hour := s.hour
-	if hour == 0 {
-		hour = firstHour + int(fnv32(s.key)%workingHours)
-	}
+	hour := firstHour + int(fnv32(s.key)%workingHours)
 	day := now.Truncate(24*time.Hour).AddDate(0, 0, -s.daysAgo)
 	start := day.Add(time.Duration(hour)*time.Hour + time.Duration(ordinal%60)*time.Minute)
 	if span := time.Duration(len(s.turns)-1) * messageGap; start.Add(span).After(now) {
