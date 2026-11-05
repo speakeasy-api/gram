@@ -200,6 +200,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		BrowserCookieID: "",
 		BrowserHash:     "",
 		Attempt:         mcpconnectionattempts.NoAttempt,
+		ClientRequest:   mcpconnectionattempts.FromRequest(nil),
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)
@@ -218,6 +219,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 
 	authorization, err := a.sessions.ResolveAuthorization(
 		ctx,
+		remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(request.OrganizationID, request.ProjectID, mcpconnectionattempts.AppFirstParty)),
 		request.ProjectID,
 		request.OrganizationID,
 		request.UserSessionIssuerID,

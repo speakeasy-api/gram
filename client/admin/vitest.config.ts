@@ -22,6 +22,8 @@ export default defineConfig({
     // empty string instead of the generated CSS. Narrowed to the one sheet a
     // test reads, so no other file changes behaviour.
     css: { include: [/index\.css/] },
+    // Component and browser-behavior tests. DOM-independent files opt into
+    // Node with `// @vitest-environment node` on the first line.
     environment: "happy-dom",
   },
 });

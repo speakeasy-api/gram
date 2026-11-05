@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -655,6 +656,7 @@ func (s *Service) loadAuthClientHeaders(ctx context.Context, organizationID stri
 		}
 		current.headers = append(current.headers, proxy.ConfiguredHeader{
 			IsRequired:             row.IsRequired,
+			IsSecret:               row.IsSecret,
 			Name:                   row.Name,
 			StaticValue:            value,
 			ValueFromRequestHeader: row.ValueFromRequestHeader.String,
@@ -706,9 +708,12 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 		}
 		return none, false, nil
 	case authClientGap:
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
+		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
+			mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject),
+			s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		return none, true, s.authClientNoAccessError(ctx, endpoint.McpServerID.UUID, res)
 	case authClientNoAuth:
 		authentication.chosenClient = none.clientID
@@ -771,6 +776,7 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 			Subject:             subject,
 			RegistrationID:      res.choice.clientID.UUID,
 			SkipUnusable:        false,
+			Attribution:         remotesessions.RefreshAttribution{},
 		})
 		if err != nil {
 			return false, false, fmt.Errorf("check auth client reconnect: %w", err)

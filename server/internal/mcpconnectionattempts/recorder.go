@@ -280,7 +280,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientVersion:         "",
 		Repeats:               0,
 		DeviceKey:             "",
-		client:                requestClient{present: false, userAgent: "", forwardedFor: ""},
+		client:                requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil},
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -353,10 +353,12 @@ type Recorder struct {
 	steps       metric.Int64Counter
 	dropped     metric.Int64Counter
 
-	queue    chan Row
-	stop     chan struct{}
-	done     chan struct{}
-	stopOnce sync.Once
+	queue        chan Row
+	stop         chan struct{}
+	done         chan struct{}
+	stopOnce     sync.Once
+	writerCtx    context.Context //nolint:containedctx // Recorder-owned background lifecycle; shutdown cancels writer IO, never a request context.
+	cancelWriter context.CancelFunc
 
 	// stopMu makes enqueueing and stopping exclusive, so each row is drained or counted.
 	stopMu  sync.RWMutex
@@ -418,25 +420,28 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterDropped), attr.SlogError(err))
 	}
 
+	writerCtx, cancelWriter := context.WithCancel(context.Background())
 	r := &Recorder{
-		logger:      logger,
-		conn:        conn,
-		limiter:     newOnceLimiter(),
-		logsEnabled: logsEnabled,
-		deviceKeys:  nil,
-		capture:     nil,
-		cfg:         cfg,
-		steps:       steps,
-		dropped:     dropped,
-		queue:       make(chan Row, cfg.queueSize),
-		stop:        make(chan struct{}),
-		done:        make(chan struct{}),
-		stopOnce:    sync.Once{},
-		stopMu:      sync.RWMutex{},
-		stopped:     false,
-		lastDrop:    newDropCounters(),
-		unfinished:  atomic.Int64{},
-		dropTotals:  newDropCounters(),
+		logger:       logger,
+		conn:         conn,
+		limiter:      newOnceLimiter(),
+		logsEnabled:  logsEnabled,
+		deviceKeys:   nil,
+		capture:      nil,
+		cfg:          cfg,
+		steps:        steps,
+		dropped:      dropped,
+		queue:        make(chan Row, cfg.queueSize),
+		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
+		stopOnce:     sync.Once{},
+		writerCtx:    writerCtx,
+		cancelWriter: cancelWriter,
+		stopMu:       sync.RWMutex{},
+		stopped:      false,
+		lastDrop:     newDropCounters(),
+		unfinished:   atomic.Int64{},
+		dropTotals:   newDropCounters(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -449,24 +454,26 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 // writing it. Use mcpconnectionattemptstest rather than calling this.
 func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
-		logger:      slog.New(slog.DiscardHandler),
-		conn:        nil,
-		limiter:     nil,
-		logsEnabled: logsEnabled,
-		deviceKeys:  nil,
-		capture:     capture,
-		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
-		steps:       nil,
-		dropped:     nil,
-		queue:       nil,
-		stop:        nil,
-		done:        nil,
-		stopOnce:    sync.Once{},
-		stopMu:      sync.RWMutex{},
-		stopped:     false,
-		lastDrop:    newDropCounters(),
-		unfinished:  atomic.Int64{},
-		dropTotals:  newDropCounters(),
+		logger:       slog.New(slog.DiscardHandler),
+		conn:         nil,
+		limiter:      nil,
+		logsEnabled:  logsEnabled,
+		deviceKeys:   nil,
+		capture:      capture,
+		cfg:          config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
+		steps:        nil,
+		dropped:      nil,
+		queue:        nil,
+		stop:         nil,
+		done:         nil,
+		stopOnce:     sync.Once{},
+		writerCtx:    context.Background(),
+		cancelWriter: nil,
+		stopMu:       sync.RWMutex{},
+		stopped:      false,
+		lastDrop:     newDropCounters(),
+		unfinished:   atomic.Int64{},
+		dropTotals:   newDropCounters(),
 	}
 }
 
@@ -501,47 +508,49 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats count as rate_limited, and rows past its queue share as queue_reserved.
-func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
+// It reports capture/queue acceptance, not eventual persistence; rejected rows return false.
+func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
+	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) (accepted bool) {
 	if r == nil || attempt.IsZero() {
-		return
+		return false
 	}
 	// Recording must never panic a request.
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.drop(ctx, dropPanic, 1, fmt.Errorf("connection events record: %v", recovered))
+			accepted = false
 		}
 	}()
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
-		return
+		return false
 	}
 	switch {
 	case r.limiter == nil:
 	case held == limitStart:
 		if r.queueReserved() {
 			r.drop(ctx, dropQueueReserve, 1, nil)
-			return
+			return false
 		}
 		if !r.limiter.allowOrganization(row.OrganizationID, time.Now()) {
 			r.drop(ctx, dropRateLimited, 1, nil)
-			return
+			return false
 		}
 	case held == limitOnce:
 		if r.queueReserved() {
 			r.dropLostRepeats(ctx, r.limiter.holdBack(row))
 			r.drop(ctx, dropQueueReserve, 1, nil)
-			return
+			return false
 		}
 		decision := r.limiter.take(row, time.Now())
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
 			r.drop(ctx, dropRateLimited, 1, nil)
-			return
+			return false
 		}
 		row.Repeats = decision.repeats
 	}
@@ -553,13 +562,16 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
+			return true
 		}
-		return
+		return false
 	}
 
 	if reason := r.enqueue(row); reason != "" {
 		r.drop(ctx, reason, 1, nil)
+		return false
 	}
+	return true
 }
 
 // enqueue holds the lock only for a non-blocking send, and reports any drop after releasing it.
@@ -629,6 +641,18 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 	return err
 }
 
+// ShutdownAndWait drains until ctx ends, then cancels in-flight I/O and drops
+// the backlog. It joins the writer before returning so its datastore can close.
+// The logs callback and datastore driver must honor their operation contexts.
+func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
+	err := r.Shutdown(ctx)
+	if r != nil && r.cancelWriter != nil {
+		r.cancelWriter()
+		<-r.done
+	}
+	return err
+}
+
 func (r *Recorder) dropSnapshot() map[dropReason]int64 {
 	snapshot := make(map[dropReason]int64, len(r.dropTotals))
 	for reason, total := range r.dropTotals {
@@ -657,6 +681,7 @@ func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int
 
 func (r *Recorder) run() {
 	defer close(r.done)
+	defer r.cancelWriter()
 
 	ticker := time.NewTicker(r.cfg.flushInterval)
 	defer ticker.Stop()
@@ -692,7 +717,7 @@ func (r *Recorder) run() {
 		ticker.Reset(r.cfg.flushInterval)
 	}
 	add := func(row Row) {
-		if drainFailed {
+		if drainFailed || r.writerCtx.Err() != nil {
 			r.drop(context.Background(), dropShutdown, 1, nil)
 			r.unfinished.Add(-1)
 			return
@@ -769,7 +794,7 @@ func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error
 	if r.logsEnabled == nil {
 		return dropLogsOff, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.logsCheckTimeout)
+	ctx, cancel := context.WithTimeout(r.writerCtx, r.cfg.logsCheckTimeout)
 	defer cancel()
 
 	enabled, err := r.logsEnabled(ctx, organizationID)
@@ -785,7 +810,11 @@ func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error
 
 // insert writes one batch once and waits for the commit, so failures are counted. It reports success.
 func (r *Recorder) insert(rows []Row) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.insertTimeout)
+	if r.writerCtx.Err() != nil {
+		r.drop(context.Background(), dropShutdown, len(rows), nil)
+		return false
+	}
+	ctx, cancel := context.WithTimeout(r.writerCtx, r.cfg.insertTimeout)
 	defer cancel()
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))

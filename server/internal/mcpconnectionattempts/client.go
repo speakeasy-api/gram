@@ -37,14 +37,15 @@ const (
 )
 
 // clientFamilies is checked in order, so an editor's Electron User-Agent reads as the
-// editor before its Mozilla prefix reads as a browser. A marker matches whole words only.
+// editor before its Mozilla prefix reads as a browser. A marker matches whole words only,
+// and is written with dashes because spaces, dots and underscores all read as dashes.
 var clientFamilies = []struct {
 	family  string
 	markers []string
 }{
 	{FamilyClaudeCode, []string{"claude-code", "claude-cli"}},
-	{FamilyClaudeAI, []string{"claude-user", "claude.ai"}},
-	{FamilyCodexCLI, []string{"codex_cli_rs", "codex_cli", "codex-cli", "codex-mcp-client", "codex"}},
+	{FamilyClaudeAI, []string{"claude-user", "claude-ai"}},
+	{FamilyCodexCLI, []string{"codex-cli-rs", "codex-cli", "codex-mcp-client", "codex"}},
 	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt"}},
 	{FamilyCursor, []string{"cursor"}},
 	{FamilyCopilot, []string{"copilot"}},
@@ -52,7 +53,7 @@ var clientFamilies = []struct {
 	{FamilyKiro, []string{"kiro"}},
 	{FamilyReplit, []string{"replit-agent-mcp-client", "replit"}},
 	{FamilyNotion, []string{"notion-mcp-client"}},
-	{FamilyVSCode, []string{"vscode", "visual studio code - insiders", "visual studio code"}},
+	{FamilyVSCode, []string{"vscode", "visual-studio-code---insiders", "visual-studio-code"}},
 	{FamilyPerplexity, []string{"perplexity"}},
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
@@ -65,7 +66,7 @@ var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.
 // the family's own marker and has the shape of a version. A browser's Mozilla/5.0 is no version.
 func classifyUserAgent(userAgent string) (family, version string) {
 	userAgent = userAgent[:min(len(userAgent), maxUserAgentBytes)]
-	lower := asciiLower(userAgent)
+	lower := foldClientName(userAgent)
 	// A link in the User-Agent names its owner, not the client: PerplexityBot's points at perplexity.ai.
 	if link := strings.Index(lower, "://"); link >= 0 {
 		lower = lower[:link]
@@ -106,16 +107,20 @@ func isWordByte(b byte) bool {
 	return 'a' <= b && b <= 'z' || '0' <= b && b <= '9'
 }
 
-// asciiLower keeps every byte offset, so an index into its result is an index into its input.
-// strings.ToLower can change a string's length.
-func asciiLower(value string) string {
-	lower := []byte(value)
-	for i, b := range lower {
-		if 'A' <= b && b <= 'Z' {
-			lower[i] = b + ('a' - 'A')
+// foldClientName lowercases ASCII and turns spaces, dots and underscores into dashes, so "Claude Code"
+// and "claude-code" read alike. It keeps every byte offset, so an index into its result is an index
+// into its input. strings.ToLower can change a string's length.
+func foldClientName(value string) string {
+	folded := []byte(value)
+	for i, b := range folded {
+		switch {
+		case 'A' <= b && b <= 'Z':
+			folded[i] = b + ('a' - 'A')
+		case b == ' ' || b == '.' || b == '_':
+			folded[i] = '-'
 		}
 	}
-	return string(lower)
+	return string(folded)
 }
 
 func versionAfter(rest string) string {
@@ -126,10 +131,14 @@ func versionAfter(rest string) string {
 	if end := strings.IndexAny(rest, " ;,()"); end >= 0 {
 		rest = rest[:end]
 	}
-	if len(rest) > maxClientVersionBytes || !clientVersionShape.MatchString(rest) {
+	if !validClientVersion(rest) {
 		return ""
 	}
 	return rest
+}
+
+func validClientVersion(version string) bool {
+	return len(version) <= maxClientVersionBytes && clientVersionShape.MatchString(version)
 }
 
 // requestClient is what a row keeps from its request until the writer reads it. It is bounded
@@ -138,6 +147,9 @@ type requestClient struct {
 	present      bool
 	userAgent    string
 	forwardedFor string
+
+	// reported reads what the MCP session said about itself. It runs on the writer.
+	reported func() (name, version string)
 }
 
 // FromRequest keeps what the request says about its client, for the writer to read. It parses
@@ -146,22 +158,49 @@ func FromRequest(r *http.Request) Option {
 	if r == nil {
 		return Option{apply: nil}
 	}
-	userAgent := r.UserAgent()
-	client := requestClient{
-		present:      true,
-		userAgent:    strings.Clone(userAgent[:min(len(userAgent), maxUserAgentBytes)]),
-		forwardedFor: lastForwardedFor(r),
+	userAgent := strings.Clone(r.UserAgent()[:min(len(r.UserAgent()), maxUserAgentBytes)])
+	forwardedFor := lastForwardedFor(r)
+	return Option{apply: func(row *Row) {
+		row.client.present, row.client.userAgent, row.client.forwardedFor = true, userAgent, forwardedFor
+	}}
+}
+
+// ReportedClient names the client an MCP session reported, read first when the writer names a
+// row's client. read runs on the writer, so a slow lookup costs the request nothing. It must bound
+// its own time and must not touch the request: a slow read stalls the single writer
+// and delays other queued rows until it returns. Nil sets nothing.
+func ReportedClient(read func() (name, version string)) Option {
+	if read == nil {
+		return Option{apply: nil}
 	}
-	return Option{apply: func(row *Row) { row.client = client }}
+	return Option{apply: func(row *Row) { row.client.reported = read }}
 }
 
 // stampClient reads a row's request on the writer: its family, version and device key.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: ""}
+	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil}
+	if client.reported != nil {
+		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
+	}
 	if !client.present {
 		return
 	}
-	row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	if row.ClientFamily == "" {
+		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	}
 	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
+}
+
+// classifyReported returns no family for a name it does not know, so the User-Agent gets its turn.
+// A named client's version comes only from what it reported.
+func classifyReported(name, version string) (string, string) {
+	family, inName := classifyUserAgent(name)
+	if family == FamilyOther {
+		return "", ""
+	}
+	if validClientVersion(version) {
+		return family, version
+	}
+	return family, inName
 }

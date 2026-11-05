@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";

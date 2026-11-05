@@ -1188,7 +1188,7 @@ type ListProjectMcpServersResponseBody struct {
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
 	// List of organization activity.
-	Logs []*AuditLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Logs []*AdminAuditLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -23141,8 +23141,12 @@ type AdminMcpServerResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
-// AuditLogResponseBody is used to define fields on response body types.
-type AuditLogResponseBody struct {
+// AdminAuditLogResponseBody is used to define fields on response body types.
+type AdminAuditLogResponseBody struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool   `form:"is_internal,omitempty" json:"is_internal,omitempty" xml:"is_internal,omitempty"`
 	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
@@ -28798,13 +28802,13 @@ func NewListOrganizationActivityAdminListOrganizationActivityResultOK(body *List
 	v := &admin.AdminListOrganizationActivityResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Logs = make([]*admin.AuditLog, len(body.Logs))
+	v.Logs = make([]*admin.AdminAuditLog, len(body.Logs))
 	for i, val := range body.Logs {
 		if val == nil {
 			v.Logs[i] = nil
 			continue
 		}
-		v.Logs[i] = unmarshalAuditLogResponseBodyToAdminAuditLog(val)
+		v.Logs[i] = unmarshalAdminAuditLogResponseBodyToAdminAdminAuditLog(val)
 	}
 
 	return v
@@ -44554,7 +44558,7 @@ func ValidateListOrganizationActivityResponseBody(body *ListOrganizationActivity
 	}
 	for _, e := range body.Logs {
 		if e != nil {
-			if err2 := ValidateAuditLogResponseBody(e); err2 != nil {
+			if err2 := ValidateAdminAuditLogResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -73591,9 +73595,9 @@ func ValidateAdminMcpServerResponseBody(body *AdminMcpServerResponseBody) (err e
 	return
 }
 
-// ValidateAuditLogResponseBody runs the validations defined on
-// AuditLogResponseBody
-func ValidateAuditLogResponseBody(body *AuditLogResponseBody) (err error) {
+// ValidateAdminAuditLogResponseBody runs the validations defined on
+// AdminAuditLogResponseBody
+func ValidateAdminAuditLogResponseBody(body *AdminAuditLogResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

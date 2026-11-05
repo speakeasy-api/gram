@@ -288,7 +288,7 @@ func TestServePublic_MetaEndpoint_RefreshFailureNotFromTheProvider(t *testing.T)
 	require.Empty(t, status.Servers[0].Outage.ReconnectURL)
 	require.Zero(t, f.refreshes.Load(), "no provider call was made")
 
-	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.project, f.org, f.issuerID, f.subject)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokens)
 	for _, token := range tokens {
@@ -308,7 +308,7 @@ func TestConnectionRouteFailure_ProviderOutageOffersReconnect(t *testing.T) {
 	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
 	f.down.Store(true)
 
-	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.project, f.org, f.issuerID, f.subject)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokens)
 	for _, token := range tokens {
@@ -332,7 +332,7 @@ func TestRemoteSessionUnavailable_MessageHonoursALongWait(t *testing.T) {
 	f.down.Store(true)
 	f.retryAfter.Store("300")
 
-	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.project, f.org, f.issuerID, f.subject)
 	require.NoError(t, err)
 	require.NotEmpty(t, tokens)
 	for _, token := range tokens {
@@ -354,7 +354,7 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 
 	broken := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
 	require.NoError(t, broken.Close())
-	ti.service.SetChatSessionsManager(chatsessions.NewManager(testenv.NewLogger(t), broken, "test-jwt-secret"))
+	ti.service.SetChatSessionsManager(chatsessions.NewManager(testenv.NewLogger(t), broken, "test-jwt-secret", ti.sessionManager))
 
 	w, err := servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)
 	var shareable *oops.ShareableError

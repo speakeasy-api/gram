@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it } from "vitest";
 import { inferenceCompletionEndpoint } from "./inferenceEndpoint";
 it("uses the configured HTTPS origin for completions", () => {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";

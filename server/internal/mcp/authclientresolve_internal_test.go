@@ -830,6 +830,8 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, "Authorization", headers[0].Name)
 		require.Equal(t, "Bearer static-secret", headers[0].StaticValue)
 		require.True(t, headers[0].IsRequired)
+		require.True(t, headers[0].IsSecret)
+		require.False(t, headers[1].IsSecret)
 		require.Equal(t, "X-Caller-Tenant", headers[1].ValueFromRequestHeader)
 
 		other, err := f.service.loadAuthClientHeaders(ctx, "org_"+uuid.NewString(), []uuid.UUID{id})
@@ -1201,7 +1203,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	_, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, workload, "jti")
 	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
 	require.False(t, decided)
-	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti"), "a failed check fails open")
+	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti").reconnect(), "a failed check fails open")
 }
 
 func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {

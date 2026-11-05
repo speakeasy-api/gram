@@ -25267,10 +25267,11 @@ func unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer(v *AdminMcpServerR
 	return res
 }
 
-// unmarshalAuditLogResponseBodyToAdminAuditLog builds a value of type
-// *admin.AuditLog from a value of type *AuditLogResponseBody.
-func unmarshalAuditLogResponseBodyToAdminAuditLog(v *AuditLogResponseBody) *admin.AuditLog {
-	res := &admin.AuditLog{
+// unmarshalAdminAuditLogResponseBodyToAdminAdminAuditLog builds a value of
+// type *admin.AdminAuditLog from a value of type *AdminAuditLogResponseBody.
+func unmarshalAdminAuditLogResponseBodyToAdminAdminAuditLog(v *AdminAuditLogResponseBody) *admin.AdminAuditLog {
+	res := &admin.AdminAuditLog{
+		IsInternal:         v.IsInternal,
 		ID:                 *v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,

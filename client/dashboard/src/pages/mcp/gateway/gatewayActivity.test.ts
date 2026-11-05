@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MemberRow } from "./memberRows";

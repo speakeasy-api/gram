@@ -1924,7 +1924,11 @@ SELECT
           OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
         )
       )
-    )::boolean                             AS metadata_needs_reprojection
+    )::boolean                             AS metadata_needs_reprojection,
+    i.registration_endpoint                AS issuer_registration_endpoint,
+    c.client_id_metadata_uri               AS client_id_metadata_uri,
+    c.identity_provider_connection_id      AS identity_provider_connection_id,
+    c.credential_owner                     AS credential_owner
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -2543,7 +2547,7 @@ ORDER BY updated_at, id;
 -- Authoritative re-check immediately before a scheduled refresh: the row was
 -- claimed earlier in the pass and may have been refreshed, revoked, or re-linked
 -- since. No row means "no longer due" — the activity records a skip.
-SELECT sqlc.embed(s)
+SELECT sqlc.embed(s), c.project_id AS client_project_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
@@ -6339,3 +6343,17 @@ SELECT name
 FROM agents
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: HasActiveEMABindingForRefresh :one
+-- Resolve tenant ownership from the persisted session's identity issuer, not
+-- from a remote client that may be shared globally.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id
+  JOIN user_session_issuers AS u ON u.id = b.user_session_issuer_id
+    AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  WHERE b.remote_session_client_id = @remote_session_client_id
+    AND b.user_session_issuer_id = @user_session_issuer_id
+    AND b.state IS DISTINCT FROM 'unlinked'
+)::boolean;

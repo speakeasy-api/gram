@@ -2243,10 +2243,12 @@ jobs:
         run: aube run test
         working-directory: client/admin
 
-      - name: Test registry editor in Chromium
+      - name: Test registry editor in Chrome
         working-directory: e2e
         run: |
-          aube exec playwright install --with-deps chromium
+          # /usr/bin/google-chrome is the image browser (see
+          # e2e/registry-editor.config.ts). Do not apt-install or download one.
+          /usr/bin/google-chrome --version
           aube run test:registry-editor
 
       - name: Prune aube store

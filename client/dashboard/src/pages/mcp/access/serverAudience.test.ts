@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it } from "vitest";
 import { isBillingRecoveryPath } from "./billing-recovery-path";
 it("only exempts exact billing recovery routes for the active organization", () => {
