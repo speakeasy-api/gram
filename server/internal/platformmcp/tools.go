@@ -559,7 +559,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
-			Title:       "Send Feedback to Speakeasy",
+			Title:       "Submit Platform Feedback",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
 			Annotations: feedbackAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
