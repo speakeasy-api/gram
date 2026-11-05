@@ -491,15 +491,35 @@ func (s *Service) handleMetaInitialize(
 	return bs, nil
 }
 
+// metaInstructionMembersTimeout bounds the lookup so a slow database delays
+// the handshake by at most this long; the summary is dropped instead.
+const metaInstructionMembersTimeout = 2 * time.Second
+
 // metaInstructionMembers names the servers this caller's tool listing would
 // offer. A failed snapshot only drops the summary: the handshake must not fail.
 func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
+	ctx, cancel := context.WithTimeout(ctx, metaInstructionMembersTimeout)
+	defer cancel()
 	if gate.memberChoices != nil {
 		gate.memberChoices.readOnly = true
 	}
+	// Only servers the connection approved are named; an expired or
+	// unreadable approval names none.
+	if gate.catalogRef != nil && gate.catalog == nil {
+		if gate.authentication == nil {
+			return nil
+		}
+		catalog, err := s.loadConnectionCatalog(ctx, gate.authentication.endpoint, gate.authentication.subject, gate.catalogRef, time.Now())
+		if err != nil {
+			if !errors.Is(err, errConnectionCatalogExpired) {
+				logger.WarnContext(ctx, "failed to load approved tools for instructions", attr.SlogError(err))
+			}
+			return nil
+		}
+		gate.catalog = catalog
+	}
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to resolve gateway members for instructions", attr.SlogError(err))
 		return nil
 	}
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
