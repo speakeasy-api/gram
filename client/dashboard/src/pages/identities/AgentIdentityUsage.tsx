@@ -9,7 +9,10 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
-import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
+import {
+  isOwnedAgent,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useUser } from "@/contexts/Auth";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -231,7 +234,7 @@ function AgentCredentialUsePanel({
   const viewer = useUser();
   // The agent's traces are the owner's to read; anyone else needs log:read.
   const canViewToolLogs =
-    useToolLogsAccess().projectWide || agent.ownerUserId === viewer.id;
+    useToolLogsAccess().projectWide || isOwnedAgent(agent, viewer.id);
   const { from, to } = useIdentityWindow();
   const { slug: gramProject } = useIdentityProject();
 

@@ -205,20 +205,36 @@ function getRequestableScopes(scopes: Scope[]): RequestAccessFormScope[] {
   );
 }
 
-/**
- * Asks an organization admin for the scopes the viewer is missing, and says
- * how that went. Renders nothing when every requestable scope is already held.
- */
-export function RequestScopeAccess({
-  scopes,
-  all = false,
-  resourceId,
-}: {
+type RequestScopeAccessProps = {
   scopes: Scope[];
   /** When true, every missing scope is requested, not only the first. */
   all?: boolean;
   resourceId?: string;
-}): React.JSX.Element | null {
+};
+
+/**
+ * Asks an organization admin for the scopes the viewer is missing, and says
+ * how that went. Renders nothing when every requestable scope is already held.
+ */
+export function RequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  // A request is for one resource and one set of scopes. The key remounts
+  // the form when either changes, so "Request sent" for one project does not
+  // carry over to the next.
+  return (
+    <RequestScopeAccessForm
+      key={`${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      {...props}
+    />
+  );
+}
+
+function RequestScopeAccessForm({
+  scopes,
+  all = false,
+  resourceId,
+}: RequestScopeAccessProps): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
     "idle" | "sending" | "sent" | "no-admin" | "error"
   >("idle");

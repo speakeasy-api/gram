@@ -233,6 +233,14 @@ export function useCanReadRisk(): boolean {
  */
 export function useIsSelf(identity: IdentityModel): boolean {
   const { user } = useSession();
+  return isSelfIdentity(identity, user);
+}
+
+/** {@link useIsSelf} for a caller that already holds the session user. */
+export function isSelfIdentity(
+  identity: Pick<IdentityModel, "userIds" | "emails">,
+  user: { id: string; email: string },
+): boolean {
   if (identity.userIds.includes(user.id)) return true;
   if (identity.userIds.length > 0) return false;
   return identity.emails.some(
