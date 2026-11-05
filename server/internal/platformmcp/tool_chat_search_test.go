@@ -68,14 +68,19 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, output.Hits)
 	// An administrator without chat:read searches their own scope rather than
-	// being refused, and is refused only when reading someone else's chat.
+	// being refused: their own chat is found, someone else's is not, and reading
+	// that other chat is refused.
+	other := f.chat(t, ctx, "user_fixture_other_owner", "someone else's")
+	seedRecallMessage(t, ctx, f.db, other, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	own := f.chat(t, ctx, f.principal.UserID, "the admin's own")
+	seedRecallMessage(t, ctx, f.db, own, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	args, err = json.Marshal(f.search("private"))
+	require.NoError(t, err)
 	result, err = descriptorByName(t, live, searchChatsToolName).Invoke(admin, args)
 	require.NoError(t, err)
 	output, ok = result.(SearchChatsOutput)
 	require.True(t, ok)
-	require.Empty(t, output.Hits)
-	other := f.chat(t, ctx, "user_fixture_other_owner", "someone else's")
-	seedRecallMessage(t, ctx, f.db, other, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	require.Equal(t, []string{own.String()}, chatIDsOf(output.Hits))
 	_, err = descriptorByName(t, live, readChatToolName).Invoke(admin, json.RawMessage(`{"project_id":"`+f.project.ID.String()+`","chat_id":"`+other.String()+`"}`))
 	var denied *ToolRefusalError
 	require.ErrorAs(t, err, &denied)
