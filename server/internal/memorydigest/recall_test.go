@@ -35,7 +35,7 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 		ids = append(ids, e.ID)
 	}
 	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday}, ids)
-	require.Equal(t, "October 2026 (month digest)", entries[0].Heading)
+	require.Equal(t, "October 2026 (weeks of Oct 5 - Oct 26) (month digest)", entries[0].Heading)
 	require.Equal(t, memorydigest.SourceChat, entries[3].Kind)
 	require.Equal(t, "Chat 2026-11-10: Retry ## queue", entries[3].Heading)
 	require.Equal(t, "Picked queue X.", entries[3].Text)
@@ -91,12 +91,12 @@ func TestRender(t *testing.T) {
 	digestID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	out := memorydigest.Render([]memorydigest.Entry{
-		{Kind: memorydigest.SourceDigest, ID: digestID, Heading: "October 2026 (month digest)", Text: "Picked queue X."},
+		{Kind: memorydigest.SourceDigest, ID: digestID, Heading: "October 2026 (weeks of Oct 5 - Oct 26) (month digest)", Text: "Picked queue X."},
 		{Kind: memorydigest.SourceChat, ID: chatID, Heading: "Chat 2026-11-10", Text: "Shipped retries."},
 	}, 3)
 
 	require.Equal(t, "(3 older entries omitted to fit the budget; use search_team_memory for older history.)\n\n"+
-		"## October 2026 (month digest) [digest:00000000-0000-0000-0000-000000000001]\nPicked queue X.\n\n"+
+		"## October 2026 (weeks of Oct 5 - Oct 26) (month digest) [digest:00000000-0000-0000-0000-000000000001]\nPicked queue X.\n\n"+
 		"## Chat 2026-11-10 [chat:00000000-0000-0000-0000-000000000002]\nShipped retries.", out)
 	require.Empty(t, memorydigest.Render(nil, 0))
 }

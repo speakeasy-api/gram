@@ -115,9 +115,7 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok 
 		total += n
 		blocks = append(blocks, block)
 	}
-	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
-		blocks[i], blocks[j] = blocks[j], blocks[i]
-	}
+	slices.Reverse(blocks)
 	return system, strings.Join(blocks, inputSeparator), true
 }
 
@@ -140,14 +138,21 @@ func formatInput(in Input) string {
 }
 
 // Label names the period at this level starting at start, for prompts and
-// recall headings: "2026-10-29", "week of 2026-10-26" or "October 2026".
+// recall headings: "2026-10-29", "week of 2026-10-26" or "October 2026
+// (weeks of Oct 5 - Oct 26)". A month digest folds the weeks whose Monday
+// falls in the month, so its label names those weeks: days before the first
+// Monday belong to the previous month's digest.
 func (l Level) Label(start time.Time) string {
 	start = start.UTC()
 	switch l {
 	case LevelWeek:
 		return "week of " + start.Format(time.DateOnly)
 	case LevelMonth:
-		return start.Format("January 2006")
+		weeks := LevelMonth.ChildStarts(start)
+		if len(weeks) == 0 {
+			return start.Format("January 2006")
+		}
+		return fmt.Sprintf("%s (weeks of %s - %s)", start.Format("January 2006"), weeks[0].Format("Jan 2"), weeks[len(weeks)-1].Format("Jan 2"))
 	default:
 		return start.Format(time.DateOnly)
 	}

@@ -80,3 +80,13 @@ func TestPromptOrdersByAtAndCapsAuthor(t *testing.T) {
 	require.Less(t, strings.Index(user, "earlier"), strings.Index(user, "later"))
 	require.NotContains(t, user, strings.Repeat("a", 201))
 }
+
+func TestMonthLabelNamesItsWeeks(t *testing.T) {
+	t.Parallel()
+
+	// October 2026 starts on a Thursday: 1-4 October belong to September's
+	// last week, so the label names the weeks October actually folds.
+	require.Equal(t, "October 2026 (weeks of Oct 5 - Oct 26)", memorydigest.LevelMonth.Label(date(2026, 10, 1)))
+	require.Equal(t, "June 2026 (weeks of Jun 1 - Jun 29)", memorydigest.LevelMonth.Label(date(2026, 6, 1)))
+	require.Equal(t, "week of 2026-10-05", memorydigest.LevelWeek.Label(date(2026, 10, 5)))
+}
