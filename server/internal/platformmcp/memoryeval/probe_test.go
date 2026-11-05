@@ -3,6 +3,7 @@ package memoryeval_test
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // scorecard holds the mechanical results for one arm. None of it needs an
@@ -51,16 +54,16 @@ func (s scorecard) String() string {
 }
 
 // probe runs the mechanical checks against one arm.
-func probe(ctx context.Context, t *testing.T, corpus *memoryeval.Corpus, a arm) scorecard {
+func probe(ctx context.Context, t *testing.T, corpus *memoryeval.Corpus, a bench.Arm) scorecard {
 	t.Helper()
-	card := scorecard{arm: a.name, leaks: make(map[memoryeval.SecretCategory][]string)}
+	card := scorecard{arm: a.Name, leaks: make(map[memoryeval.SecretCategory][]string)}
 
-	swept, err := a.sweep(ctx)
+	swept, err := a.Sweep(ctx)
 	require.NoError(t, err)
-	for _, secret := range corpus.Leaks(swept.output) {
+	for _, secret := range corpus.Leaks(swept.Output) {
 		card.leaks[secret.Category] = append(card.leaks[secret.Category], secret.Name)
 	}
-	for _, canary := range corpus.IsolationViolations(swept.output) {
+	for _, canary := range corpus.IsolationViolations(swept.Output) {
 		if canaryIsPrivate(corpus, canary) {
 			card.privateCanaries = append(card.privateCanaries, canary)
 		} else {
@@ -76,10 +79,10 @@ func probe(ctx context.Context, t *testing.T, corpus *memoryeval.Corpus, a arm) 
 		card.answerable++
 		var found []uuid.UUID
 		for _, group := range q.Evidence {
-			result, err := a.search(ctx, group[0])
+			result, err := a.Search(ctx, group[0])
 			require.NoError(t, err)
-			tokens += memoryeval.EstimateTokens(result.output)
-			found = append(found, result.chatIDs...)
+			tokens += memoryeval.EstimateTokens(result.Output)
+			found = append(found, result.ChatIDs...)
 		}
 		if retrievedAll(q, found) {
 			card.retrieved++
@@ -109,6 +112,83 @@ func retrievedAll(q memoryeval.Question, found []uuid.UUID) bool {
 	return true
 }
 
+// TestSearchTeamMemoryMechanical scores search_team_memory on the corpus. The
+// RFC bar is zero secret leaks in every category and zero isolation
+// violations.
+func TestSearchTeamMemoryMechanical(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	loaded := loadCorpus(t, "memoryeval_search_team_memory", corpus)
+	// The echo model writes each chat's masked transcript as its summary. A
+	// real summary carries less than this, so leaks and isolation measured
+	// here are an upper bound.
+	_, err := bench.Prepare(t.Context(), testenv.NewLogger(t), &echoModel{}, loaded.target(), bench.DefaultMemoryModels, 8)
+	require.NoError(t, err)
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+
+	card := probe(t.Context(), t, corpus, memoryArm)
+	t.Log("\n" + card.String())
+
+	for category, leaks := range card.leaks {
+		require.Empty(t, leaks, "search_team_memory leaked %s", category)
+	}
+	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
+	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+}
+
+// hashEmbedder is a deterministic bag-of-words embedder for CI: each word
+// adds one to a hashed dimension. It shares words the way full-text search
+// does, so it says nothing about semantic quality, but it exercises the
+// hybrid arm's loading, filtering and fusion without a model.
+type hashEmbedder struct{}
+
+func (hashEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	vectors := make([][]float32, len(inputs))
+	for i, input := range inputs {
+		vector := make([]float32, 256)
+		for _, word := range strings.Fields(strings.ToLower(input)) {
+			h := fnv.New32a()
+			_, _ = h.Write([]byte(word))
+			vector[h.Sum32()%256]++
+		}
+		vectors[i] = vector
+	}
+	return vectors, nil
+}
+
+// TestHybridTeamMemoryMechanical holds the hybrid arm to the same bar as
+// search_team_memory. A vector search returns its nearest items for any
+// query, so the sweep reaches every item the arm can show: none of them may
+// leak a secret, come from a personal-account session or another project.
+func TestHybridTeamMemoryMechanical(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	loaded := loadCorpus(t, "memoryeval_hybrid_team_memory", corpus)
+	_, err := bench.Prepare(t.Context(), testenv.NewLogger(t), &echoModel{}, loaded.target(), bench.DefaultMemoryModels, 8)
+	require.NoError(t, err)
+	hybridArm, err := bench.HybridTeamMemoryArm(t.Context(), testenv.NewLogger(t), hashEmbedder{}, loaded.target())
+	require.NoError(t, err)
+
+	card := probe(t.Context(), t, corpus, hybridArm)
+	t.Log("\n" + card.String())
+
+	for category, leaks := range card.leaks {
+		require.Empty(t, leaks, "hybrid search leaked %s", category)
+	}
+	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
+	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+
+	// The hash embedder only shares words, so this recall is a plumbing check;
+	// the judged eval measures it with a real embedding model.
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
+	require.NoError(t, err)
+	require.Len(t, recall.Rows, 2)
+	t.Log("\n" + recall.Markdown())
+}
+
 // TestSearchChatsBaselineMechanical scores today's search_chats on the
 // corpus. It pins what the baseline is expected to get right, so a regression
 // in the harness or in search shows up here, and logs the rest of the
@@ -117,9 +197,10 @@ func TestSearchChatsBaselineMechanical(t *testing.T) {
 	t.Parallel()
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_search_chats", corpus)
-	ctx, searchArm := searchChatsArm(t, loaded)
+	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
 
-	card := probe(ctx, t, corpus, searchArm)
+	card := probe(t.Context(), t, corpus, searchArm)
 	t.Log("\n" + card.String())
 
 	require.Empty(t, card.leaks[memoryeval.SecretCategoryCredential], "search_chats masks credentials with secret scanning")
