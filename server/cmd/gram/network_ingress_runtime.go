@@ -17,9 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
-// newNetworkIngressExecutor registers the Tailscale provider. With the gateway
-// enabled it is a composite: the operator provider (when still enabled and
-// reachable) tears down resources it owns, and the gateway hosts everything.
+// newNetworkIngressExecutor registers the Tailscale provider as a composite
+// that routes by runtime: gateway ingresses to the tailnet gateway, every
+// other ingress to the operator provider while it is still enabled.
 func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
 	providers := make(map[string]k8s.NetworkIngressProvisioner)
 	var operator *k8s.TailscaleNetworkIngressProvisioner
