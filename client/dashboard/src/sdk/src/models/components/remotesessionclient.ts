@@ -91,6 +91,10 @@ export type RemoteSessionClient = {
    */
   federatedCallbackUrl?: string | undefined;
   /**
+   * Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
+   */
+  forwardClientName: boolean;
+  /**
    * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
    */
   grantTypes: Array<string> | null;
@@ -183,6 +187,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     credential_owner: CredentialOwner$inboundSchema,
     display_name: z.optional(z.string()),
     federated_callback_url: z.optional(z.string()),
+    forward_client_name: z.boolean(),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
@@ -217,6 +222,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "credential_owner": "credentialOwner",
       "display_name": "displayName",
       "federated_callback_url": "federatedCallbackUrl",
+      "forward_client_name": "forwardClientName",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
       "legacy_callback_url": "legacyCallbackUrl",

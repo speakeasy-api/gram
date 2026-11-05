@@ -1559,6 +1559,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_audience_format,
     scope,
     audience,
+    forward_client_name,
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
@@ -1582,10 +1583,11 @@ VALUES (
     $13,
     $14,
     $15,
-    $16::text[],
+    $16,
+    $17::text[],
     -- NULL creates a subject client, so callers that predate credential_owner
     -- need not name it. Allowed values are validated in application code.
-    COALESCE($17::text, 'subject')
+    COALESCE($18::text, 'subject')
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
@@ -1602,6 +1604,7 @@ type CreateRemoteSessionClientParams struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	Scope                           []string
 	Audience                        pgtype.Text
+	ForwardClientName               bool
 	LegacyCallbackUrl               bool
 	JsonWebKeySetID                 uuid.NullUUID
 	IdentityProviderConnectionID    uuid.NullUUID
@@ -1626,6 +1629,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.TokenEndpointAuthAudienceFormat,
 		arg.Scope,
 		arg.Audience,
+		arg.ForwardClientName,
 		arg.LegacyCallbackUrl,
 		arg.JsonWebKeySetID,
 		arg.IdentityProviderConnectionID,
@@ -1683,6 +1687,7 @@ INSERT INTO remote_session_clients (
     token_endpoint_auth_method,
     scope,
     audience,
+    forward_client_name,
     callback_base_url
 )
 VALUES (
@@ -1696,7 +1701,8 @@ VALUES (
     'none',
     $7::text[],
     $8,
-    $9
+    $9,
+    $10
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
@@ -1710,6 +1716,7 @@ type CreateRemoteSessionClientCIMDParams struct {
 	ClientIDIssuedAt      pgtype.Timestamptz
 	Scope                 []string
 	Audience              pgtype.Text
+	ForwardClientName     bool
 	CallbackBaseUrl       pgtype.Text
 }
 
@@ -1728,6 +1735,7 @@ func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateR
 		arg.ClientIDIssuedAt,
 		arg.Scope,
 		arg.Audience,
+		arg.ForwardClientName,
 		arg.CallbackBaseUrl,
 	)
 	var i RemoteSessionClient
@@ -4508,6 +4516,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
@@ -4581,6 +4590,7 @@ type GetReachableRemoteSessionClientRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	ForwardClientName                          bool
 	CallbackBaseUrl                            pgtype.Text
 	ResourceIdentifier                         pgtype.Text
 	ResourceName                               pgtype.Text
@@ -4636,6 +4646,7 @@ func (q *Queries) GetReachableRemoteSessionClient(ctx context.Context, arg GetRe
 		&i.ClientScope,
 		&i.ClientAudience,
 		&i.LegacyCallbackUrl,
+		&i.ForwardClientName,
 		&i.CallbackBaseUrl,
 		&i.ResourceIdentifier,
 		&i.ResourceName,
@@ -9501,6 +9512,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
@@ -9575,6 +9587,7 @@ type ListReachableRemoteSessionClientsRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	ForwardClientName                          bool
 	CallbackBaseUrl                            pgtype.Text
 	ResourceIdentifier                         pgtype.Text
 	ResourceName                               pgtype.Text
@@ -9633,6 +9646,7 @@ func (q *Queries) ListReachableRemoteSessionClients(ctx context.Context, arg Lis
 			&i.ClientScope,
 			&i.ClientAudience,
 			&i.LegacyCallbackUrl,
+			&i.ForwardClientName,
 			&i.CallbackBaseUrl,
 			&i.ResourceIdentifier,
 			&i.ResourceName,
@@ -10036,6 +10050,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.forward_client_name                  AS forward_client_name,
     c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
@@ -10124,6 +10139,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	ForwardClientName                          bool
 	CallbackBaseUrl                            pgtype.Text
 	ResourceIdentifier                         pgtype.Text
 	ResourceName                               pgtype.Text
@@ -10198,6 +10214,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientScope,
 			&i.ClientAudience,
 			&i.LegacyCallbackUrl,
+			&i.ForwardClientName,
 			&i.CallbackBaseUrl,
 			&i.ResourceIdentifier,
 			&i.ResourceName,
@@ -15569,11 +15586,12 @@ SET
         ELSE COALESCE($7, c.audience)
     END,
     legacy_callback_url = COALESCE($8, c.legacy_callback_url),
+    forward_client_name = COALESCE($9, c.forward_client_name),
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i
-WHERE c.id = $9
+WHERE c.id = $10
   AND c.remote_session_issuer_id = i.id
-  AND (i.organization_id = $10 OR c.organization_id = $10)
+  AND (i.organization_id = $11 OR c.organization_id = $11)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
@@ -15588,6 +15606,7 @@ type UpdateOrganizationRemoteSessionClientParams struct {
 	Scope                           []string
 	Audience                        pgtype.Text
 	LegacyCallbackUrl               pgtype.Bool
+	ForwardClientName               pgtype.Bool
 	ID                              uuid.UUID
 	OrganizationID                  pgtype.Text
 }
@@ -15608,6 +15627,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg
 		arg.Scope,
 		arg.Audience,
 		arg.LegacyCallbackUrl,
+		arg.ForwardClientName,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -15945,8 +15965,9 @@ SET
         ELSE COALESCE($8, audience)
     END,
     legacy_callback_url = COALESCE($9, legacy_callback_url),
+    forward_client_name = COALESCE($10, forward_client_name),
     updated_at = clock_timestamp()
-WHERE id = $10 AND project_id = $11 AND deleted IS FALSE
+WHERE id = $11 AND project_id = $12 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
@@ -15960,6 +15981,7 @@ type UpdateRemoteSessionClientParams struct {
 	Scope                           []string
 	Audience                        pgtype.Text
 	LegacyCallbackUrl               pgtype.Bool
+	ForwardClientName               pgtype.Bool
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 }
@@ -15980,6 +16002,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		arg.Scope,
 		arg.Audience,
 		arg.LegacyCallbackUrl,
+		arg.ForwardClientName,
 		arg.ID,
 		arg.ProjectID,
 	)

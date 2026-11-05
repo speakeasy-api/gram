@@ -216,6 +216,8 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
+	forwardClientName bool
+	parentClientName  string
 	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
 	tokenResponseIssuer string
 	legacyCallbackURL   bool
@@ -326,6 +328,14 @@ func withRegistrationTelemetry() syntheticLoginOption {
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
+}
+
+func withForwardClientName() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.forwardClientName = true }
+}
+
+func withParentClientName(name string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.parentClientName = name }
 }
 
 func withClientScope(scopes ...string) syntheticLoginOption {
@@ -619,6 +629,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
 		Scope:                   options.clientScope,
 		LegacyCallbackUrl:       options.legacyCallbackURL,
+		ForwardClientName:       options.forwardClientName,
 		CallbackBaseUrl:         conv.ToPGTextEmpty(options.clientCallbackBaseURL),
 	})
 	require.NoError(t, err)
@@ -647,6 +658,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
+		ClientName:          options.parentClientName,
 	}
 	if options.gatewayMember {
 		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID

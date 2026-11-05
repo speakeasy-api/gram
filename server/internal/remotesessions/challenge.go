@@ -142,6 +142,8 @@ type ParentChallenge struct {
 	Attempt mcpconnectionattempts.Attempt
 	// ClientRequest is what the request starting this login says about its client.
 	ClientRequest mcpconnectionattempts.Option
+	// ClientName is the MCP client's self-reported name. Empty omits the parameter.
+	ClientName string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -201,6 +203,8 @@ type RemoteLoginState struct {
 	// ResourceRetried marks the single retry leg the callback mints after an
 	// invalid_target answer. A retry leg that is refused again fails the login.
 	ResourceRetried bool `json:"resource_retried,omitempty"`
+	// ClientName is the cleaned MCP client name this login sent, kept for the retry leg.
+	ClientName string `json:"client_name,omitempty"`
 	// OmitScope records that the operator chose to send no scope, so the
 	// retry leg also strips one baked into the authorization endpoint.
 	OmitScope bool `json:"omit_scope,omitempty"`
@@ -251,6 +255,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		BrowserHash:         s.BrowserHash,
 		Attempt:             s.Attempt,
 		ClientRequest:       mcpconnectionattempts.FromRequest(nil),
+		ClientName:          s.ClientName,
 	}
 }
 
@@ -635,6 +640,9 @@ type Client struct {
 
 	Audience    string
 	Passthrough bool
+	// ForwardClientName opts this provider into receiving the MCP client's name.
+	ForwardClientName bool
+
 	// LegacyCallbackUrl flips BuildAuthorizationUrl onto the
 	// /oauth/callback redirect_uri (with a JSON state carrying
 	// remote_sessions=true) so a client registered against the old
@@ -1054,6 +1062,7 @@ func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionI
 		IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
 		IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
 		Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+		ForwardClientName:                                r.ForwardClientName,
 		Passthrough:                                      r.Passthrough,
 		LegacyCallbackUrl:                                r.LegacyCallbackUrl,
 		CallbackBaseURL:                                  r.CallbackBaseUrl,
@@ -1524,6 +1533,11 @@ func (m *ChallengeManager) mintAuthorization(
 		expectedIssuer = client.IssuerIdentifier
 	}
 
+	forwardedClientName := ""
+	if client.ForwardClientName {
+		forwardedClientName = sanitizeForwardedClientName(parent.ClientName)
+	}
+
 	state := RemoteLoginState{
 		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
@@ -1551,6 +1565,7 @@ func (m *ChallengeManager) mintAuthorization(
 		Scopes:                scopes,
 		OmitResource:          omitResource,
 		ResourceRetried:       retry,
+		ClientName:            forwardedClientName,
 		OmitScope:             omitScope,
 		ExpectedIssuer:        expectedIssuer,
 		Nonce:                 nonce,
@@ -1590,6 +1605,9 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 	if parent.Resource != "" && !omitResource {
 		q.Set("resource", parent.Resource)
+	}
+	if forwardedClientName != "" {
+		q.Set(forwardedClientNameParam, forwardedClientName)
 	}
 	for _, ic := range m.authorizeInterceptors {
 		if ic.Match(client.IssuerURL) {
@@ -1714,6 +1732,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	)
 	if state.Resource != "" {
 		logger = logger.With(attr.SlogOAuthResource(state.Resource))
+	}
+	if state.ClientName != "" {
+		logger = logger.With(attr.SlogOAuthForwardedClientName(true), attr.SlogRemoteSessionClientID(state.RemoteSessionClientID.String()))
 	}
 
 	// RFC 9207 §2.4: iss must be present and match before anything in the

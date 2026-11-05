@@ -635,6 +635,34 @@ func TestUpdateRemoteSessionClient_Audience(t *testing.T) {
 	}
 }
 
+func TestUpdateRemoteSessionClient_ForwardClientName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-forward-name", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-forward-name").String()
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "forward-name-client",
+	})
+	require.NoError(t, err)
+	require.False(t, created.ForwardClientName, "off by default")
+
+	on, off := true, false
+	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID, ForwardClientName: &on})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName)
+
+	updated, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName, "omitted leaves it unchanged")
+
+	updated, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID, ForwardClientName: &off})
+	require.NoError(t, err)
+	require.False(t, updated.ForwardClientName)
+}
+
 func TestUpdateRemoteSessionClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 

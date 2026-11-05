@@ -122234,6 +122234,9 @@ components:
                     type: string
                     description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
                     format: uri
+                forward_client_name:
+                    type: boolean
+                    description: Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
                 grant_types:
                     type: array
                     items:
@@ -122301,6 +122304,7 @@ components:
                 - user_session_issuer_ids
                 - client_id
                 - legacy_callback_url
+                - forward_client_name
                 - credential_owner
                 - created_at
                 - updated_at
@@ -134969,6 +134973,9 @@ components:
                     type: string
                     description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
                     maxLength: 200
+                forward_client_name:
+                    type: boolean
+                    description: Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
                 id:
                     type: string
                     description: The remote_session_client id.

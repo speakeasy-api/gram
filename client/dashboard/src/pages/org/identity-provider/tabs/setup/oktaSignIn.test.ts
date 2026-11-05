@@ -32,6 +32,7 @@ function makeClient(
     grantTypes: null,
     credentialOwner: "subject",
     legacyCallbackUrl: false,
+    forwardClientName: false,
     organizationId: "organization-id",
     projectId: "",
     remoteSessionIssuerId: "issuer-id",

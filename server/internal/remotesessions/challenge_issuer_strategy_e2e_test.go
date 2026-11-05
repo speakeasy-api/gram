@@ -335,6 +335,22 @@ func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetriesOnce(t *test
 	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid)
 }
 
+func TestRemoteLoginCallback_InvalidTargetRetryKeepsForwardedClientName(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int64
+	_, _, first, err := driveSyntheticLogin(t, "invalid-target-client-name", resourceRejectingToken(&exchanges),
+		withResource("https://member.example.com/mcp"),
+		withForwardClientName(),
+		withParentClientName("Example Client"),
+	)
+	require.NoError(t, err)
+	retryLocation(t, first)
+	loc, err := url.Parse(first.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "Example Client", loc.Query().Get("speakeasy_client_name"))
+}
+
 // A successful retry after a redirect invalid_target completes the login and writes nothing.
 func TestRemoteLoginCallback_InvalidTargetOnAuthorizeRedirectRetrySucceedsWithoutRecording(t *testing.T) {
 	t.Parallel()

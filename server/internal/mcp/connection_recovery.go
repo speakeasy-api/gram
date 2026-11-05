@@ -252,6 +252,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		BrowserHash:         "",
 		Attempt:             attempt,
 		ClientRequest:       mcpconnectionattempts.FromRequest(r),
+		ClientName:          "",
 	}, clients[0])
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

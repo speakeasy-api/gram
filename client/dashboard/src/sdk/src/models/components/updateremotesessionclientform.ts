@@ -58,6 +58,10 @@ export type UpdateRemoteSessionClientForm = {
    */
   displayName?: string | undefined;
   /**
+   * Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
+   */
+  forwardClientName?: boolean | undefined;
+  /**
    * The remote_session_client id.
    */
   id: string;
@@ -100,6 +104,7 @@ export type UpdateRemoteSessionClientForm$Outbound = {
   client_id?: string | undefined;
   client_secret?: string | undefined;
   display_name?: string | undefined;
+  forward_client_name?: boolean | undefined;
   id: string;
   legacy_callback_url?: boolean | undefined;
   scope?: Array<string> | undefined;
@@ -117,6 +122,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientId: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     displayName: z.optional(z.string()),
+    forwardClientName: z.optional(z.boolean()),
     id: z.string(),
     legacyCallbackUrl: z.optional(z.boolean()),
     scope: z.optional(z.array(z.string())),
@@ -132,6 +138,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       clientId: "client_id",
       clientSecret: "client_secret",
       displayName: "display_name",
+      forwardClientName: "forward_client_name",
       legacyCallbackUrl: "legacy_callback_url",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",

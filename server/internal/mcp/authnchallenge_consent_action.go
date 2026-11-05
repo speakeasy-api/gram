@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
@@ -453,6 +454,7 @@ func (s *Service) buildRemoteConnectURL(
 		BrowserHash:         "",
 		Attempt:             challengeState.connectionAttempt(endpoint),
 		ClientRequest:       mcpconnectionattempts.FromRequest(r),
+		ClientName:          s.forwardedClientName(ctx, logger, endpoint, challengeState, client),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
@@ -521,4 +523,22 @@ func (s *Service) serveConsentHideServer(w http.ResponseWriter, r *http.Request,
 	}
 	http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(stateID), http.StatusSeeOther)
 	return nil
+}
+
+// forwardedClientName is empty except for anonymous sign-ins, the only ones with a grant per client.
+func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, client remotesessions.Client) string {
+	if !client.ForwardClientName || challengeState.ClientID == "" ||
+		challengeState.Subject == nil || challengeState.Subject.Kind != urn.SessionSubjectKindAnonymous {
+		return ""
+	}
+	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "mcp client to forward the name of not found", attr.SlogError(err))
+		return ""
+	case err != nil:
+		logger.WarnContext(ctx, "resolve mcp client name to forward", attr.SlogError(err))
+		return ""
+	}
+	return row.ClientName
 }
