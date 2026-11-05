@@ -15,12 +15,16 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -77,6 +81,8 @@ func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
 				require.Equal(t, mine.RemoteSessionClientID, pendingClient)
 			}
 			renewed := insertRemoteSession(t, ctx, ti.conn, mine.SubjectUrn, config.String(), client)
+			_, err = testrepo.New(ti.conn).SetAttachmentSourceIdentityFixture(ctx, testrepo.SetAttachmentSourceIdentityFixtureParams{ID: renewed.ID, UpstreamEmail: conv.ToPGText("renewed-account@example.com"), UpstreamDisplayName: conv.ToPGText("Renewed account"), IdentitySource: conv.ToPGText(remotesessions.IdentitySourceIDToken), UserSessionIssuerID: config})
+			require.NoError(t, err)
 			grant := remotesessions.RemoteGrant{ParentChallengeID: attempt.AttemptID, UserSessionIssuerID: config, RemoteSessionClientID: renewed.RemoteSessionClientID, Subject: renewed.SubjectUrn, RemoteSessionID: renewed.ID, RemoteSessionUpdatedAt: renewed.UpdatedAt.Time, GrantGeneration: renewed.GrantGeneration}
 			switch scenario {
 			case "unrelated sign-in":
@@ -117,6 +123,14 @@ func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
 				require.NotEqual(t, binding.ID, result.Binding.ID)
 				require.Equal(t, binding.RemoteSession.SubjectDisplayName, result.Binding.RemoteSession.SubjectDisplayName)
 				require.Equal(t, binding.RemoteSession.SubjectEmail, result.Binding.RemoteSession.SubjectEmail)
+				// Both halves of the reconnect name the account the connection signs in as.
+				for _, action := range []audit.Action{audit.ActionAgentConnectionDetach, audit.ActionAgentConnectionAttach} {
+					entry, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, action, agent.ID.String())
+					require.NoError(t, err)
+					metadata, err := audittest.DecodeAuditData(entry.Metadata)
+					require.NoError(t, err)
+					require.Equal(t, "renewed-account@example.com", metadata["upstream_account"], "%s", action)
+				}
 				lookup := repo.LockRemoteSessionGrantForBindingRefreshParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: config, ID: renewed.ID, RemoteSessionClientID: renewed.RemoteSessionClientID, SubjectUrn: renewed.SubjectUrn, GrantGeneration: renewed.GrantGeneration}
 				_, err = repo.New(ti.conn).LockRemoteSessionGrantForBindingRefresh(ctx, lookup)
 				require.NoError(t, err)
