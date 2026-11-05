@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -255,7 +254,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	}
 	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), mcpconnectionattempts.CodeRemoteSessionUnavailable}
+		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
 	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())

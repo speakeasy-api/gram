@@ -97,7 +97,7 @@ var errRefreshFailureRecorded = errors.New("refresh failure recorded")
 
 // RefreshFailureRecorded reports whether this fresh refresh error already submitted
 // a standalone failed provider_refresh row, including when the token service collapsed
-// it to a sentinel carrying errRefreshFailureRecorded. Cached/deferred errors and
+// it to an error carrying errRefreshFailureRecorded. Cached/deferred errors and
 // carried steps do not qualify. Acceptance is into the recorder queue, not a persistence guarantee.
 func RefreshFailureRecorded(err error) bool {
 	if errors.Is(err, errRefreshFailureRecorded) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,8 +35,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -43,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -779,18 +783,30 @@ func TestFreshMisconfiguredRefreshWritesOnlyTheRefreshRow(t *testing.T) {
 
 func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 	t.Parallel()
-	for _, oauth := range []bool{false, true} {
-		t.Run(fmt.Sprint(oauth), func(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		oauth      bool
+		providedBy string
+		want       mcpconnectionattempts.Code
+		who        mcpconnectionattempts.WhoFixes
+	}{
+		{name: "no config", want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "system provided", providedBy: "system", want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "user provided", providedBy: "user", want: mcpconnectionattempts.CodeCallerCredentialMissing, who: mcpconnectionattempts.WhoPerson},
+		{name: "oauth alternative", oauth: true, want: mcpconnectionattempts.CodeInvalidRemoteSession, who: mcpconnectionattempts.WhoPerson},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			auth := requireProjectAuthContext(t, ctx)
 			ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
-			want, who := mcpconnectionattempts.CodeCredentialMisconfigured, mcpconnectionattempts.WhoAdmin
-			if oauth {
+			if tc.oauth {
 				ti.addToolWithDualSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
-				want, who = mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.WhoPerson
 			} else {
 				ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+			}
+			if tc.providedBy != "" {
+				setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, tc.providedBy)
 			}
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
@@ -798,9 +814,161 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
-			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, want)
-			require.Equal(t, string(who), row.WhoFixes)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
+}
+
+func setSecurityVariableProvidedBy(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, providedBy string) {
+	t.Helper()
+	queries := metadatarepo.New(ti.conn)
+	metadata, err := queries.UpsertMetadataByMcpServerID(ctx, metadatarepo.UpsertMetadataByMcpServerIDParams{McpServerID: toolsetID, ProjectID: projectID})
+	require.NoError(t, err)
+	_, err = queries.UpsertEnvironmentConfig(ctx, metadatarepo.UpsertEnvironmentConfigParams{ProjectID: projectID, McpMetadataID: metadata.ID, VariableName: "TEST_API_KEY", ProvidedBy: providedBy})
+	require.NoError(t, err)
+}
+
+// An external OAuth server's first handshake carries no token, and its 401 is how sign-in starts.
+func TestExternalOAuthFirstHandshakeRecordsNothing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		add  func(context.Context, *testing.T, *testInstance, uuid.UUID, *contextvalues.AuthContext)
+	}{
+		{name: "no schemes"},
+		{name: "api key scheme", add: func(ctx context.Context, t *testing.T, ti *testInstance, toolset uuid.UUID, auth *contextvalues.AuthContext) {
+			t.Helper()
+			ti.addToolWithSecurity(ctx, t, toolset, *auth.ProjectID, auth.ActiveOrganizationID)
+		}},
+		{name: "oauth scheme", add: func(ctx context.Context, t *testing.T, ti *testInstance, toolset uuid.UUID, auth *contextvalues.AuthContext) {
+			t.Helper()
+			ti.addToolWithDualSecurity(ctx, t, toolset, *auth.ProjectID, auth.ActiveOrganizationID)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, auth, oauthtest.ExternalOAuthToolsetOpts{Slug: "first-handshake", IsPublic: true})
+			if tc.add != nil {
+				tc.add(ctx, t, ti, external.Toolset.ID, auth)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+
+			for range 2 {
+				response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "", nil)
+				require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+				require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
+			}
+			rec.RequireNothing()
+		})
+	}
+}
+
+// Only the tokenless start of sign-in is silent: a token that still falls short is a failure.
+func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, auth, oauthtest.ExternalOAuthToolsetOpts{Slug: "token-unmet", IsPublic: true})
+	ti.addToolWithSecurity(ctx, t, external.Toolset.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "external-token", nil)
+	require.Error(t, err)
+	require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
+}
+
+// A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.
+func TestGatewayMemberSecurityOutcomeIgnoresDirectRules(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		external   bool
+		schemes    bool
+		providedBy string
+		want       mcpconnectionattempts.Code
+	}{
+		{name: "external oauth without schemes", external: true, want: mcpconnectionattempts.CodeInvalidRemoteSession},
+		{name: "external oauth with api key", external: true, schemes: true, want: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{name: "user provided variable", schemes: true, providedBy: "user", want: mcpconnectionattempts.CodeCredentialMisconfigured},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			slug := "meta-" + uuid.NewString()
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+			tools := []string{"ping"}
+			tool := "ping"
+			if tc.schemes {
+				tools, tool = nil, "test_tool"
+			}
+			member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic, tools...)
+			if tc.schemes {
+				ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+			}
+			if tc.providedBy != "" {
+				setSecurityVariableProvidedBy(t, ctx, ti, member.toolsetID, *auth.ProjectID, tc.providedBy)
+			}
+			if tc.external {
+				external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, auth, oauthtest.ExternalOAuthToolsetOpts{Slug: "gateway-member", IsPublic: true})
+				toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: member.toolsetID, ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				_, err = toolsetsrepo.New(ti.conn).UpdateToolsetExternalOAuthServer(ctx, toolsetsrepo.UpdateToolsetExternalOAuthServerParams{
+					ExternalOauthServerID: uuid.NullUUID{UUID: external.ServerMetadata.ID, Valid: true},
+					Slug:                  toolset.Slug,
+					ProjectID:             toolset.ProjectID,
+				})
+				require.NoError(t, err)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			text, isError := metaToolResultText(t, executeMetaTool(t, ti, slug, "", member.slug+"--"+tool))
+			require.True(t, isError)
+			require.Equal(t, fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug), text)
+			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// A refused refresh wrote its row, so the gate adds none, and the caller still gets the reconnect challenge.
+func TestFreshInvalidGrantWritesOnlyTheRefreshRow(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-invalid-grant")
+
+	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
+	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
+	challenge, ok := errors.AsType[*oops.ShareableError](wantErr)
+	require.True(t, ok, wantErr)
+	require.Equal(t, oops.CodeUnauthorized, challenge.Code)
+	require.Contains(t, want.Header().Get("WWW-Authenticate"), "resource_metadata=")
+	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
+
+	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	})
+	got, gotErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject), nil)
+	require.EqualError(t, gotErr, wantErr.Error())
+	require.Equal(t, want.Code, got.Code)
+	require.Equal(t, want.Body.String(), got.Body.String())
+	require.Equal(t, want.Header().Get("WWW-Authenticate"), got.Header().Get("WWW-Authenticate"))
+
+	rows := rec.Rows()[1:]
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
 }

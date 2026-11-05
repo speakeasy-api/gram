@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -304,9 +303,6 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		return nil, err
 	}
 	if !satisfied {
-		if failureCode == mcpconnectionattempts.CodeInvalidRemoteSession {
-			failureCode = gate.memberNoCredentialHappened(member)
-		}
 		s.recordMemberFailure(ctx, gate, member, failureCode)
 		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
 		attempt.fail(http.StatusUnauthorized, message)

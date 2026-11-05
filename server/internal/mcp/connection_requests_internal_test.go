@@ -117,15 +117,6 @@ func TestMemberNoCredentialHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, (&metaGateContext{}).memberNoCredentialHappened(metaMember{authClient: &setup}))
 }
 
-func TestResolveFailureHappened(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, mcpconnectionattempts.CodeInternalError, resolveFailureHappened(remotesessions.ErrRemoteSessionUnavailable))
-	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, resolveFailureHappened(remotesessions.ErrRemoteSessionMisconfigured))
-	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, resolveFailureHappened(remotesessions.ErrNoValidToken))
-	require.Equal(t, mcpconnectionattempts.CodeInternalError, resolveFailureHappened(errors.New("database")))
-}
-
 func TestToolsCallRefusal(t *testing.T) {
 	t.Parallel()
 
@@ -223,6 +214,11 @@ func TestMemberClientFailure_SDKRejection(t *testing.T) {
 	require.EqualError(t, err, `server "fixture" rejected the call: database is down`)
 	_, recorded := errors.AsType[memberConnectionError](err)
 	require.False(t, recorded, "HTTP-successful tool errors do not describe connection health")
+
+	err = memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{code: http.StatusOK}, memberDial{}, metaMember{slug: "fixture"}, rejected)
+	require.EqualError(t, err, `server "fixture" rejected the call: rejected by transport`)
+	_, recorded = errors.AsType[memberConnectionError](err)
+	require.False(t, recorded, "a member can say these words in an HTTP 200")
 }
 
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
@@ -379,7 +375,7 @@ func TestChainMetaMember_OutageCarriesRequestOutcome(t *testing.T) {
 	}
 }
 
-func TestResolveOutageEvidence(t *testing.T) {
+func TestResolveFailureHappened(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name  string
@@ -390,6 +386,9 @@ func TestResolveOutageEvidence(t *testing.T) {
 		{"token endpoint", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: 503}), mcpconnectionattempts.CodeRemoteSessionUnavailable},
 		{"signer", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{Signing: true}), mcpconnectionattempts.CodeInternalError},
 		{"lock contention", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, mcpconnectionattempts.Code{}},
+		{"misconfigured", remotesessions.ErrRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured},
+		{"no token", remotesessions.ErrNoValidToken, mcpconnectionattempts.CodeInvalidRemoteSession},
+		{"unknown", errors.New("database"), mcpconnectionattempts.CodeInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.want, resolveFailureHappened(tc.cause)) })
 	}
@@ -467,11 +466,11 @@ func TestMemberFailureExhaustedTunnelCause(t *testing.T) {
 				require.NoError(t, resp.Body.Close())
 			}
 			require.ErrorIs(t, cause, tunnelrouting.ErrNoTunnelRoute)
-			err = memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: cause}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.Join(errMemberUnroutable, cause))
+			err = memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: cause}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("SDK rejected"))
 			failure, ok := errors.AsType[memberConnectionError](err)
 			require.True(t, ok)
 			require.Equal(t, tc.want, failure.code)
-			require.EqualError(t, err, `server "fixture" can't be reached right now`)
+			require.EqualError(t, err, `server "fixture" did not answer: upstream unreachable or timed out`)
 		})
 	}
 }

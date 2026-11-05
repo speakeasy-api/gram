@@ -283,6 +283,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 	// remains the original snapshot only when this resolution won the refresh.
 	tok, sess, resolvedFromUpdatedAt, err := m.validateAndRefresh(ctx, attribution, sess, resource)
 	if err != nil {
+		// Reconnect routing stays an empty token; only the already-recorded fact travels.
+		zero.refreshFailureRecorded = RefreshFailureRecorded(err)
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
 		// logging every retry here would turn one stale session into noise.
@@ -334,6 +336,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
 		ClientCredentialErr:                nil,
 		renewal:                            nil,
+		refreshFailureRecorded:             false,
 	}, nil
 }
 
@@ -462,6 +465,17 @@ type UpstreamToken struct {
 	// renewal is how RenewClientCredential replaces the self credential Token
 	// came from; nil for any other token.
 	renewal *clientCredentialRenewal
+
+	// refreshFailureRecorded marks an empty entry whose failed refresh already wrote its row.
+	refreshFailureRecorded bool
+}
+
+// noTokenError is the ErrNoValidToken for an empty entry, keeping its recorded refresh.
+func (t UpstreamToken) noTokenError() error {
+	if t.refreshFailureRecorded {
+		return errors.Join(ErrNoValidToken, errRefreshFailureRecorded)
+	}
+	return ErrNoValidToken
 }
 
 // clientCredentialRenewal is what replacing a self credential needs: the
@@ -705,7 +719,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, ErrNoValidToken)
 				continue
 			}
-			return nil, ErrNoValidToken
+			return nil, resolved.noTokenError()
 		default:
 			tokens[c.RemoteSessionIssuerID] = resolved
 		}
@@ -759,6 +773,7 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                err,
 		renewal:                            nil,
+		refreshFailureRecorded:             false,
 	}
 }
 
@@ -774,6 +789,7 @@ func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                outage,
 		renewal:                            nil,
+		refreshFailureRecorded:             false,
 	}
 }
 

@@ -1219,9 +1219,9 @@ func (s *Service) authenticateIssuerGate(
 	}
 	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden && !errors.Is(ctx.Err(), context.Canceled) {
-			s.connections.Once(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
-				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.CodeNoServerAccess, r,
+				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		}
 		return ctx, nil, nil, err
 	}
@@ -1291,7 +1291,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		// The credential's chosen client is no longer bound to its issuer, the
 		// same unusable choice the selection read reports.
-		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession, err)
@@ -1318,7 +1318,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		// A turn acting for a person cannot reauthorize on their behalf; the
 		// person gets a link to connect their own account instead.
-		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
@@ -1375,15 +1375,11 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
-	if code == (mcpconnectionattempts.Code{}) || remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
 		return
 	}
-	// A caller that went away says nothing about the remote session.
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return
-	}
-	s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, code,
-		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request),
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
+		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
 		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 }
 

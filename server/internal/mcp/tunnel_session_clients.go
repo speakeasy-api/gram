@@ -73,6 +73,10 @@ type tunnelClientFamilies struct {
 	rowReadsPausedUntil atomic.Int64
 }
 
+func tunnelClientKey(projectID uuid.UUID, scope, sessionID string) tunnelClientCacheKey {
+	return tunnelClientCacheKey{projectID: projectID, scope: scope, session: sha256.Sum256([]byte(sessionID))}
+}
+
 func newTunnelClientFamilies(store sessionClientInfoStore) *tunnelClientFamilies {
 	return &tunnelClientFamilies{
 		store:               store,
@@ -84,7 +88,7 @@ func newTunnelClientFamilies(store sessionClientInfoStore) *tunnelClientFamilies
 // remembered returns a session's client from memory, else from Redis. A miss is
 // remembered and a failed read is not.
 func (c *tunnelClientFamilies) remembered(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (rememberedClient, error) {
-	key := tunnelClientCacheKey{projectID: projectID, scope: scope, session: sha256.Sum256([]byte(sessionID))}
+	key := tunnelClientKey(projectID, scope, sessionID)
 	if client, ok := c.cache.Get(key); ok {
 		return client, nil
 	}
@@ -113,7 +117,7 @@ func (c *tunnelClientFamilies) remembered(ctx context.Context, logger *slog.Logg
 // forRow reads a session's client for a connection row. It runs on the
 // connection writer, which has no request to outlive.
 func (c *tunnelClientFamilies) forRow(logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (name, version string) {
-	key := tunnelClientCacheKey{projectID: projectID, scope: scope, session: sha256.Sum256([]byte(sessionID))}
+	key := tunnelClientKey(projectID, scope, sessionID)
 	if client, ok := c.cache.Get(key); ok {
 		return client.name, client.version
 	}
@@ -164,7 +168,7 @@ func (s *tunnelSessionClients) RecordInitialize(ctx context.Context, sessionID s
 		sessionID:       sessionID,
 		clientInfoScope: s.scope,
 	}, name, version, params.ProtocolVersion)
-	key := tunnelClientCacheKey{projectID: s.projectID, scope: s.scope, session: sha256.Sum256([]byte(sessionID))}
+	key := tunnelClientKey(s.projectID, s.scope, sessionID)
 	s.families.cache.Add(key, rememberedClient{family: reportedClientFamily(name), name: mcprequests.SanitizeClientInfoField(name), version: mcprequests.SanitizeClientInfoField(version)})
 }
 

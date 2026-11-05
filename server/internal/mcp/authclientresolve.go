@@ -711,11 +711,9 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
-		if !errors.Is(ctx.Err(), context.Canceled) {
-			s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
-				mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request),
-				s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
-		}
+		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
+			mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject),
+			s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		return none, true, s.authClientNoAccessError(ctx, endpoint.McpServerID.UUID, res)
 	case authClientNoAuth:
 		authentication.chosenClient = none.clientID

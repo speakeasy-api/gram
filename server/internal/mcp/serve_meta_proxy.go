@@ -552,13 +552,9 @@ func (s *Service) executeProxiedMemberTool(
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		if _, credential := errors.AsType[memberCredentialError](err); credential {
-			s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
+			s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
 		} else if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			code := failure.code
-			if code == mcpconnectionattempts.CodeInvalidRemoteSession {
-				code = gate.memberNoCredentialHappened(member)
-			}
-			s.recordMemberFailure(ctx, gate, member, code)
+			s.recordMemberFailure(ctx, gate, member, failure.code)
 		}
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
 			message := s.memberFailureMessage(ctx, logger, gate, member, err)
@@ -581,11 +577,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			code := failure.code
-			if code == mcpconnectionattempts.CodeInvalidRemoteSession {
-				code = gate.memberNoCredentialHappened(member)
-			}
-			s.recordMemberFailure(ctx, gate, member, code)
+			s.recordMemberFailure(ctx, gate, member, failure.code)
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.

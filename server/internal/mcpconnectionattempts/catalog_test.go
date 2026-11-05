@@ -115,6 +115,7 @@ var frozenCodes = []string{
 	"consent_not_approved",
 	"catalog_too_large",
 	"tunnel_at_capacity",
+	"caller_credential_missing",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

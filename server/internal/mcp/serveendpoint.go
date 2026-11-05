@@ -1007,7 +1007,7 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoRoute) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeTunnelUnavailable, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		tagTunnelOutage(w, err)
 		return err
@@ -1123,7 +1123,7 @@ func (s *Service) prepareProxyBackendContext(
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		if mcpaccess.IsServerPermissionDenied(err) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		return nil, "", err
 	}
