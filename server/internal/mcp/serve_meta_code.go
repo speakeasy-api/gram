@@ -92,7 +92,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	case len(gate.hiddenMembers) > 1:
 		fmt.Fprintf(&description, "The user hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
 	}
-	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
+	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Title: "Run Python with Tools", Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code tool catalog").LogError(ctx, logger)
 	}

@@ -498,3 +498,25 @@ func TestClassifyEndpointError_RouteStoreOutageIsRetryable(t *testing.T) {
 	require.True(t, outcome.Retryable)
 	require.False(t, outcome.Submitted, "nothing reached the provider")
 }
+
+func TestIdentityProviderLoadOutcome_SignerOutageIsRetryable(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		err       error
+		reason    Reason
+		retryable bool
+	}{
+		"signer outage":  {err: errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning), reason: ReasonTransientFailure, retryable: true},
+		"signing failed": {err: remotesessions.ErrFederatedSigning, reason: ReasonConfigurationRequired, retryable: false},
+		"configuration":  {err: remotesessions.ErrFederatedConfiguration, reason: ReasonConfigurationRequired, retryable: false},
+		"other":          {err: errors.New("read failed"), reason: ReasonTransientFailure, retryable: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			outcome := identityProviderLoadOutcome(tc.err)
+			require.Equal(t, tc.reason, outcome.Reason)
+			require.Equal(t, tc.retryable, outcome.Retryable)
+		})
+	}
+}

@@ -81,6 +81,34 @@ func TestCodeReconnectCatalogPending(t *testing.T) {
 	require.False(t, b.catalogPending())
 }
 
+func TestUpdateCodeReconnectApprovalWinsEitherOrder(t *testing.T) {
+	t.Parallel()
+	for _, cancelFirst := range []bool{false, true} {
+		t.Run(map[bool]string{false: "approve then cancel", true: "cancel then approve"}[cancelFirst], func(t *testing.T) {
+			t.Parallel()
+			adapter := &popupGrantCASCache{Cache: testenv.NewMemoryCache()}
+			service := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
+			state := AuthnChallengeState{ID: uuid.NewString(), CreatedAt: time.Now(), CodeReconnect: &CodeReconnectBinding{CatalogID: uuid.New()}}
+			require.NoError(t, service.authnChallengeCache.Store(t.Context(), state))
+			approved := *state.CodeReconnect
+			approved.CatalogComplete = true
+			canceled := approved
+			canceled.CatalogCanceled = true
+			updates := []CodeReconnectBinding{approved, canceled}
+			if cancelFirst {
+				updates = []CodeReconnectBinding{canceled, approved}
+			}
+			for _, update := range updates {
+				require.NoError(t, service.updateCodeReconnect(t.Context(), state, update))
+			}
+			got, err := service.authnChallengeCache.Get(t.Context(), state.CacheKey())
+			require.NoError(t, err)
+			require.True(t, got.CodeReconnect.CatalogComplete)
+			require.False(t, got.CodeReconnect.CatalogCanceled)
+		})
+	}
+}
+
 func TestUpdateCodeReconnectPreservesCompletedApproval(t *testing.T) {
 	t.Parallel()
 	adapter := &popupGrantCASCache{Cache: testenv.NewMemoryCache()}

@@ -76,6 +76,9 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
+	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeProviderDenied},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch},
+	{mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant},
 }
 
 // connectionRequestEndings are the single-row outcomes: a refused or failed
@@ -265,7 +268,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 	first.ClientFamily = mcpconnectionattempts.FamilyBrowser
 	first.DeviceKey = s.connectionDevice(key)
 	if abandoned {
-		return []mcpconnectionattempts.Row{first}, nil
+		return s.stoppedAttemptRows(attempt, key, first)
 	}
 
 	rows := []mcpconnectionattempts.Row{first}
@@ -276,7 +279,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 
 	subject := urn.NewUserSubject(s.userID("amara"))
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
-	if ending.step == mcpconnectionattempts.StepProviderSignIn {
+	if ending.step == mcpconnectionattempts.StepProviderSignIn || ending.step == mcpconnectionattempts.StepProviderToken {
 		opts = append(opts, mcpconnectionattempts.Provider(demoConnectionProvider))
 	}
 	if ending.what == mcpconnectionattempts.ResultCodeIssued {
@@ -292,4 +295,27 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		s.setConnectionClient(&last, key)
 	}
 	return append(rows, last), nil
+}
+
+// stoppedAttemptRows stops on a failed provider sign-in; project gateways also show an active member.
+func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key string, first mcpconnectionattempts.Row) ([]mcpconnectionattempts.Row, error) {
+	rows := []mcpconnectionattempts.Row{first}
+	at := attempt.StartedAt().Add(connectionAttemptLength)
+	failed, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient, false, at, mcpconnectionattempts.Provider(demoConnectionProvider))
+	if err != nil {
+		return nil, fmt.Errorf("build connection event: %w", err)
+	}
+	failed.TraceID = md5Hex(s.name(key + "-failed-step"))
+	failed.ClientFamily, failed.DeviceKey = first.ClientFamily, first.DeviceKey
+	rows = append(rows, failed)
+	if first.ServerID != s.det("metamcp-1").String() {
+		return rows, nil
+	}
+	member, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, at, mcpconnectionattempts.Member(s.det("mcpserver-support")))
+	if err != nil {
+		return nil, fmt.Errorf("build connection event: %w", err)
+	}
+	member.TraceID = md5Hex(s.name(key + "-member"))
+	member.ClientFamily, member.DeviceKey = first.ClientFamily, first.DeviceKey
+	return append(rows, member), nil
 }

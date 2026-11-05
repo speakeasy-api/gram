@@ -62,6 +62,7 @@ func (l *Logger) LogAssistantExecutionProfileUpdate(ctx context.Context, dbtx re
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

@@ -51,7 +51,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "list_registry_promotion_candidates", Title: "List Catalogue Promotion Candidates",
-		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence, setup documentation delivery status, and auth_discovery for promoted entries when available. Authentication capabilities are advertised evidence, not a verified connection; unknown setup does not mean manual setup. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
+		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence, setup documentation delivery status, and auth_discovery for promoted entries when available. docs_status is pending, retrying, needs_attention, queued (guide request filed), existing_guide (a setup guide already exists, so none was filed) or guide_in_review (waiting on an open guide pull request, rechecked daily); docs_url links to the matching GitHub issue, guide folder or pull request. Authentication capabilities are advertised evidence, not a verified connection; unknown setup does not mean manual setup. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListCatalogPromotionInput) (*mcp.CallToolResult, CatalogPromotionPage, error) {
 		out := CatalogPromotionPage{Candidates: []CatalogPromotionCandidate{}, NextCursor: ""}
@@ -150,9 +150,9 @@ type CatalogPromotionCandidate struct {
 	CheckedAt string `json:"checked_at,omitempty"`
 	// RegistryEntryID identifies a committed public entry.
 	RegistryEntryID string `json:"registry_entry_id,omitempty"`
-	// DocsStatus reports guide-request delivery.
+	// DocsStatus reports guide-request delivery: pending, retrying, needs_attention, queued, existing_guide or guide_in_review.
 	DocsStatus string `json:"docs_status,omitempty"`
-	// DocsURL links only to a GitHub guide issue.
+	// DocsURL links only to a GitHub guide issue, guide folder or guide pull request.
 	DocsURL string `json:"docs_url,omitempty"`
 	// DocsRevision binds a retry to reviewed delivery state.
 	DocsRevision string `json:"docs_revision"`
@@ -164,7 +164,7 @@ type CatalogPromotionCandidate struct {
 	DocsLastAttemptAt string `json:"docs_last_attempt_at,omitempty"`
 	// DocsNextAttemptAt records the next automatic attempt.
 	DocsNextAttemptAt string `json:"docs_next_attempt_at,omitempty"`
-	// DocsQueuedAt records guide-factory acknowledgement.
+	// DocsQueuedAt records guide-factory acknowledgement, or when an existing guide was found.
 	DocsQueuedAt string `json:"docs_queued_at,omitempty"`
 	// PromotedAt records catalogue publication.
 	PromotedAt string `json:"promoted_at,omitempty"`
@@ -174,8 +174,10 @@ type CatalogPromotionCandidate struct {
 	DeliveryError string `json:"delivery_error,omitempty"`
 }
 
-// promotionGuideIssue permits only the public GitHub issue links produced by guide delivery.
-var promotionGuideIssue = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$`)
+// promotionGuideLink permits only the public GitHub links produced by guide
+// delivery: a guide request issue, an open guide pull request, or an existing
+// guide folder on the default branch.
+var promotionGuideLink = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:issues/[1-9][0-9]*|pull/[1-9][0-9]*|tree/HEAD/guides/[a-z0-9]+(?:-[a-z0-9]+)*)$`)
 
 func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromotionCandidate, bool) {
 	var empty CatalogPromotionCandidate
@@ -233,16 +235,16 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 		return empty, false
 	}
 	switch candidate.DocsStatus {
-	case "", "pending", "retrying", "queued", "needs_attention":
+	case "", "pending", "retrying", "queued", "needs_attention", "existing_guide", "guide_in_review":
 	default:
 		return empty, false
 	}
 	switch candidate.DeliveryError {
-	case "", "docs_transient", "docs_not_configured", "docs_permanent", "docs_attempts_exhausted":
+	case "", "docs_transient", "docs_not_configured", "docs_permanent", "docs_attempts_exhausted", "docs_guide_pr_stalled":
 	default:
 		return empty, false
 	}
-	if candidate.DocsURL != "" && (len(candidate.DocsURL) > maxRegistryCursor || !promotionGuideIssue.MatchString(candidate.DocsURL)) {
+	if candidate.DocsURL != "" && (len(candidate.DocsURL) > maxRegistryCursor || !promotionGuideLink.MatchString(candidate.DocsURL)) {
 		return empty, false
 	}
 	if candidate.AuthDiscovery != nil && !candidate.AuthDiscovery.Valid() {

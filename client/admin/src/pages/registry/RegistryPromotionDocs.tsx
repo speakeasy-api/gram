@@ -32,16 +32,28 @@ export function RegistryPromotionDocs({
   const inFlight = useRef(false);
   const requestKey = useRef({ revision: "", key: "" });
   const queued = candidate.docsStatus === "queued";
+  const existing = candidate.docsStatus === "existing_guide";
+  const inReview = candidate.docsStatus === "guide_in_review";
   const attention = candidate.docsStatus === "needs_attention";
+  const stalledReview =
+    attention && candidate.deliveryError === "docs_guide_pr_stalled";
+  const resolved = queued || existing;
   const canRetry =
     Boolean(candidate.docsRevision) &&
     candidate.docsRetryAllowed &&
     (attention || candidate.docsStatus === "retrying");
-  const Icon = queued
+  const Icon = resolved
     ? CheckCircle2Icon
     : attention
       ? AlertCircleIcon
       : Clock3Icon;
+  const linkLabel = existing
+    ? "View guide"
+    : inReview || stalledReview
+      ? "View guide PR"
+      : queued
+        ? "View guide request"
+        : null;
   const next = promotionTimestamp(candidate.docsNextAttemptAt);
   const last = promotionTimestamp(candidate.docsLastAttemptAt);
   const queuedAt = promotionTimestamp(candidate.docsQueuedAt);
@@ -96,7 +108,7 @@ export function RegistryPromotionDocs({
         <Badge
           variant="outline"
           className={
-            queued
+            resolved
               ? badgeTone.success
               : attention
                 ? badgeTone.warning
@@ -110,9 +122,13 @@ export function RegistryPromotionDocs({
         <p className="text-muted-foreground">
           {queued
             ? "The guide factory received this request. Follow the request for its draft and review; publication happens after the guide is merged."
-            : attention
-              ? "The catalog entry is published. Resolve the delivery issue, then retry the guide request."
-              : "The catalog entry is published. Setup documentation will be requested automatically."}
+            : existing
+              ? "A setup guide for this slug already exists, so no new guide was requested. Guide refreshes go through the setup docs repository."
+              : inReview
+                ? "A guide pull request for this slug is already open, so no new guide was requested. Delivery checks it daily and records the guide once it merges."
+                : attention
+                  ? "The catalog entry is published. Resolve the delivery issue, then retry the guide request."
+                  : "The catalog entry is published. Setup documentation will be requested automatically."}
         </p>
       )}
       {candidate.deliveryError && (
@@ -122,11 +138,15 @@ export function RegistryPromotionDocs({
       )}
       <div className="text-muted-foreground space-y-1 text-xs">
         {queuedAt ? (
-          <p>Requested {queuedAt}</p>
+          <p>
+            {existing ? "Found" : "Requested"} {queuedAt}
+          </p>
         ) : next ? (
-          <p>Next attempt {next}</p>
+          <p>
+            {inReview ? "Next check" : "Next attempt"} {next}
+          </p>
         ) : null}
-        {last && !queued && (
+        {last && !resolved && (
           <p>
             Last attempt {last} · {candidate.docsAttempts} attempt
             {candidate.docsAttempts === 1 ? "" : "s"}
@@ -134,10 +154,10 @@ export function RegistryPromotionDocs({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {queued && candidate.docsUrl?.startsWith("https://") && (
+        {linkLabel && candidate.docsUrl?.startsWith("https://") && (
           <Button variant="outline" size="sm" asChild>
             <a href={candidate.docsUrl} target="_blank" rel="noreferrer">
-              View guide request
+              {linkLabel}
               <ExternalLinkIcon aria-hidden="true" className="size-3" />
             </a>
           </Button>

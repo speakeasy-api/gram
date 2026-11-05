@@ -536,7 +536,8 @@ export function AddServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="gap-2">
+      {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
+      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>

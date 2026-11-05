@@ -27,6 +27,7 @@ type LogCatalogPromotionRetryDocsEvent struct {
 // LogCatalogPromotionRetryDocs writes an audit entry in the retry transaction.
 func (l *Logger) LogCatalogPromotionRetryDocs(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionRetryDocsEvent) error {
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
 		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionCatalogPromotionRetryDocs), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
@@ -52,6 +53,7 @@ type LogCatalogPromotionRejectEvent struct {
 // LogCatalogPromotionReject writes an audit entry in the curation transaction.
 func (l *Logger) LogCatalogPromotionReject(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionRejectEvent) error {
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
 		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionCatalogPromotionReject), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
@@ -77,6 +79,7 @@ type LogCatalogPromotionArchiveEvent struct {
 // LogCatalogPromotionArchive writes an audit entry in the curation transaction.
 func (l *Logger) LogCatalogPromotionArchive(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionArchiveEvent) error {
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
 		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionCatalogPromotionArchive), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
@@ -102,6 +105,7 @@ type LogCatalogPromotionRestoreEvent struct {
 // LogCatalogPromotionRestore writes an audit entry in the curation transaction.
 func (l *Logger) LogCatalogPromotionRestore(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionRestoreEvent) error {
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     true,
 		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionCatalogPromotionRestore), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),

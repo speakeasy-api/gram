@@ -114,6 +114,10 @@ var frozenCodes = []string{
 	"needs_sign_in",
 	"consent_not_approved",
 	"catalog_too_large",
+	"client_authentication_failed",
+	"sign_in_provider_error",
+	"review_canceled",
+	"connection_catalog_expired",
 	"tunnel_at_capacity",
 	"caller_credential_missing",
 }
@@ -131,6 +135,7 @@ var frozenResults = map[string]Result{
 	"allowed":                   ResultAllowed,
 	"listed":                    ResultListed,
 	"complete":                  ResultComplete,
+	"review_shown":              ResultReviewShown,
 	"partial":                   resultPartial,
 	"failed":                    resultFailed,
 	"policy_blocked":            resultPolicyBlocked,

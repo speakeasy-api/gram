@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -26,10 +27,21 @@ type CodeReconnectBinding struct {
 	ClientID        string    `json:"client_id,omitempty"`
 	ReviewReady     bool      `json:"review_ready,omitempty"`
 	CatalogComplete bool      `json:"catalog_complete,omitempty"`
+	// CatalogCanceled marks a completed review the person canceled, which changed no tools.
+	CatalogCanceled bool `json:"catalog_canceled,omitempty" msgpack:",omitempty"`
 }
 
 func (b *CodeReconnectBinding) catalogPending() bool {
 	return b != nil && b.CatalogID != uuid.Nil && !b.CatalogComplete
+}
+
+// undecidedOrCanceled reports a review that has not connected anything.
+func (b *CodeReconnectBinding) undecidedOrCanceled() bool {
+	return b.catalogPending() || (b != nil && b.CatalogCanceled)
+}
+
+func (b *CodeReconnectBinding) expired(now time.Time) bool {
+	return b != nil && !now.Before(b.ExpiresAt)
 }
 
 func (b *CodeReconnectBinding) reviewReady() bool {
@@ -65,6 +77,9 @@ func validateCodeReconnectBinding(state AuthnChallengeState) error {
 	return nil
 }
 
+// errCodeReconnectTicketInvalid is a link that is not a live ticket any more.
+var errCodeReconnectTicketInvalid = errors.New("connection link is not a live ticket")
+
 func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndpoint, claim bool) (*CodeReconnectBinding, error) {
 	id := r.URL.Query().Get("code_reconnect")
 	if id == "" {
@@ -88,7 +103,10 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 	}
 	b := state.CodeReconnect
 	if b == nil || !b.Ticket || b.UserID == "" || b.Server == "" || b.ServerID == uuid.Nil || !time.Now().Before(b.ExpiresAt) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
+		if b != nil && b.Ticket && b.expired(time.Now()) && !claim {
+			s.recordTicketExpired(r, endpoint, state, mcpconnectionattempts.AppCodeMode)
+		}
+		return nil, oops.E(oops.CodeBadRequest, errCodeReconnectTicketInvalid, "invalid or expired connection request")
 	}
 	if err := endpoint.ValidateChallenge(r.Context(), state.Endpoint, state.UserSessionIssuerID); err != nil {
 		return nil, oauthAuthorityError(err)
@@ -111,6 +129,12 @@ func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeS
 		updated := current
 		merged := *current.CodeReconnect
 		merged.ReviewReady = merged.ReviewReady || binding.ReviewReady
+		if binding.CatalogComplete && !binding.CatalogCanceled {
+			// A committed approval wins even if cancellation was stored first.
+			merged.CatalogCanceled = false
+		} else if !merged.CatalogComplete {
+			merged.CatalogCanceled = merged.CatalogCanceled || binding.CatalogCanceled
+		}
 		merged.CatalogComplete = merged.CatalogComplete || binding.CatalogComplete
 		updated.CodeReconnect = &merged
 		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
