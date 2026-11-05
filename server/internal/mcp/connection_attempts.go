@@ -242,10 +242,12 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
+	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
 		opts = append(opts, mcpconnectionattempts.AuthClient(authClient.clientID))
+		status += "|" + authClient.clientID.String()
 	}
-	return memberStatus{id: serverID.String(), status: fmt.Sprint(what) + "|" + detail, what: what, opts: opts}, true
+	return memberStatus{id: serverID.String(), status: status, what: what, opts: opts}, true
 }
 
 // memberStatusCache is the cache side of changedMemberStatuses.
@@ -261,6 +263,9 @@ type recordedMember struct {
 
 var errMemberStatusesUnchanged = errors.New("member statuses unchanged")
 
+// memberStatusTimeout keeps a slow cache from holding up the consent page.
+const memberStatusTimeout = 2 * time.Second
+
 func memberStatusesKey(attempt mcpconnectionattempts.Attempt) string {
 	return "connectionAttemptMembers:" + attempt.ID().String()
 }
@@ -271,6 +276,8 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	if !ok || attempt.IsZero() || len(statuses) == 0 {
 		return statuses
 	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
 	var changed []memberStatus
 	var recorded []recordedMember
 	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {

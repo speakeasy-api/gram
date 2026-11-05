@@ -558,3 +558,25 @@ func TestRecordRemoteSessionVerdict_SetupFailure(t *testing.T) {
 	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), remotesessions.Client{}, validationTarget{setupFailed: true, memberID: member}, uuid.New(), remotesessions.ValidationOutcomeUnknown, remotesessionmetrics.ValidationTriggerVerify)
 	require.Equal(t, member.String(), rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
 }
+
+func TestRecordConsentPage_AuthClientChangeWritesRow(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	member := uuid.New()
+	render := func(clientID uuid.UUID) {
+		view := memberView(map[uuid.UUID]gatewayServerStatus{member: gatewayServerConnected})
+		view.members = []metaMember{{serverID: member, authClient: &authClientResolution{clientID: clientID}}}
+		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	}
+
+	first, second := uuid.New(), uuid.New()
+	render(first)
+	render(first)
+	require.Len(t, rec.Rows(), 1)
+	render(second)
+	rows := rec.Rows()
+	require.Len(t, rows, 2, "the same status through a different auth client is a change")
+	require.Equal(t, second.String(), rows[1].AuthClientID)
+}
