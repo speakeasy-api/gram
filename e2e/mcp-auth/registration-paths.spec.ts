@@ -46,12 +46,18 @@ test("G18 enforced: typed registration picker labels, ownership eligibility, and
       await sheet
         .getByRole("combobox", { name: "Sign-in", exact: true })
         .click();
-      await expect(
-        auth.page.getByRole("option", { name: registration.name, exact: true }),
-      ).toHaveCount(1);
-      await expect(
-        auth.page.getByRole("option", { name: selfName, exact: true }),
-      ).toHaveCount(0);
+      // Match the exact registration identity in the option description, not
+      // the composite accessible name containing its issuer label.
+      const registrationOption = (name: string) => {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return auth.page.getByRole("option").filter({
+          has: auth.page.locator(".text-muted-foreground").filter({
+            hasText: new RegExp(`(?:^| · )${escaped}$`),
+          }),
+        });
+      };
+      await expect(registrationOption(registration.name)).toHaveCount(1);
+      await expect(registrationOption(selfName)).toHaveCount(0);
       await auth.page.keyboard.press("Escape");
       const self = sheet.getByRole("radio", { name: /^Service account/ });
       await self.focus();
@@ -60,12 +66,8 @@ test("G18 enforced: typed registration picker labels, ownership eligibility, and
       await sheet
         .getByRole("combobox", { name: "Sign-in", exact: true })
         .click();
-      await expect(
-        auth.page.getByRole("option", { name: selfName, exact: true }),
-      ).toHaveCount(1);
-      await expect(
-        auth.page.getByRole("option", { name: registration.name, exact: true }),
-      ).toHaveCount(0);
+      await expect(registrationOption(selfName)).toHaveCount(1);
+      await expect(registrationOption(registration.name)).toHaveCount(0);
       await auth.page.keyboard.press("Escape");
       await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(sheet).not.toBeVisible();

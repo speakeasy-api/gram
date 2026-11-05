@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { privateProtocolFailureRecorder } from "./authorization-diagnostics.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { Dashboard, approveAuthorization } from "./dashboard.ts";
 import { FixtureMcpClient } from "./client.ts";
 import { startMockAuthServer } from "./mock-server.ts";
 import { gatewayEchoes } from "./gateway.ts";
+import { GatewayActions } from "./gateway-actions.ts";
+import {
+  consentObserver,
+  inventoryObserver,
+  sourceTopology,
+} from "./gateway-control-diagnostics.ts";
 import { captureAuthGraph } from "./graph.ts";
 
 test.describe.configure({ mode: "default" }); // config uses one worker; a blocked case must not skip later cases.
@@ -21,21 +28,15 @@ test.beforeEach(async ({ page }, testInfo) => {
   });
   dashboard = new Dashboard(page);
   await dashboard.login();
-  await dashboard.enforce();
-  testInfo.annotations.push({
-    type: "auth-path",
-    description:
-      "Persisted typed-client enforcement verified through a fresh staff UI read before fixture creation",
-  });
-  await dashboard.createProject(`auth-e2e-${randomUUID().slice(0, 8)}`);
+  await dashboard.enterProject();
 });
 
 test.afterEach(async ({}, testInfo) => {
   let graphFailure: unknown;
-  if (dashboard?.createdProjects.length > 0) {
+  if (dashboard?.ownedProjects.length > 0) {
     try {
       const graph = await captureAuthGraph(
-        dashboard.createdProjects.map((project) => project.url),
+        dashboard.ownedProjects.map((project) => project.url),
       );
       await testInfo.attach("fixture-auth-graph", {
         body: JSON.stringify(graph),
@@ -68,31 +69,64 @@ test.afterEach(async ({}, testInfo) => {
   const closed = await Promise.allSettled(
     clients.splice(0).map((client) => client.close()),
   );
-  try {
-    await dashboard?.restoreEnforcement();
-    if (testInfo.status === testInfo.expectedStatus)
-      await dashboard.removeProject();
-  } finally {
-    await mock?.close();
+  // Evidence and grant/session closure precede dashboard-only fixture cleanup.
+  // Keep scenario failures primary; report teardown failures separately.
+  const scenarioFailed = testInfo.status !== "passed";
+  const cleanup = {
+    grantFailures: revoked.filter((result) => result.status === "rejected")
+      .length,
+    sessionFailures: closed.filter((result) => result.status === "rejected")
+      .length,
+    projectDeleteFailures: 0,
+    mockCloseFailed: false,
+  };
+  if (dashboard?.createdProjects.length > 0) {
+    for (const project of [...dashboard.createdProjects].reverse()) {
+      try {
+        dashboard.projectURL = project.url;
+        // removeProject verifies membership in this instance's ownership ledger.
+        await dashboard.removeProject();
+      } catch {
+        cleanup.projectDeleteFailures += 1;
+      }
+    }
   }
-  if (testInfo.status === "passed" && graphFailure !== undefined)
-    throw graphFailure;
-  expect(
-    closed.filter((result) => result.status === "rejected"),
-    "PROTOCOL_CLEANUP_FAILURE: sessions",
-  ).toHaveLength(0);
-  const failures = revoked.filter((result) => result.status === "rejected");
-  if (failures.length)
+  try {
+    await mock?.close();
+  } catch {
+    cleanup.mockCloseFailed = true;
+  }
+  const cleanupFailed =
+    cleanup.grantFailures > 0 ||
+    cleanup.sessionFailures > 0 ||
+    cleanup.projectDeleteFailures > 0 ||
+    cleanup.mockCloseFailed;
+  if (cleanupFailed) {
+    try {
+      await testInfo.attach("fixture-cleanup-failure", {
+        body: JSON.stringify(cleanup),
+        contentType: "application/json",
+      });
+    } catch {
+      // This fixed annotation cannot leak resource names or cleanup errors.
+      testInfo.annotations.push({
+        type: "fixture-cleanup-failure",
+        description: "Cleanup diagnostics attachment unavailable",
+      });
+    }
+  }
+  if (!scenarioFailed && graphFailure !== undefined) throw graphFailure;
+  if (!scenarioFailed && cleanupFailed)
     throw new Error(
-      `PROTOCOL_CLEANUP_FAILURE: ${failures.length} issued grants could not be revoked`,
+      "FIXTURE_CLEANUP_FAILURE: see separate cleanup diagnostics",
     );
-  // Failed projects stay available for UI diagnosis. Never delete through APIs.
 });
 
 function client(endpoint: string, headers?: Record<string, string>) {
   const value = new FixtureMcpClient({
     endpoint,
     headers,
+    onProtocolFailure: privateProtocolFailureRecorder(test.info()),
     allowInsecureLoopback: true,
     trustedOrigins: [
       new URL(dashboard.site).origin,
@@ -104,10 +138,14 @@ function client(endpoint: string, headers?: Record<string, string>) {
   return value;
 }
 
-async function authorize(page: Page, value: FixtureMcpClient) {
+async function authorize(
+  page: Page,
+  value: FixtureMcpClient,
+  observe?: () => Promise<void>,
+) {
   const flow = await value.beginAuthorization();
   try {
-    await approveAuthorization(page, flow.authorizationUrl);
+    await approveAuthorization(page, flow.authorizationUrl, observe);
     await flow.complete();
     authorizations.add(value);
   } catch (error) {
@@ -196,7 +234,10 @@ async function invoke(
 test("enforced: no-auth upstream still requires a real downstream user session", async ({
   page,
 }) => {
-  const server = await dashboard.remote("fixture-noauth", mock.profiles.noAuth);
+  const server = await dashboard.remote(
+    `fixture-noauth-${randomUUID().slice(0, 8)}`,
+    mock.profiles.noAuth,
+  );
   const value = client(server.endpoint);
   await authorize(page, value);
   await invoke(value, mock.profiles.noAuth, "anonymous");
@@ -205,7 +246,10 @@ test("enforced: no-auth upstream still requires a real downstream user session",
 test("enforced: static header configured in dashboard reaches upstream", async ({
   page,
 }) => {
-  const server = await dashboard.remote("fixture-static", mock.profiles.static);
+  const server = await dashboard.remote(
+    `fixture-static-${randomUUID().slice(0, 8)}`,
+    mock.profiles.static,
+  );
   await dashboard.staticHeader();
   const value = client(server.endpoint);
   await authorize(page, value);
@@ -221,7 +265,7 @@ test("enforced: pass-through header is configured in dashboard and supplied only
   page,
 }) => {
   const server = await dashboard.remote(
-    "fixture-forwarded",
+    `fixture-forwarded-${randomUUID().slice(0, 8)}`,
     mock.profiles.passThrough,
   );
   await dashboard.forwardedHeader();
@@ -243,18 +287,61 @@ test("enforced: pass-through header is configured in dashboard and supplied only
 test("enforced: personal OAuth and an auxiliary static header coexist", async ({
   page,
 }) => {
-  const server = await dashboard.remote(
-    "fixture-oauth-header",
-    mock.profiles.oauthAlpha,
-    "user",
+  const offset = mock.events.length;
+  // Observe the actual UI commit, without issuing a separate API request.
+  const [commit, server] = await Promise.all([
+    page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname ===
+            "/rpc/remoteSessions.commitServerIdentityConfiguration",
+      )
+      .then(async (response) => ({
+        ok: response.ok(),
+        body: (await response.json()) as {
+          status?: unknown;
+          registration_method?: unknown;
+          client?: { id?: unknown; client_id?: unknown };
+        } | null,
+      }))
+      .catch(() => ({ ok: false, body: null })),
+    dashboard.remote(
+      `fixture-oauth-header-${randomUUID().slice(0, 8)}`,
+      mock.profiles.oauthAlpha,
+      "user",
+    ),
+  ]);
+  const registrations = mock.events
+    .slice(offset)
+    .filter((event) => event.kind === "register");
+  expect(registrations.length === 1, "C72: exactly one new registration").toBe(
+    true,
   );
-  const registrations = mock.events.filter(
-    (event) => event.kind === "register" && event.provider === "alpha",
+  expect(
+    registrations[0]!.provider === "alpha" &&
+      typeof registrations[0]!.clientId === "string" &&
+      registrations[0]!.clientId.length > 0,
+    `C72: registration must belong to the expected provider`,
+  ).toBe(true);
+  const registrationRowId = commit.body?.client?.id;
+  expect(
+    commit.ok &&
+      commit.body?.status === "registered" &&
+      commit.body?.registration_method === "dcr" &&
+      commit.body?.client?.client_id === registrations[0]!.clientId &&
+      typeof registrationRowId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        registrationRowId,
+      ),
+    `C72: UI commit must identify the exact recorded DCR registration`,
+  ).toBe(true);
+  if (typeof registrationRowId !== "string")
+    throw new Error(`C72: UI commit did not provide a registration row`);
+  await dashboard.personalStaticHeader(
+    registrations[0]!.clientId!,
+    registrationRowId,
   );
-  expect(registrations).toHaveLength(1);
-  const registrationLabel = registrations[0]!.clientId;
-  expect(registrationLabel).toBeTruthy();
-  await dashboard.personalStaticHeader(registrationLabel!);
   const value = client(server.endpoint);
   await authorize(page, value);
   await invoke(value, mock.profiles.oauthAlpha, "alpha-user");
@@ -276,7 +363,7 @@ test("enforced: regular user OAuth, fresh upstream expiry, refresh and revocatio
   page,
 }) => {
   const server = await dashboard.remote(
-    "fixture-oauth",
+    `fixture-oauth-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthAlpha,
     "user",
   );
@@ -331,7 +418,7 @@ test("enforced: shared registration keeps distinct resources without an issuer b
   // Observed graph: one OAuth registration reused by multiple typed offers.
   // A working old grant must not hide failure to authorize a different resource.
   const source = await dashboard.remote(
-    "fixture-shared-resource-source",
+    `fixture-shared-resource-source-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthAlpha,
     "user",
   );
@@ -348,7 +435,7 @@ test("enforced: shared registration keeps distinct resources without an issuer b
   // Manual setup does not attach a sign-in to this separate issuer. The only
   // OAuth offer below is the exact existing typed credential, not a new DCR client.
   const target = await dashboard.remote(
-    "fixture-shared-resource-target",
+    `fixture-shared-resource-target-${randomUUID().slice(0, 8)}`,
     mock.profiles.multiple,
     "none",
     true,
@@ -388,7 +475,7 @@ test("enforced: reused registration requests target resource scopes instead of i
   page,
 }) => {
   const source = await dashboard.remote(
-    "fixture-scope-source",
+    `fixture-scope-source-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthAlpha,
     "user",
   );
@@ -402,7 +489,7 @@ test("enforced: reused registration requests target resource scopes instead of i
   )?.clientId;
   expect(registration).toBeTruthy();
   const target = await dashboard.remote(
-    "fixture-scope-target",
+    `fixture-scope-target-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthScoped,
     "none",
     true,
@@ -436,13 +523,14 @@ test("enforced: reused registration requests target resource scopes instead of i
 test("enforced: organization gateway retains two unrelated OAuth providers", async ({
   page,
 }) => {
+  test.setTimeout(300_000);
   const alpha = await dashboard.remote(
-    "fixture-alpha",
+    `fixture-alpha-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthAlpha,
     "user",
   );
   const beta = await dashboard.remote(
-    "fixture-beta",
+    `fixture-beta-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthBeta,
     "user",
     true,
@@ -457,30 +545,70 @@ test("enforced: organization gateway retains two unrelated OAuth providers", asy
     await authorize(page, direct);
     await invoke(direct, resource, principal);
   }
-  const endpoint = await dashboard.organizationGateway();
-  const value = client(endpoint);
-  await authorize(page, value);
+  const names = [alpha.name, beta.name];
   const slugs = [alpha, beta].map((server) =>
     new URL(server.serverURL).pathname.split("/").at(-1)!,
   );
-  const echoes = await gatewayEchoes(value, slugs);
-  for (const [index, tool] of echoes.entries()) {
-    const offset = mock.events.length;
-    const result = await tool.call({ marker: "gateway-isolation" });
-    expect(result).toMatchObject({ isError: false });
-    const calls = mock.events
-      .slice(offset)
-      .filter((event) => event.method === "tools/call");
-    const expected =
-      index === 0 ? mock.profiles.oauthAlpha : mock.profiles.oauthBeta;
-    expect(calls.length).toBeGreaterThan(0);
-    expect(
-      calls.every(
-        (event) =>
-          event.resource === expected && event.outcome === "authorized",
-      ),
-      "GATEWAY_CREDENTIAL_LEAK: a rejected wrong-member attempt must not be hidden by a successful retry",
-    ).toBe(true);
+  const graphSalt = randomUUID().replaceAll("-", "");
+  const checkpoint = async (phase: string) => {
+    const graph = await captureAuthGraph(
+      dashboard.ownedProjects.map((project) => project.url),
+      graphSalt,
+    );
+    await test.info().attach(`fixture-auth-graph-${phase}`, {
+      body: JSON.stringify(graph),
+      contentType: "application/json",
+    });
+    return sourceTopology(graph, names);
+  };
+  const before = await checkpoint("before-stored-control");
+  const stored = await new GatewayActions({ page, dashboard }).create(
+    "fixture-control-stored",
+    names,
+  );
+  for (const phase of ["stored-control", "automatic-organization"] as const) {
+    try {
+      const endpoint =
+        phase === "stored-control"
+          ? stored.endpoint
+          : await dashboard.organizationGateway();
+      const value = client(endpoint);
+      await authorize(page, value, consentObserver(page, slugs, phase));
+      const echoes = await gatewayEchoes(
+        value,
+        slugs,
+        inventoryObserver(phase),
+      );
+      for (const [index, tool] of echoes.entries()) {
+        const offset = mock.events.length;
+        const result = await tool.call({ marker: "gateway-isolation" });
+        expect(result).toMatchObject({ isError: false });
+        const calls = mock.events
+          .slice(offset)
+          .filter((event) => event.method === "tools/call");
+        const expected =
+          index === 0 ? mock.profiles.oauthAlpha : mock.profiles.oauthBeta;
+        expect(calls.length).toBeGreaterThan(0);
+        expect(
+          calls.every(
+            (event) =>
+              event.resource === expected && event.outcome === "authorized",
+          ),
+          "GATEWAY_CREDENTIAL_LEAK: a rejected wrong-member attempt must not be hidden by a successful retry",
+        ).toBe(true);
+        for (const call of calls) {
+          expect(call).toMatchObject({
+            provider: index === 0 ? "alpha" : "beta",
+            principal: index === 0 ? "alpha-user" : "beta-user",
+          });
+        }
+      }
+    } finally {
+      expect(
+        await checkpoint(`after-${phase}`),
+        "Gateway controls must preserve both source bindings",
+      ).toEqual(before);
+    }
   }
   for (const provider of ["alpha", "beta"]) {
     expect(
@@ -499,7 +627,7 @@ test("enforced: one server offers personal OAuth and a shared credential", async
   page,
 }) => {
   const server = await dashboard.remote(
-    "fixture-multiple",
+    `fixture-multiple-${randomUUID().slice(0, 8)}`,
     mock.profiles.multiple,
     "user",
   );
@@ -507,7 +635,8 @@ test("enforced: one server offers personal OAuth and a shared credential", async
   await authorize(page, personal);
   await invoke(personal, mock.profiles.multiple, "alpha-user");
   await page.goto(`${server.serverURL}/settings`);
-  await dashboard.addStaticOffer("fixture-shared");
+  const sharedOffer = `fixture-shared-${randomUUID().slice(0, 8)}`;
+  await dashboard.addStaticOffer(sharedOffer);
   const value = client(server.endpoint);
   const flow = await value.beginAuthorization();
   try {
@@ -533,7 +662,7 @@ test("enforced: one server offers personal OAuth and a shared credential", async
   await invoke(personal, mock.profiles.multiple, "alpha-user");
   const key = await dashboard.issueAgentKey(
     server.name,
-    "fixture-shared",
+    sharedOffer,
     mock.profiles.multiple,
   );
   const agent = new FixtureMcpClient({

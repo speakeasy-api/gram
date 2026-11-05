@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { test as base, expect } from "./fixtures.ts";
-import { configureEMA } from "./ema-actions.ts";
+import { configureEMA, disableEMA } from "./ema-actions.ts";
 import { startEMAUpstream, type EMATrust } from "./ema-upstream.ts";
 import { prepareEMA } from "./ema-bootstrap.ts";
 
 // Expected identity comes from the real signed-in profile, before any assertion.
 const test = base.extend<{
   ema: Awaited<ReturnType<typeof startEMAUpstream>>;
-  emaIdentity: EMATrust;
+  emaIdentity: EMATrust & { chainedServers: string[] };
 }>({
   ema: async ({}, use, info) => {
     const ema = await startEMAUpstream();
@@ -23,11 +23,17 @@ const test = base.extend<{
   },
   emaIdentity: async ({ auth, ema }, use) => {
     const setup = await prepareEMA(auth);
+    const chainedServers: string[] = [];
     try {
       ema.trust(setup.trust);
-      await use(setup.trust);
+      await use({ ...setup.trust, chainedServers });
     } finally {
-      await setup.cleanup();
+      try {
+        for (const serverURL of chainedServers)
+          await disableEMA(auth, serverURL);
+      } finally {
+        await setup.cleanup();
+      }
     }
   },
 });
@@ -41,10 +47,12 @@ for (const personal of [false, true]) {
     emaIdentity,
   }) => {
     test.setTimeout(240_000);
-    const { subject, issuer } = emaIdentity;
-    const server = await configureEMA(auth, ema);
+    const { subject, issuer, chainedServers } = emaIdentity;
+    const server = await configureEMA(auth, ema, (serverURL) =>
+      chainedServers.push(serverURL),
+    );
     const caller = auth.client(server.endpoint);
-    await auth.authorize(caller, personal ? server.name : undefined);
+    await auth.authorize(caller, personal ? server.personalName : undefined);
     const tools = await caller.listTools();
     const identityTool = tools.tools.filter((tool) =>
       /(^|_)identity$/.test(tool.name),
@@ -76,7 +84,10 @@ for (const personal of [false, true]) {
       );
       expect(recorded).toBeDefined();
       const personalClients = recorded!.offers
-        .filter((offer) => offer.type === "remote_session")
+        .filter(
+          (offer) =>
+            offer.type === "remote_session" && offer.source === "admin",
+        )
         .map((offer) => offer.client);
       expect(
         recorded!.selections.some(

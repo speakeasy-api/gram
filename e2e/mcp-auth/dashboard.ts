@@ -1,13 +1,21 @@
-import { expect, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { expect, test, type Page, type Request } from "@playwright/test";
+import { authorizationFailure } from "./authorization-diagnostics.ts";
+import { addPersonalOffer } from "./personal-offer-actions.ts";
+import {
+  projectMode,
+  recordSharedProject,
+  sharedProject,
+  type OwnedProject,
+} from "./project-mode.ts";
 
 /** All product provisioning is deliberately driven by visible dashboard controls. */
 export class Dashboard {
   projectURL = "";
   private projectName = "";
-  readonly createdProjects: { name: string; url: string }[] = [];
+  readonly createdProjects: OwnedProject[] = [];
+  readonly sharedProjects: OwnedProject[] = [];
   organizationSlug = "";
-  private changedEnforcement = false;
-  private changedGateway = false;
   constructor(
     readonly page: Page,
     readonly site = process.env.GRAM_SITE_URL ?? "",
@@ -18,15 +26,79 @@ export class Dashboard {
       );
   }
 
+  get ownedProjects() {
+    return [...this.createdProjects, ...this.sharedProjects];
+  }
+
   async login() {
-    await this.page.goto(this.site);
     const login = this.page.getByRole("button", {
       name: "Log in",
       exact: true,
     });
     const add = this.page.getByRole("button", { name: "Add New", exact: true });
     const home = this.page.getByRole("link", { name: "Home", exact: true });
-    await expect(login.or(add).or(home).first()).toBeVisible();
+    const uiOrigin = new URL(this.site).origin;
+    let failedModules = 0;
+    const observeModuleFailure = (request: Request) => {
+      const url = new URL(request.url());
+      if (
+        url.origin === uiOrigin &&
+        /\.(?:ts|tsx|js|jsx)$/.test(url.pathname) &&
+        request.resourceType() === "script" &&
+        request.failure()?.errorText === "net::ERR_FAILED"
+      ) {
+        failedModules++;
+      }
+    };
+    this.page.on("requestfailed", observeModuleFailure);
+    try {
+      await this.page.goto(this.site);
+      try {
+        await expect(login.or(add).or(home).first()).toBeVisible();
+      } catch (originalFailure) {
+        // Only a timed-out initial render can recover, never a login/API failure.
+        const matcher = (
+          originalFailure as {
+            matcherResult?: { name?: string; timeout?: number };
+          }
+        )?.matcherResult;
+        if (
+          matcher?.name !== "toBeVisible" ||
+          typeof matcher.timeout !== "number" ||
+          matcher.timeout <= 0 ||
+          failedModules === 0
+        ) {
+          throw originalFailure;
+        }
+        const blankDevShell = await this.page
+          .evaluate((origin) => {
+            return (
+              location.origin === origin &&
+              document.body !== null &&
+              document.body.innerText.trim() === "" &&
+              document.querySelector('script[src="/@vite/client"]') !== null &&
+              document.querySelector(
+                '.gram-elements, button, [role="button"], a[href], input[type="button"], input[type="submit"], input[type="reset"]',
+              ) === null
+            );
+          }, uiOrigin)
+          .catch(() => false);
+        if (!blankDevShell) throw originalFailure;
+        test.info().annotations.push({
+          type: "ui-bootstrap-module-recovery",
+          description: JSON.stringify({
+            attempted: true,
+            reloadCount: 1,
+            failedModuleCount: failedModules,
+          }),
+        });
+        // One clean root load before login or any enforcement/provisioning.
+        await this.page.goto(new URL("/", this.site).href);
+        await expect(login.or(add).or(home).first()).toBeVisible();
+      }
+    } finally {
+      this.page.off("requestfailed", observeModuleFailure);
+    }
     if (await login.isVisible()) await login.click();
     await expect(
       add.or(home).first(),
@@ -42,6 +114,65 @@ export class Dashboard {
     this.organizationSlug = new URL(this.page.url()).pathname
       .split("/")
       .filter(Boolean)[0]!;
+  }
+
+  /** Follow rendered SPA links so administration does not reload the dev shell. */
+  async projectRoute(route: "mcp" | "remote-identity-providers") {
+    const projectPath = new URL(this.projectURL).pathname;
+    const location = new URL(this.page.url());
+    if (
+      location.origin !== new URL(this.projectURL).origin ||
+      /^\/(?:oauth|mcp)\//.test(location.pathname)
+    ) {
+      // A completed upstream flow leaves the page on its protocol callback,
+      // which has no dashboard sidebar. Return to the recorded UI project;
+      // only mounted dashboard routes can use the SPA Home/navigation links.
+      await this.page.goto(this.projectURL);
+      await expect(this.page).toHaveURL(this.projectURL);
+    }
+    const back = this.page.getByRole("link", {
+      name: /^Back to all (?:servers|MCPs|gateways)$/,
+    });
+    if (await back.isVisible()) await back.click();
+    const current = new URL(this.page.url()).pathname;
+    if (current !== projectPath && !current.startsWith(`${projectPath}/`)) {
+      const owned = this.ownedProjects.find((p) => p.url === this.projectURL);
+      if (!owned || !owned.name.startsWith("auth-e2e-"))
+        throw new Error(
+          "Refusing to navigate to a project not created by this fixture",
+        );
+      await this.page.getByRole("link", { name: "Home", exact: true }).click();
+      await this.page
+        .getByPlaceholder("Search projects...", { exact: true })
+        .fill(owned.name);
+      await this.page
+        .getByRole("link", { name: `Open ${owned.name}`, exact: true })
+        .click();
+      await expect(this.page).toHaveURL(this.projectURL);
+    }
+    const target = `${projectPath}/${route}`;
+    if (new URL(this.page.url()).pathname !== target) {
+      const group = route === "mcp" ? "MCP Gateway" : "Identity";
+      const expand = this.page.getByRole("button", {
+        name: `Expand ${group}`,
+        exact: true,
+      });
+      const collapse = this.page.getByRole("button", {
+        name: `Collapse ${group}`,
+        exact: true,
+      });
+      // The URL can change before the organization shell mounts the project
+      // sidebar. Wait for its group controls before deciding whether to expand.
+      await expect(expand.or(collapse)).toBeVisible();
+      if (await expand.isVisible()) await expand.click();
+      // The nested link is the route item, not the group header's toggle.
+      const link = this.page.locator(
+        `li[data-sidebar="menu-item"] ul a[href="${target}"]`,
+      );
+      await expect(link).toHaveCount(1);
+      await link.click();
+    }
+    await this.page.waitForURL((url) => url.pathname === target);
   }
 
   async createProject(name: string) {
@@ -65,6 +196,33 @@ export class Dashboard {
     await expect(
       this.page.getByRole("button", { name: `${name} Project`, exact: true }),
     ).toBeVisible();
+  }
+
+  /** Teardown removes created projects only; the shared one outlives the test. */
+  async enterProject() {
+    const name = `auth-e2e-${randomUUID().slice(0, 8)}`;
+    if (projectMode() === "isolated") {
+      await this.createProject(name);
+      return;
+    }
+    const existing = sharedProject();
+    if (existing) {
+      await this.page.goto(existing.url);
+      this.projectName = existing.name;
+      this.projectURL = existing.url;
+      this.sharedProjects.push(existing);
+      await expect(
+        this.page.getByRole("button", {
+          name: `${existing.name} Project`,
+          exact: true,
+        }),
+      ).toBeVisible();
+      return;
+    }
+    await this.createProject(name);
+    const created = this.createdProjects.pop()!;
+    this.sharedProjects.push(created);
+    recordSharedProject(created);
   }
 
   async removeProject() {
@@ -101,7 +259,19 @@ export class Dashboard {
     identity: "user" | "none" = "none",
     projectIssuer = false,
   ) {
-    await this.page.goto(`${this.projectURL}/mcp/add/remote`);
+    await this.projectRoute("mcp");
+    // Header and empty-state buttons open the same add flow.
+    await this.page
+      .getByRole("button", { name: "Add new", exact: true })
+      .first()
+      .click();
+    await this.page
+      .getByRole("link")
+      .filter({
+        has: this.page.getByText("Hosted remotely", { exact: true }),
+      })
+      .click();
+    await this.page.waitForURL(`${this.projectURL}/mcp/add/remote`);
     // The project assistant inserts this wrapper when ready, remounting route
     // children. Wait before entering data so fixture setup is not erased.
     await expect(
@@ -213,7 +383,7 @@ export class Dashboard {
         .first()
         .click();
       const input = this.page.getByPlaceholder("my-endpoint", { exact: true });
-      await input.fill(`fixture-${Date.now().toString(36)}`);
+      await input.fill(`fixture-${randomUUID().slice(0, 8)}`);
       await this.page
         .getByRole("button", { name: "Add address", exact: true })
         .click();
@@ -238,7 +408,10 @@ export class Dashboard {
     );
   }
 
-  async personalStaticHeader(registrationLabel: string) {
+  async personalStaticHeader(
+    registrationExternalId: string,
+    registrationRowId: string,
+  ) {
     // Mirrors are intentionally read-only. Add an administrator-owned personal
     // offer for the exact mock registration, then edit that offer, not its mirror.
     const mirror = this.page.getByRole("button", {
@@ -249,32 +422,13 @@ export class Dashboard {
       .locator("span[title]")
       .getAttribute("title");
     expect(originalName).toBeTruthy();
-    const name = "fixture-personal-with-header";
-    await this.page
-      .getByRole("button", { name: "Add credential", exact: true })
-      .click();
-    const dialog = this.page.getByRole("dialog");
-    const kind = dialog.locator("#add-credential-remote_session");
-    await kind.focus();
-    await kind.press("Space");
-    await expect(kind).toBeChecked();
-    await dialog.locator("#credential-name").fill(name);
-    await dialog
-      .getByRole("combobox", { name: "Sign-in", exact: true })
-      .click();
-    const option = this.page.getByRole("option", {
-      name: registrationLabel,
-      exact: true,
-    });
-    await expect(
-      option,
-      "UI_REGISTRATION_BLOCKER: exact fixture sign-in must be available",
-    ).toHaveCount(1);
-    await option.click();
-    await dialog
-      .getByRole("button", { name: "Add credential", exact: true })
-      .click();
-    await expect(dialog).not.toBeVisible();
+    const name = `fixture-personal-with-header-${randomUUID().slice(0, 8)}`;
+    await addPersonalOffer(
+      this.page,
+      name,
+      registrationExternalId,
+      registrationRowId,
+    );
     await this.configureTypedHeader(
       "X-Fixture-Key",
       "static",
@@ -644,7 +798,6 @@ export class Dashboard {
     });
     await expect(toggle).toBeVisible();
     if (!(await toggle.isChecked())) {
-      this.changedGateway = true;
       await toggle.click();
       await this.page
         .getByRole("dialog")
@@ -667,6 +820,7 @@ export class Dashboard {
     return endpoint;
   }
 
+  /** Run once by enforcement.setup.ts; it stays on for every later run. */
   async enforce() {
     const admin = process.env.GRAM_ADMIN_URL;
     if (!admin)
@@ -703,10 +857,7 @@ export class Dashboard {
         name: "Stop enforcing",
         exact: true,
       });
-      if (await stopped.isVisible()) {
-        await this.verifyPersistedEnforcement(staff);
-        return;
-      }
+      if (await stopped.isVisible()) return;
       const migrate = row.getByRole("button", {
         name: /^(Migrate|Run again)$/,
       });
@@ -723,101 +874,18 @@ export class Dashboard {
         ),
         "UI_ENFORCEMENT_READINESS_BLOCKER: staff readiness must finish before testing auth",
       ).toBeVisible({ timeout: 60_000 });
-      if (await stopped.isVisible()) {
-        await this.verifyPersistedEnforcement(staff);
-        return;
-      }
+      if (await stopped.isVisible()) return;
       const enforce = row.getByRole("button", { name: "Enforce", exact: true });
       await expect(
         enforce,
         "UI_ENFORCEMENT_READINESS_BLOCKER: inspect migration readiness and blockers; no API or SQL workaround is allowed",
       ).toBeEnabled();
       await enforce.click();
-      this.changedEnforcement = true;
       await staff
         .getByRole("dialog")
         .getByRole("button", { name: "Enforce", exact: true })
         .click();
       await expect(stopped).toBeVisible();
-      await this.verifyPersistedEnforcement(staff);
-    } finally {
-      await staff.close();
-    }
-  }
-
-  private async verifyPersistedEnforcement(staff: Page) {
-    // Re-read persisted state after a fresh page load, not a mutation's cached UI.
-    await staff.reload();
-    const filter = staff.getByRole("textbox", { name: "Filter organizations" });
-    await expect(filter).toBeVisible();
-    await filter.fill(this.organizationSlug);
-    const row = staff
-      .getByRole("row")
-      .filter({ hasText: this.organizationSlug });
-    await expect(row).toHaveCount(1);
-    await expect(
-      row.getByText(/^Upstream auth enforced\./),
-      "UI_ENFORCEMENT_BLOCKER: persisted typed-client enforcement must be enabled before every scenario",
-    ).toBeVisible({ timeout: 60_000 });
-    await expect(
-      row.getByRole("button", { name: "Stop enforcing", exact: true }),
-    ).toBeVisible();
-  }
-
-  async restoreEnforcement() {
-    if (this.changedGateway) {
-      await this.page.goto(`${this.site}/${this.organizationSlug}/gateway`);
-      const toggle = this.page.getByRole("switch", {
-        name: "Organization Gateway",
-        exact: true,
-      });
-      await expect(toggle).toBeVisible();
-      if (await toggle.isChecked()) {
-        await toggle.click();
-        await this.page
-          .getByRole("dialog")
-          .getByRole("button", { name: "Turn off", exact: true })
-          .click();
-        await expect(toggle).not.toBeChecked();
-      }
-      this.changedGateway = false;
-    }
-    if (!this.changedEnforcement) return;
-    const admin = process.env.GRAM_ADMIN_URL;
-    if (!admin)
-      throw new Error(
-        "UI_CLEANUP_BLOCKER: local staff dashboard is required to restore enforcement",
-      );
-    const staff = await this.page.context().newPage();
-    try {
-      await staff.goto(`${admin}/upstream-oauth-migration`);
-      const filter = staff.getByRole("textbox", {
-        name: "Filter organizations",
-      });
-      await expect(filter).toBeVisible();
-      await filter.fill(this.organizationSlug);
-      const row = staff
-        .getByRole("row")
-        .filter({ hasText: this.organizationSlug });
-      await expect(row).toHaveCount(1);
-      await expect(
-        row.getByText(
-          /Upstream auth enforced|Ready to enforce|Not ready to enforce/,
-        ),
-      ).toBeVisible();
-      const stop = row.getByRole("button", {
-        name: "Stop enforcing",
-        exact: true,
-      });
-      if (await stop.isVisible()) {
-        await stop.click();
-        await staff
-          .getByRole("dialog")
-          .getByRole("button", { name: "Stop enforcing", exact: true })
-          .click();
-        await expect(stop).not.toBeVisible();
-      }
-      this.changedEnforcement = false;
     } finally {
       await staff.close();
     }
@@ -828,6 +896,7 @@ export class Dashboard {
 export async function approveAuthorization(
   page: Page,
   authorizationURL: string,
+  observe?: () => Promise<void>,
 ) {
   await page.goto(authorizationURL);
   for (let step = 0; step < 20; step++) {
@@ -856,24 +925,45 @@ export async function approveAuthorization(
       "Tools could not be captured. This gateway cannot be approved. Try again later.",
       { exact: true },
     );
+    const configurationChanged = page.getByText(
+      "This server’s configuration changed. Reload this page to review access.",
+      { exact: true },
+    );
     // A disabled approval button is not a transition. Wait for an actionable
     // control or report the actual consent failure instead of spinning on it.
-    await expect
-      .poll(
-        async () =>
-          (await inventoryFailure.isVisible()) ||
-          (await allTools.isVisible()) ||
-          (await approve.isVisible()) ||
-          (await login.isVisible()) ||
-          ((await give.isVisible()) && (await give.isEnabled())) ||
-          (await connect.isVisible()) ||
-          (await connectButton.isVisible()),
-        {
-          timeout: 10_000,
-          message: "UI_CONSENT_BLOCKER: no actionable consent control",
-        },
-      )
-      .toBe(true);
+    try {
+      await expect
+        .poll(
+          async () =>
+            (await page.locator("details[data-error-code]").isVisible()) ||
+            (await inventoryFailure.isVisible()) ||
+            (await allTools.isVisible()) ||
+            (await approve.isVisible()) ||
+            (await login.isVisible()) ||
+            ((await give.isVisible()) && (await give.isEnabled())) ||
+            (await connect.isVisible()) ||
+            (await connectButton.isVisible()),
+          {
+            timeout: 10_000,
+            message: "UI_CONSENT_BLOCKER: no actionable consent control",
+          },
+        )
+        .toBe(true);
+    } catch (originalFailure) {
+      // A stale inventory can coexist with a valid Connect action. Classify it
+      // only when no supported action appeared; never reload or retry consent.
+      if (await configurationChanged.isVisible()) {
+        await observe?.();
+        throw new Error(
+          "UI_CONSENT_CONFIGURATION_CHANGED: inventory requires reload; approval remains disabled",
+        );
+      }
+      throw originalFailure;
+    }
+    await observe?.();
+    const failure = await authorizationFailure(page);
+    if (failure)
+      throw new Error(`AUTHORIZATION_REFUSED: ${JSON.stringify(failure)}`);
     if (await inventoryFailure.isVisible()) {
       throw new Error(
         "UI_CONSENT_INVENTORY_BLOCKER: tools could not be captured; organization gateway approval is disabled",

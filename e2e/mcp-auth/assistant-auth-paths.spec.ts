@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect } from "./fixtures.ts";
 import { AssistantAuthActions } from "./assistant-auth-actions.ts";
 import { addStaticOffer } from "./credential-actions.ts";
@@ -13,8 +14,9 @@ test("G16 assistant execution: personal OAuth choice binds a profile and later t
   AssistantAuthActions.requireModel();
   const assistant = new AssistantAuthActions(auth);
   const { page, dashboard, mock } = auth;
-  const name = "fixture-assistant-personal";
+  const name = `fixture-assistant-personal-${randomUUID().slice(0, 8)}`;
   let serverSlug = "";
+  let serverURL = "";
   await test.step(
     "UI attach remote MCP to the existing managed Project Assistant",
     async () => {
@@ -24,6 +26,7 @@ test("G16 assistant execution: personal OAuth choice binds a profile and later t
         "user",
       );
       // The persisted route carries the generated slug, not the display name.
+      serverURL = server.serverURL;
       serverSlug = new URL(server.serverURL).pathname.split("/").at(-1)!;
       await assistant.attach(serverSlug);
     },
@@ -46,8 +49,11 @@ test("G16 assistant execution: personal OAuth choice binds a profile and later t
       await page.reload();
       await assistant.identity();
       await expect(assistant.profile(name)).toHaveText(label);
+      await assistant.grantCredentials(serverURL, name, [
+        label.split(" · Each person's own account")[0]!,
+      ]);
     },
-    { timeout: 30_000 },
+    { timeout: 90_000 },
   );
 
   await test.step(
@@ -56,8 +62,8 @@ test("G16 assistant execution: personal OAuth choice binds a profile and later t
       await assistant.openChat();
       const offset = mock.events.length;
       await assistant.send(serverSlug);
-      await assistant.authorize();
-      // OAuth completion resumes the suspended assistant turn; only a real
+      await assistant.authorize(serverSlug);
+      // Completion resumes the turn or retries after connection recovery; only a real
       // tools/call at the fixture establishes successful execution.
       await assistant.executedSince(
         offset,
@@ -89,24 +95,26 @@ test("G16 assistant execution: personal OAuth choice binds a profile and later t
   );
 });
 
-test("G27 assistant execution: ambiguous execution profile requires administrator choice and tool uses that identity", async ({
+test("G27 assistant execution: mixed offers default to personal OAuth and administrator-selected static credentials determine tool identity", async ({
   auth,
 }) => {
   AssistantAuthActions.requireModel();
   const assistant = new AssistantAuthActions(auth);
   const { page, dashboard, mock } = auth;
-  const name = "fixture-assistant-ambiguous";
+  const name = `fixture-assistant-mixed-${randomUUID().slice(0, 8)}`;
   let serverSlug = "";
-  const first = "fixture-assistant-first";
-  const second = "fixture-assistant-second";
+  let serverURL = "";
+  const first = `fixture-assistant-first-${randomUUID().slice(0, 8)}`;
+  const second = `fixture-assistant-second-${randomUUID().slice(0, 8)}`;
   await test.step(
-    "UI create two static alternatives and attach the server to the managed assistant",
+    "UI retain personal OAuth, add two static alternatives, and attach the server",
     async () => {
       const server = await dashboard.remote(
         name,
         mock.profiles.multiMethod,
         "user",
       );
+      serverURL = server.serverURL;
       serverSlug = new URL(server.serverURL).pathname.split("/").at(-1)!;
       await addStaticOffer(page, first, "fixture-static-secret");
       await addStaticOffer(page, second, "fixture-static-alt-secret");
@@ -116,15 +124,53 @@ test("G27 assistant execution: ambiguous execution profile requires administrato
   );
 
   await test.step(
-    "Actual execution profile is ambiguous; administrator binds the second credential",
+    "Mixed offers automatically choose personal OAuth; administrator explicitly binds the second static credential",
     async () => {
-      await expect(assistant.profile(name)).toContainText("Not chosen");
-      await expect(assistant.profile(name).locator("..")).toContainText(
-        "No credential chosen yet. Choose one.",
+      const graph = await auth.graph();
+      const servers = graph.servers.filter((server) => server.name === name);
+      expect(servers).toHaveLength(1);
+      const server = servers[0]!;
+      expect(server.disabled).toBe(false);
+      expect(server.deleted).toBe(false);
+      const liveOffers = server.offers.filter(
+        (offer) => offer.enabled && !offer.deleted && !offer.bindingDeleted,
       );
+      expect(liveOffers).toHaveLength(3);
+      expect(new Set(liveOffers.map((offer) => offer.client)).size).toBe(3);
+      const staticOffers = liveOffers.filter(
+        (offer) => offer.type === "static_credential",
+      );
+      expect(staticOffers).toHaveLength(2);
+      expect(staticOffers.every((offer) => offer.registration === null)).toBe(
+        true,
+      );
+      const personalOffers = liveOffers.filter(
+        (offer) => offer.type === "remote_session",
+      );
+      expect(personalOffers).toHaveLength(1);
+      expect(personalOffers[0]!.registration).not.toBeNull();
+      expect(personalOffers[0]!.registrationDeleted).toBe(false);
+      expect(personalOffers[0]!.issuerBridge).toBe("present");
+
+      // executionprofiles/profiles.go decide(): one OAuth registration selects
+      // its personal client for user-backed turns, even with static offers.
+      // This mixed topology does not cover header-only credential ambiguity.
+      const control = assistant.profile(name);
+      await expect(control).toHaveCount(1);
+      await control.click();
+      const personal = page
+        .getByRole("option")
+        .filter({ hasText: " · Each person's own account" });
+      await expect(personal).toHaveCount(1);
+      const personalName = (await personal.innerText()).split(
+        " · Each person's own account",
+      )[0]!;
+      await page.keyboard.press("Escape");
+      await expect(control).toHaveText(`Automatic (${personalName})`);
       await assistant.choose(name, second);
+      await assistant.grantCredentials(serverURL, name, [first, second]);
     },
-    { timeout: 30_000 },
+    { timeout: 90_000 },
   );
 
   await test.step(

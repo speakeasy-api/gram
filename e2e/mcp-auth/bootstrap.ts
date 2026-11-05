@@ -17,7 +17,10 @@ const serviceAccount = "auth-e2e-signer@local-signing.iam.gserviceaccount.com";
 const keys = [
   "GRAM_IDENTITY_PROVIDER_SIGNING_CREDENTIAL_ID",
   "GRAM_LOCAL_FEATURE_FLAGS_CSV",
+  "GRAM_IDENTITY_PROVIDER_SIGNING_SERVICE_ACCOUNT",
 ] as const;
+// The Speakeasy issuer can vouch for a sign-in only with both flags on.
+const scopedFlags = ["internal-session-issuer", "sign-in-enforcement"] as const;
 let stage = "prerequisites";
 class BootstrapError extends Error {}
 function requireSafe(ok: unknown, code: string): asserts ok {
@@ -48,9 +51,14 @@ export function scopedCSV(source: string, organization: string): string {
     "INVALID_ORGANIZATION",
   );
   requireSafe(source.trim().length > 0, "EMPTY_FLAGS_CSV");
-  const row = `${organization},internal-session-issuer,true`;
-  if (source.trimEnd().endsWith(`\n${row}`)) return source;
-  return source + (source.endsWith("\n") ? "" : "\n") + row + "\n";
+  const lines = source.split(/\r?\n/);
+  const missing = scopedFlags
+    .map((flag) => `${organization},${flag},true`)
+    .filter((row) => !lines.includes(row));
+  if (missing.length === 0) return source;
+  return (
+    source + (source.endsWith("\n") ? "" : "\n") + missing.join("\n") + "\n"
+  );
 }
 function contained(root: string, path: string) {
   const rel = relative(root, path);
@@ -137,7 +145,7 @@ async function main() {
       stdio: "pipe",
     });
   }
-  // Read only the two selected settings, not the complete local configuration.
+  // Read only the selected settings, not the complete local configuration.
   const previous = Object.fromEntries(
     keys.map((key) => {
       const result = spawnSync(
@@ -292,6 +300,16 @@ async function main() {
           manifest.privateCSV === outputPath,
         "MANIFEST_CONFLICT",
       );
+      // Preserve prior snapshots when a new deployment setting is introduced.
+      for (const key of keys) {
+        if (!(key in manifest.previous)) {
+          manifest.previous[key] = previous[key];
+          manifest.previousEffective[key] = process.env[key] ?? null;
+        }
+      }
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", {
+        mode: 0o600,
+      });
     }
     chmodSync(manifestPath, 0o600);
     mkdirSync(dirname(outputPath), { recursive: true, mode: 0o700 });
@@ -306,11 +324,12 @@ async function main() {
         config,
         `${keys[0]}=${credential.id}`,
         `${keys[1]}=${outputPath}`,
+        `${keys[2]}=${serviceAccount}`,
       ],
       { cwd: root, stdio: "pipe" },
     );
     console.log(
-      `SETUP_READY credential=${created ? "created" : "reused"} scoped_flag=enabled runtime_keys=2 browser=released_after_exit`,
+      `SETUP_READY credential=${created ? "created" : "reused"} scoped_flag=enabled runtime_keys=3 browser=released_after_exit`,
     );
     console.log(
       "Restart required (not executed): mise exec -- pitchfork restart server",

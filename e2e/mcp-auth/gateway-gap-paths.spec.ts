@@ -272,35 +272,122 @@ test("G9 approved no-auth member requires reviewed consent after administrator a
     [{ ...member, resource, principal: "anonymous" }],
     id,
   );
+  // Capture the exact qualified call while the original anonymous grant works;
+  // rediscovery after mutation must not substitute a different member or tool.
+  const staleCalls = await gatewayEchoes(client, [serverSlug(member)]);
+  expect(staleCalls).toHaveLength(1);
+  const staleCall = staleCalls[0]!;
   await test.step(`${id} administrator adds a real personal authentication offer`, async () => {
     phase(id, "admin-adds-auth");
     auth.mock.setResourceAuth(resource, true);
     const offset = auth.mock.events.length;
-    await auth.dashboard.remote(
-      label(`${id}-registration`),
-      auth.mock.profiles.oauthAlpha,
-      "user",
-    );
+    // Observe the actual UI commit, without issuing a separate API request.
+    const [commit] = await Promise.all([
+      auth.page
+        .waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname ===
+              "/rpc/remoteSessions.commitServerIdentityConfiguration",
+        )
+        .then(async (response) => ({
+          ok: response.ok(),
+          body: (await response.json()) as {
+            status?: unknown;
+            registration_method?: unknown;
+            client?: { id?: unknown; client_id?: unknown };
+          } | null,
+        }))
+        .catch(() => ({ ok: false, body: null })),
+      auth.dashboard.remote(
+        label(`${id}-registration`),
+        auth.mock.profiles.oauthAlpha,
+        "user",
+      ),
+    ]);
     const registrations = auth.mock.events
       .slice(offset)
-      .filter(
-        (event) => event.kind === "register" && event.provider === "alpha",
-      );
-    expect(registrations).toHaveLength(1);
-    expect(registrations[0]!.clientId).toBeTruthy();
+      .filter((event) => event.kind === "register");
+    expect(registrations.length, `${id}: exactly one new registration`).toBe(1);
+    expect(
+      registrations[0]!.provider === "alpha" &&
+        typeof registrations[0]!.clientId === "string" &&
+        registrations[0]!.clientId.length > 0,
+      `${id}: registration must belong to the expected provider`,
+    ).toBe(true);
+    const registrationRowId = commit.body?.client?.id;
+    expect(
+      commit.ok &&
+        commit.body?.status === "registered" &&
+        commit.body?.registration_method === "dcr" &&
+        commit.body?.client?.client_id === registrations[0]!.clientId &&
+        typeof registrationRowId === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          registrationRowId,
+        ),
+      `${id}: UI commit must identify the exact recorded DCR registration`,
+    ).toBe(true);
+    if (typeof registrationRowId !== "string")
+      throw new Error(`${id}: UI commit did not provide a registration row`);
     await auth.page.goto(`${member.serverURL}/settings`);
     await addPersonalOffer(
       auth.page,
       label(`${id}-personal`),
       registrations[0]!.clientId!,
+      registrationRowId,
     );
   });
   await test.step(`${id} old approval cannot silently authorize the new policy`, async () => {
     phase(id, "old-approval-needs-consent");
     const statuses = await connectionStatuses(client);
-    expect(statuses.find((row) => row.name === member.name)).toMatchObject({
-      status: "needs_consent",
-    });
+    // Keep the classification mismatch red while measuring ordinary recovery.
+    expect
+      .soft(statuses.find((row) => row.name === member.name))
+      .toMatchObject({
+        status: "needs_consent",
+      });
+    const upstreamOffset = auth.mock.events.length;
+    const protocolOffset = client.transcript.length;
+    let refused: Awaited<ReturnType<typeof staleCall.call>>;
+    try {
+      refused = await staleCall.call({ marker: randomUUID() });
+    } finally {
+      // Even rejected upstream attempts violate the stale-call boundary.
+      expect(
+        auth.mock.events
+          .slice(upstreamOffset)
+          .filter((event) => event.method === "tools/call"),
+        `${id}: stale approval must not forward any upstream tool call`,
+      ).toHaveLength(0);
+    }
+    const attempts = client.transcript.slice(protocolOffset);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({ operation: "tools/call", status: 200 });
+    // These exact remedies are the stale-choice contract, not generic outage
+    // errors. The soft status assertion above still requires needs_consent.
+    const remedies = [
+      `Server "${staleCall.server}"'s sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.`,
+      `Server "${staleCall.server}" needs your administrator to finish setup or give you access.`,
+    ];
+    expect(refused).toMatchObject({ isError: true });
+    if (
+      !refused ||
+      typeof refused !== "object" ||
+      !("content" in refused) ||
+      !Array.isArray(refused.content)
+    )
+      throw new Error(`${id}: stale refusal must contain text content`);
+    expect(refused.content).toHaveLength(1);
+    const text = refused.content[0] as {
+      type?: unknown;
+      text?: unknown;
+    } | null;
+    expect(
+      text?.type === "text" &&
+        typeof text.text === "string" &&
+        remedies.includes(text.text),
+      `${id}: stale call must return the exact member-specific authorization remedy`,
+    ).toBe(true);
   });
   await test.step(`${id} explicit new review authorizes the changed member`, async () => {
     phase(id, "explicit-reconsent");
@@ -416,7 +503,7 @@ test("G28 stale gateway membership review never grants execution on the removed 
   );
 });
 
-test("G28 direct backend change renders stale-review recovery rather than raw JSON", async ({
+test("G28 direct backend change honors live all-tools approval or renders stale-review recovery", async ({
   auth,
 }) => {
   const id = "G28";
@@ -430,6 +517,11 @@ test("G28 direct backend change renders stale-review recovery rather than raw JS
   try {
     await reviewConsent(consent, flow.authorizationUrl, id);
     const reviewOrigin = new URL(consent.url()).origin;
+    // Direct consent defaults to a live all-tools grant, not a frozen backend
+    // snapshot. Keep that scope and measure routing if approval is accepted.
+    await expect(
+      consent.locator('input[name="consent-tool-access-mode"][value="all"]'),
+    ).toBeChecked();
     await test.step(
       "G28 administrator changes the actual upstream URL through Settings",
       async () => {
@@ -470,14 +562,20 @@ test("G28 direct backend change renders stale-review recovery rather than raw JS
     const response = await pending;
     if (response.status() === 303) {
       const location = new URL(response.headers()["location"]!, consent.url());
-      expect(location.origin).toBe(reviewOrigin);
-      expect(
-        location.searchParams.has("code"),
-        "G28: a changed backend needs review before an authorization code",
-      ).toBe(false);
-      await expect(
-        consent.getByRole("button", { name: "Give access", exact: true }),
-      ).toBeVisible();
+      if (location.searchParams.has("code")) {
+        // A live grant need not reject a URL-only change with the same no-auth
+        // selection. Completion validates the callback; invocation must reach
+        // only the newly configured resource with the unchanged identity.
+        await flow.complete();
+        auth.trackGrant(caller);
+        await caller.initialize();
+        await auth.invoke(caller, auth.mock.profiles.noAuthTwin, "anonymous");
+      } else {
+        expect(location.origin).toBe(reviewOrigin);
+        await expect(
+          consent.getByRole("button", { name: "Give access", exact: true }),
+        ).toBeVisible();
+      }
     } else {
       expect([409, 412]).toContain(response.status());
       expect(

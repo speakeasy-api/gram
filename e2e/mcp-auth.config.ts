@@ -27,10 +27,38 @@ for (const value of [
 }
 process.env["GRAM_ADMIN_URL"] ??= process.env["GRAM_ADMIN_SERVER_URL"];
 
+// These change organization state that other scenarios can observe, so they
+// never run alongside anything else.
+const orgWideSpecs = "ema-paths.spec.ts";
+
 export default defineConfig({
   testDir: "./mcp-auth",
-  testMatch: "**/*.spec.ts",
-  workers: 1,
+  projects: [
+    { name: "enforcement-setup", testMatch: "enforcement.setup.ts" },
+    {
+      name: "scenarios",
+      testMatch: "**/*.spec.ts",
+      testIgnore: orgWideSpecs,
+      dependencies: ["enforcement-setup"],
+      teardown: "shared-project-cleanup",
+    },
+    {
+      name: "org-wide-scenarios",
+      testMatch: orgWideSpecs,
+      dependencies: ["enforcement-setup"],
+      teardown: "shared-project-cleanup",
+    },
+    {
+      name: "shared-project-cleanup",
+      testMatch: "shared-project-cleanup.teardown.ts",
+    },
+  ],
+  globalSetup: "./mcp-auth/suite-setup.ts",
+  // One project cannot take concurrent setup, so shared mode stays serial.
+  workers:
+    process.env["MCP_AUTH_PROJECT_MODE"] === "shared"
+      ? 1
+      : Number(process.env["MCP_AUTH_WORKERS"] ?? 1),
   fullyParallel: false,
   retries: 0,
   timeout: 300_000,

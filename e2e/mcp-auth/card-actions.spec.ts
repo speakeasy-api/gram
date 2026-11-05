@@ -1,5 +1,6 @@
 import { test, expect } from "./fixtures.ts";
 import { assertGrant, openCard, setupCard } from "./auth-setup-actions.ts";
+import { authorizationFailure } from "./authorization-diagnostics.ts";
 
 test.describe.configure({ mode: "default", retries: 0 });
 test.setTimeout(180_000);
@@ -40,12 +41,25 @@ for (const connection of ["new", "existing"] as const) {
               });
               if (await connect.isVisible()) {
                 await connect.click();
-                await auth.page
-                  .getByRole("button", {
-                    name: "Approve mock access",
-                    exact: true,
-                  })
-                  .click();
+                const approve = auth.page.getByRole("button", {
+                  name: "Approve mock access",
+                  exact: true,
+                });
+                await expect
+                  .poll(
+                    async () =>
+                      (await approve.isVisible()) ||
+                      (await auth.page
+                        .locator("details[data-error-code]")
+                        .isVisible()),
+                  )
+                  .toBe(true);
+                const failure = await authorizationFailure(auth.page);
+                if (failure)
+                  throw new Error(
+                    `AUTHORIZATION_REFUSED: ${JSON.stringify(failure)}`,
+                  );
+                await approve.click();
               }
               assertGrant(
                 auth,

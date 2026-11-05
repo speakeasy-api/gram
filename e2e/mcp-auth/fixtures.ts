@@ -1,9 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test as base, expect, type Page } from "@playwright/test";
 import { Dashboard, approveAuthorization } from "./dashboard.ts";
 import { FixtureMcpClient } from "./client.ts";
 import { startMockAuthServer } from "./mock-server.ts";
 import { captureAuthGraph, type AuthGraph } from "./graph.ts";
+import {
+  authorizationFailure,
+  privateConsentSnapshot,
+  privateProtocolFailureRecorder,
+} from "./authorization-diagnostics.ts";
 
 export { expect };
 export type AuthScenario = {
@@ -16,7 +21,12 @@ export type AuthScenario = {
     options?: { clientName?: string },
   ): FixtureMcpClient;
   graph(additionalProjectURLs?: string[]): Promise<AuthGraph>;
-  authorize(client: FixtureMcpClient, choice?: string): Promise<void>;
+  authorize(
+    client: FixtureMcpClient,
+    choice?: string,
+    observeConsent?: () => Promise<void>,
+    options?: { initialize?: boolean },
+  ): Promise<void>;
   revoke(client: FixtureMcpClient): Promise<void>;
   trackGrant(client: FixtureMcpClient): void;
   invoke(
@@ -43,9 +53,8 @@ export const test = base.extend<{
     const graphAliasSalt = randomUUID().replaceAll("-", "");
     const setPhase = (phase: string) =>
       info.annotations.push({ type: "auth-stage", description: phase });
-    setPhase("persisted-enforcement");
+    setPhase("login");
     let created = false;
-    let enforcementVerified = false;
     const auth: AuthScenario = {
       page,
       dashboard,
@@ -53,7 +62,7 @@ export const test = base.extend<{
       async graph(additionalProjectURLs = []) {
         const graph = await captureAuthGraph(
           [
-            ...dashboard.createdProjects.map((project) => project.url),
+            ...dashboard.ownedProjects.map((project) => project.url),
             ...additionalProjectURLs,
           ],
           graphAliasSalt,
@@ -69,6 +78,7 @@ export const test = base.extend<{
           endpoint,
           headers,
           clientName: options?.clientName,
+          onProtocolFailure: privateProtocolFailureRecorder(info),
           allowInsecureLoopback: true,
           trustedOrigins: [
             new URL(dashboard.site).origin,
@@ -79,12 +89,17 @@ export const test = base.extend<{
         clients.push(client);
         return client;
       },
-      async authorize(client, choice) {
+      async authorize(client, choice, observeConsent, options) {
         setPhase("consent");
+        const upstreamOffset = mock.events.length;
         const flow = await client.beginAuthorization();
         try {
           if (choice === undefined)
-            await approveAuthorization(page, flow.authorizationUrl);
+            await approveAuthorization(
+              page,
+              flow.authorizationUrl,
+              observeConsent,
+            );
           else {
             await page.goto(flow.authorizationUrl);
             const login = page.getByRole("button", {
@@ -94,10 +109,18 @@ export const test = base.extend<{
             const pickerReady = page.locator(
               '[data-upstream-auth-option], select[name^="auth_client."]',
             );
+            const singletonInput = page.locator(
+              'input[type="hidden"][name="auth_client"][form="consent-approve-form"]',
+            );
+            const typedRadios = page.locator(
+              'input[type="radio"][name="auth_client"]',
+            );
             await expect
               .poll(
                 async () =>
                   (await login.isVisible()) ||
+                  (await singletonInput.count()) > 0 ||
+                  (await authorizationFailure(page)) !== null ||
                   (await pickerReady.count()) > 0 ||
                   (await page
                     .getByRole("button", { name: "Give access", exact: true })
@@ -106,10 +129,81 @@ export const test = base.extend<{
               )
               .toBe(true);
             if (await login.isVisible()) await login.click();
-            await expect(
-              pickerReady,
-              `TYPED_OFFER_DISCOVERY_REGRESSION: consent must expose the attached alternatives before selecting ${choice}`,
-            ).not.toHaveCount(0);
+            await expect
+              .poll(
+                async () =>
+                  (await pickerReady.count()) > 0 ||
+                  (await singletonInput.count()) > 0 ||
+                  (await authorizationFailure(page)) !== null,
+                { message: "UI_CHOICE_BLOCKER: wait for consent or error" },
+              )
+              .toBe(true);
+            const consentFailure = await authorizationFailure(page);
+            if (consentFailure !== null)
+              throw new Error(
+                `UI_CHOICE_BLOCKER: consent error ${JSON.stringify(consentFailure)}`,
+              );
+            let singletonValue: string | undefined;
+            if (
+              (await singletonInput.count()) === 1 &&
+              (await typedRadios.count()) === 0 &&
+              (await pickerReady.count()) === 0
+            ) {
+              // The static sole-choice template has no visible choice label.
+              // Assert its identity against a fresh read-only fixture snapshot.
+              const graph = await auth.graph();
+              const candidates = [
+                ...new Set(
+                  graph.servers
+                    .filter(
+                      (server) =>
+                        graph.projects.includes(server.project) &&
+                        !server.disabled &&
+                        !server.deleted,
+                    )
+                    .flatMap((server) => server.offers)
+                    .filter(
+                      (offer) =>
+                        offer.name === choice &&
+                        offer.enabled &&
+                        !offer.deleted &&
+                        !offer.bindingDeleted &&
+                        offer.registrationDeleted !== true &&
+                        offer.issuerDeleted !== true,
+                    )
+                    .map((offer) => offer.client),
+                ),
+              ];
+              expect(
+                candidates.length,
+                "UI_CHOICE_BLOCKER: requested singleton must identify exactly one live bound typed client",
+              ).toBe(1);
+              const value = await singletonInput.inputValue();
+              expect(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+                  value,
+                ),
+                "UI_CHOICE_BLOCKER: singleton must contain a canonical typed client UUID",
+              ).toBe(true);
+              const alias = `client-${createHash("md5")
+                .update(value + graphAliasSalt)
+                .digest("hex")
+                .slice(0, 12)}`;
+              expect(
+                alias,
+                "UI_CHOICE_BLOCKER: singleton must be the exact requested typed client",
+              ).toBe(candidates[0]);
+              singletonValue = value;
+              info.annotations.push({
+                type: "singleton-choice-verified",
+                description: alias,
+              });
+            } else {
+              await expect(
+                pickerReady,
+                `TYPED_OFFER_DISCOVERY_REGRESSION: consent must expose the attached alternatives before selecting ${choice}`,
+              ).not.toHaveCount(0);
+            }
             const radio = page
               .locator("[data-upstream-auth-option]")
               .filter({ has: page.getByText(choice, { exact: true }) })
@@ -153,17 +247,31 @@ export const test = base.extend<{
                 );
               }
               gatewayChosen = true;
-            } else {
+            } else if (singletonValue === undefined) {
               await expect(
                 radio,
                 `UI_CHOICE_BLOCKER: expose exactly ${choice}`,
               ).toHaveCount(1);
               if (await radio.isEnabled()) await radio.check();
             }
+            const directChoiceVerified = async () =>
+              !gatewayChosen &&
+              (singletonValue !== undefined
+                ? (await singletonInput.count()) === 1 &&
+                  (await typedRadios.count()) === 0 &&
+                  (await pickerReady.count()) === 0 &&
+                  (await singletonInput.inputValue()) === singletonValue
+                : (await radio.count()) === 1 &&
+                  (await radio.isVisible()) &&
+                  (await radio.isChecked()));
             // Continue in-place: navigating back would discard the selection.
             for (let step = 0; step < 20; step++) {
               const give = page.getByRole("button", {
                 name: "Give access",
+                exact: true,
+              });
+              const allTools = page.getByRole("button", {
+                name: "Give access to all tools",
                 exact: true,
               });
               const approve = page.getByRole("button", {
@@ -180,6 +288,9 @@ export const test = base.extend<{
                 .poll(
                   async () =>
                     ((await give.isVisible()) && (await give.isEnabled())) ||
+                    ((await directChoiceVerified()) &&
+                      (await allTools.isVisible()) &&
+                      (await allTools.isEnabled())) ||
                     (await approve.isVisible()) ||
                     (await connect.isVisible()) ||
                     (await connectButton.isVisible()),
@@ -195,12 +306,38 @@ export const test = base.extend<{
               }
               if (
                 (gatewayChosen ||
+                  singletonValue !== undefined ||
                   ((await radio.isVisible()) && (await radio.isChecked()))) &&
                 (await give.isVisible()) &&
                 (await give.isEnabled())
               ) {
+                if (singletonValue !== undefined) {
+                  expect(
+                    (await singletonInput.count()) === 1 &&
+                      (await typedRadios.count()) === 0 &&
+                      (await pickerReady.count()) === 0 &&
+                      (await singletonInput.inputValue()) === singletonValue,
+                    "UI_CHOICE_BLOCKER: verified singleton must remain unchanged before approval",
+                  ).toBe(true);
+                }
+                if (!gatewayChosen) {
+                  expect(
+                    await directChoiceVerified(),
+                    "UI_CHOICE_BLOCKER: exact typed choice must remain selected before approval",
+                  ).toBe(true);
+                }
                 await give.click();
                 break;
+              }
+              if (
+                (await directChoiceVerified()) &&
+                (await allTools.isVisible()) &&
+                (await allTools.isEnabled())
+              ) {
+                // Explicitly approve all tools through the direct-server UI;
+                // this does not change the selected upstream credential.
+                await allTools.click();
+                continue;
               }
               if (await approve.isVisible()) await approve.click();
               else if (await connect.isVisible()) await connect.click();
@@ -210,11 +347,24 @@ export const test = base.extend<{
           await flow.complete();
           grants.add(client);
         } catch (error) {
+          // Correlate this authorization attempt, not earlier discovery/setup,
+          // with the strict upstream journal. Its entries contain no secrets.
+          await privateConsentSnapshot(page, info).catch(() => {});
+          await info.attach("authorization-attempt-failure", {
+            body: JSON.stringify({
+              choiceExplicit: choice !== undefined,
+              error: await authorizationFailure(page),
+              upstream: mock.events.slice(upstreamOffset),
+            }),
+            contentType: "application/json",
+          });
           await flow.cancel();
           throw error;
         }
-        setPhase("runtime-initialize");
-        await client.initialize();
+        if (options?.initialize !== false) {
+          setPhase("runtime-initialize");
+          await client.initialize();
+        }
       },
       trackGrant(client) {
         grants.add(client);
@@ -255,15 +405,8 @@ export const test = base.extend<{
     };
     try {
       await dashboard.login();
-      await dashboard.enforce();
-      enforcementVerified = true;
-      info.annotations.push({
-        type: "auth-path",
-        description:
-          "Persisted typed-client enforcement verified through a fresh staff UI read before fixture creation",
-      });
       setPhase("ui-topology");
-      await dashboard.createProject(`auth-e2e-${randomUUID().slice(0, 8)}`);
+      await dashboard.enterProject();
       created = true;
       await use(auth);
     } finally {
@@ -272,7 +415,6 @@ export const test = base.extend<{
         description: JSON.stringify({
           topology: info.title,
           provisioning: "dashboard-only",
-          enforcement: enforcementVerified ? "persisted" : "not-verified",
           lastPhase: info.annotations
             .filter((a) => a.type === "auth-stage")
             .at(-1)?.description,
@@ -280,7 +422,7 @@ export const test = base.extend<{
         }),
       });
       let graphFailure: unknown;
-      if (created && dashboard.createdProjects.length > 0) {
+      if (created && dashboard.ownedProjects.length > 0) {
         try {
           await auth.graph();
         } catch (error) {
@@ -310,28 +452,57 @@ export const test = base.extend<{
       const closed = await Promise.allSettled(
         clients.map((client) => client.close()),
       );
-      try {
-        await dashboard.restoreEnforcement();
-        if (
-          created &&
-          info.status === "passed" &&
-          revoked.every((r) => r.status === "fulfilled") &&
-          closed.every((r) => r.status === "fulfilled")
-        )
-          await dashboard.removeCreatedProjects();
-      } finally {
-        await mock.close();
+      // Evidence and grant/session closure precede dashboard-only fixture cleanup.
+      // Keep scenario failures primary; report teardown failures separately.
+      const scenarioFailed = info.status !== "passed";
+      const cleanup = {
+        grantFailures: revoked.filter((result) => result.status === "rejected")
+          .length,
+        sessionFailures: closed.filter((result) => result.status === "rejected")
+          .length,
+        projectDeleteFailures: 0,
+        mockCloseFailed: false,
+      };
+      if (dashboard?.createdProjects.length > 0) {
+        for (const project of [...dashboard.createdProjects].reverse()) {
+          try {
+            dashboard.projectURL = project.url;
+            // removeProject verifies membership in this instance's ownership ledger.
+            await dashboard.removeProject();
+          } catch {
+            cleanup.projectDeleteFailures += 1;
+          }
+        }
       }
-      if (info.status === "passed" && graphFailure !== undefined)
-        throw graphFailure;
-      expect(
-        revoked.filter((r) => r.status === "rejected"),
-        "PROTOCOL_CLEANUP_FAILURE: issued grants",
-      ).toHaveLength(0);
-      expect(
-        closed.filter((r) => r.status === "rejected"),
-        "PROTOCOL_CLEANUP_FAILURE: sessions",
-      ).toHaveLength(0);
+      try {
+        await mock?.close();
+      } catch {
+        cleanup.mockCloseFailed = true;
+      }
+      const cleanupFailed =
+        cleanup.grantFailures > 0 ||
+        cleanup.sessionFailures > 0 ||
+        cleanup.projectDeleteFailures > 0 ||
+        cleanup.mockCloseFailed;
+      if (cleanupFailed) {
+        try {
+          await info.attach("fixture-cleanup-failure", {
+            body: JSON.stringify(cleanup),
+            contentType: "application/json",
+          });
+        } catch {
+          // This fixed annotation cannot leak resource names or cleanup errors.
+          info.annotations.push({
+            type: "fixture-cleanup-failure",
+            description: "Cleanup diagnostics attachment unavailable",
+          });
+        }
+      }
+      if (!scenarioFailed && graphFailure !== undefined) throw graphFailure;
+      if (!scenarioFailed && cleanupFailed)
+        throw new Error(
+          "FIXTURE_CLEANUP_FAILURE: see separate cleanup diagnostics",
+        );
     }
   },
 });

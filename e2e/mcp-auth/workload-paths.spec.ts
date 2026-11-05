@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect } from "./fixtures.ts";
 import { FixtureMcpClient } from "./client.ts";
 import {
@@ -16,11 +17,11 @@ test("G17 workload: one shared-AS token admits its assigned server and rejects a
   const { dashboard, mock } = auth;
   try {
     const allowed = await dashboard.remote(
-      "fixture-workload-allowed",
+      `fixture-workload-allowed-${randomUUID().slice(0, 8)}`,
       mock.profiles.noAuth,
     );
     const sibling = await dashboard.remote(
-      "fixture-workload-sibling",
+      `fixture-workload-sibling-${randomUUID().slice(0, 8)}`,
       mock.profiles.noAuth,
     );
     const allowedMetadata = await auth.client(allowed.endpoint).discover();
@@ -31,9 +32,17 @@ test("G17 workload: one shared-AS token admits its assigned server and rejects a
     expect(allowedMetadata.tokenEndpoint).toBe(siblingMetadata.tokenEndpoint);
     // Owner setup is real browser consent; it does not substitute for the workload grant below.
     await auth.authorize(auth.client(allowed.endpoint));
-    await createWorkloadAgent(auth, issuer, allowed);
+    // The shared-AS grant omits resource, so trust must be organization-visible.
+    await createWorkloadAgent(auth, issuer, allowed, "organization");
+    test.info().annotations.push({
+      type: "auth-stage",
+      description: "workload-shared-as-exchange",
+    });
     const token = await exchangeWorkload(issuer, allowedMetadata);
-    expect(token.status).toBe(200);
+    expect(
+      token.status,
+      `WORKLOAD_EXCHANGE: ${token.errorCode ?? "no_error"}`,
+    ).toBe(200);
     expect(typeof token.access_token).toBe("string");
     expect(token.refresh_token).toBeUndefined();
     expect(issuer.jwksReads).toBeGreaterThan(0);
@@ -75,6 +84,16 @@ test("G17 workload: one shared-AS token admits its assigned server and rejects a
       await Promise.all(clients.map((client) => client.close()));
     }
   } finally {
-    await issuer.close();
+    try {
+      await test.info().attach("workload-protocol-journal", {
+        body: JSON.stringify({
+          jwksReads: issuer.jwksReads,
+          exchanges: issuer.exchanges,
+        }),
+        contentType: "application/json",
+      });
+    } finally {
+      await issuer.close();
+    }
   }
 });

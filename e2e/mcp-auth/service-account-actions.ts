@@ -142,18 +142,26 @@ export class ServiceAccountActions {
     await kind.press("Space");
     await expect(kind).toBeChecked();
     await dialog.getByLabel("Name", { exact: true }).fill(name);
-    await dialog
-      .getByRole("combobox", { name: "Sign-in", exact: true })
-      .click();
-    const option = page.getByRole("option", {
-      name: registrationName,
+    const signIn = dialog.getByRole("combobox", {
+      name: "Sign-in",
       exact: true,
+    });
+    await signIn.click();
+    const escaped = registrationName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const registrationIdentity = new RegExp(`(?:^| · )${escaped}$`);
+    const option = page.getByRole("option").filter({
+      has: page.locator(".text-muted-foreground").filter({
+        hasText: registrationIdentity,
+      }),
     });
     await expect(
       option,
       "UI_SELF_REGISTRATION_BLOCKER: exact self-owned registration must be selectable",
     ).toHaveCount(1);
     await option.click();
+    await expect(signIn.locator("span.text-muted-foreground")).toHaveText(
+      registrationIdentity,
+    );
     await dialog
       .getByRole("button", { name: "Add credential", exact: true })
       .click();

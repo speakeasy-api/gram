@@ -225,6 +225,62 @@ test("OAuth discovery, DCR, strict state, PKCE, SSE, refresh and revocation", as
   }
 });
 
+test("fresh initialize omits the previous MCP session", async () => {
+  const f = await fixture();
+  const client = new FixtureMcpClient({
+    endpoint: `${f.origin}/mcp`,
+    allowInsecureLoopback: true,
+    bearerToken: "private-bearer",
+  });
+  try {
+    await client.initialize();
+    await client.callTool("echo");
+    assert.equal(f.calls.at(-1)?.session, "fixture-session");
+    const start = f.calls.length;
+    await client.initialize();
+    assert.equal(f.calls[start]?.session, undefined);
+    assert.equal(f.calls[start + 1]?.session, "fixture-session");
+  } finally {
+    await client.close();
+    await f.close();
+  }
+});
+
+test("new authorization drops the MCP session but refresh preserves it", async () => {
+  const f = await fixture();
+  const client = new FixtureMcpClient({
+    endpoint: `${f.origin}/mcp`,
+    allowInsecureLoopback: true,
+  });
+  const authorize = async () => {
+    const auth = await client.beginAuthorization();
+    const response = await fetch(auth.authorizationUrl, { redirect: "manual" });
+    const completion = auth.complete();
+    await fetch(response.headers.get("location")!);
+    await completion;
+  };
+  try {
+    await authorize();
+    await client.initialize();
+    await client.refresh();
+    await client.callTool("echo");
+    assert.equal(f.calls.at(-1)?.authorization, "Bearer private-refreshed");
+    assert.equal(f.calls.at(-1)?.session, "fixture-session");
+    await authorize();
+    // Inspect the exchange reset independently of initialize's own reset.
+    await client.callTool("echo");
+    assert.equal(f.calls.at(-1)?.session, undefined);
+    assert.equal(f.calls.filter((call) => call.path === "/register").length, 2);
+    const start = f.calls.length;
+    await client.initialize();
+    assert.equal(f.calls[start]?.session, undefined);
+    assert.equal(f.calls[start + 1]?.session, "fixture-session");
+  } finally {
+    await client.close();
+    await f.close();
+  }
+});
+
 test("supplied API headers and bearer token are limited to resource requests", async () => {
   const f = await fixture();
   const client = new FixtureMcpClient({

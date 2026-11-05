@@ -8,6 +8,11 @@ export interface FixtureMcpClientOptions {
   bearerToken?: string;
   allowInsecureLoopback?: boolean;
   trustedOrigins?: string[];
+  // Sensitive opt-in capture: callers must keep bodies out of logs and attachments.
+  onProtocolFailure?: (event: {
+    operation: string;
+    body: unknown;
+  }) => Promise<void>;
 }
 export interface Discovery {
   resource: string;
@@ -19,6 +24,13 @@ export interface Discovery {
 export interface TranscriptEvent {
   operation: string;
   status?: number;
+  protocolCode?: number | string;
+  reason?: string;
+  errorBodyUnavailable?: boolean;
+  errorBodyTooLarge?: boolean;
+  sessionSent?: boolean;
+  retryAfterSeconds?: number;
+  responseReceivedAtMs?: number;
 }
 type JsonObject = Record<string, unknown>;
 function object(value: unknown): JsonObject {
@@ -30,6 +42,189 @@ function string(value: unknown): string {
   if (typeof value !== "string" || !value)
     throw new Error("Expected nonempty string");
   return value;
+}
+
+// Retain only a bounded delay, never the raw Retry-After header or wall-clock date.
+function unavailableRetryAfter(
+  value: string | null,
+  receivedWallMs: number,
+): number | undefined {
+  if (value === null || value.length > 64) return undefined;
+  const trimmed = value.trim();
+  let seconds: number;
+  if (/^\d{1,3}$/.test(trimmed)) {
+    seconds = Number(trimmed);
+  } else if (
+    /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(
+      trimmed,
+    )
+  ) {
+    const deadline = Date.parse(trimmed);
+    if (
+      !Number.isFinite(deadline) ||
+      new Date(deadline).toUTCString() !== trimmed
+    )
+      return undefined;
+    seconds = Math.ceil((deadline - receivedWallMs) / 1000);
+  } else {
+    return undefined;
+  }
+  return Number.isInteger(seconds) && seconds >= 1 && seconds <= 300
+    ? seconds
+    : undefined;
+}
+
+// Only exact source-defined literals may escape an untrusted response body.
+// Sources: oautherr/rfc_6749_codes.go, oops/{codes,mcp}.go, mcp/authnchallenge*.go.
+function errorDiagnostics(value: unknown): Partial<TranscriptEvent> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const body = value as JsonObject;
+  const error = body.error;
+  const rpc =
+    error && typeof error === "object" && !Array.isArray(error)
+      ? (error as JsonObject)
+      : undefined;
+  const result: Partial<TranscriptEvent> = {};
+  const oauthCodes = [
+    "access_denied",
+    "invalid_client",
+    "invalid_grant",
+    "invalid_request",
+    "invalid_scope",
+    "server_error",
+    "temporarily_unavailable",
+    "unauthorized_client",
+    "unsupported_grant_type",
+    "unsupported_response_type",
+  ];
+  if (typeof error === "string" && oauthCodes.includes(error))
+    result.protocolCode = error;
+  const httpCodes = [
+    "unauthorized",
+    "forbidden",
+    "bad_request",
+    "failed_precondition",
+    "gateway_error",
+    "unavailable",
+    "not_found",
+    "unexpected",
+  ];
+  if (typeof body.name === "string" && httpCodes.includes(body.name))
+    result.protocolCode = body.name;
+  const rpcCodes = [
+    -32700, -32600, -32601, -32602, -32603, -32000, -32001, -32002, -32003,
+    -32020, -32021, -32022,
+  ];
+  if (typeof rpc?.code === "number" && rpcCodes.includes(rpc.code))
+    result.protocolCode = rpc.code;
+  const reasons = [
+    [
+      "The upstream connection for this MCP server is missing or expired. Reauthorize the MCP server to reconnect it.",
+      "upstream_connection_missing_or_expired",
+    ],
+    [
+      "session authorization is no longer valid",
+      "session_authorization_invalid",
+    ],
+    [
+      "agent authorization is no longer valid; reauthorize",
+      "agent_authorization_invalid",
+    ],
+    [
+      "authorization issuer is no longer available",
+      "authorization_issuer_unavailable",
+    ],
+    [
+      "the sign-in that authorized this grant was revoked; sign in again",
+      "sign_in_revoked",
+    ],
+    [
+      "refresh_token is unknown or already used",
+      "refresh_token_unknown_or_used",
+    ],
+    [
+      "refresh_token was issued to a different client",
+      "refresh_token_client_mismatch",
+    ],
+    ["refresh_token has expired", "refresh_token_expired"],
+    ["refreshed session is no longer active", "refreshed_session_inactive"],
+    [
+      "session tool selection is malformed; reauthorize",
+      "session_tool_selection_malformed",
+    ],
+    [
+      "session tool selection is bound to a different MCP endpoint; reauthorize",
+      "session_tool_selection_endpoint_mismatch",
+    ],
+    [
+      "session policy is invalid for this MCP endpoint; reauthorize",
+      "session_policy_endpoint_invalid",
+    ],
+    ["code not found or expired", "code_not_found_or_expired"],
+    ["code was issued to a different client", "code_client_mismatch"],
+    [
+      "redirect_uri does not match the original request",
+      "redirect_uri_mismatch",
+    ],
+    ["code_verifier does not match code_challenge", "pkce_mismatch"],
+    [
+      "The upstream connection for this MCP server is misconfigured. Contact the MCP server administrator.",
+      "remote_session_misconfigured",
+    ],
+    [
+      "The upstream credential this MCP server uses is misconfigured or was rejected by the upstream. Contact the MCP server administrator.",
+      "client_credential_misconfigured",
+    ],
+  ] as const;
+  for (const [literal, reason] of reasons) {
+    if (
+      [
+        body.error_description,
+        body.message,
+        rpc?.message,
+        rpc?.error_description,
+      ].some(
+        (message) =>
+          typeof message === "string" &&
+          (message === literal || message.endsWith(`: ${literal}`)),
+      )
+    )
+      result.reason = reason;
+  }
+  return result;
+}
+
+async function responseDiagnostics(
+  response: Response,
+): Promise<{ diagnostics: Partial<TranscriptEvent>; body?: unknown }> {
+  const reader = response.clone().body?.getReader();
+  if (!reader) return { diagnostics: { errorBodyUnavailable: true } };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("Diagnostic read timeout")),
+      2_000,
+    );
+  });
+  try {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await Promise.race([reader.read(), deadline]);
+      if (done) break;
+      size += value.byteLength;
+      if (size > 16_384) return { diagnostics: { errorBodyTooLarge: true } };
+      chunks.push(value);
+    }
+    const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return { diagnostics: errorDiagnostics(body), body };
+  } catch {
+    return { diagnostics: { errorBodyUnavailable: true } };
+  } finally {
+    clearTimeout(timer);
+    // A clone is a tee: awaiting cancellation can wait for the original consumer.
+    void reader.cancel().catch(() => {});
+  }
 }
 
 /** Protocol-only test client. Transcripts intentionally contain no URLs or payloads. */
@@ -123,16 +318,55 @@ export class FixtureMcpClient {
       this.events.push({ operation });
       throw new Error(`${operation} transport failed`);
     }
-    this.events.push({ operation, status: response.status });
+    const event: TranscriptEvent = { operation, status: response.status };
+    if (response.status === 503) {
+      event.responseReceivedAtMs = performance.now();
+      const seconds = unavailableRetryAfter(
+        response.headers.get("Retry-After"),
+        Date.now(),
+      );
+      if (seconds !== undefined) event.retryAfterSeconds = seconds;
+    }
+    if (init.method === "POST" && url === this.options.endpoint)
+      event.sessionSent = new Headers(init.headers).has("mcp-session-id");
+    if (!response.ok) {
+      const failure = await responseDiagnostics(response);
+      Object.assign(event, failure.diagnostics);
+      if ("body" in failure)
+        await this.captureProtocolFailure(operation, failure.body);
+    }
+    this.events.push(event);
     return response;
+  }
+
+  private async captureProtocolFailure(
+    operation: string,
+    body: unknown,
+  ): Promise<void> {
+    if (!this.options.onProtocolFailure) return;
+    try {
+      // Successful HTTP responses can carry RPC errors, including in SSE. Apply
+      // the same capture cap to those already-parsed messages before delivery.
+      const encoded = JSON.stringify(body);
+      if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > 16_384)
+        return;
+      await this.options.onProtocolFailure({
+        operation,
+        body: JSON.parse(encoded),
+      });
+    } catch {
+      // Capture is observational: never replace the actual protocol failure.
+    }
   }
 
   private async jsonResponse(
     response: Response,
     operation: string,
   ): Promise<JsonObject> {
-    if (!response.ok)
+    if (!response.ok) {
+      await response.body?.cancel();
       throw new Error(`${operation} failed (HTTP ${response.status})`);
+    }
     try {
       return object(await response.json());
     } catch {
@@ -413,6 +647,8 @@ export class FixtureMcpClient {
     if (string(token.token_type).toLowerCase() !== "bearer")
       throw new Error("Unsupported token type");
     this.accessToken = string(token.access_token);
+    // A new grant starts a new transport session; refresh retains the current one.
+    if (params.grant_type === "authorization_code") this.sessionId = undefined;
     if (token.refresh_token !== undefined)
       this.refreshToken = string(token.refresh_token);
     else if (params.grant_type === "authorization_code")
@@ -523,14 +759,23 @@ export class FixtureMcpClient {
     }
     if (!message || message.id !== id || message.jsonrpc !== "2.0")
       throw new Error("Invalid JSON-RPC response");
-    if ("error" in message)
+    if ("error" in message) {
+      this.events.push({
+        operation: method,
+        status: response.status,
+        ...errorDiagnostics(message),
+      });
+      await this.captureProtocolFailure(method, message);
       throw new Error(`${method} returned JSON-RPC error`);
+    }
     if (!("result" in message)) throw new Error("Missing JSON-RPC result");
     return message.result;
   }
 
   private protocolVersion = "2025-03-26";
   async initialize(): Promise<unknown> {
+    // Initialize starts a new MCP session, not a request on the previous session.
+    this.sessionId = undefined;
     const result = object(
       await this.rpc("initialize", {
         protocolVersion: this.protocolVersion,

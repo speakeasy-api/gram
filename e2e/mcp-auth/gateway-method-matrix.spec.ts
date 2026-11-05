@@ -3,6 +3,11 @@ import { test, expect, type AuthScenario } from "./fixtures.ts";
 import { GatewayActions } from "./gateway-actions.ts";
 import { gatewayEchoes } from "./gateway.ts";
 import {
+  sourceTopology,
+  inventoryObserver,
+  consentObserver,
+} from "./gateway-control-diagnostics.ts";
+import {
   addStaticOffer,
   disableCredential,
   detachCredential,
@@ -12,28 +17,80 @@ import {
 // Independent cases: an earlier discovery failure must not skip a later mutation scenario.
 test.describe.configure({ mode: "default" });
 test.setTimeout(600_000);
-const shared = "matrix-shared-static";
-const alternate = "matrix-alternate-static";
+let shared = "";
+let alternate = "";
+test.beforeEach(() => {
+  shared = `matrix-shared-static-${randomUUID().slice(0, 8)}`;
+  alternate = `matrix-alternate-static-${randomUUID().slice(0, 8)}`;
+});
 type Echo = Awaited<ReturnType<typeof gatewayEchoes>>[number];
+
+// Snapshot aliases share the fixture salt; a replacement is not the original grant.
+async function personalGraph(auth: AuthScenario, stage: string) {
+  const graph = await auth.graph();
+  await test.info().attach(`gateway-personal-graph-${stage}`, {
+    body: JSON.stringify(graph),
+    contentType: "application/json",
+  });
+  return graph;
+}
+
+async function originalPersonal(
+  auth: AuthScenario,
+  name: string,
+  stage: string,
+) {
+  const graph = await personalGraph(auth, stage);
+  const servers = graph.servers.filter((server) => server.name === name);
+  expect(servers, "FIXTURE_MODEL_MISMATCH: exact personal source").toHaveLength(
+    1,
+  );
+  const source = servers[0]!;
+  const offers = source.offers.filter(
+    (offer) =>
+      offer.type === "remote_session" &&
+      offer.enabled &&
+      !offer.deleted &&
+      !offer.bindingDeleted,
+  );
+  expect(
+    offers,
+    "FIXTURE_MODEL_MISMATCH: one original personal binding",
+  ).toHaveLength(1);
+  return { server: source.server, client: offers[0]!.client };
+}
 
 async function topology(auth: AuthScenario) {
   return test.step("UI setup and direct personal/static positive controls", async () => {
     const { dashboard, page, mock } = auth;
     const resource = mock.profiles.multiMethod;
-    const a = await dashboard.remote("matrix-a", resource, "user");
+    const a = await dashboard.remote(
+      `matrix-a-${randomUUID().slice(0, 8)}`,
+      resource,
+      "user",
+    );
     const personalA = auth.client(a.endpoint);
     await auth.authorize(personalA);
     await auth.invoke(personalA, resource, "alpha-user");
+    const originalA = await originalPersonal(auth, a.name, "a-login");
     await page.goto(`${a.serverURL}/settings`);
     await addStaticOffer(page, shared, "fixture-static-secret");
     await addStaticOffer(page, alternate, "fixture-static-alt-secret");
-    const b = await dashboard.remote("matrix-b", resource, "user");
+    await personalGraph(auth, "a-static");
+    const b = await dashboard.remote(
+      `matrix-b-${randomUUID().slice(0, 8)}`,
+      resource,
+      "user",
+    );
+    await personalGraph(auth, "b-save-before-login");
     const personalB = auth.client(b.endpoint);
     await auth.authorize(personalB);
     await auth.invoke(personalB, resource, "alpha-user");
+    const originalB = await originalPersonal(auth, b.name, "b-login");
     await page.goto(`${b.serverURL}/settings`);
     // UI Used on verification proves one credential object, not matching clones.
     await dashboard.attachExistingOffer(shared, a.name, b.name);
+    await personalGraph(auth, "shared-attachment");
     const staticA = auth.client(a.endpoint);
     const staticB = auth.client(b.endpoint);
     const alternateA = auth.client(a.endpoint);
@@ -51,6 +108,8 @@ async function topology(auth: AuthScenario) {
       resource,
       personalA,
       personalB,
+      originalA,
+      originalB,
       staticA,
       staticB,
       alternateA,
@@ -68,10 +127,18 @@ async function gateway(
 ) {
   return test.step(`Gateway consent and discovery: ${choice}`, async () => {
     const client = auth.client(endpoint);
-    await auth.authorize(client, choice);
+    await auth.authorize(
+      client,
+      choice,
+      consentObserver(auth.page, slugs, `typed-${choice}`),
+    );
     // A gateway discovery failure is a precondition failure, not evidence that a
     // subsequent credential mutation was enforced. Mutation steps run only later.
-    const tools = await gatewayEchoes(client, slugs);
+    const tools = await gatewayEchoes(
+      client,
+      slugs,
+      inventoryObserver(`typed-${choice}`),
+    );
     return { client, tools };
   });
 }
@@ -135,9 +202,79 @@ async function personalControls(
   t: Awaited<ReturnType<typeof topology>>,
   refresh = false,
 ) {
-  for (const client of [t.personalA, t.personalB]) {
-    if (refresh) await client.refresh();
-    await auth.invoke(client, t.resource, "alpha-user");
+  for (const [client, original] of [
+    [t.personalA, t.originalA],
+    [t.personalB, t.originalB],
+  ] as const) {
+    const transcriptOffset = client.transcript.length;
+    const upstreamOffset = auth.mock.events.length;
+    let phase: "refresh" | "invoke" = refresh ? "refresh" : "invoke";
+    try {
+      if (refresh) await client.refresh();
+      phase = "invoke";
+      await auth.invoke(client, t.resource, "alpha-user");
+    } catch (error) {
+      const events = client.transcript.slice(transcriptOffset);
+      const last = events.at(-1);
+      // Only the exact transport refusal may continue. Assertion errors, failed
+      // discovery/configuration, and identity/header failures remain hard.
+      const listRefusal =
+        phase === "invoke" &&
+        error instanceof Error &&
+        (error.message === "tools/list failed (HTTP 401)" ||
+          error.message === "tools/list failed (HTTP 403)") &&
+        last?.operation === "tools/list" &&
+        (last.status === 401 || last.status === 403) &&
+        error.message === `tools/list failed (HTTP ${last.status})`;
+      const refreshRefusal =
+        phase === "refresh" &&
+        error instanceof Error &&
+        error.message === "token failed (HTTP 400)" &&
+        last?.operation === "token" &&
+        last.status === 400 &&
+        last.protocolCode === "invalid_grant" &&
+        (last.reason === "upstream_connection_missing_or_expired" ||
+          last.reason === "session_authorization_invalid");
+      if (!listRefusal && !refreshRefusal) throw error;
+      expect(
+        auth.mock.events
+          .slice(upstreamOffset)
+          .filter((event) => event.method === "tools/call"),
+        "PERSONAL_REFUSAL_LEAK: a refused personal control must not execute upstream",
+      ).toEqual([]);
+      const graph = await personalGraph(
+        auth,
+        `refused-${original.server}-${phase}`,
+      );
+      const sources = graph.servers.filter(
+        (server) => server.server === original.server,
+      );
+      expect(
+        sources,
+        "FIXTURE_MODEL_MISMATCH: original personal source exists",
+      ).toHaveLength(1);
+      const bindings = sources[0]!.offers.filter(
+        (offer) => offer.client === original.client,
+      );
+      const failedAvailability =
+        bindings.length === 0 ||
+        bindings.every((offer) => offer.deleted || offer.bindingDeleted);
+      if (!failedAvailability) throw error;
+      test.info().annotations.push({
+        type: refreshRefusal
+          ? "personal-invoke-blocked"
+          : "personal-availability-failed",
+        description: `${original.server}/${original.client}: original binding lost; ${phase} refused; personal control NOT passed${refreshRefusal ? "; invocation blocked by refresh refusal" : ""}`,
+      });
+      // Keep the test RED, but measure the other personal/alternate controls
+      // and shared-static mutations without reauthorizing or replacing grants.
+      expect
+        .soft(
+          failedAvailability,
+          `PERSONAL_BINDING_LOSS_REGRESSION: unaffected original personal grant ${original.server}/${original.client} MUST remain available`,
+        )
+        .toBe(false);
+    }
   }
   await auth.invoke(t.alternateA, t.resource, "static-alt-user");
 }
@@ -148,10 +285,35 @@ for (const kind of ["project", "stored"] as const) {
   }) => {
     const t = await topology(auth);
     const ui = new GatewayActions(auth);
+    if (kind === "project") {
+      await test.step("Same-source stored gateway control before automatic typed-static discovery", async () => {
+        const names = [t.a.name, t.b.name];
+        const before = sourceTopology(await auth.graph(), names);
+        const stored = await ui.create(
+          `matrix-project-control-${randomUUID().slice(0, 8)}`,
+          names,
+        );
+        const control = await gateway(auth, stored.endpoint, shared, [
+          t.aSlug,
+          t.bSlug,
+        ]);
+        for (const echo of control.tools)
+          await invoke(auth, echo, "static-user");
+        expect(
+          sourceTopology(await auth.graph(), names),
+          "Stored control must not change source identity or bindings",
+        ).toEqual(before);
+      });
+    }
     const endpoint =
       kind === "project"
         ? await ui.projectEndpoint()
-        : (await ui.create("matrix-shared", [t.a.name, t.b.name])).endpoint;
+        : (
+            await ui.create(`matrix-shared-${randomUUID().slice(0, 8)}`, [
+              t.a.name,
+              t.b.name,
+            ])
+          ).endpoint;
     const caller = await gateway(auth, endpoint, shared, [t.aSlug, t.bSlug]);
     for (const echo of caller.tools) await invoke(auth, echo, "static-user");
     await test.step("Existing direct and gateway selections survive refresh", async () => {
@@ -169,8 +331,13 @@ for (const kind of ["project", "stored"] as const) {
 async function overlapping(auth: AuthScenario) {
   const t = await topology(auth);
   const ui = new GatewayActions(auth);
-  const first = await ui.create("matrix-g1", [t.a.name, t.b.name]);
-  const second = await ui.create("matrix-g2", [t.a.name]);
+  const first = await ui.create(`matrix-g1-${randomUUID().slice(0, 8)}`, [
+    t.a.name,
+    t.b.name,
+  ]);
+  const second = await ui.create(`matrix-g2-${randomUUID().slice(0, 8)}`, [
+    t.a.name,
+  ]);
   const g1 = await gateway(auth, first.endpoint, shared, [t.aSlug, t.bSlug]);
   const g2 = await gateway(auth, second.endpoint, shared, [t.aSlug]);
   const other = await gateway(auth, second.endpoint, alternate, [t.aSlug]);

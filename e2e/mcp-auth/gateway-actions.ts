@@ -4,7 +4,9 @@ export type StoredGateway = { name: string; url: string; endpoint: string };
 
 /** Stored meta MCP servers, not the automatic organization/project gateway. */
 export class GatewayActions {
-  constructor(private readonly auth: AuthScenario) {}
+  constructor(
+    private readonly auth: Pick<AuthScenario, "page" | "dashboard">,
+  ) {}
 
   async projectEndpoint() {
     const { dashboard } = this.auth;
@@ -60,6 +62,12 @@ export class GatewayActions {
         ).toContainText(/ — (?:Organization|Project)/);
         const selectedIssuer = (await issuer.innerText()).trim();
         await page.reload();
+        // Separate fresh-page readiness from persisted issuer identity. Keep the
+        // exact issuer assertion below; never select a replacement on reload.
+        await expect(
+          page.getByRole("heading", { name: "Gateway URL", exact: true }),
+          "UI_STORED_GATEWAY_RELOAD_BLOCKER: settings must mount after reload",
+        ).toBeVisible({ timeout: 60_000 });
         await expect(
           page.getByRole("combobox", {
             name: "User session issuer",

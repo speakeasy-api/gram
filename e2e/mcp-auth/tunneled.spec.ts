@@ -54,7 +54,7 @@ test("native tunnel without an upstream resource stays anonymous beside a signed
   // Prime a real upstream connection in the same project. An unset tunnel
   // resource is not permission to guess this sibling's URL or forward its token.
   const sibling = await auth.dashboard.remote(
-    "tunnel-signed-sibling",
+    `tunnel-signed-sibling-${randomUUID().slice(0, 8)}`,
     auth.mock.profiles.oauthBeta,
     "user",
   );
@@ -62,12 +62,88 @@ test("native tunnel without an upstream resource stays anonymous beside a signed
   await auth.authorize(siblingClient);
   await auth.invoke(siblingClient, auth.mock.profiles.oauthBeta, "beta-user");
   const source = await tunnel.create(
-    "tunnel-unqualified",
+    `tunnel-unqualified-${randomUUID().slice(0, 8)}`,
     auth.mock.profiles.noAuth,
   );
   const direct = auth.client(source.endpoint);
   const offset = auth.mock.events.length;
-  await auth.authorize(direct);
+  await auth.authorize(direct, undefined, async () => {
+    const page = auth.page;
+    const consent = page.locator("#consent-tools-root");
+    const flag = async (
+      attribute: string,
+    ): Promise<"true" | "false" | "unknown"> => {
+      const [yes, no] = await Promise.all([
+        page.locator(`#consent-tools-root[${attribute}="true"]`).count(),
+        page.locator(`#consent-tools-root[${attribute}="false"]`).count(),
+      ]);
+      return yes === 1 && no === 0
+        ? "true"
+        : no === 1 && yes === 0
+          ? "false"
+          : "unknown";
+    };
+    const give = page.getByRole("button", { name: "Give access", exact: true });
+    const allTools = page.getByRole("button", {
+      name: "Give access to all tools",
+      exact: true,
+    });
+    const connect = page
+      .getByRole("link", { name: /^(?:Connect|Reconnect)(?:\s|$)/ })
+      .or(page.getByRole("button", { name: /^(?:Connect|Reconnect)(?:\s|$)/ }));
+    const [giveVisible, allToolsVisible, connectVisible] = await Promise.all([
+      give.first().isVisible(),
+      allTools.first().isVisible(),
+      connect.first().isVisible(),
+    ]);
+    // Record only fixed-state categories and counts, never identity-bearing DOM values.
+    await test.info().attach("anonymous-tunnel-consent-controls", {
+      contentType: "application/json",
+      body: JSON.stringify({
+        consentRootCount: await consent.count(),
+        consentEnabled: await flag("data-consent-enabled"),
+        inventoryDeferred: await flag("data-inventory-deferred"),
+        typedOptionCount: await page
+          .locator("[data-upstream-auth-option]")
+          .count(),
+        checkedTypedRadioCount: await page
+          .locator('input[type="radio"][name="auth_client"]:checked')
+          .count(),
+        hiddenChoiceCount: await page
+          .locator('input[type="hidden"][name="auth_client"]')
+          .count(),
+        giveAccess: {
+          count: await give.count(),
+          visible: giveVisible,
+          enabled: giveVisible ? await give.first().isEnabled() : false,
+        },
+        allTools: {
+          count: await allTools.count(),
+          visible: allToolsVisible,
+          enabled: allToolsVisible ? await allTools.first().isEnabled() : false,
+        },
+        connect: {
+          count: await connect.count(),
+          visible: connectVisible,
+          enabled: connectVisible ? await connect.first().isEnabled() : false,
+        },
+        inventoryFailureVisible: await page
+          .getByText(
+            "Tools could not be captured. This gateway cannot be approved. Try again later.",
+            { exact: true },
+          )
+          .first()
+          .isVisible(),
+        staleConfigurationVisible: await page
+          .getByText(
+            "This server’s configuration changed. Reload this page to review access.",
+            { exact: true },
+          )
+          .first()
+          .isVisible(),
+      }),
+    });
+  });
   await auth.invoke(direct, auth.mock.profiles.noAuth, "anonymous");
   const forwarded = auth.mock.events
     .slice(offset)
@@ -89,7 +165,7 @@ test("native tunnel without an upstream resource stays anonymous beside a signed
   ).toEqual([]);
 
   const gateway = await new GatewayActions(auth).create(
-    "tunnel-unqualified-gateway",
+    `tunnel-unqualified-gateway-${randomUUID().slice(0, 8)}`,
     [source.name, sibling.name],
   );
   const gatewayClient = auth.client(gateway.endpoint);
@@ -123,19 +199,23 @@ for (const surface of ["stored", "project"] as const) {
     const registration = await accounts.registration();
     const resource = auth.mock.profiles.serviceAccount;
     const sibling = await auth.dashboard.remote(
-      "tunnel-scoped-sibling",
+      `tunnel-scoped-sibling-${randomUUID().slice(0, 8)}`,
       resource,
     );
     const offer = await accounts.offer(
       sibling.serverURL,
       registration,
-      "tunnel-shared-self",
+      `tunnel-shared-self-${randomUUID().slice(0, 8)}`,
     );
     // This is deliberately a shared registration also offered on a real remote
     // source. Its RFC 8707 resource comes from that recorded remote attachment;
     // the tunnel's resource identifier is an explicit routing match, NOT a
     // claim that adding a tunnel identifier alone provisions OAuth metadata.
-    const source = await tunnel.create("tunnel-scoped", resource, resource);
+    const source = await tunnel.create(
+      `tunnel-scoped-${randomUUID().slice(0, 8)}`,
+      resource,
+      resource,
+    );
     await auth.dashboard.attachExistingOffer(offer, sibling.name, source.name);
     const graph = await auth.graph();
     const offers = [sibling.name, source.name].map((name) =>
@@ -162,10 +242,10 @@ for (const surface of ["stored", "project"] as const) {
     const endpoint =
       surface === "stored"
         ? (
-            await gateways.create("tunnel-scoped-gateway", [
-              sibling.name,
-              source.name,
-            ])
+            await gateways.create(
+              `tunnel-scoped-gateway-${randomUUID().slice(0, 8)}`,
+              [sibling.name, source.name],
+            )
           ).endpoint
         : await gateways.projectEndpoint();
     const client = auth.client(endpoint);

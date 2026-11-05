@@ -1,16 +1,25 @@
+import { randomUUID } from "node:crypto";
 import { test, expect, type AuthScenario } from "./fixtures.ts";
 import type { FixtureMcpClient } from "./client.ts";
 import { addPersonalOffer } from "./personal-offer-actions.ts";
 import { addStaticOffer, disableCredential } from "./credential-actions.ts";
 
 test.describe.configure({ mode: "default" });
-const betaName = "fixture-beta-personal-offer";
-const staticName = "fixture-dual-static-offer";
+let betaName = "";
+let staticName = "";
+test.beforeEach(() => {
+  betaName = `fixture-beta-personal-offer-${randomUUID().slice(0, 8)}`;
+  staticName = `fixture-dual-static-offer-${randomUUID().slice(0, 8)}`;
+});
 
 async function setup(auth: AuthScenario) {
   const { dashboard, page, mock } = auth;
   const resource = mock.profiles.dualProvider;
-  const a = await dashboard.remote("fixture-two-providers-a", resource, "user");
+  const a = await dashboard.remote(
+    `fixture-two-providers-a-${randomUUID().slice(0, 8)}`,
+    resource,
+    "user",
+  );
   const alphaName = await dashboard.personalCredentialName();
   const alpha = auth.client(a.endpoint);
   await auth.authorize(alpha);
@@ -20,7 +29,7 @@ async function setup(auth: AuthScenario) {
   // the separately covered same-provider sibling mirror mutation.
   const beforeBeta = mock.events.length;
   const b = await dashboard.remote(
-    "fixture-beta-registration-source",
+    `fixture-beta-registration-source-${randomUUID().slice(0, 8)}`,
     mock.profiles.oauthBeta,
     "user",
   );
@@ -187,7 +196,7 @@ test("enforced multiple OAuth: same administrator beta personal offer attaches t
   // Create the manual target before any personal mirror. It needs no default
   // OAuth offer; the exact existing beta offer is attached later via the UI.
   const c = await auth.dashboard.remote(
-    "fixture-two-providers-c",
+    `fixture-two-providers-c-${randomUUID().slice(0, 8)}`,
     auth.mock.profiles.dualProvider,
     "none",
   );

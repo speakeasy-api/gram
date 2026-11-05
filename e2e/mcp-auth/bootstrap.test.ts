@@ -19,12 +19,19 @@ test("bootstrap accepts only credential-free loopback URLs", () => {
   ])
     assert.throws(() => loopbackURL(value));
 });
-test("bootstrap preserves existing rows and scopes only the issuer resolver", () => {
+test("bootstrap preserves existing rows and scopes only the EMA flags", () => {
   const source =
     "distinct_id,flag,enabled\n*,existing-flag,true\nother,internal-session-issuer,false\n";
   const result = scopedCSV(source, "org_fixture");
-  assert.equal(result, source + "org_fixture,internal-session-issuer,true\n");
+  assert.equal(
+    result,
+    source +
+      "org_fixture,internal-session-issuer,true\norg_fixture,sign-in-enforcement,true\n",
+  );
   assert.equal(scopedCSV(result, "org_fixture"), result);
+  // A CSV from an earlier bootstrap gains only the row it lacks.
+  const earlier = source + "org_fixture,internal-session-issuer,true\n";
+  assert.equal(scopedCSV(earlier, "org_fixture"), result);
   for (const id of ["*", "", "org,other", "org\nother"])
     assert.throws(() => scopedCSV(source, id));
 });

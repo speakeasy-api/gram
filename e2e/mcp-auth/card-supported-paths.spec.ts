@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
+import type { CDPSession, Response } from "@playwright/test";
 import { test, expect, type AuthScenario } from "./fixtures.ts";
 
 // This baseline retains the issuer bridge created by the normal User Identity
 // journey. Enforcement remains enabled by fixtures.ts; this is not legacy mode.
 const scopes = ["fixture:read", "openid"];
 
+// Healthy-provider journeys must satisfy the strict HTTPS JWKS URI policy.
+test.use({ mockOptions: { https: true } });
 test.describe.configure({ mode: "default", retries: 0 });
 test.setTimeout(150_000);
 
@@ -54,6 +57,199 @@ async function supportedConnection(auth: AuthScenario) {
     },
     { timeout: 50_000 },
   );
+}
+
+// Observe ordinary UI traffic only; never attach bodies, identifiers, or URLs.
+async function observeDisconnectCreation(auth: AuthScenario) {
+  const observations: Record<string, string | number | boolean>[] = [];
+  const pending: Promise<void>[] = [];
+  const object = (value: unknown): Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const nonempty = (value: unknown) =>
+    typeof value === "string" && value.trim().length > 0;
+  const expectedOrigin = new URL(auth.dashboard.site).origin;
+  let session: CDPSession | undefined;
+  const operation = (method: string, rawURL: string) => {
+    if (method !== "POST") return undefined;
+    const url = new URL(rawURL);
+    if (url.origin !== expectedOrigin) return undefined;
+    switch (url.pathname) {
+      case "/rpc/remoteSessionIssuers.fetchMetadata":
+        return "fetchMetadata";
+      case "/rpc/remoteSessions.commitServerIdentityConfiguration":
+        return "commitServerIdentityConfiguration";
+      default:
+        return undefined;
+    }
+  };
+  const onRequest = (event: {
+    requestId: string;
+    request: { method: string; url: string; postData?: string };
+  }) => {
+    const step = operation(event.request.method, event.request.url);
+    if (!step || !session) return;
+    const observer = session;
+    // Only the allowlisted request ID and optional body enter the pending task.
+    const requestId = event.requestId;
+    const inlineBody = event.request.postData;
+    pending.push(
+      (async () => {
+        try {
+          const text =
+            inlineBody ??
+            (await observer.send("Network.getRequestPostData", { requestId }))
+              .postData;
+          const raw: unknown = JSON.parse(text);
+          if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+            observations.push({ step, phase: "request", parsed: false });
+            return;
+          }
+          const body = object(raw);
+          const provider = object(body.create_provider);
+          const profiles = provider.authorization_grant_profiles_supported;
+          observations.push({
+            step,
+            phase: "request",
+            parsed: true,
+            ...(step === "commitServerIdentityConfiguration"
+              ? {
+                  createProviderSupplied: Object.hasOwn(
+                    body,
+                    "create_provider",
+                  ),
+                  createProviderIsObject:
+                    body.create_provider !== null &&
+                    typeof body.create_provider === "object" &&
+                    !Array.isArray(body.create_provider),
+                  providerIdReuse: nonempty(body.provider_id),
+                  revocationEndpointKeyPresent: Object.hasOwn(
+                    provider,
+                    "revocation_endpoint",
+                  ),
+                  revocationEndpointNonempty: nonempty(
+                    provider.revocation_endpoint,
+                  ),
+                  authorizationGrantProfilesSupplied: Object.hasOwn(
+                    provider,
+                    "authorization_grant_profiles_supported",
+                  ),
+                  authorizationGrantProfilesIsArray: Array.isArray(profiles),
+                  authorizationGrantProfilesCount: Array.isArray(profiles)
+                    ? profiles.length
+                    : 0,
+                }
+              : {}),
+          });
+        } catch {
+          // CDP errors may contain request details; retain no error text.
+          observations.push({ step, phase: "request", parsed: false });
+        }
+      })(),
+    );
+  };
+  const onResponse = (response: Response) => {
+    const step = operation(response.request().method(), response.url());
+    if (!step) return;
+    pending.push(
+      (async () => {
+        try {
+          const raw: unknown = await response.json();
+          if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+            observations.push({
+              step,
+              phase: "response",
+              statusCode: response.status(),
+              parsed: false,
+            });
+            return;
+          }
+          const body = object(raw);
+          const provider = object(body.provider);
+          observations.push({
+            step,
+            phase: "response",
+            statusCode: response.status(),
+            parsed:
+              raw !== null && typeof raw === "object" && !Array.isArray(raw),
+            ...(step === "fetchMetadata"
+              ? {
+                  revocationEndpointKeyPresent: Object.hasOwn(
+                    body,
+                    "revocation_endpoint",
+                  ),
+                  revocationEndpointNonempty: nonempty(
+                    body.revocation_endpoint,
+                  ),
+                }
+              : {
+                  // provider_path is a dashboard URL, not a created/reused enum.
+                  providerPathPresent: nonempty(body.provider_path),
+                  providerReturned: Object.hasOwn(body, "provider"),
+                  providerRevocationEndpointKeyPresent: Object.hasOwn(
+                    provider,
+                    "revocation_endpoint",
+                  ),
+                  providerRevocationEndpointNonempty: nonempty(
+                    provider.revocation_endpoint,
+                  ),
+                  registered: body.status === "registered",
+                  linked: body.status === "linked",
+                  manualSetupRequired: body.manual_setup_required === true,
+                  registrationDcr: body.registration_method === "dcr",
+                  registrationCimd: body.registration_method === "cimd",
+                  registrationManual: body.registration_method === "manual",
+                  registrationExisting: body.registration_method === "existing",
+                }),
+          });
+        } catch {
+          observations.push({
+            step,
+            phase: "response",
+            statusCode: response.status(),
+            parsed: false,
+          });
+        }
+      })(),
+    );
+  };
+  auth.page.on("response", onResponse);
+  try {
+    try {
+      session = await auth.page.context().newCDPSession(auth.page);
+      session.on("Network.requestWillBeSent", onRequest);
+      await session.send("Network.enable", { maxPostDataSize: 65536 });
+    } catch {
+      session?.off("Network.requestWillBeSent", onRequest);
+      observations.push({ step: "observer", phase: "setup", available: false });
+    }
+    return await supportedConnection(auth);
+  } finally {
+    session?.off("Network.requestWillBeSent", onRequest);
+    auth.page.off("response", onResponse);
+    // Diagnostics must not replace the scenario's original failure.
+    await Promise.allSettled(pending);
+    if (session) {
+      try {
+        await session.detach();
+      } catch {
+        observations.push({
+          step: "observer",
+          phase: "teardown",
+          detached: false,
+        });
+      }
+    }
+    try {
+      await test.info().attach("disconnect-identity-creation-observation", {
+        body: JSON.stringify(observations),
+        contentType: "application/json",
+      });
+    } catch {
+      // Attachment failure must not mask the strict scenario result.
+    }
+  }
 }
 
 function assertGrant(
@@ -139,7 +335,10 @@ for (const action of ["Refresh", "Verify", "Disconnect"] as const) {
   test(`G4 supported typed card ${action}${action === "Disconnect" ? " and reconnect" : ""} with persisted enforcement and issuer bridge`, async ({
     auth,
   }) => {
-    const setup = await supportedConnection(auth);
+    const setup =
+      action === "Disconnect"
+        ? await observeDisconnectCreation(auth)
+        : await supportedConnection(auth);
     const { card, flow, displayName } = await connectedCard(auth, setup);
     try {
       await test.step(
@@ -161,7 +360,23 @@ for (const action of ["Refresh", "Verify", "Disconnect"] as const) {
                   exact: true,
                 });
           await expect(actionButton).toBeVisible();
-          await actionButton.click();
+          if (action === "Disconnect") {
+            const [response] = await Promise.all([
+              auth.page.waitForResponse(
+                (response) =>
+                  new URL(response.url()).pathname.endsWith(
+                    "/remote-session",
+                  ) && response.request().method() === "POST",
+              ),
+              actionButton.click(),
+            ]);
+            await test.info().attach("disconnect-action-response", {
+              body: JSON.stringify({ status: response.status() }),
+              contentType: "application/json",
+            });
+            // The consent action completes with a See Other back to the card.
+            expect(response.status()).toBe(303);
+          } else await actionButton.click();
           if (action === "Refresh") {
             await expect
               .poll(

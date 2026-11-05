@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect, type AuthScenario } from "./fixtures.ts";
 import { createOAuthRegistration } from "./auth-setup-actions.ts";
 import { addPersonalOffer } from "./personal-offer-actions.ts";
@@ -72,7 +73,11 @@ test("G15: public native tunnel never borrows a live or revoked personal upstrea
     const resource = auth.mock.profiles.oauthAlpha;
     const source =
       await test.step("G15 UI: create private native tunnel with explicit OAuth resource", async () =>
-        tunnel.create("fixture-g15-public-grant", resource, resource));
+        tunnel.create(
+          `fixture-g15-public-grant-${randomUUID().slice(0, 8)}`,
+          resource,
+          resource,
+        ));
     await test.step("G15 UI: attach the named registration and establish a real personal grant", async () => {
       await addPersonalOffer(auth.page, registration.name, registration.name);
       const signedIn = auth.client(source.endpoint);

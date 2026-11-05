@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 export type AuthGraphEdgeState = "present" | "missing" | "not_applicable";
 export interface AuthGraphOffer {
   client: string;
+  name?: string;
   type: string;
   source: string;
   enabled: boolean;
@@ -12,8 +13,16 @@ export interface AuthGraphOffer {
   bindingDeleted: boolean;
   registration: string | null;
   registrationDeleted: boolean | null;
+  registrationScopePresent?: boolean | null;
+  registrationResourcePresent?: boolean | null;
+  issuerResourcePolicy?:
+    | "not_applicable"
+    | "unset"
+    | "supported"
+    | "unsupported";
   issuer: string | null;
   issuerDeleted: boolean | null;
+  issuerRevocationEndpointPresent?: boolean | null;
   issuerBridge: AuthGraphEdgeState;
   directLegacyAssociation: AuthGraphEdgeState;
   selectedServerCount: number;
@@ -46,6 +55,29 @@ export interface AuthGraphGateway {
   members: AuthGraphGatewayMember[];
   outsideSelectedMemberCount: number;
 }
+export interface AuthGraphAutomaticGatewayRoles {
+  project: string;
+  issuerResolution: "sole" | "none" | "multiple";
+  organizationGatewayIssuer: string | null;
+  projectGatewayIssuer: string | null;
+}
+export interface AuthGraphAutomaticGateway {
+  /** Graph signals only: headers, runtime authorization, and availability are not captured. */
+  derivedOAuthSignal: boolean;
+  legacyOAuthGate:
+    | "matched"
+    | "unmatched"
+    | "issuer_unavailable"
+    | "not_applicable";
+  registrations: Array<{
+    registration: string;
+    liveLegacyAssociation: boolean;
+    gatewayIssuerLink: AuthGraphEdgeState;
+    organizationClientListEligible: boolean;
+    registrationDeleted: boolean;
+    providerDeleted: boolean | null;
+  }>;
+}
 export interface AuthGraphServer {
   server: string;
   project: string;
@@ -59,6 +91,7 @@ export interface AuthGraphServer {
   deleted: boolean;
   offers: AuthGraphOffer[];
   selections: AuthGraphSelection[];
+  automaticGateway?: AuthGraphAutomaticGateway;
 }
 export interface AuthGraph {
   capturedAt: string;
@@ -66,7 +99,11 @@ export interface AuthGraph {
   servers: AuthGraphServer[];
   gateways: AuthGraphGateway[];
   /** Computed gateways have no durable member rows in these tables. */
-  automaticGateways: { organization: "not_captured"; project: "not_captured" };
+  automaticGateways: {
+    organization: "not_captured";
+    project: "not_captured";
+    issuerLinks?: AuthGraphAutomaticGatewayRoles[];
+  };
 }
 
 const failure = (code: string) => new Error(`AUTH_GRAPH_${code}`);
@@ -175,6 +212,12 @@ p AS (
   SELECT l.mcp_server_id, l.source AS binding_source, l.deleted AS binding_deleted,
     c.*, r.id AS registration_id, r.deleted AS registration_deleted,
     i.id AS issuer_id, i.deleted AS issuer_deleted,
+    CASE WHEN i.id IS NOT NULL THEN nullif(i.revocation_endpoint, '') IS NOT NULL END AS issuer_revocation_endpoint_present,
+    CASE WHEN r.id IS NOT NULL THEN coalesce(cardinality(r.scope), 0) > 0 END AS registration_scope_present,
+    CASE WHEN r.id IS NOT NULL THEN nullif(r.resource_identifier, '') IS NOT NULL END AS registration_resource_present,
+    CASE WHEN i.id IS NULL THEN 'not_applicable'
+      WHEN i.resource_indicator_supported IS NULL THEN 'unset'
+      WHEN i.resource_indicator_supported THEN 'supported' ELSE 'unsupported' END AS issuer_resource_policy,
     CASE WHEN r.id IS NULL THEN 'not_applicable'
       WHEN EXISTS (
         SELECT 1 FROM remote_session_client_user_session_issuers b
@@ -259,11 +302,58 @@ p AS (
       AND NOT a.registration_deleted AND NOT a.deleted AND NOT a.binding_deleted
     ORDER BY a.registration_alias LIMIT 1
   ) registration ON true
+), gateway_roles AS (
+  -- Both automatic gateway scopes use the sole live organization-level issuer.
+  SELECT p.id AS project_id, p.alias AS project_alias,
+    count(u.id)::int AS issuer_count,
+    CASE WHEN count(u.id) = 1 THEN (array_agg(u.id))[1] END AS issuer_id
+  FROM p LEFT JOIN user_session_issuers u
+    ON u.organization_id = p.organization_id AND u.project_id IS NULL AND NOT u.deleted
+  GROUP BY p.id, p.alias
+), gateway_role_aliases AS (
+  SELECT g.*, CASE WHEN g.issuer_id IS NOT NULL THEN
+    'user-issuer-' || substr(md5(g.issuer_id::text || '${aliasSalt}'), 1, 12) END AS issuer_alias
+  FROM gateway_roles g
+), gateway_legacy AS (
+  SELECT DISTINCT s.id AS server_id, c.id AS registration_id
+  FROM s JOIN mcp_server_remote_session_clients a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+      AND a.organization_id = s.organization_id AND NOT a.deleted
+  JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND NOT c.deleted
+    AND (c.project_id = s.project_id
+      OR (c.project_id IS NULL AND c.organization_id = s.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+), gateway_exact_registrations AS (
+  SELECT mcp_server_id AS server_id, registration_id FROM offers
+  WHERE registration_id IS NOT NULL
+  UNION
+  SELECT server_id, registration_id FROM gateway_legacy
+), gateway_registration_edges AS (
+  SELECT x.server_id, x.registration_id,
+    'registration-' || substr(md5(x.registration_id::text || '${aliasSalt}'), 1, 12) AS registration_alias,
+    EXISTS (SELECT 1 FROM gateway_legacy l
+      WHERE l.server_id = x.server_id AND l.registration_id = x.registration_id) AS live_legacy_association,
+    EXISTS (SELECT 1 FROM remote_session_client_user_session_issuers b
+      WHERE b.remote_session_client_id = x.registration_id
+        AND b.user_session_issuer_id = g.issuer_id) AS gateway_issuer_link,
+    coalesce((NOT c.deleted AND i.id IS NOT NULL AND
+      (c.project_id = s.project_id OR
+        (c.project_id IS NULL AND c.organization_id = s.organization_id))), false) AS organization_client_list_eligible,
+    c.deleted AS registration_deleted, i.deleted AS provider_deleted
+  FROM gateway_exact_registrations x JOIN s ON s.id = x.server_id
+  JOIN gateway_roles g ON g.project_id = s.project_id
+  JOIN remote_session_clients c ON c.id = x.registration_id
+  LEFT JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id
 )
 SELECT json_build_object(
   'capturedAt', transaction_timestamp(),
   'projects', (SELECT coalesce(json_agg(alias ORDER BY alias), '[]') FROM p),
-  'automaticGateways', json_build_object('organization', 'not_captured', 'project', 'not_captured'),
+  'automaticGateways', json_build_object('organization', 'not_captured', 'project', 'not_captured',
+    'issuerLinks', (SELECT coalesce(json_agg(json_build_object(
+      'project', g.project_alias,
+      'issuerResolution', CASE g.issuer_count WHEN 0 THEN 'none' WHEN 1 THEN 'sole' ELSE 'multiple' END,
+      'organizationGatewayIssuer', g.issuer_alias, 'projectGatewayIssuer', g.issuer_alias
+    ) ORDER BY g.project_alias), '[]') FROM gateway_role_aliases g)),
   'gateways', (SELECT coalesce(json_agg(json_build_object(
     'gateway', g.alias, 'project', g.project_alias, 'name', g.name,
     'issuer', g.issuer_alias, 'missingIssuer', g.missing_issuer, 'deleted', g.deleted,
@@ -286,6 +376,25 @@ SELECT json_build_object(
     'derivedUpstreamIssuer', CASE WHEN s.remote_session_issuer_id IS NOT NULL THEN 'issuer-' || substr(md5(s.remote_session_issuer_id::text || '${aliasSalt}'), 1, 12) END,
     'visibility', s.visibility,
     'disabled', s.visibility = 'disabled', 'deleted', s.deleted,
+    'automaticGateway', (SELECT json_build_object(
+      'derivedOAuthSignal', s.remote_session_issuer_id IS NOT NULL OR
+        EXISTS (SELECT 1 FROM gateway_legacy l WHERE l.server_id = s.id),
+      -- This is only the exact legacy registration gate, not final eligibility.
+      'legacyOAuthGate', CASE
+        WHEN s.remote_mcp_server_id IS NULL AND s.tunneled_mcp_server_id IS NULL THEN 'not_applicable'
+        WHEN g.issuer_count <> 1 THEN 'issuer_unavailable'
+        WHEN EXISTS (SELECT 1 FROM gateway_registration_edges e WHERE e.server_id = s.id
+          AND e.live_legacy_association AND e.gateway_issuer_link AND e.organization_client_list_eligible)
+          THEN 'matched' ELSE 'unmatched' END,
+      'registrations', (SELECT coalesce(json_agg(json_build_object(
+        'registration', e.registration_alias,
+        'liveLegacyAssociation', e.live_legacy_association,
+        'gatewayIssuerLink', CASE WHEN g.issuer_count <> 1 THEN 'not_applicable'
+          WHEN e.gateway_issuer_link THEN 'present' ELSE 'missing' END,
+        'organizationClientListEligible', e.organization_client_list_eligible,
+        'registrationDeleted', e.registration_deleted, 'providerDeleted', e.provider_deleted
+      ) ORDER BY e.registration_alias), '[]') FROM gateway_registration_edges e WHERE e.server_id = s.id)
+    ) FROM gateway_roles g WHERE g.project_id = s.project_id),
     'selections', (SELECT coalesce(json_agg(json_build_object(
       'choice', q.alias, 'credentialKind', q.credential_kind, 'noAuth', q.no_auth,
       'typedClient', q.client_alias, 'missingTypedClient', q.missing_typed_client,
@@ -294,10 +403,15 @@ SELECT json_build_object(
     ) ORDER BY q.id), '[]') FROM choices q WHERE q.mcp_server_id = s.id),
     'offers', (SELECT coalesce(json_agg(json_build_object(
       'client', a.client_alias, 'type', a.client_type, 'source', a.source,
+      'name', a.name,
       'enabled', a.enabled, 'deleted', a.deleted,
       'bindingSource', a.binding_source, 'bindingDeleted', a.binding_deleted,
       'registration', a.registration_alias, 'registrationDeleted', a.registration_deleted,
+      'registrationScopePresent', a.registration_scope_present,
+      'registrationResourcePresent', a.registration_resource_present,
+      'issuerResourcePolicy', a.issuer_resource_policy,
       'issuer', a.issuer_alias, 'issuerDeleted', a.issuer_deleted,
+      'issuerRevocationEndpointPresent', a.issuer_revocation_endpoint_present,
       'issuerBridge', a.bridge, 'directLegacyAssociation', a.direct,
       'selectedServerCount', coalesce(peers.selected_servers, 0),
       'selectedProjectCount', coalesce(peers.selected_projects, 0),

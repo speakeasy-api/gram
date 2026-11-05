@@ -13,7 +13,6 @@ async function secondProject(auth: AuthScenario) {
   const dashboard = new Dashboard(auth.page);
   dashboard.organizationSlug = auth.dashboard.organizationSlug;
   await auth.page.goto(`${dashboard.site}/${dashboard.organizationSlug}`);
-  await dashboard.enforce();
   await dashboard.createProject(`auth-e2e-${randomUUID().slice(0, 8)}`);
   return dashboard;
 }
@@ -37,7 +36,12 @@ test("enforced cross-project: organization-scoped static client shares rotation 
   const { page, dashboard, mock } = auth;
   const shared = `fixture-cross-project-static-${randomUUID().slice(0, 8)}`;
   const resource = mock.profiles.multiMethod;
-  const a = await dashboard.remote("fixture-project-a", resource, "user", true);
+  const a = await dashboard.remote(
+    `fixture-project-a-${randomUUID().slice(0, 8)}`,
+    resource,
+    "user",
+    true,
+  );
   const personalAName = await dashboard.personalCredentialName();
   const personalA = auth.client(a.endpoint);
   await auth.authorize(personalA);
@@ -47,7 +51,12 @@ test("enforced cross-project: organization-scoped static client shares rotation 
   const secondGrants: FixtureMcpClient[] = [];
   let passed = false;
   try {
-    const b = await second.remote("fixture-project-b", resource, "user", true);
+    const b = await second.remote(
+      `fixture-project-b-${randomUUID().slice(0, 8)}`,
+      resource,
+      "user",
+      true,
+    );
     const personalBName = await second.personalCredentialName();
     const personalB = auth.client(b.endpoint);
     // Discover both issuers over the actual resource challenges; a visually
@@ -96,7 +105,6 @@ test("enforced cross-project: organization-scoped static client shares rotation 
     await auth.graph([second.projectURL]);
     // Revoke before deleting B's issuer and release base-cleanup ownership.
     for (const grant of secondGrants) await auth.revoke(grant);
-    await second.restoreEnforcement();
     if (passed) await second.removeProject();
   }
 });
@@ -108,7 +116,7 @@ test("enforced cross-project: project-scoped static is absent from other project
   const shared = `fixture-cross-project-static-${randomUUID().slice(0, 8)}`;
   const resource = mock.profiles.multiMethod;
   const a = await dashboard.remote(
-    "fixture-private-project-a",
+    `fixture-private-project-a-${randomUUID().slice(0, 8)}`,
     resource,
     "user",
     true,
@@ -129,7 +137,7 @@ test("enforced cross-project: project-scoped static is absent from other project
   let passed = false;
   try {
     const b = await second.remote(
-      "fixture-private-project-b",
+      `fixture-private-project-b-${randomUUID().slice(0, 8)}`,
       resource,
       "user",
       true,
@@ -141,7 +149,7 @@ test("enforced cross-project: project-scoped static is absent from other project
     await auth.authorize(personalB);
     secondGrants.push(personalB);
     const control = await second.remote(
-      "fixture-local-control",
+      `fixture-local-control-${randomUUID().slice(0, 8)}`,
       mock.profiles.noAuth,
     );
     await addStaticOffer(
@@ -208,7 +216,6 @@ test("enforced cross-project: project-scoped static is absent from other project
     await auth.graph([second.projectURL]);
     await revokeKey(auth, credentialsURL);
     for (const grant of secondGrants) await auth.revoke(grant);
-    await second.restoreEnforcement();
     if (passed) await second.removeProject();
   }
 });

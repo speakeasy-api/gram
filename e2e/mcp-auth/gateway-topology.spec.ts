@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type AuthScenario } from "./fixtures.ts";
 import { GatewayActions } from "./gateway-actions.ts";
+import {
+  consentObserver,
+  inventoryObserver,
+  sourceTopology,
+} from "./gateway-control-diagnostics.ts";
 import { gatewayEchoes } from "./gateway.ts";
 import type { FixtureMcpClient } from "./client.ts";
 
@@ -37,9 +42,24 @@ async function member(
   };
 }
 
-async function connect(auth: AuthScenario, endpoint: string) {
+async function connect(
+  auth: AuthScenario,
+  endpoint: string,
+  members?: Member[],
+  phase = "gateway",
+) {
   const client = auth.client(endpoint);
-  await auth.authorize(client);
+  await auth.authorize(
+    client,
+    undefined,
+    members
+      ? consentObserver(
+          auth.page,
+          members.map((member) => member.slug),
+          phase,
+        )
+      : undefined,
+  );
   return client;
 }
 
@@ -47,10 +67,12 @@ async function echoes(
   auth: AuthScenario,
   client: FixtureMcpClient,
   members: Member[],
+  phase?: string,
 ) {
   const tools = await gatewayEchoes(
     client,
     members.map((m) => m.slug),
+    phase ? inventoryObserver(phase) : undefined,
   );
   for (const [index, tool] of tools.entries()) {
     const target = members[index]!;
@@ -114,13 +136,6 @@ async function excludes(
       ),
       "GATEWAY_MEMBERSHIP_BLEED: unrelated member must not be discoverable",
     ).toBe(false);
-    if (formerlyQualified) {
-      const result = await client.callTool("execute_tool", {
-        name: formerlyQualified,
-        arguments: { marker: randomUUID() },
-      });
-      expect(result).toMatchObject({ isError: true });
-    }
   } else {
     expect(
       tools.some(
@@ -129,12 +144,24 @@ async function excludes(
           tool.name.includes(`.${forbidden.slug}--`),
       ),
     ).toBe(false);
-    if (formerlyQualified) {
-      const result = await client
-        .callTool(formerlyQualified, { marker: randomUUID() })
-        .catch(() => null);
-      if (result !== null) expect(result).toMatchObject({ isError: true });
-    }
+  }
+  if (formerlyQualified) {
+    // Removed tools can be rejected at the JSON-RPC boundary rather than
+    // returning an MCP tool error. Network failures are not rejection evidence.
+    const outcome = await (
+      tools.some((tool) => tool.name === "list_servers")
+        ? client.callTool("execute_tool", {
+            name: formerlyQualified,
+            arguments: { marker: randomUUID() },
+          })
+        : client.callTool(formerlyQualified, { marker: randomUUID() })
+    ).then(
+      (result) => ({ result, error: undefined }),
+      (error: unknown) => ({ result: undefined, error: String(error) }),
+    );
+    if (outcome.error !== undefined)
+      expect(outcome.error).toMatch(/HTTP (401|403|404)|JSON-RPC error/i);
+    else expect(outcome.result).toMatchObject({ isError: true });
   }
   expect(
     auth.mock.events
@@ -151,12 +178,42 @@ for (const kind of ["project", "stored"] as const) {
     const a = await member(auth, "overlap-a", "alpha");
     const b = await member(auth, "overlap-b", "beta", true);
     const ui = new GatewayActions(auth);
-    const endpoint =
-      kind === "project"
-        ? await ui.projectEndpoint()
-        : (await ui.create("overlap-stored", [a.name, b.name])).endpoint;
-    const gateway = await connect(auth, endpoint);
-    await echoes(auth, gateway, [a, b]);
+    const names = [a.name, b.name];
+    const before = sourceTopology(await auth.graph(), names);
+    const stored = await ui.create(
+      `overlap-stored-${randomUUID().slice(0, 8)}`,
+      names,
+    );
+    try {
+      const control = await connect(
+        auth,
+        stored.endpoint,
+        [a, b],
+        "stored-control",
+      );
+      await echoes(auth, control, [a, b], "stored-control");
+    } finally {
+      expect(
+        sourceTopology(await auth.graph(), names),
+        "Stored control must preserve both source bindings",
+      ).toEqual(before);
+    }
+    if (kind === "project") {
+      try {
+        const gateway = await connect(
+          auth,
+          await ui.projectEndpoint(),
+          [a, b],
+          "automatic-project",
+        );
+        await echoes(auth, gateway, [a, b], "automatic-project");
+      } finally {
+        expect(
+          sourceTopology(await auth.graph(), names),
+          "Automatic control must preserve both source bindings",
+        ).toEqual(before);
+      }
+    }
     await auth.invoke(a.direct, a.resource, a.principal);
     await auth.invoke(b.direct, b.resource, b.principal);
   });
@@ -169,8 +226,14 @@ test("enforced: G1={A,B}, G2={A,C} isolate catalogs and membership changes from 
   const b = await member(auth, "overlap-b", "beta", true);
   const c = await member(auth, "overlap-c", "alpha");
   const ui = new GatewayActions(auth);
-  const g1 = await ui.create("overlap-g1", [a.name, b.name]);
-  const g2 = await ui.create("overlap-g2", [a.name, c.name]);
+  const g1 = await ui.create(`overlap-g1-${randomUUID().slice(0, 8)}`, [
+    a.name,
+    b.name,
+  ]);
+  const g2 = await ui.create(`overlap-g2-${randomUUID().slice(0, 8)}`, [
+    a.name,
+    c.name,
+  ]);
   const first = await connect(auth, g1.endpoint);
   const second = await connect(auth, g2.endpoint);
   await echoes(auth, first, [a, b]);
@@ -197,15 +260,45 @@ test("enforced: organization, automatic project, and stored gateways overlap on 
   const a = await member(auth, "overlap-a", "alpha");
   const b = await member(auth, "overlap-b", "beta", true);
   const ui = new GatewayActions(auth);
-  const stored = await ui.create("overlap-stored", [a.name, b.name]);
+  const names = [a.name, b.name];
+  const before = sourceTopology(await auth.graph(), names);
+  const stored = await ui.create(
+    `overlap-stored-${randomUUID().slice(0, 8)}`,
+    names,
+  );
+  const callers = [];
+  try {
+    const control = await connect(
+      auth,
+      stored.endpoint,
+      [a, b],
+      "stored-control",
+    );
+    await echoes(auth, control, [a, b], "stored-control");
+    callers.push(control);
+  } finally {
+    expect(
+      sourceTopology(await auth.graph(), names),
+      "Stored control must preserve both source bindings",
+    ).toEqual(before);
+  }
   const organization = await auth.dashboard.organizationGateway();
   const project = await ui.projectEndpoint();
   expect(new Set([organization, project, stored.endpoint]).size).toBe(3);
-  const callers = [];
-  for (const endpoint of [organization, project, stored.endpoint]) {
-    const caller = await connect(auth, endpoint);
-    await echoes(auth, caller, [a, b]);
-    callers.push(caller);
+  for (const [phase, endpoint] of [
+    ["automatic-organization", organization],
+    ["automatic-project", project],
+  ] as const) {
+    try {
+      const caller = await connect(auth, endpoint, [a, b], phase);
+      await echoes(auth, caller, [a, b], phase);
+      callers.push(caller);
+    } finally {
+      expect(
+        sourceTopology(await auth.graph(), names),
+        "Automatic control must preserve both source bindings",
+      ).toEqual(before);
+    }
   }
   // Keep existing sessions alive while the overlapping callers are established.
   for (const caller of callers) await echoes(auth, caller, [a, b]);
@@ -217,8 +310,12 @@ test("enforced: typed multi-offer source keeps direct OAuth while stored gateway
   auth,
 }) => {
   const resource = auth.mock.profiles.multiMethod;
-  const server = await auth.dashboard.remote("overlap-multi", resource, "user");
-  const offer = "overlap-shared-static";
+  const server = await auth.dashboard.remote(
+    `overlap-multi-${randomUUID().slice(0, 8)}`,
+    resource,
+    "user",
+  );
+  const offer = `overlap-shared-static-${randomUUID().slice(0, 8)}`;
   // Establish OAuth before adding the second offer, avoiding ambiguous consent defaults.
   const oauth = auth.client(server.endpoint);
   await auth.authorize(oauth);

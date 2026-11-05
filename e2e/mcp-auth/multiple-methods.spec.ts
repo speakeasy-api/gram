@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, expect, type AuthScenario } from "./fixtures.ts";
 import {
   addStaticOffer,
@@ -9,28 +10,77 @@ import type { FixtureMcpClient } from "./client.ts";
 
 // Each topology is built in its own UI-created project, never from seeded state.
 test.describe.configure({ mode: "default" });
-const sharedName = "fixture-shared-static";
-const alternateName = "fixture-alternate-static";
+let sharedName = "";
+let alternateName = "";
+test.beforeEach(() => {
+  sharedName = `fixture-shared-static-${randomUUID().slice(0, 8)}`;
+  alternateName = `fixture-alternate-static-${randomUUID().slice(0, 8)}`;
+});
+
+async function checkpoint(
+  auth: AuthScenario,
+  stage: string,
+  personalNames: string[],
+) {
+  test.info().annotations.push({ type: "auth-stage", description: stage });
+  const graph = await auth.graph();
+  for (const name of personalNames) {
+    const source = graph.servers.find((server) => server.name === name);
+    expect(
+      source,
+      `FIXTURE_MODEL_MISMATCH: ${stage}: source exists`,
+    ).toBeDefined();
+    expect
+      .soft(
+        source!.offers.filter(
+          (offer) =>
+            offer.type === "remote_session" &&
+            offer.enabled &&
+            !offer.deleted &&
+            !offer.bindingDeleted,
+        ),
+        `PERSONAL_BINDING_LOSS_REGRESSION: ${stage}: ${name} must retain its personal alternative (checkpoint, not writer attribution)`,
+      )
+      .toHaveLength(1);
+  }
+  return graph;
+}
 
 async function sharedTopology(auth: AuthScenario) {
   const { dashboard, page, mock } = auth;
   const resource = mock.profiles.multiMethod;
-  const a = await dashboard.remote("fixture-methods-a", resource, "user");
+  const a = await dashboard.remote(
+    `fixture-methods-a-${randomUUID().slice(0, 8)}`,
+    resource,
+    "user",
+  );
+  await checkpoint(auth, "A-created-before-login", [a.name]);
   const personalAName = await dashboard.personalCredentialName();
   const personalA = auth.client(a.endpoint);
   await auth.authorize(personalA);
+  await checkpoint(auth, "A-logged-in", [a.name]);
   await auth.invoke(personalA, resource, "alpha-user");
   await page.goto(`${a.serverURL}/settings`);
   await addStaticOffer(page, sharedName, "fixture-static-secret");
+  await checkpoint(auth, "A-static-added", [a.name]);
   const resourceB = mock.profiles.multiMethodBeta;
-  const b = await dashboard.remote("fixture-methods-b", resourceB, "user");
+  const b = await dashboard.remote(
+    `fixture-methods-b-${randomUUID().slice(0, 8)}`,
+    resourceB,
+    "user",
+  );
+  await checkpoint(auth, "B-saved-before-login", [a.name, b.name]);
   const personalBName = await dashboard.personalCredentialName();
   const personalB = auth.client(b.endpoint);
   await auth.authorize(personalB);
+  await checkpoint(auth, "B-logged-in", [a.name, b.name]);
   await auth.invoke(personalB, resourceB, "beta-user");
   await page.goto(`${b.serverURL}/settings`);
   await dashboard.attachExistingOffer(sharedName, a.name, b.name);
-  const graph = await auth.graph();
+  const graph = await checkpoint(auth, "shared-static-attached", [
+    a.name,
+    b.name,
+  ]);
   const sources = [a.name, b.name].map((name) =>
     graph.servers.find((server) => server.name === name),
   );
@@ -48,7 +98,7 @@ async function sharedTopology(auth: AuthScenario) {
             !offer.deleted &&
             !offer.bindingDeleted,
         ),
-        "PERSONAL_BINDING_LOSS_REGRESSION: attaching the same static client must retain each personal alternative",
+        "PERSONAL_BINDING_LOSS_REGRESSION: after shared static attachment each personal alternative must remain; earlier checkpoints locate the first observed loss",
       )
       .toHaveLength(1);
   }
@@ -138,7 +188,7 @@ test("enforced methods: personal plus two static offers select each explicitly a
   const { dashboard, page, mock } = auth;
   const resource = mock.profiles.multiMethod;
   const server = await dashboard.remote(
-    "fixture-three-offers",
+    `fixture-three-offers-${randomUUID().slice(0, 8)}`,
     resource,
     "user",
   );
@@ -178,6 +228,23 @@ test("enforced methods: same static client on two servers keeps personal alterna
     [topology.a, topology.personalAName, topology.resource, "alpha-user"],
     [topology.b, topology.personalBName, topology.resourceB, "beta-user"],
   ] as const) {
+    // Resolve the personal alternative on this exact source. A sibling may
+    // have the same display name; it must never supply the expected identity.
+    const current = await auth.graph();
+    const personal = current.servers
+      .find((source) => source.name === server.name)
+      ?.offers.filter(
+        (offer) =>
+          offer.type === "remote_session" &&
+          offer.name === choice &&
+          offer.enabled &&
+          !offer.deleted &&
+          !offer.bindingDeleted,
+      );
+    expect(
+      personal?.length === 1,
+      "PERSONAL_BINDING_LOSS_REGRESSION: fresh personal selection requires its own source's live offer, never a same-named sibling client",
+    ).toBe(true);
     const client = auth.client(server.endpoint);
     await auth.authorize(client, choice);
     await auth.invoke(client, resource, principal);
@@ -266,15 +333,16 @@ for (const sameResource of [true, false]) {
       ? resourceA
       : auth.mock.profiles.multiMethodTwin;
     const a = await auth.dashboard.remote(
-      "fixture-sibling-a",
+      `fixture-sibling-a-${randomUUID().slice(0, 8)}`,
       resourceA,
       "user",
     );
+    await checkpoint(auth, "A-created-before-login", [a.name]);
     const originalName = await auth.dashboard.personalCredentialName();
     const existing = auth.client(a.endpoint);
     await auth.authorize(existing);
     await auth.invoke(existing, resourceA, "alpha-user");
-    const before = await auth.graph();
+    const before = await checkpoint(auth, "A-logged-in", [a.name]);
     expect(
       before.servers
         .find((server) => server.name === a.name)
@@ -295,14 +363,14 @@ for (const sameResource of [true, false]) {
         !offer.bindingDeleted,
     )!;
     const b = await auth.dashboard.remote(
-      "fixture-sibling-b",
+      `fixture-sibling-b-${randomUUID().slice(0, 8)}`,
       resourceB,
       "user",
     );
-    const second = auth.client(b.endpoint);
-    await auth.authorize(second);
-    await auth.invoke(second, resourceB, "alpha-user");
-    const after = await auth.graph();
+    const after = await checkpoint(auth, "B-saved-before-login", [
+      a.name,
+      b.name,
+    ]);
     const retained = after.servers.find((server) => server.name === a.name)!;
     test.info().annotations.push({ type: "gap-hypothesis", description: "G8" });
     expect
@@ -341,6 +409,10 @@ for (const sameResource of [true, false]) {
         "SIBLING_BINDING_LOSS_REGRESSION: B setup must retain A's persisted personal binding",
       )
       .toHaveLength(1);
+    const second = auth.client(b.endpoint);
+    await auth.authorize(second);
+    await checkpoint(auth, "B-logged-in", [a.name, b.name]);
+    await auth.invoke(second, resourceB, "alpha-user");
     await auth.page.goto(`${a.serverURL}/settings`);
     await expect(
       auth.page

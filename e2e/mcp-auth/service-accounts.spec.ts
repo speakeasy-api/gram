@@ -12,13 +12,19 @@ async function sharedSources(auth: AuthScenario) {
   const actions = new ServiceAccountActions(auth);
   const registration = await actions.registration();
   const resource = auth.mock.profiles.serviceAccount;
-  const first = await auth.dashboard.remote("self-first", resource);
+  const first = await auth.dashboard.remote(
+    `self-first-${randomUUID().slice(0, 8)}`,
+    resource,
+  );
   const offer = await actions.offer(
     first.serverURL,
     registration,
     "shared-service-account",
   );
-  const second = await auth.dashboard.remote("self-second", resource);
+  const second = await auth.dashboard.remote(
+    `self-second-${randomUUID().slice(0, 8)}`,
+    resource,
+  );
   await auth.dashboard.attachExistingOffer(offer, first.name, second.name);
   const graph = await auth.graph();
   const modeled = graph.servers.filter((server) =>
@@ -148,10 +154,10 @@ test("shared service account on the same direct sources and a stored gateway", a
     await authorizeSelf(auth, direct);
     await auth.invoke(direct, resource, "alpha-service");
   }
-  const gateway = await new GatewayActions(auth).create("self-stored-gateway", [
-    first.name,
-    second.name,
-  ]);
+  const gateway = await new GatewayActions(auth).create(
+    `self-stored-gateway-${randomUUID().slice(0, 8)}`,
+    [first.name, second.name],
+  );
   for (let attempt = 0; attempt < 2; attempt++) {
     const client = auth.client(gateway.endpoint);
     await authorizeSelf(auth, client);
@@ -187,7 +193,10 @@ test("organization-scoped self credential is reused across two UI-created projec
   const actions = new ServiceAccountActions(auth);
   const registration = await actions.registration();
   const resource = auth.mock.profiles.serviceAccount;
-  const first = await auth.dashboard.remote("self-project-one", resource);
+  const first = await auth.dashboard.remote(
+    `self-project-one-${randomUUID().slice(0, 8)}`,
+    resource,
+  );
   const offer = await actions.offer(
     first.serverURL,
     registration,
@@ -202,7 +211,10 @@ test("organization-scoped self credential is reused across two UI-created projec
   // Keep a failed fixture available for diagnosis, matching the shared fixture.
   let complete = false;
   try {
-    const second = await other.remote("self-project-two", resource);
+    const second = await other.remote(
+      `self-project-two-${randomUUID().slice(0, 8)}`,
+      resource,
+    );
     await other.attachExistingOffer(offer, first.name, second.name);
     for (const server of [first, second]) {
       const client = auth.client(server.endpoint);

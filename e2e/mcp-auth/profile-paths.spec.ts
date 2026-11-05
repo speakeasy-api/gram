@@ -5,9 +5,11 @@ import { ProfileActions } from "./profile-actions.ts";
 
 // This covers the administrator's issuance-profile surface, not assistant turns
 // or headless token issuance. Existing sessions deliberately keep their choice.
+// Multiple offers alone do not prove ambiguity: one eligible OAuth registration
+// can select personal OAuth automatically. This test proves only saved overrides.
 test.use({ trace: "off", screenshot: "off", video: "off" });
 
-test("G27 administration: ambiguous offers require an explicit app choice; removal and recovery persist", async ({
+test("G27 administration: explicit app choices among mixed offers persist through removal and recovery", async ({
   auth,
 }) => {
   test.setTimeout(240_000);
@@ -19,14 +21,14 @@ test("G27 administration: ambiguous offers require an explicit app choice; remov
   const { page, dashboard, mock } = auth;
   const profiles = new ProfileActions(page);
   const caller = `fixture-profile-app-${randomUUID().slice(0, 8)}`;
-  const first = "fixture-profile-first";
-  const second = "fixture-profile-second";
+  const first = `fixture-profile-first-${randomUUID().slice(0, 8)}`;
+  const second = `fixture-profile-second-${randomUUID().slice(0, 8)}`;
 
   const { server, personal } = await test.step(
     "UI provision and prove personal execution baseline",
     async () => {
       const server = await dashboard.remote(
-        "fixture-profile-choice",
+        `fixture-profile-choice-${randomUUID().slice(0, 8)}`,
         mock.profiles.multiMethod,
         "user",
       );

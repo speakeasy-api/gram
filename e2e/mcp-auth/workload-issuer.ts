@@ -7,10 +7,12 @@ import {
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { readFile } from "node:fs/promises";
-import { createServer } from "node:https";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import type { Discovery } from "./client.ts";
 import type { AuthScenario } from "./fixtures.ts";
+import { acquireHost, hostOrigin } from "./scenario-host.ts";
+import { createScenario, type ScenarioRequest } from "./scenario-store.ts";
 
 /** Ephemeral protocol identity: the TLS private key is never a JWT signing key. */
 export function workloadSigner() {
@@ -66,80 +68,95 @@ export function validateWorkloadAddresses(
 }
 
 /**
- * Dedicated TLS fixture, independent of dashboard/server certificates.
+ * Dedicated TLS material, independent of dashboard/server certificates.
  * Default DNS depends on sslip.io; every startup checks exclusively IPv4 loopback.
  * .localhost can also resolve ::1, which this IPv4-only listener cannot serve.
  * With an EXISTING trusted mkcert CA (never install a CA here), provision with:
  * mkcert -cert-file local/ssl/certs/workload.pem -key-file local/ssl/keys/workload-key.pem 127.0.0.1.sslip.io
  * Node must also trust that CA, e.g. NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem".
  */
-export async function startWorkloadIssuer() {
+export async function loadWorkloadTLS() {
   const root = resolve(import.meta.dirname, "../..");
   const hostname = process.env.MCP_AUTH_WORKLOAD_HOST || "127.0.0.1.sslip.io";
   validateWorkloadHostname(hostname);
   validateWorkloadAddresses(
     await lookup(hostname, { all: true }).catch(() => []),
   );
-  const certPath =
-    process.env.MCP_AUTH_WORKLOAD_CERT_FILE ||
-    resolve(root, "local/ssl/certs/workload.pem");
-  const keyPath =
-    process.env.MCP_AUTH_WORKLOAD_KEY_FILE ||
-    resolve(root, "local/ssl/keys/workload-key.pem");
   const [cert, key] = await Promise.all([
-    readFile(certPath),
-    readFile(keyPath),
+    readFile(
+      process.env.MCP_AUTH_WORKLOAD_CERT_FILE ||
+        resolve(root, "local/ssl/certs/workload.pem"),
+    ),
+    readFile(
+      process.env.MCP_AUTH_WORKLOAD_KEY_FILE ||
+        resolve(root, "local/ssl/keys/workload-key.pem"),
+    ),
   ]);
-  if (!new X509Certificate(cert).checkHost(hostname)) {
+  const certificate = new X509Certificate(cert);
+  if (
+    !certificate.checkHost(hostname) ||
+    Date.now() < Date.parse(certificate.validFrom) ||
+    Date.now() > Date.parse(certificate.validTo)
+  ) {
     throw new Error(
-      "ENV_WORKLOAD_ISSUER: MCP_AUTH_WORKLOAD_HOST must be covered by MCP_AUTH_WORKLOAD_CERT_FILE (dedicated trusted TLS certificate)",
+      "ENV_WORKLOAD_ISSUER: MCP_AUTH_WORKLOAD_HOST must be covered by a current MCP_AUTH_WORKLOAD_CERT_FILE (dedicated trusted TLS certificate)",
     );
   }
+  return { hostname, cert, key };
+}
+
+export function handleWorkloadRequest(
+  request: ScenarioRequest,
+  req: IncomingMessage,
+  res: ServerResponse,
+) {
+  res.setHeader("Content-Type", "application/json");
+  if (req.method === "GET" && request.path === "/jwks") {
+    request.files.journal<true>("jwks-reads").push(true);
+    res.end(
+      JSON.stringify({
+        keys: [request.files.map<unknown>("signer").get("jwk")],
+      }),
+    );
+  } else if (
+    req.method === "GET" &&
+    request.path === "/.well-known/openid-configuration"
+  ) {
+    res.end(
+      JSON.stringify({
+        issuer: request.origin,
+        jwks_uri: `${request.origin}/jwks`,
+        id_token_signing_alg_values_supported: ["RS256"],
+      }),
+    );
+  } else {
+    res.writeHead(404).end("{}");
+  }
+}
+
+export async function startWorkloadIssuer() {
+  const host = await acquireHost();
+  const { id, files } = createScenario(host.runDir, "workload");
+  const origin = `${hostOrigin(host.info.workload)}/s/${id}`;
   const signer = workloadSigner();
-  let origin = "";
-  let jwksReads = 0;
-  const server = createServer({ cert, key }, (request, response) => {
-    response.setHeader("Content-Type", "application/json");
-    if (request.method === "GET" && request.url === "/jwks") {
-      jwksReads++;
-      response.end(JSON.stringify({ keys: [signer.jwk] }));
-    } else if (
-      request.method === "GET" &&
-      request.url === "/.well-known/openid-configuration"
-    ) {
-      response.end(
-        JSON.stringify({
-          issuer: origin,
-          jwks_uri: `${origin}/jwks`,
-          id_token_signing_alg_values_supported: ["RS256"],
-        }),
-      );
-    } else {
-      response.writeHead(404).end("{}");
-    }
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string")
-    throw new Error("Workload issuer did not bind TCP");
-  origin = `https://${hostname}:${address.port}`;
+  files.map<unknown>("signer").set("jwk", signer.jwk);
+  const jwksReads = files.journal<true>("jwks-reads");
+  const exchanges: {
+    status: number;
+    resourceScoped: boolean;
+    errorCode?: string;
+  }[] = [];
   return {
     origin,
     jwksURL: `${origin}/jwks`,
     subject: "fixture:workload:runner",
+    exchanges,
     get jwksReads() {
-      return jwksReads;
+      return jwksReads.list().length;
     },
     issue: (audience: string) =>
       signer.issue(origin, "fixture:workload:runner", audience),
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-        server.closeAllConnections();
-      }),
+    close: () => host.release(),
   };
 }
 
@@ -148,6 +165,7 @@ export async function createWorkloadAgent(
   auth: AuthScenario,
   issuer: Awaited<ReturnType<typeof startWorkloadIssuer>>,
   server: { name: string; serverURL: string },
+  scope: "project" | "organization" = "project",
 ) {
   const { expect } = await import("./fixtures.ts");
   const { page, dashboard } = auth;
@@ -224,14 +242,19 @@ export async function createWorkloadAgent(
   await dialog.getByLabel("Name", { exact: true }).fill(name);
   await dialog.getByLabel("Issuer URL", { exact: true }).fill(issuer.origin);
   await dialog.getByLabel("JWKS URL", { exact: true }).fill(issuer.jwksURL);
-  await dialog
-    .getByLabel("Available to", { exact: true })
-    .selectOption("project");
+  await dialog.getByLabel("Available to", { exact: true }).selectOption(scope);
   await dialog
     .getByRole("button", { name: "Create workload issuer", exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByText(issuer.origin, { exact: true })).toBeVisible();
+  const selectedTrust = page.locator("dl").filter({
+    has: page.getByText("External JWT issuer", { exact: true }),
+  });
+  await expect(selectedTrust).toHaveCount(1);
+  await expect(selectedTrust.locator("dd")).toHaveText([
+    issuer.origin,
+    issuer.jwksURL,
+  ]);
   await expect(next).toBeEnabled();
   await next.click();
   await page.getByLabel("Subject", { exact: true }).fill(issuer.subject);
@@ -271,5 +294,14 @@ export async function exchangeWorkload(
     error?: string;
     refresh_token?: string;
   };
-  return { status: response.status, ...value };
+  const errorCode =
+    value.error === undefined
+      ? undefined
+      : typeof value.error === "string" &&
+          value.error.length <= 64 &&
+          /^[_a-z]+$/.test(value.error)
+        ? value.error
+        : "unrecognized_error";
+  issuer.exchanges.push({ status: response.status, resourceScoped, errorCode });
+  return { status: response.status, ...value, errorCode };
 }

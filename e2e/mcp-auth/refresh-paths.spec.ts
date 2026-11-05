@@ -1,4 +1,5 @@
 import { test, expect, type AuthScenario } from "./fixtures.ts";
+import { assertGrant } from "./auth-setup-actions.ts";
 
 // Keep all provisioning in the dashboard and all fault injection in the issuer.
 // These cases do not install routes, seed sessions, or change the browser store.
@@ -71,14 +72,66 @@ test.describe("short-lived upstream grants", () => {
     } finally {
       auth.mock.setTokenFailure("alpha", null);
     }
-    await test.step("Retry the same caller grant after restoring the issuer", async () => {
+    await test.step("Retry the same caller grant once at the advertised recovery deadline", async () => {
+      const outage = client.transcript.at(-1);
+      const seconds = outage?.retryAfterSeconds;
+      const receivedAt = outage?.responseReceivedAtMs;
+      if (
+        outage?.operation !== "tools/list" ||
+        outage.status !== 503 ||
+        seconds === undefined ||
+        !Number.isInteger(seconds) ||
+        seconds < 1 ||
+        seconds > 300 ||
+        receivedAt === undefined ||
+        !Number.isFinite(receivedAt) ||
+        receivedAt < 0 ||
+        receivedAt > performance.now()
+      ) {
+        throw new Error(
+          "G12_RECOVERY_DEADLINE_MISSING_OR_INVALID: expected outage 503 with Retry-After in 1..300 seconds and monotonic receipt time",
+        );
+      }
+      const deadline = receivedAt + seconds * 1000;
+      // One advertised wait, not a retry loop or a probe of restored availability.
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.max(0, Math.ceil(deadline - performance.now())) + 1,
+        ),
+      );
+      expect(
+        performance.now(),
+        "G12_RECOVERY_DEADLINE_EARLY: the single recovery attempt must not precede Retry-After",
+      ).toBeGreaterThanOrEqual(deadline);
+      const recoveryOffset = auth.mock.events.length;
       await auth.invoke(client, resource, "alpha-user");
-      expect(refreshes(auth, offset).length).toBeGreaterThan(0);
+      const recovered = refreshes(auth, recoveryOffset);
+      expect(
+        recovered.length,
+        "G12_RECOVERY_REFRESH_MISSING: the single recovery invocation must perform a fresh successful refresh",
+      ).toBeGreaterThan(0);
+      for (const refresh of recovered) {
+        expect(refresh).toMatchObject({
+          provider: "alpha",
+          resource,
+          outcome: "success",
+        });
+        expect([...(refresh.scopes ?? [])].sort()).toEqual(
+          ["fixture:read", "openid"].sort(),
+        );
+      }
+      // invoke asserts the exact resource and alpha-user principal on real tool forwarding.
       expect(
         auth.mock.events
           .slice(offset)
           .filter((event) => event.kind === "authorize"),
       ).toHaveLength(0);
+      expect(
+        auth.mock.events
+          .slice(offset)
+          .some((event) => event.principal === "anonymous"),
+      ).toBe(false);
     });
   });
 
@@ -135,13 +188,14 @@ test.describe("short-lived upstream grants", () => {
 test("G14: expires_in zero is unreported lifetime, not immediate expiration", async ({
   auth,
 }) => {
+  // remotesessions/token_response.go:249–267 treats zero as unreported, not expired.
   auth.mock.setAdvertisedLifetime(0);
+  const offset = auth.mock.events.length;
   try {
     const { client, resource } = await connected(
       auth,
       "fixture-g14-zero-lifetime",
     );
-    const offset = auth.mock.events.length;
     await test.step("Use a zero-lifetime response repeatedly without a refresh loop", async () => {
       await auth.invoke(client, resource, "alpha-user");
       await auth.invoke(client, resource, "alpha-user");
@@ -157,7 +211,61 @@ test("G14: expires_in zero is unreported lifetime, not immediate expiration", as
       ).toBe(false);
     });
     await test.step("Reconnect through browser consent after the real revocation", async () => {
-      await auth.authorize(client);
+      const initialGrants = auth.mock.events
+        .slice(offset)
+        .filter((event) => event.kind === "token");
+      expect(initialGrants).toHaveLength(1);
+      const initialGrant = initialGrants[0]!;
+      expect(initialGrant.clientId).toBeTruthy();
+      expect(initialGrant.scopes).toBeDefined();
+      const reconnectOffset = auth.mock.events.length;
+      const flow = await client.beginAuthorization();
+      try {
+        await auth.page.goto(flow.authorizationUrl);
+        const card = auth.page.locator("li[data-remote-client]");
+        await expect(card).toHaveCount(1);
+        // Downstream consent alone can reuse the revoked upstream connection.
+        const disconnect = card.locator('button[value="disconnect"]');
+        const connect = card.getByRole("button", {
+          name: /^(Connect|Reconnect)$/,
+        });
+        await expect
+          .poll(
+            async () =>
+              (await disconnect.isVisible()) || (await connect.isVisible()),
+          )
+          .toBe(true);
+        if (await disconnect.isVisible()) await disconnect.click();
+        await expect(connect).toBeVisible();
+        await connect.click();
+        await auth.page
+          .getByRole("button", { name: "Approve mock access", exact: true })
+          .click();
+        await expect(card.locator("[data-card-status]")).toContainText(
+          "Service connected",
+        );
+        assertGrant(
+          auth,
+          initialGrant.clientId!,
+          resource,
+          initialGrant.scopes!,
+          reconnectOffset,
+        );
+        expect(
+          auth.mock.events
+            .slice(reconnectOffset)
+            .filter((event) => event.kind === "register"),
+        ).toHaveLength(0);
+        await auth.page
+          .getByRole("button", { name: "Give access", exact: true })
+          .click();
+        await flow.complete();
+        auth.trackGrant(client);
+      } catch (error) {
+        await flow.cancel();
+        throw error;
+      }
+      await client.initialize();
       await auth.invoke(client, resource, "alpha-user");
     });
   } finally {
