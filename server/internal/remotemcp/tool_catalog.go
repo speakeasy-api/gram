@@ -117,7 +117,7 @@ var errToolNotOnUpstream = &proxy.RejectError{
 // before those rules run. Writes only add tools, so annotations are whatever the
 // first listing to include a tool declared, whichever account made it.
 type toolCatalogSync struct {
-	store          ToolDispositionResolver
+	store          ToolCatalogStore
 	refreshes      *toolCatalogRefreshes
 	organizationID string
 	mcpServerID    string
@@ -133,7 +133,9 @@ type toolCatalogSync struct {
 // failure is returned, because enforcing with an empty disposition would let the
 // call past rules that match on it.
 func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.ToolsCallRequest) (string, error) {
-	name := call.Params.Name
+	// Catalog names are stored trimmed, so a padded spelling can't read as a
+	// different tool from the one a rule covers.
+	name := strings.TrimSpace(call.Params.Name)
 
 	catalog, err := c.store.ToolCatalog(ctx, c.mcpServerID, c.projectID)
 	if err != nil {
@@ -149,10 +151,7 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 	// Cloned because the shared refresh can outlive this request's handler.
 	userRequest := call.UserRequest.UserHTTPRequest.Clone(context.WithoutCancel(ctx))
 
-	refreshKey := c.mcpServerID
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		refreshKey += "\x00" + authCtx.UserID
-	}
+	refreshKey := toolCatalogRefreshKey(ctx, c.mcpServerID)
 
 	err = c.refreshes.run(ctx, refreshKey, func(refreshCtx context.Context) error {
 		tools, err := c.listUpstream(refreshCtx, userRequest)
@@ -179,6 +178,20 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 	return disposition, nil
 }
 
+// toolCatalogRefreshKey scopes shared lookups and cooldowns to one caller on one
+// server, because a lookup runs with that caller's upstream credential. Assistants,
+// device agents and principal credentials have no user id, so the authenticated
+// actor comes first.
+func toolCatalogRefreshKey(ctx context.Context, mcpServerID string) string {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		return mcpServerID + "\x00" + actor.String()
+	}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		return mcpServerID + "\x00" + authCtx.UserID
+	}
+	return mcpServerID
+}
+
 // recordListed adds tools from an unfiltered tools/list response that the catalog
 // has no entry for, and writes nothing when every tool already has one.
 func (c *toolCatalogSync) recordListed(ctx context.Context, list *proxy.ToolsListResponse) error {
@@ -192,7 +205,11 @@ func (c *toolCatalogSync) recordListed(ctx context.Context, list *proxy.ToolsLis
 		if tool == nil {
 			return errors.New("record listed tools: upstream listed a null tool")
 		}
-		if _, recorded := catalog[tool.Name]; !recorded {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		if _, recorded := catalog[name]; !recorded {
 			allRecorded = false
 			break
 		}
@@ -208,7 +225,7 @@ func (c *toolCatalogSync) recordListed(ctx context.Context, list *proxy.ToolsLis
 
 	missing := make([]tooldisposition.ToolRecord, 0, len(listed))
 	for _, tool := range listed {
-		if _, recorded := catalog[tool.ToolName]; !recorded {
+		if _, recorded := catalog[strings.TrimSpace(tool.ToolName)]; !recorded {
 			missing = append(missing, tool)
 		}
 	}

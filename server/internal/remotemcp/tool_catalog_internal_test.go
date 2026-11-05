@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -336,4 +338,37 @@ func TestToolsListCatalog_NullToolIsRejected(t *testing.T) {
 	resp := newListedResponse(t, `{"tools":[null]}`)
 	require.Error(t, newCatalogSync(store, nil).recordListed(t.Context(), resp))
 	require.Empty(t, store.writes)
+}
+
+func TestToolsCallCatalog_PaddedToolNameReadsTheStoredRule(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{"delete_repository": authz.DispositionDestructive}}
+	catalog := newCatalogSync(store, func(context.Context, *http.Request) ([]*mcp.Tool, error) {
+		t.Fatal("a recorded tool must not list the upstream")
+		return nil, nil
+	})
+
+	err := newAuthzInterceptor(t, store, catalog).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "delete_repository "))
+	require.Error(t, err, "a padded name must not get past a rule on the tool it spells")
+}
+
+func TestToolsListCatalog_BlankToolNameDoesNotWriteOnEveryListing(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{"list_issues": ""}}
+
+	resp := newListedResponse(t, `{"tools":[{"name":"list_issues","inputSchema":{"type":"object"}},{"name":" ","inputSchema":{"type":"object"}}]}`)
+	require.NoError(t, newCatalogSync(store, nil).recordListed(t.Context(), resp))
+	require.Empty(t, store.writes)
+}
+
+func TestToolCatalogRefreshKey_SeparatesCallersWithoutAUserID(t *testing.T) {
+	t.Parallel()
+
+	base := &contextvalues.AuthContext{ActiveOrganizationID: catalogTestOrgID}
+	first := contextvalues.WithAuthenticatedActor(t.Context(), base, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+	second := contextvalues.WithAuthenticatedActor(t.Context(), base, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+
+	require.NotEqual(t, toolCatalogRefreshKey(first, catalogTestServerID), toolCatalogRefreshKey(second, catalogTestServerID))
 }

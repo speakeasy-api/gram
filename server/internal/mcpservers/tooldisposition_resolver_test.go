@@ -270,3 +270,24 @@ func TestToolCatalog_RecordMissingToolsAuditsAsSystemWhenAnAgentTriggersIt(t *te
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
 }
+
+func TestToolCatalog_RecordMissingToolsTrimsNamesAndSkipsBlankOnes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	err := ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: " foo ", Title: nil, ReadOnlyHint: nil, DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
+		{ToolName: "  ", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"foo": "destructive"}, catalog)
+}

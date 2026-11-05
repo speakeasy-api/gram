@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -117,5 +118,5 @@ func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call
 	if err != nil {
 		return "", fmt.Errorf("list dispositions: %w", err)
 	}
-	return dispositions[call.Params.Name], nil
+	return dispositions[strings.TrimSpace(call.Params.Name)], nil
 }

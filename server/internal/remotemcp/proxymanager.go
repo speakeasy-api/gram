@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -133,7 +132,7 @@ type ProxyManager struct {
 	// platform surfaces emit it.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
 
-	toolDispositions ToolDispositionResolver
+	toolDispositions ToolCatalogStore
 
 	toolsCallUsageLimitsInterceptor       *ToolsCallUsageLimitsInterceptor
 	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
@@ -178,7 +177,7 @@ func NewProxyManager(
 	telemLogger *tm.Logger,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
-	toolDispositions ToolDispositionResolver,
+	toolDispositions ToolCatalogStore,
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
@@ -521,21 +520,4 @@ func (f *ProxyManager) Dispositions(ctx context.Context, mcpServerID, projectID 
 		return nil, fmt.Errorf("resolve gateway tool dispositions: %w", err)
 	}
 	return dispositions, nil
-}
-
-// ToolCatalog forwards to the proxy's shared resolver, which gateway discovery reads through this manager.
-func (f *ProxyManager) ToolCatalog(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
-	catalog, err := f.toolDispositions.ToolCatalog(ctx, mcpServerID, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve gateway tool catalog: %w", err)
-	}
-	return catalog, nil
-}
-
-// RecordMissingTools forwards to the proxy's shared resolver, which gateway discovery reads through this manager.
-func (f *ProxyManager) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []tooldisposition.ToolRecord) error {
-	if err := f.toolDispositions.RecordMissingTools(ctx, organizationID, mcpServerID, projectID, tools); err != nil {
-		return fmt.Errorf("record gateway tools: %w", err)
-	}
-	return nil
 }

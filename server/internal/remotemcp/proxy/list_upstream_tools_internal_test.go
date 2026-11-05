@@ -63,10 +63,11 @@ func TestListUpstreamTools_ReadsEveryPageInItsOwnSession(t *testing.T) {
 	require.Equal(t, "Bearer upstream-token", bearer.Load(), "the listing uses the resolved upstream credential")
 }
 
-func TestListUpstreamTools_UpstreamRejectionIsAnError(t *testing.T) {
+func TestListUpstreamTools_UpstreamRejectionCarriesTheChallenge(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(upstream.Close)
@@ -83,5 +84,9 @@ func TestListUpstreamTools_UpstreamRejectionIsAnError(t *testing.T) {
 	}
 
 	_, err = p.ListUpstreamTools(t.Context(), httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil))
-	require.Error(t, err)
+	var refusal *UpstreamListingRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.NotNil(t, refusal.Response)
+	require.Equal(t, http.StatusUnauthorized, refusal.Response.StatusCode)
+	require.Equal(t, `Bearer error="invalid_token"`, refusal.Response.Header.Get("WWW-Authenticate"))
 }

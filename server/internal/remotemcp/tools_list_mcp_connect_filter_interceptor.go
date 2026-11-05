@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -119,7 +120,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 	for idx, t := range tools {
 		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
 			Tool:        t.Name,
-			Disposition: dispositions[t.Name],
+			Disposition: dispositions[strings.TrimSpace(t.Name)],
 			ProjectID:   i.projectID,
 		})
 	}

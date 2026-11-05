@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,8 +163,10 @@ func (c *Cache) ToolCatalog(ctx context.Context, mcpServerID, projectID string) 
 }
 
 // RecordMissingTools adds tools with no catalog entry and audits the change as a
-// system write. Existing entries are left untouched, and nothing is audited when
-// every tool already has an entry. An error means the catalog can't be relied on
+// system write. Names are trimmed and blank ones skipped, matching the management
+// API's write path, so one tool can't be stored under two spellings. Existing
+// entries are left untouched, and nothing is audited when every tool already has
+// an entry. An error means the catalog can't be relied on
 // to reflect these tools, so callers enforcing access must fail closed.
 func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []ToolRecord) error {
 	serverUUID, err := uuid.Parse(mcpServerID)
@@ -175,7 +178,18 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		return fmt.Errorf("parse project id: %w", err)
 	}
 
-	payload, err := json.Marshal(tools)
+	normalized := make([]ToolRecord, 0, len(tools))
+	for _, tool := range tools {
+		tool.ToolName = strings.TrimSpace(tool.ToolName)
+		if tool.ToolName != "" {
+			normalized = append(normalized, tool)
+		}
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	payload, err := json.Marshal(normalized)
 	if err != nil {
 		return fmt.Errorf("encode tool records: %w", err)
 	}

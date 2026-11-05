@@ -32,6 +32,6 @@ func (f fakeToolDispositionResolver) RecordMissingTools(_ context.Context, _, _,
 
 // emptyResolver resolves every tool to the empty disposition, reducing each
 // check to a pure tool-name match.
-func emptyResolver() remotemcp.ToolDispositionResolver {
+func emptyResolver() remotemcp.ToolCatalogStore {
 	return fakeToolDispositionResolver{dispositions: nil, err: nil}
 }
