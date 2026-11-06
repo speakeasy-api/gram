@@ -6,7 +6,8 @@ import type { ReactNode } from "react";
 /**
  * The acknowledgement a grant of sensitive access waits for. The role editor,
  * Manage Roles and Grant Access all ask it the same way; only the sentence
- * naming who gets the access differs.
+ * naming who gets the access differs. The sentence is the checkbox's
+ * accessible name, so a screen reader hears who the access is for.
  */
 export function ConfirmSensitiveAccess({
   checked,
@@ -23,7 +24,6 @@ export function ConfirmSensitiveAccess({
       <Checkbox
         checked={checked}
         onCheckedChange={(next) => onCheckedChange(next === true)}
-        aria-label="Confirm sensitive permissions"
         className="mt-0.5"
       />
       <Text variant="body" className="text-sm">

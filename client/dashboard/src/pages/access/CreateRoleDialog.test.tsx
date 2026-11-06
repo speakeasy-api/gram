@@ -501,7 +501,9 @@ describe("the review step", () => {
     expect(save.getAttribute("disabled")).not.toBeNull();
 
     fireEvent.click(
-      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     fireEvent.click(save);
     expect(mocks.update).toHaveBeenCalledOnce();
@@ -582,7 +584,9 @@ describe("the review step", () => {
     expect(save.getAttribute("disabled")).not.toBeNull();
 
     fireEvent.click(
-      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     fireEvent.click(save);
     expect(mocks.update).toHaveBeenCalledOnce();
@@ -613,7 +617,9 @@ describe("the review step", () => {
     );
     expect(review.getByText("View tool logs")).toBeTruthy();
     fireEvent.click(
-      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     fireEvent.click(review.getByRole("button", { name: "Save role" }));
     expect(mocks.update).toHaveBeenCalledOnce();

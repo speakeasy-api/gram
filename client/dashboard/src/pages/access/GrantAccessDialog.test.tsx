@@ -159,7 +159,9 @@ describe("assigning a role that adds sensitive access", () => {
     }) as HTMLButtonElement;
     expect(assign.disabled).toBe(true);
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     expect(assign.disabled).toBe(false);
     fireEvent.click(assign);

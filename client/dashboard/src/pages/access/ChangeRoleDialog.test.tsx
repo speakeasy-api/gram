@@ -199,7 +199,9 @@ describe("adding a role that gives sensitive access", () => {
     expect(updateButton().disabled).toBe(true);
 
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     expect(updateButton().disabled).toBe(false);
     fireEvent.click(updateButton());
@@ -219,7 +221,9 @@ describe("adding a role that widens a permission the member holds", () => {
     ).toBeTruthy();
     expect(updateButton().disabled).toBe(true);
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     expect(updateButton().disabled).toBe(false);
   });
@@ -260,7 +264,9 @@ describe("removing a role that withheld a permission", () => {
     ).toBeTruthy();
     expect(updateButton().disabled).toBe(true);
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
     );
     expect(updateButton().disabled).toBe(false);
     fireEvent.click(updateButton());
