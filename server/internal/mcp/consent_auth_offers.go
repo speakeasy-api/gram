@@ -131,30 +131,17 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 }
 
 // Discovery lists a member only when the serving resolver could reach it
-// through one of its offered clients. signInRegistrations are the
-// registrations linked to the gateway sign-in.
-func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata, signInRegistrations map[uuid.UUID]bool) bool {
+// through one of its offered clients under upstream auth enforcement.
+func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata) bool {
 	for _, client := range offer.clients {
 		row, ok := metadata.selections[[2]uuid.UUID{member.serverID, client.AuthClientID.UUID}]
 		if !ok {
 			continue
 		}
-		resolution := decideAuthClient(row)
+		resolution := enforcedCompatibility(decideAuthClient(row))
 		headersOnly := isHeadersOnlyType(resolution.clientType)
 		switch resolution.outcome {
-		case authClientResolved:
-		case authClientLegacy:
-			// The upstream client choice serves these under its own rule:
-			// headers alone only on a server with no associated registration,
-			// and a registration only when the server associates it and the
-			// gateway sign-in links it.
-			registration := row.RegistrationID.UUID
-			if headersOnly && len(member.associatedClients) > 0 {
-				continue
-			}
-			if !headersOnly && (!row.RegistrationID.Valid || !member.associatedClients[registration] || !signInRegistrations[registration]) {
-				continue
-			}
+		case authClientResolved, authClientLegacy:
 		case authClientGap, authClientNoAuth, authClientNoAccess:
 			continue
 		}

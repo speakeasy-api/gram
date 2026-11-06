@@ -392,10 +392,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
 		}
 	}
-	signInRegistrations := make(map[uuid.UUID]bool, len(clients))
-	for _, client := range clients {
-		signInRegistrations[client.ID] = true
-	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
@@ -407,7 +403,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			// Without a live offer, retain legacy transport and issuer checks,
 			// including after an auth-client link was deleted (pending=false).
 			if len(offer.clients) > 0 {
-				supported := gatewayOfferCapability(member, offer, offerMetadata, signInRegistrations)
+				supported := gatewayOfferCapability(member, offer, offerMetadata)
 				if supported {
 					eligible = append(eligible, member)
 				}
