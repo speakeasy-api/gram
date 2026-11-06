@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/Button";
 function Plan() {
   const { s } = useSetup();
   const github = s.provider === "github";
+  const snowflake = s.provider === "snowflake";
   return (
     <>
       <Card className="h-auto bg-muted/10">
@@ -36,22 +37,41 @@ function Plan() {
           <Link className="mt-1 size-5" aria-hidden />
           <div>
             <h3 className="mb-4 text-lg font-normal">
-              Let’s connect {names[s.provider]} to Speakeasy.
+              Let’s connect{" "}
+              {snowflake ? "your Snowflake Cortex Agent" : names[s.provider]} to
+              Speakeasy.
             </h3>
             <p>
-              {github
-                ? "We’ll walk you through setting up an OAuth app in GitHub, adding its credentials here, and testing the connection."
-                : "We’ll walk you through creating or configuring a Slack app, choosing its permissions, adding its credentials here, and testing the connection."}
+              {snowflake
+                ? "We’ll walk you through creating or choosing an MCP server, granting access, setting up OAuth, and testing the connection."
+                : github
+                  ? "We’ll walk you through setting up an OAuth app in GitHub, adding its credentials here, and testing the connection."
+                  : "We’ll walk you through creating or configuring a Slack app, choosing its permissions, adding its credentials here, and testing the connection."}
             </p>
             <p className="mt-[18px]">
-              {github
-                ? "You’ll need permission to manage OAuth apps in your GitHub organization—or a teammate who can help."
-                : "You’ll need access to your Slack workspace and permission to manage an app—or a teammate who can help. Your workspace may also require app approval."}
+              {snowflake
+                ? "Have your existing agent’s database, schema, and name ready, along with a database and schema for the MCP server, a warehouse, and the usernames of the people who will connect. You’ll need permission to configure these—or teammates who can grant access and create the OAuth integration."
+                : github
+                  ? "You’ll need permission to manage OAuth apps in your GitHub organization—or a teammate who can help."
+                  : "You’ll need access to your Slack workspace and permission to manage an app—or a teammate who can help. Your workspace may also require app approval."}
             </p>
           </div>
         </Card.Content>
       </Card>
-      {github ? (
+      {snowflake ? (
+        <details className="mt-6">
+          <summary>Check permissions and region availability</summary>
+          <p className="mt-3">
+            You’ll need a security owner to grant access, a role that can create
+            the MCP server if needed, and ACCOUNTADMIN or a delegated role with
+            CREATE INTEGRATION for OAuth. These can be different people.
+          </p>
+          <p className="mt-3">
+            This setup isn’t available in China or government regions. Each
+            person will sign in using their own Snowflake account.
+          </p>
+        </details>
+      ) : github ? (
         <details className="mt-6">
           <summary>Organization approval and SSO</summary>
           <p className="mt-3">
@@ -476,7 +496,7 @@ export function ProviderTask({
   serverName: string;
 }): JSX.Element {
   const { s } = useSetup();
-  if (s.provider === "snowflake" && s.step !== "credentials")
+  if (s.provider === "snowflake" && !["begin", "credentials"].includes(s.step))
     return <SnowflakeTask />;
   if (s.provider === "salesforce" && s.step !== "credentials")
     return <SalesforceTask />;

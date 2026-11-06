@@ -1,0 +1,296 @@
+import { StrictMode } from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SnowflakeCatalogFlow } from "./SnowflakeCatalogSetup";
+import { useSetup } from "./provider-setup/setup-context";
+import { initialState, type State } from "./provider-setup/state";
+import {
+  providerProgressKey,
+  saveProviderProgress,
+} from "@/pages/mcp/x/setup/provider-setup";
+
+const api = vi.hoisted(() => ({
+  remote: vi.fn(),
+  create: vi.fn(),
+  get: vi.fn(),
+  upstream: vi.fn(),
+  endpoint: vi.fn(),
+  next: vi.fn(),
+  live: vi.fn(),
+  member: vi.fn(),
+  members: vi.fn(),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+  useProject: () => ({ id: "project" }),
+  useSession: () => ({ user: { id: "person" } }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    remoteMcp: { createServer: api.remote, getServer: api.upstream },
+    mcpServers: { create: api.create, get: api.get },
+    metaMcp: { addMember: api.member, listMembers: api.members },
+  }),
+  useSlugs: () => ({ orgSlug: "example" }),
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: {
+      details: {
+        overview: { href: () => "/overview" },
+        settings: { href: () => "/settings" },
+      },
+    },
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/mcpServers", () => ({
+  invalidateAllMcpServers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/remoteMcpServers", () => ({
+  invalidateAllRemoteMcpServers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/getMcpServer", () => ({
+  useGetMcpServer: () => ({}),
+}));
+vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
+  useGetRemoteMcpServer: () => ({}),
+}));
+vi.mock("@/lib/mcpEndpoints", () => ({
+  createDefaultMcpEndpoint: api.endpoint,
+}));
+vi.mock("@/pages/mcp/x/setup/useProviderConnection", () => ({
+  useProviderConnection: (...args: unknown[]) => {
+    api.live(...args);
+    return { next: api.next, loading: false, pending: null, error: null };
+  },
+}));
+// Isolate lifecycle wiring while exercising the real reducer and secret-free progress.
+// The actual shared shell/tasks have separate component tests and browser checks.
+vi.mock("@/pages/mcp/x/setup/ProviderSetupPage", () => ({
+  SetupBody: () => {
+    const { s, live } = useSetup();
+    return (
+      <>
+        <output>{s.step}</output>
+        <input
+          aria-label="Client ID"
+          value={s.values.clientId}
+          onChange={(e) =>
+            live.changeField({ field: "clientId", value: e.target.value })
+          }
+        />
+        <input
+          aria-label="Client Secret"
+          value={s.values.clientSecret}
+          onChange={(e) =>
+            live.changeField({ field: "clientSecret", value: e.target.value })
+          }
+        />
+        <button disabled={!!live.pending} onClick={live.next}>
+          Continue
+        </button>
+        {live.error}
+        <button onClick={live.retryLoad}>Retry load</button>
+      </>
+    );
+  },
+}));
+const key = providerProgressKey(
+  "snowflake",
+  "person",
+  "org",
+  "project",
+  "catalog:com.snowflake/cortex-mcp",
+);
+const url =
+  "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP";
+const server = {
+  id: "server",
+  remoteMcpServerId: "remote",
+  platformEndpointSlug: "example-mcp",
+  name: "Snowflake",
+  slug: "snowflake",
+};
+function seedCredentials() {
+  const s: State = { ...initialState("snowflake"), step: "credentials" };
+  Object.assign(s.values, {
+    host: "example.snowflakecomputing.com",
+    database: "APP",
+    schema: "PUBLIC",
+    serverName: "MCP",
+    agent: "APP.PUBLIC.AGENT",
+    accessRole: "MCP_ACCESS",
+    oauthIntegration: "MCP_OAUTH",
+  });
+  saveProviderProgress(key, s);
+}
+function show() {
+  return render(
+    <StrictMode>
+      <MemoryRouter>
+        <SnowflakeCatalogFlow />
+      </MemoryRouter>
+    </StrictMode>,
+  );
+}
+beforeEach(() => {
+  vi.clearAllMocks();
+  sessionStorage.clear();
+  api.remote.mockResolvedValue({ id: "remote" });
+  api.create.mockResolvedValue(server);
+  api.get.mockResolvedValue(server);
+  api.upstream.mockResolvedValue({ url });
+  api.endpoint.mockResolvedValue({ slug: "example-mcp" });
+  api.members.mockResolvedValue({ members: [] });
+});
+afterEach(cleanup);
+async function credentials() {
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Client ID"), "client-id");
+  await user.type(screen.getByLabelText("Client Secret"), "test-secret");
+  return user;
+}
+describe("Snowflake catalog draft lifecycle (mocked API)", () => {
+  it("opens the setup plan and collects values without probing or installing", async () => {
+    show();
+    expect(screen.getByText("begin")).toBeDefined();
+    await userEvent.click(screen.getByText("Continue"));
+    expect(screen.getByText("account")).toBeDefined();
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(api.live).not.toHaveBeenCalled();
+  });
+  it("does not install without credentials", async () => {
+    seedCredentials();
+    show();
+    await userEvent.click(screen.getByText("Continue"));
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+  it("installs the resolved source disabled, then delegates credential save once", async () => {
+    seedCredentials();
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledTimes(1));
+    expect(api.remote).toHaveBeenCalledWith({
+      createServerForm: {
+        name: "Snowflake",
+        url,
+        transportType: "streamable-http",
+      },
+    });
+    expect(api.create).toHaveBeenCalledWith({
+      createMcpServerForm: {
+        name: "Snowflake",
+        remoteMcpServerId: "remote",
+        visibility: "disabled",
+      },
+    });
+    expect(api.live.mock.lastCall?.[0]).toMatchObject({
+      values: { clientId: "client-id", clientSecret: "test-secret" },
+    });
+    expect(sessionStorage.getItem(key)).not.toContain("test-secret");
+    expect(
+      JSON.parse(sessionStorage.getItem(key + ":installation") ?? "null"),
+    ).toMatchObject({ remoteId: "remote", serverId: "server" });
+  });
+  it("reuses a completed source after wrapper creation fails, including reload", async () => {
+    seedCredentials();
+    api.create.mockRejectedValueOnce(new Error("temporary failure"));
+    let view = show();
+    let user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await screen.findByText(/Couldn’t prepare/);
+    view.unmount();
+    show();
+    user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledTimes(1));
+    expect(api.remote).toHaveBeenCalledTimes(1);
+    expect(api.create).toHaveBeenCalledTimes(2);
+  });
+  it("resumes the same installed source without automatically saving absent secrets", async () => {
+    seedCredentials();
+    sessionStorage.setItem(
+      key + ":installation",
+      JSON.stringify({ remoteId: "remote", serverId: "server" }),
+    );
+    show();
+    await waitFor(() => expect(api.live).toHaveBeenCalled());
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(api.next).not.toHaveBeenCalled();
+  });
+  it("stops provisioning after leaving setup and resumes the retained source", async () => {
+    seedCredentials();
+    let finish: (value: { id: string }) => void = () => {};
+    api.remote.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    view.unmount();
+    finish({ id: "remote" });
+    await waitFor(() =>
+      expect(sessionStorage.getItem(key + ":installation")).toContain("remote"),
+    );
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("retries endpoint preparation on the same server after reload", async () => {
+    seedCredentials();
+    sessionStorage.setItem(
+      key + ":installation",
+      JSON.stringify({ remoteId: "remote", serverId: "server" }),
+    );
+    api.get.mockResolvedValueOnce({ ...server, platformEndpointSlug: null });
+    api.endpoint.mockResolvedValueOnce(undefined);
+    show();
+    await screen.findByText(/Couldn’t load your saved/);
+    await userEvent.click(screen.getByText("Retry load"));
+    await waitFor(() => expect(api.live).toHaveBeenCalled());
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(api.next).not.toHaveBeenCalled();
+    expect(
+      sessionStorage.getItem(
+        providerProgressKey("snowflake", "person", "org", "project", "server"),
+      ),
+    ).toContain('"step":"credentials"');
+  });
+  it("clears stale setup metadata when the saved upstream changes outside this draft", async () => {
+    seedCredentials();
+    sessionStorage.setItem(
+      key + ":installation",
+      JSON.stringify({
+        remoteId: "remote",
+        serverId: "server",
+        sourceFingerprint: JSON.stringify([
+          "remote",
+          "https://previous.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+          "",
+        ]),
+      }),
+    );
+    show();
+    await waitFor(() => expect(api.live).toHaveBeenCalled());
+    expect(api.live.mock.lastCall?.[0]).toMatchObject({
+      step: "account",
+      saved: false,
+      values: {
+        host: "https://example.snowflakecomputing.com",
+        agent: "",
+        clientSecret: "",
+      },
+    });
+    expect(api.next).not.toHaveBeenCalled();
+  });
+});

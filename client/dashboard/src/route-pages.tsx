@@ -1,3 +1,4 @@
+import SnowflakeCatalogSetup from "./pages/catalog/SnowflakeCatalogSetup";
 import React from "react";
 import { Navigate, Outlet } from "react-router";
 import type {
@@ -331,6 +332,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           detail: {
             component: CatalogDetailRoot,
             indexComponent: CatalogDetail,
+            subPages: { setup: { component: SnowflakeCatalogSetup } },
           },
         },
       },
