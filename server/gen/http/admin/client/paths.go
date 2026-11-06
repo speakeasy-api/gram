@@ -521,3 +521,13 @@ func BackfillMcpAuthGrantsAdminPath() string {
 func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"
 }
+
+// GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
+func GetProjectRedeployPreviewAdminPath() string {
+	return "/admin/project.redeployPreview"
+}
+
+// RedeployProjectAdminPath returns the URL path to the admin service redeployProject HTTP endpoint.
+func RedeployProjectAdminPath() string {
+	return "/admin/project.redeploy"
+}

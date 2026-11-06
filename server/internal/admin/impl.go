@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -103,6 +104,10 @@ type Service struct {
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
 
 	audit *audit.Logger
 
@@ -244,7 +249,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -818,13 +823,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,

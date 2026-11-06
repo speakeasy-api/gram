@@ -3523,3 +3523,55 @@ func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody stri
 
 	return v, nil
 }
+
+// BuildGetProjectRedeployPreviewPayload builds the payload for the admin
+// getProjectRedeployPreview endpoint from CLI flags.
+func BuildGetProjectRedeployPreviewPayload(adminGetProjectRedeployPreviewOrganizationID string, adminGetProjectRedeployPreviewProjectID string, adminGetProjectRedeployPreviewAdminSessionToken string) (*admin.GetProjectRedeployPreviewPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetProjectRedeployPreviewOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminGetProjectRedeployPreviewProjectID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetProjectRedeployPreviewAdminSessionToken != "" {
+			adminSessionToken = &adminGetProjectRedeployPreviewAdminSessionToken
+		}
+	}
+	v := &admin.GetProjectRedeployPreviewPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRedeployProjectPayload builds the payload for the admin redeployProject
+// endpoint from CLI flags.
+func BuildRedeployProjectPayload(adminRedeployProjectBody string, adminRedeployProjectAdminSessionToken string) (*admin.RedeployProjectPayload, error) {
+	var err error
+	var body RedeployProjectRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRedeployProjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expected_active_deployment_id\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRedeployProjectAdminSessionToken != "" {
+			adminSessionToken = &adminRedeployProjectAdminSessionToken
+		}
+	}
+	v := &admin.RedeployProjectPayload{
+		OrganizationID:             body.OrganizationID,
+		ProjectID:                  body.ProjectID,
+		ExpectedActiveDeploymentID: body.ExpectedActiveDeploymentID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -263,6 +265,10 @@ type WriteDependencies struct {
 	// ImageUploads is nil when the admin server has no asset storage, which
 	// leaves upload_platform_image unimplemented.
 	ImageUploads PlatformImageUploader
+
+	// ProjectRedeployer is nil when the admin server has no Temporal
+	// connection, which leaves redeploy_project unimplemented.
+	ProjectRedeployer admin.ProjectRedeployer
 }
 
 // AttachWrites exposes every write operation this server implements while
@@ -287,6 +293,9 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationCreateRegistryEntry:                  &registryEntryWriter{runner: runner, registry: registry, writes: writes},
 		OperationSetRegistryIcons:                     &registryIconsWriter{runner: runner, registry: registry, writes: writes},
 	}}
+	if deps.ProjectRedeployer != nil {
+		tools.writers[OperationRedeployProject] = &projectRedeployWriter{runner: runner, redeployer: deps.ProjectRedeployer, writes: writes, now: time.Now}
+	}
 	if runtime.catalogPromotions != nil {
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}

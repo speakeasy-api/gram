@@ -25,7 +25,7 @@ func listAllAdminTools(t *testing.T) []json.RawMessage {
 	principal.Scopes = append(principal.Scopes, ScopeWrite)
 	runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
 	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	handler := runtime.Handler()
 

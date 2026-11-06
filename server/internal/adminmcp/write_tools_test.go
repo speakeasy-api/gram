@@ -134,7 +134,7 @@ func TestEveryWriteToolAsksForConfirmation(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
 	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()

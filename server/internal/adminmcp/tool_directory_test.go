@@ -26,7 +26,7 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
 	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}}
 	session := &StaffOAuthAuthorization{verifier: verifier}

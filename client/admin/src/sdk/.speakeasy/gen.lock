@@ -73,6 +73,7 @@ trackedFiles:
   src/funcs/adminGetOrganizationStats.ts: {}
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
+  src/funcs/adminGetProjectRedeployPreview.ts: {}
   src/funcs/adminGetRegistryEntry.ts: {}
   src/funcs/adminGetRegistryOktaCandidates.ts: {}
   src/funcs/adminGetRegistryPromotionCandidate.ts: {}
@@ -107,6 +108,7 @@ trackedFiles:
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
+  src/funcs/adminRedeployProject.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
@@ -216,6 +218,8 @@ trackedFiles:
   src/models/components/adminpaygbillingsummary.ts: {}
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
+  src/models/components/adminprojectredeploypreview.ts: {}
+  src/models/components/adminprojectredeployresult.ts: {}
   src/models/components/adminregistryentry.ts: {}
   src/models/components/adminregistryissue.ts: {}
   src/models/components/adminregistryoktacandidate.ts: {}
@@ -291,6 +295,7 @@ trackedFiles:
   src/models/components/productfeatures.ts: {}
   src/models/components/promoteregistrycandidaterequestbody.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
+  src/models/components/redeployprojectrequestbody.ts: {}
   src/models/components/remotesessionissuer.ts: {}
   src/models/components/remotesessionissuerdraft.ts: {}
   src/models/components/remotesessionissuerduplicatematch.ts: {}
@@ -354,6 +359,7 @@ trackedFiles:
   src/models/operations/admingetorganizationonboardingstack.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
+  src/models/operations/admingetprojectredeploypreview.ts: {}
   src/models/operations/admingetregistryentry.ts: {}
   src/models/operations/admingetregistryoktacandidates.ts: {}
   src/models/operations/admingetspendbreakdown.ts: {}
@@ -423,6 +429,8 @@ trackedFiles:
   src/react-query/adminGetPaygBillingSummary.ts: {}
   src/react-query/adminGetProject.core.ts: {}
   src/react-query/adminGetProject.ts: {}
+  src/react-query/adminGetProjectRedeployPreview.core.ts: {}
+  src/react-query/adminGetProjectRedeployPreview.ts: {}
   src/react-query/adminGetRegistryEntry.core.ts: {}
   src/react-query/adminGetRegistryEntry.ts: {}
   src/react-query/adminGetRegistryOktaCandidates.core.ts: {}
@@ -493,6 +501,7 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingStack.ts: {}
   src/react-query/adminPromoteRegistryCandidate.ts: {}
   src/react-query/adminRearmTrial.ts: {}
+  src/react-query/adminRedeployProject.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
@@ -1102,6 +1111,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetProjectRedeployPreview:
+    speakeasy-default-admin-get-project-redeploy-preview:
+      parameters:
+        query:
+          organization_id: "<id>"
+          project_id: "<id>"
+      responses:
+        "200":
+          application/json: {"active_deployment_id": "<id>", "external_mcps": 350939, "function_assets": 680909, "openapi_assets": 613857, "organization_id": "<id>", "packages": 444954, "project_id": "<id>", "project_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminGetRegistryEntry:
     speakeasy-default-admin-get-registry-entry:
       parameters:
@@ -1537,6 +1559,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminRedeployProject:
+    speakeasy-default-admin-redeploy-project:
+      requestBody:
+        application/json: {"expected_active_deployment_id": "<id>", "organization_id": "<id>", "project_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"deployment_id": "<id>", "project_id": "<id>", "source_deployment_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminRefreshGlobalIssuerMetadata:
     speakeasy-default-admin-refresh-global-issuer-metadata:
       requestBody:

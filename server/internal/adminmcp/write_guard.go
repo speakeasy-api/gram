@@ -34,6 +34,7 @@ const (
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
 	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
+	OperationRedeployProject                      WriteOperation = "redeploy_project"
 )
 
 // AllWriteOperations lists every write operation, in a stable order.
@@ -52,6 +53,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateRegistryEntry,
 	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
+	OperationRedeployProject,
 }
 
 func (op WriteOperation) known() bool {

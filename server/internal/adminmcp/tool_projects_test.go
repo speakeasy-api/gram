@@ -22,6 +22,7 @@ type recordingProjectReader struct {
 	getInput  *gen.GetProjectPayload
 	list      *gen.AdminListOrganizationProjectsResult
 	project   *gen.AdminProjectDetail
+	preview   *gen.AdminProjectRedeployPreview
 	err       error
 }
 
@@ -33,6 +34,10 @@ func (r *recordingProjectReader) ListOrganizationProjects(_ context.Context, inp
 func (r *recordingProjectReader) GetProject(_ context.Context, input *gen.GetProjectPayload) (*gen.AdminProjectDetail, error) {
 	r.getInput = input
 	return r.project, r.err
+}
+
+func (r *recordingProjectReader) GetProjectRedeployPreview(_ context.Context, _ *gen.GetProjectRedeployPreviewPayload) (*gen.AdminProjectRedeployPreview, error) {
+	return r.preview, r.err
 }
 
 func testProjectReads() *recordingProjectReader {
@@ -70,6 +75,25 @@ func TestListOrganizationProjectsBoundsAndSafeProjection(t *testing.T) {
 	reads = testProjectReads()
 	reads.list.Projects = append(reads.list.Projects, make([]*gen.AdminProject, maxOrganizationProjects+1)...)
 	_, body, _ = callStaffReadTool(t, reads, "list_organization_projects", `{"organization_id":"org-a"}`)
+	require.Contains(t, body, `"isError":true`)
+}
+
+func TestProjectRedeployPreviewRequiresExactProjectAndMatchingOrganization(t *testing.T) {
+	t.Parallel()
+	reads := testProjectReads()
+	reads.preview = &gen.AdminProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenapiAssets: 1, ExternalMcps: 2}
+	args := `{"organization_id":"org-a","project_id":"` + testProjectID + `"}`
+	status, _, data := callStaffReadTool(t, reads, "get_project_redeploy_preview", args)
+	require.Equal(t, http.StatusOK, status)
+	var preview ProjectRedeployPreview
+	require.NoError(t, json.Unmarshal(data, &preview))
+	require.Equal(t, ProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenAPIAssets: 1, ExternalMCPs: 2}, preview)
+
+	_, body, _ := callStaffReadTool(t, reads, "get_project_redeploy_preview", `{"organization_id":"org-a","project_id":"example"}`)
+	require.Contains(t, body, `"isError":true`)
+
+	reads.preview.OrganizationID = "org-b"
+	_, body, _ = callStaffReadTool(t, reads, "get_project_redeploy_preview", args)
 	require.Contains(t, body, `"isError":true`)
 }
 

@@ -124,6 +124,8 @@ type Server struct {
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
 	BackfillMcpConnectGrants                http.Handler
+	GetProjectRedeployPreview               http.Handler
+	RedeployProject                         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -256,6 +258,8 @@ func New(
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
+			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
+			{"RedeployProject", "POST", "/admin/project.redeploy"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -360,6 +364,8 @@ func New(
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
+		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -471,6 +477,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
+	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
+	s.RedeployProject = m(s.RedeployProject)
 }
 
 // MethodNames returns the methods served.
@@ -581,6 +589,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
+	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
+	MountRedeployProjectHandler(mux, h.RedeployProject)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -6109,6 +6119,113 @@ func NewBackfillMcpConnectGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillMcpConnectGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetProjectRedeployPreviewHandler configures the mux to serve the
+// "admin" service "getProjectRedeployPreview" endpoint.
+func MountGetProjectRedeployPreviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.redeployPreview", f)
+}
+
+// NewGetProjectRedeployPreviewHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getProjectRedeployPreview"
+// endpoint.
+func NewGetProjectRedeployPreviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetProjectRedeployPreviewRequest(mux, decoder)
+		encodeResponse = EncodeGetProjectRedeployPreviewResponse(encoder)
+		encodeError    = EncodeGetProjectRedeployPreviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectRedeployPreview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRedeployProjectHandler configures the mux to serve the "admin" service
+// "redeployProject" endpoint.
+func MountRedeployProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/project.redeploy", f)
+}
+
+// NewRedeployProjectHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "redeployProject" endpoint.
+func NewRedeployProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRedeployProjectRequest(mux, decoder)
+		encodeResponse = EncodeRedeployProjectResponse(encoder)
+		encodeError    = EncodeRedeployProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "redeployProject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
