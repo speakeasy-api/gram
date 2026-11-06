@@ -124,7 +124,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("detachServerClientAssociation", func() {
-		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding. With upstream auth enforcement off, detach returns a conflict (409): turn off User Identity on the server instead. With enforcement on, detach retires the typed auth-client link so the server stops offering the client, but preserves the underlying association. Repeating that detach returns not found (404). Requires mcp:write on the server.")
+		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })

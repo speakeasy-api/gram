@@ -251,7 +251,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		// from stays. A client an administrator created is not this
 		// association's and is left offered.
 		aq := authclientsrepo.New(dbtx)
-		offered, err := aq.ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{
+		offered, err := aq.ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
 			McpServerID:    serverID,
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,

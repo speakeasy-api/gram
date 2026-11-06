@@ -170,18 +170,19 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
-		DirectAuthClient: nil,
-		CompletedAt:      time.Time{},
-		BackendHash:      backendHash,
-		StateID:          stateID,
-		Attempt:          attempt,
-		Resource:         endpointToolSelectionResource(endpoint),
-		Tools:            []consentInventoryTool{},
-		ExpectedCursor:   "",
-		Complete:         false,
-		McpSessionID:     "",
-		MemberBindings:   nil,
-		MemberOutcomes:   nil,
+		DirectAuthClient:     nil,
+		otherModeBackendHash: "",
+		CompletedAt:          time.Time{},
+		BackendHash:          backendHash,
+		StateID:              stateID,
+		Attempt:              attempt,
+		Resource:             endpointToolSelectionResource(endpoint),
+		Tools:                []consentInventoryTool{},
+		ExpectedCursor:       "",
+		Complete:             false,
+		McpSessionID:         "",
+		MemberBindings:       nil,
+		MemberOutcomes:       nil,
 	}, nil
 }
 

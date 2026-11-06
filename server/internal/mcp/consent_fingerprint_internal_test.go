@@ -169,7 +169,9 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 			require.ErrorContains(t, err, "configuration changed")
 			var diagnostic map[string]any
 			require.NoError(t, json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &diagnostic))
-			require.Equal(t, tc.enforced && tc.approved.TypedBackendHash != "", diagnostic[string(attr.McpConsentComparisonsKey)].(map[string]any)["typed_compared"])
+			comparisons, ok := diagnostic[string(attr.McpConsentComparisonsKey)].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, tc.enforced && tc.approved.TypedBackendHash != "", comparisons["typed_compared"])
 		})
 	}
 }

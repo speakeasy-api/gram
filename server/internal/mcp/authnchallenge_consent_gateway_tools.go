@@ -47,8 +47,9 @@ type consentMemberOutcome struct {
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
-		DirectAuthClient: nil,
-		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
+		DirectAuthClient:     nil,
+		otherModeBackendHash: "",
+		CompletedAt:          time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, reservation); err != nil {
 		return "", fmt.Errorf("%w: reserve gateway capture: %w", errConsentInventoryUnavailable, err)

@@ -446,6 +446,44 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to retire")
 }
 
+// An administrator can attach a backfilled credential independently of the
+// association it came from. Detach must preserve that administrator-owned link.
+func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+	issuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-adminlink")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, issuerID, "adminlink")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, issuerID, orgID, "rsi-adminlink")
+	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.Len(t, offered, 1)
+	q := authclientsrepo.New(ti.conn)
+	_, err := q.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{
+		AuthClientID: offered[0], McpServerID: serverID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	_, err = q.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{
+		AuthClientID: offered[0], McpServerID: serverID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	err = ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID: serverID.String(), RemoteSessionClientID: clientID.String(),
+	})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code, "no backfill-owned link remains to retire")
+	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))
+}
+
 // TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync
 // never reaches records an administrator owns: a client and link they created
 // survive a legacy detach of the registration-derived ones.
