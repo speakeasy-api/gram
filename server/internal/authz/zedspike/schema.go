@@ -55,7 +55,10 @@ func LoadRegistry() (*Registry, error) {
 		}
 		reg.Types[def.Name] = def
 	}
-	errs = append(errs, checkTables(reg)...)
+	// the table checks walk every type, so run them on a complete registry only
+	if len(errs) == 0 {
+		errs = checkTables(reg)
+	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("rbac.zed does not match the Go tables: %w", errors.Join(errs...))
 	}

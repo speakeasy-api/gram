@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 )
 
 // Permissionship is the answer to one check under one policy.
@@ -52,6 +53,34 @@ type Caller struct {
 	Policies       []Policy
 	// RepresentedUser is the user an upstream auth client check acts for.
 	RepresentedUser string
+	// RepresentedPolicies are that user's own policies. An auth client check
+	// must pass them too, so an agent cannot use a connection its represented
+	// user could not use.
+	RepresentedPolicies []Policy
+}
+
+// clone copies the caller deeply, so nothing holding the original can change
+// the grants a later check reads.
+func (c Caller) clone() Caller {
+	out := c
+	out.Policies = clonePolicies(c.Policies)
+	out.RepresentedPolicies = clonePolicies(c.RepresentedPolicies)
+	return out
+}
+
+func clonePolicies(policies []Policy) []Policy {
+	if policies == nil {
+		return nil
+	}
+	out := make([]Policy, len(policies))
+	for i, p := range policies {
+		out[i] = Policy{Subject: p.Subject, Roles: slices.Clone(p.Roles), Grants: make([]GrantRow, len(p.Grants))}
+		for j, g := range p.Grants {
+			g.Selector = maps.Clone(g.Selector)
+			out[i].Grants[j] = g
+		}
+	}
+	return out
 }
 
 type callerKey struct{}
@@ -59,14 +88,14 @@ type callerKey struct{}
 // withCaller stores the admitted caller. Admission lives in this package, so
 // no handler can replace the caller before a check.
 func withCaller(ctx context.Context, caller Caller) context.Context {
-	return context.WithValue(ctx, callerKey{}, caller)
+	return context.WithValue(ctx, callerKey{}, caller.clone())
 }
 
 // CallerFrom returns the admitted caller. Handlers never pass one: the
 // client reads it, so no handler can check as someone else.
 func CallerFrom(ctx context.Context) (Caller, bool) {
 	caller, ok := ctx.Value(callerKey{}).(Caller)
-	return caller, ok
+	return caller.clone(), ok
 }
 
 // Evaluator answers checks over one policy. The production implementation
@@ -109,11 +138,13 @@ func (c *Client) Allowed(ctx context.Context, check Check) (bool, error) {
 	if check.organizationID != "" && check.organizationID != caller.OrganizationID {
 		return false, nil
 	}
+	policies := caller.Policies
 	if check.resourceType == "mcp_auth_client" {
 		check.context = maps.Clone(check.context)
 		check.context["represented_user"] = caller.RepresentedUser
+		policies = append(slices.Clone(policies), caller.RepresentedPolicies...)
 	}
-	for _, policy := range caller.Policies {
+	for _, policy := range policies {
 		answer, err := c.evaluator.Check(ctx, caller.OrganizationID, policy, check)
 		if err != nil {
 			return false, fmt.Errorf("check %s: %w", check, err)

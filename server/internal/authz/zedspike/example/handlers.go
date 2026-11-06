@@ -17,15 +17,17 @@ type Service struct {
 	chats   ChatStore
 }
 
-// ServerStore and ChatStore stand in for sqlc queries.
+// ServerStore and ChatStore stand in for sqlc queries. Every load is scoped
+// by the caller's organization: a check's organization edge is always the
+// caller's, so a row from another organization must never reach a check.
 type ServerStore interface {
-	Get(ctx context.Context, id string) (Server, error)
-	List(ctx context.Context, projectID, where string, args []any, limit, offset int) ([]Server, error)
-	Count(ctx context.Context, projectID, where string, args []any) (int, error)
+	Get(ctx context.Context, organizationID, id string) (Server, error)
+	List(ctx context.Context, organizationID, projectID, where string, args []any, limit, offset int) ([]Server, error)
+	Count(ctx context.Context, organizationID, projectID, where string, args []any) (int, error)
 }
 
 type ChatStore interface {
-	Get(ctx context.Context, id string) (Chat, error)
+	Get(ctx context.Context, organizationID, id string) (Chat, error)
 }
 
 type Server struct{ ID, ProjectID, Name string }
@@ -47,9 +49,11 @@ func (s *Service) UpdateOrganizationSettings(ctx context.Context, organizationID
 // 2. MCP tool call. The project comes from the loaded server row, never from
 // the request, so a project-level grant on another project cannot match.
 // CallTool passes tool and disposition to the caveats: an allow limited to
-// other tools does not match, and a block on this tool does.
-func (s *Service) CallTool(ctx context.Context, serverID, tool, disposition string) error {
-	server, err := s.servers.Get(ctx, serverID)
+// other tools does not match, and a block on this tool does. A block or a
+// direct grant limited to one disposition matches only a call that names
+// that disposition, so pass it whenever the call has one.
+func (s *Service) CallTool(ctx context.Context, organizationID, serverID, tool, disposition string) error {
+	server, err := s.servers.Get(ctx, organizationID, serverID)
 	if err != nil {
 		return err
 	}
@@ -70,13 +74,13 @@ func (s *Service) ListServers(ctx context.Context, organizationID, projectID str
 		return nil, 0, err
 	}
 	where, args := predicate.SQL("toolsets.id")
-	page, err := s.servers.List(ctx, projectID, where, args, limit, offset)
+	page, err := s.servers.List(ctx, organizationID, projectID, where, args, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	// 4. Count: the same predicate, so the total equals what the caller can
 	// page through. Counting a filtered page would be wrong both ways.
-	total, err := s.servers.Count(ctx, projectID, where, args)
+	total, err := s.servers.Count(ctx, organizationID, projectID, where, args)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -88,8 +92,8 @@ func (s *Service) ListServers(ctx context.Context, organizationID, projectID str
 // and Require passes only if every one allows. An agent whose own grant
 // covers every server in the project still cannot open a server its owner
 // cannot.
-func (s *Service) ConnectServer(ctx context.Context, serverID string) error {
-	server, err := s.servers.Get(ctx, serverID)
+func (s *Service) ConnectServer(ctx context.Context, organizationID, serverID string) error {
+	server, err := s.servers.Get(ctx, organizationID, serverID)
 	if err != nil {
 		return err
 	}
@@ -102,8 +106,8 @@ func (s *Service) ConnectServer(ctx context.Context, serverID string) error {
 // mcp_read_direct, which rbac.zed adds back after the role's block and
 // before her own blocks. Connecting works the same way through
 // mcp_connect_direct.
-func (s *Service) OpenServerSettings(ctx context.Context, serverID string) error {
-	server, err := s.servers.Get(ctx, serverID)
+func (s *Service) OpenServerSettings(ctx context.Context, organizationID, serverID string) error {
+	server, err := s.servers.Get(ctx, organizationID, serverID)
 	if err != nil {
 		return err
 	}
@@ -113,8 +117,8 @@ func (s *Service) OpenServerSettings(ctx context.Context, serverID string) error
 // Chat ownership: the handler loads the chat and passes its owner, which is
 // the only way to build a chat check. A chat grant, being its author, or
 // owning the live agent that ran an agent-only chat each allow.
-func (s *Service) LoadChat(ctx context.Context, chatID string) (Chat, error) {
-	chat, err := s.chats.Get(ctx, chatID)
+func (s *Service) LoadChat(ctx context.Context, organizationID, chatID string) (Chat, error) {
+	chat, err := s.chats.Get(ctx, organizationID, chatID)
 	if err != nil {
 		return Chat{}, err
 	}

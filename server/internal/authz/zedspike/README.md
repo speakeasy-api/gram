@@ -46,7 +46,7 @@ no database.
 - **`_direct` and `_own`.** `mcp_connect_direct` holds the same rows as
   `mcp_connect` when they were written for one user by name, name this server
   and were not inferred. `mcp_blocked_connect_own` holds blocks written for
-  the user being checked. Every blockable permission reads
+  the user being checked. Every blockable resource-level permission reads
   `((inherited grants - inherited blocks) + direct grants) - own blocks`,
   which is today's precedence (`precedence.go`) written into the file.
 - **Partials.** Each kind's grant set (`mcp_grants`, `environment_grants`, …)
@@ -79,12 +79,14 @@ Storage does not change and no SpiceDB server runs. `Registry.Land` reads each
 | `principal_urn` `user:dana` / `user:all` / `role:organization:<id>` / `agent:<id>` / `api_key:<id>` | subject `user:dana` / `user:*` / `role:organization_<id>#member` / `agent:<id>` / `api_key:<id>` |                                                            |
 | `scope`                                                                                             | relation, `:` as `_`, plus `_direct` / `_own` by principal                                       | `mcp:connect` → `mcp_connect`                              |
 | `selectors.resource_id` concrete                                                                    | object is that resource                                                                          | `mcp_server:S#mcp_connect@…`                               |
-| `resource_id "*"` with `project_id`                                                                 | object is the project                                                                            | `project:P#mcp_connect@…`                                  |
+| `resource_id "*"` with `project_id`                                                                 | object is the project (auth clients keep `project_id` as a caveat parameter)                     | `project:P#mcp_connect@…`                                  |
 | `resource_id "*"` alone                                                                             | object is the organization                                                                       | `organization:O#mcp_connect@…`                             |
 | other selector keys                                                                                 | caveat `granted_*` parameters                                                                    | `tool: search` → `mcp_tools_allow{granted_tool: "search"}` |
 | `inferred`                                                                                          | keeps a user's concrete grant out of `_direct`                                                   |                                                            |
 
-Role assignments become `role:<id>#member@user:<id>`. Edges and facts come
+Risk-policy rows must name a policy: `risk_policy` has no organization or
+project edge, so a `*` row fails to land (see Simplifications). Role
+assignments become `role:<id>#member@user:<id>`. Edges and facts come
 from the check, never from storage (`edgeRelationships` in the conformance
 test shows them as the relationships SpiceDB would need).
 
@@ -129,7 +131,8 @@ capped by its owner need no handler code at all; see `example/handlers.go`.
    walkthrough (broad grant, inferred, agent, tool-limited, own block,
    `user:all` block).
 6. **Subject types per relation; `root` kept.** `user:*`, `agent`, `api_key`
-   listed. `root` is a relation on organization reached from every `has_*`,
+   listed. `root` is a relation on organization reached from every `has_*` except
+   auth clients and risk policies,
    marked as a deletion candidate.
 7. **Explicit `answers`.** `Answers` in `catalogue.go`; reordering a union
    never changes the old tables. Organization edges are one implicit rule,
