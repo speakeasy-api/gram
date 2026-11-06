@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,7 +10,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import { ChatTranscript, type TranscriptPagination } from "./ChatTranscript";
 import { buildTranscript, type DisplayItem } from "./transcript";
-import { STALE_PENDING_TOOL_CALL_MS } from "@/lib/toolCallStatus";
+
+// The contract, stated apart from the implementation's constant: a call with
+// no result reads Pending for ten minutes.
+const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 // Layout has no viewport in happy-dom. Keep the real transcript and ToolUI;
 // only make every virtual row visible and isolate unrelated risk actions.
@@ -248,12 +252,22 @@ describe("hook tool result status", () => {
     );
     expect(screen.getByText("Failed")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
-    // The error is the call's output: the row has content to expand.
-    expect(
-      screen
-        .getByRole("button", { name: /execute_tool/ })
-        .hasAttribute("disabled"),
-    ).toBe(false);
+    // The error is the call's output: expanding the row shows it.
+    const row = screen.getByRole("button", { name: /execute_tool/ });
+    expect(row.hasAttribute("disabled")).toBe(false);
+    // Expanding a row draws the ToolUI section toggles inside the row toggle,
+    // which React reports as nested buttons. That markup predates this test,
+    // so only that warning is allowed.
+    const nestingWarning = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    fireEvent.click(row);
+    fireEvent.click(screen.getByRole("button", { name: /Output/ }));
+    expect(screen.getByText(/MCP error -32603/)).toBeTruthy();
+    for (const [message] of nestingWarning.mock.calls) {
+      expect(String(message)).toMatch(/descendant of|nested/);
+    }
+    nestingWarning.mockRestore();
   });
 
   it("renders a call with no result yet as pending, never complete", () => {
@@ -264,10 +278,24 @@ describe("hook tool result status", () => {
   });
 
   it("renders a call with no result for a long time as unknown", () => {
-    showCall([call(new Date(Date.now() - STALE_PENDING_TOOL_CALL_MS))]);
+    showCall([call(new Date(Date.now() - TEN_MINUTES_MS))]);
     expect(screen.getByRole("img", { name: "Tool unknown" })).toBeTruthy();
     expect(screen.getByText("Unknown")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+  });
+
+  it("turns a pending call unknown at ten minutes without another update", () => {
+    vi.useFakeTimers();
+    try {
+      showCall([call(new Date(Date.now() - TEN_MINUTES_MS + 1000))]);
+      expect(screen.getByText("Pending")).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByText("Unknown")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows a group with an unanswered call as not complete", () => {

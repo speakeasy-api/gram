@@ -40,6 +40,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import { useStalePendingRerender } from "@/lib/toolCallStatus";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
@@ -70,6 +71,7 @@ import {
   type ToolResultStatus,
   type ToolRow,
   toolResultStatus,
+  pendingSinceMs,
   type TranscriptRow,
   type TurnAuthor,
 } from "./transcript";
@@ -876,6 +878,9 @@ function ToolRowView({
   const result = row.resultMessage
     ? messageText(row.resultMessage.content)
     : undefined;
+  // A call with no result turns Unknown after a while; re-render then so the
+  // label does not wait for an unrelated update.
+  useStalePendingRerender(pendingSinceMs(row));
   const status = toolResultStatus(row);
 
   const { callResults, resultResults } = toolResults(row, ctx);
@@ -1015,6 +1020,13 @@ const ToolGroupView = memo(function ToolGroupView({
   const flaggedCount = useMemo(
     () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
     [group.rows, ctx],
+  );
+  // The group reads pending until its last unanswered call turns unknown.
+  const pendingSince = group.rows
+    .map(pendingSinceMs)
+    .filter((ms): ms is number => ms !== undefined);
+  useStalePendingRerender(
+    pendingSince.length > 0 ? Math.max(...pendingSince) : undefined,
   );
   const statuses = group.rows.map((row) => toolResultStatus(row));
   const failedCount = statuses.filter((status) => status === "error").length;

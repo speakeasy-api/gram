@@ -144,6 +144,15 @@ export type ToolResultStatus =
   | "pending"
   | "unknown";
 
+/** When a tool row's call started, while it still has no result; undefined
+ * once it has one. Its pending status turns unknown a while after this. */
+export function pendingSinceMs(row: ToolRow): number | undefined {
+  if (row.resultMessage) return undefined;
+  const startedAt = row.callMessage?.createdAt;
+  if (!startedAt) return undefined;
+  return new Date(startedAt).getTime();
+}
+
 /** The status of a tool row. A call with no result is never a success: it is
  * pending while it may still run, and unknown once it is too old to be
  * running. A hook-captured failure carries the "error" finish reason. For a
