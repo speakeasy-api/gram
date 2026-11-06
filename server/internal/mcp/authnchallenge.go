@@ -1281,8 +1281,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		}
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
-			s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, resolveFailureHappened(err), err)
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+			return nil, s.remoteSessionResolveFailed(ctx, s.logger, authentication, err)
 		}
 		return tokens, nil
 	}
@@ -1341,8 +1340,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		}
 		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	default:
-		s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, mcpconnectionattempts.CodeInternalError, err)
-		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+		return s.remoteSessionResolveFailed(ctx, s.logger, authentication, err)
 	}
 }
 
@@ -1390,6 +1388,13 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 	s.recordRemoteSessionOutcome(ctx, authentication, reason, code, causes...)
+}
+
+// remoteSessionResolveFailed records an upstream remote session the gate
+// could not resolve and returns the logged 500.
+func (s *Service) remoteSessionResolveFailed(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication, err error) error {
+	s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, resolveFailureHappened(err), err)
+	return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 }
 
 // recordRemoteSessionOutcome writes the request row for an upstream remote

@@ -143,15 +143,13 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			return none, s.rejectRemoteSession(ctx, w, authentication, err)
 		}
 		if err != nil {
-			s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, resolveFailureHappened(err), err)
-			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+			return none, s.remoteSessionResolveFailed(ctx, logger, authentication, err)
 		}
 		if upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID) {
 			return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 		}
 	case strictErr != nil:
-		s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, resolveFailureHappened(strictErr), strictErr)
-		return none, oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
+		return none, s.remoteSessionResolveFailed(ctx, logger, authentication, strictErr)
 	case upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID):
 		return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 	}

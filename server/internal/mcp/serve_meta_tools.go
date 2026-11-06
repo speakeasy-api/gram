@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -272,9 +271,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	}
 	attempt.member = &member
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-		if consent, ok := errors.AsType[catalogConsentError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeConsentNotApproved, mcpconnectionattempts.Detail(string(consent.reason)))
-		}
+		s.recordConsentRefusal(ctx, gate, member, err)
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
 			message := s.memberFailureMessage(ctx, logger, gate, member, err)
 			attempt.fail(metaMemberErrorStatus(err), message)
@@ -291,6 +288,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
+		if failure, ok := errors.AsType[memberConnectionError](err); ok {
+			s.recordMemberFailure(ctx, gate, member, failure.code)
+		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
@@ -303,12 +303,13 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// member-scoped result (as in serveToolsetResolved). Members keep their
 	// toolset's hosting publicness.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
-	if err != nil {
+	if err != nil || !satisfied {
 		s.recordMemberFailure(ctx, gate, member, failureCode)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if !satisfied {
-		s.recordMemberFailure(ctx, gate, member, failureCode)
 		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
 		attempt.fail(http.StatusUnauthorized, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
