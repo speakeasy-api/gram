@@ -128,3 +128,15 @@ export function identityRailItems(
     },
   ];
 }
+
+/**
+ * The breadcrumb label for each sub-page segment, taken from the rail so a
+ * section has one name in both places. Without it the crumb title-cased the
+ * URL segment, so the agent tab "Controls & Safety" read "Controls" above it.
+ * A rail item's key is its URL segment.
+ */
+export function identitySectionCrumbs(
+  items: Pick<IdentityRailItem, "key" | "title">[],
+): Record<string, string> {
+  return Object.fromEntries(items.map((item) => [item.key, item.title]));
+}
