@@ -934,7 +934,7 @@ func matchingDispositionRules(grants []*accessgen.RoleGrant, mcpID, projectID st
 
 func scopeMayAllowConnect(scope string) bool {
 	switch authz.Scope(scope) {
-	case authz.ScopeRoot, authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite:
+	case authz.ScopeRoot, authz.ScopeMCPConnect:
 		return true
 	default:
 		return false
@@ -943,7 +943,7 @@ func scopeMayAllowConnect(scope string) bool {
 
 func scopeMayBlockConnect(scope string) bool {
 	switch authz.Scope(scope) {
-	case authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite:
+	case authz.ScopeMCPBlockedConnect:
 		return true
 	default:
 		return false

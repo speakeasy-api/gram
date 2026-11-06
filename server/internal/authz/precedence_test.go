@@ -69,13 +69,14 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 			allowed: false,
 		},
 		{
-			name: "direct grant through scope expansion outranks role block",
+			name: "direct write grant does not imply connect past a role block",
 			grants: []Grant{
+				heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 				heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPWrite, "server-1")),
 			},
 			check:   serverCheck,
-			allowed: true,
+			allowed: false,
 		},
 		{
 			name: "direct wildcard grant does not outrank role block",
