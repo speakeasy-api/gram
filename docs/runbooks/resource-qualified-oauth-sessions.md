@@ -33,8 +33,12 @@ resource's current tokens and consent generation.
   disconnect and auto-refresh preference mutations must use `ForResource` too:
   they affect only a matching bound audience, never an inferred legacy NULL
   resource. Unqualified multi-grant mutations return a failed precondition.
+  Focused mutations reject an empty resource instead of selecting a singleton
+  from another audience. Focused refresh and verification also require a bound
+  matching resource; they never mutate a legacy unbound source by inference.
   Verification uses the qualified status's row ID and CAS timestamp with the
-  existing enrichment/validation methods.
+  `EnrichRemoteSessionForResource` and `RecordRemoteSessionValidationForResource`
+  methods. Unqualified legacy singleton operations retain their existing contract.
 
 ## Required deployment order
 

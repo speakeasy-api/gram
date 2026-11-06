@@ -1302,12 +1302,19 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
 ) (RefreshResult, error) {
-	return m.RefreshRemoteSessionForResource(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
+	return m.refreshRemoteSession(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
 }
 
 // RefreshRemoteSessionForResource refreshes one audience without replacing any
 // sibling grant. A registration-only request is refused when ambiguous.
 func (m *ChallengeManager) RefreshRemoteSessionForResource(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
+	if resource == "" {
+		return RefreshResult{}, focusedResourceRequired()
+	}
+	return m.refreshRemoteSession(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, resource)
+}
+
+func (m *ChallengeManager) refreshRemoteSession(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
 	var zero RefreshResult
 
 	bound, err := remotesessions_repo.New(m.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
@@ -1333,6 +1340,9 @@ func (m *ChallengeManager) RefreshRemoteSessionForResource(ctx context.Context, 
 	}
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
+	}
+	if resource != "" && (!session.Resource.Valid || session.Resource.String == "" || strings.TrimRight(session.Resource.String, "/") != strings.TrimRight(resource, "/")) {
+		return zero, ErrRemoteSessionNotRefreshable
 	}
 	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
 		return zero, ErrRemoteSessionNotRefreshable
@@ -1372,13 +1382,20 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, orga
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
 func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
-	return m.DisconnectRemoteSessionForResource(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
+	return m.disconnectRemoteSession(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
 }
 
 // DisconnectRemoteSessionForResource disconnects only the matching bound audience.
 // It does not guess that a legacy unbound grant belongs to a focused resource.
 // Registration-only requests are refused when multiple grants exist.
 func (m *ChallengeManager) DisconnectRemoteSessionForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
+	if resource == "" {
+		return 0, focusedResourceRequired()
+	}
+	return m.disconnectRemoteSession(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource)
+}
+
+func (m *ChallengeManager) disconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
 	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
 		return 0, err
 	}
@@ -1409,13 +1426,20 @@ func (m *ChallengeManager) DisconnectRemoteSessionForResource(ctx context.Contex
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
 func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
-	return m.SetRemoteSessionAutoRefreshForResource(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "", enabled)
+	return m.setRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "", enabled)
 }
 
 // SetRemoteSessionAutoRefreshForResource changes one audience's preference without
 // touching its siblings or the refresh CAS timestamp. No legacy resource inference
 // is permitted for this mutation; an unqualified multi-grant request is refused.
 func (m *ChallengeManager) SetRemoteSessionAutoRefreshForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string, enabled bool) (int64, error) {
+	if resource == "" {
+		return 0, focusedResourceRequired()
+	}
+	return m.setRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource, enabled)
+}
+
+func (m *ChallengeManager) setRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string, enabled bool) (int64, error) {
 	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
 		return 0, err
 	}
@@ -1432,6 +1456,10 @@ func (m *ChallengeManager) SetRemoteSessionAutoRefreshForResource(ctx context.Co
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
 	}
 	return n, nil
+}
+
+func focusedResourceRequired() error {
+	return oops.E(oops.CodeFailedPrecondition, nil, "a specific upstream resource is required for this focused connection action")
 }
 
 func (m *ChallengeManager) requireUnambiguousSessionMutation(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) error {

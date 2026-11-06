@@ -232,6 +232,14 @@ func TestRemoteSessionResourceGrants_FocusedMutationsNeverTouchSibling(t *testin
 	}
 	a := consent("https://mutation-a.example/mcp")
 	b := consent("https://mutation-b.example/mcp")
+	refA := remotesessions.RemoteSessionRef{ID: a.ID, Subject: subject, ClientID: f.clientID, UpdatedAt: a.UpdatedAt.Time, ProjectID: f.projectID, OrganizationID: f.organizationID}
+	verdict := remotesessions.RemoteSessionValidation{Status: remotesessions.ValidationOutcomeValid, Reason: "verified fixture", At: time.Now()}
+	recorded, err := f.mgr.RecordRemoteSessionValidationForResource(ctx, refA, b.Resource.String, verdict)
+	require.NoError(t, err)
+	require.False(t, recorded)
+	verification, err := f.mgr.EnrichRemoteSessionForResource(ctx, refA, b.Resource.String)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.UpstreamVerification{}, verification)
 	n, err := f.mgr.SetRemoteSessionAutoRefresh(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, true)
 	require.Zero(t, n)
 	var refusal *oops.ShareableError
@@ -259,6 +267,21 @@ func TestRemoteSessionResourceGrants_FocusedMutationsNeverTouchSibling(t *testin
 	require.Equal(t, a, retainedA)
 	_, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+	// A missing focused resource is never an unqualified request for singleton A.
+	n, err = f.mgr.DisconnectRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, "")
+	require.Zero(t, n)
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	n, err = f.mgr.SetRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, "", true)
+	require.Zero(t, n)
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	_, err = f.mgr.RefreshRemoteSessionForResource(ctx, remotesessions.RefreshAttribution{}, subject, f.projectID, f.organizationID, f.signInA, f.clientID, "")
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	retainedA, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: a.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, a, retainedA)
 	// A focused request for an audience with no bound grant does not delete A.
 	n, err = f.mgr.DisconnectRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, "https://missing.example/mcp")
 	require.NoError(t, err)
