@@ -18,6 +18,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
@@ -107,6 +108,14 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 			}
 			if tc.header != "" {
 				seedRemoteHeader(t, ctx, ti.conn, projectID, server.RemoteMcpServerID.UUID, tc.header, tc.value, tc.source, tc.required)
+			}
+			if tc.noLegacyAssociation {
+				// Reproduce a derived OAuth signal without a legacy association.
+				// Otherwise legacy admission sees an anonymous source, not the
+				// missing-issuer-link predicate this regression must exercise.
+				client, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, ID: registration})
+				require.NoError(t, err)
+				stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, server.ID, conv.ToNullUUID(client.RemoteSessionClient.RemoteSessionIssuerID))
 			}
 			token := mintOrganizationGatewayBearer(t, ti, fx)
 			endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
