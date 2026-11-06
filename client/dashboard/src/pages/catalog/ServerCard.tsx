@@ -1,5 +1,6 @@
-import { catalogLogoClassName } from "./logo";
-import { cn } from "@/lib/utils";
+import { resolveCatalogLogo } from "./logo";
+import { useIsDarkTheme } from "@/lib/theme";
+import { CatalogLogo } from "./CatalogLogo";
 import { Card } from "@/components/ui/Card";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
@@ -75,6 +76,7 @@ export function ServerCard({
   onAdd,
 }: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
+  const theme = useIsDarkTheme() ? "dark" : "light";
   const { canvasRef, start, stop } = useIconDither();
 
   return (
@@ -89,14 +91,11 @@ export function ServerCard({
       <Card.Entity
         className="cursor-pointer"
         icon={
-          server.iconUrl ? (
-            <img
-              src={server.iconUrl}
+          resolveCatalogLogo(server, theme).src ? (
+            <CatalogLogo
+              server={server}
               alt={displayName}
-              className={cn(
-                "h-12 w-12 object-contain",
-                catalogLogoClassName(server.registrySpecifier),
-              )}
+              className="h-12 w-12 object-contain"
             />
           ) : undefined
         }
