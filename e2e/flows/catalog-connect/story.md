@@ -5,7 +5,9 @@ and gets the URL an agent connects to.
 
 ## Given
 
-- The catalog is reachable (it is fetched live from the MCP registry).
+- The catalog is reachable (it is fetched live from the MCP registry). This
+  is deliberate: the flow checks what a user sees. An outage or a catalog
+  change fails it, and the heal agent reports which.
 - "DeepWiki" is in the catalog. Its remote needs no credentials, so the add
   flow needs no headers or identity setup.
 - The user can write MCP servers.

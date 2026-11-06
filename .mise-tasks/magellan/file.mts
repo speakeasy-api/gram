@@ -45,9 +45,9 @@ async function latestRunDir(): Promise<string> {
 
 // The same bug found on two nights must map to one issue. The agent names it
 // with a stable `signature`; the route's org/project slugs vary per stack, so
-// only the part after the project counts.
+// only the part after them counts (org-level routes have no project).
 function fingerprint(f: Finding): string {
-  const route = f.route.replace(/^\/[^/]+\/projects\/[^/]+/, "");
+  const route = f.route.replace(/^\/[^/]+(?:\/projects\/[^/]+)?/, "");
   const key = [f.kind, route, f.signature.trim().toLowerCase()].join("|");
   return `magellan-${createHash("sha256").update(key).digest("hex").slice(0, 12)}`;
 }
@@ -172,13 +172,19 @@ async function main() {
       continue;
     }
 
+    // Search is fuzzy: only a hit that carries this exact fingerprint is the
+    // same bug.
     const { searchIssues } = await linear<{
-      searchIssues: { nodes: { identifier: string; url: string }[] };
+      searchIssues: {
+        nodes: { identifier: string; url: string; description?: string }[];
+      };
     }>(
-      `query($term: String!) { searchIssues(term: $term, first: 1, includeArchived: true) { nodes { identifier url } } }`,
+      `query($term: String!) { searchIssues(term: $term, first: 10, includeArchived: true) { nodes { identifier url description } } }`,
       { term: id },
     );
-    const existing = searchIssues.nodes[0];
+    const existing = searchIssues.nodes.find((n) =>
+      n.description?.includes(id),
+    );
     if (existing) {
       console.log(`seen   ${existing.identifier} ${label}`);
       continue;
@@ -197,14 +203,23 @@ async function main() {
             f,
             id,
             f.screenshot
-              ? await uploadScreenshot(path.join(runDir, f.screenshot))
+              ? // basename: the agent wrote this path, and it must not reach
+                // outside the run directory. A failed upload still files.
+                await uploadScreenshot(
+                  path.join(runDir, path.basename(f.screenshot)),
+                ).catch((err: unknown) => {
+                  console.warn(`screenshot upload failed for ${id}: ${err}`);
+                  return undefined;
+                })
               : undefined,
           ),
           priority: priority[f.severity],
         },
       },
     );
-    console.log(`filed  ${issueCreate.issue.identifier} ${label}`);
+    console.log(
+      `filed  ${issueCreate.issue.identifier} ${label}${quiet ? "" : ` ${issueCreate.issue.url}`}`,
+    );
   }
 }
 

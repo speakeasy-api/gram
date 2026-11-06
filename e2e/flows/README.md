@@ -44,8 +44,8 @@ not change the story. A removed step or a new required step does.
 ## The loop
 
 1. **Replay** — `mise run test:flows` runs every `flow.spec.ts` against the
-   local stack. Cheap and deterministic. CI runs this on PRs that touch the
-   dashboard.
+   local stack. It needs no LLM of its own, so it is cheap. CI runs this on
+   PRs that touch the dashboard.
 2. **Heal** — when a replay fails, `mise run flows:heal <flow>` hands the story,
    the failure, and the branch diff to a Claude Code agent. The agent walks the
    story in a real browser and returns one verdict:
@@ -67,3 +67,17 @@ not change the story. A removed step or a new required step does.
 
 Scripts must create their own data with a unique suffix (`runId()` in
 `fixtures.ts`), so a rerun never collides with an earlier run.
+
+## Starter flows and their dependencies
+
+Not every flow is equally repeatable:
+
+| Flow                 | Depends on                                         | Repeatable                                 |
+| -------------------- | -------------------------------------------------- | ------------------------------------------ |
+| `server-from-source` | the local stack only                               | yes                                        |
+| `assistant-create`   | an LLM (`OPENROUTER_DEV_KEY`); skipped without one | no: the builder's replies vary             |
+| `catalog-connect`    | the live MCP registry and DeepWiki's remote server | no: an outage or a catalog change fails it |
+
+A failure in a flow that is not repeatable is not proof of a regression on
+its own. The heal agent re-walks the story and says which it was, and the
+check does not block merges.

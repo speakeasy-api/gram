@@ -8,7 +8,8 @@ Inputs (paths are relative to the repository root):
 - `e2e/flows/{{FLOW}}/flow.spec.ts` — the current script. May not exist yet.
 - `e2e/.flows/results.json` — the last replay result, if there was one.
 - `e2e/.flows/artifacts/` — traces and screenshots from that replay.
-- The branch diff: `git diff origin/main...HEAD -- client/`.
+- The branch diff: `git diff origin/main...HEAD -- client/ e2e/flows/`. A
+  change to this flow's `story.md` there is a deliberate flow change.
 
 Do this:
 
@@ -35,8 +36,10 @@ Do this:
    - One `test.step` per story step, named after the step.
    - Prefer `getByRole` / `getByLabel` / `getByText` with the visible text.
      No CSS classes, no `nth()` unless the story is about order.
-   - Prove every `Then` with `rpc(...)` or a URL check, not only with text on
-     screen.
+   - Prove every `Then` with `rpc(...)`, a URL check, or a direct request to
+     the endpoint the story names (for example an MCP `initialize` against
+     the server's URL), not only with text on screen. Keep every such check
+     the current script has unless the story dropped it.
    - Name created data with `runId()` so reruns never collide.
    - Do not change application code.
    - The script must pass `aube run -F @gram/e2e type-check`.

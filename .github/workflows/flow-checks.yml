@@ -40,7 +40,6 @@ jobs:
       pull-requests: write # posts the verdict comment
     env:
       GOMAXPROCS: 8
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -74,7 +73,11 @@ jobs:
           git config user.email "flow-checks@example.com"
           git config user.name "Flow Checks"
 
+      # ATLAS_TOKEN stays on this step only, out of reach of the agent and
+      # its installer.
       - name: Boot the stack
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: ./zero --agent
 
       - name: Replay flows
@@ -84,7 +87,9 @@ jobs:
 
       - name: Install Claude Code
         if: steps.replay.outcome == 'failure'
-        run: curl -fsSL https://claude.ai/install.sh | bash
+        # A pinned npm release, checked against the registry's integrity hash,
+        # rather than a mutable install script.
+        run: mise exec -- npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code@2.1.311
 
       # One agent per failing flow. Each writes e2e/.flows/<flow>-verdict.json.
       - name: Heal failing flows
@@ -93,6 +98,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          # Spec files are relative to testDir: <flow>/flow.spec.ts.
           failed=$(jq -r '[.. | objects | select(.specs?) | .specs[]
             | select(.ok == false) | .file | split("/")[0]] | unique[]' \
             e2e/.flows/results.json)
@@ -102,7 +108,7 @@ jobs:
           wait
 
       - name: Post verdicts
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}

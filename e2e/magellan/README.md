@@ -8,7 +8,7 @@ that break where nobody wrote a check.
 ## How a run works
 
 1. `mise run magellan:explore` lists dashboard files changed on `main` since
-   yesterday (`focus.md`), then hands `EXPLORE.md` to a Claude Code agent.
+   yesterday (`focus.md`, paths only), then hands `EXPLORE.md` to a Claude Code agent.
 2. The agent explores those pages first, then roams. It watches the console
    and every `/rpc/` call while it clicks.
 3. It records a finding only with hard evidence — a console error, a failed
@@ -58,8 +58,10 @@ To set it up, or to replace a dead session:
    `gram_session` cookie value.
 3. Close that profile **without logging out**. Logging out ends the session.
 4. In the repo's `magellan` environment, set the `MAGELLAN_SESSION` secret to
-   the cookie value, and set the variables `MAGELLAN_SITE_URL` (the dashboard
-   host the cookie came from) and `MAGELLAN_ORG` (the integration org's slug).
+   the cookie value, set the variables `MAGELLAN_SITE_URL` (the `https://`
+   dashboard host the cookie came from) and `MAGELLAN_ORG` (the integration
+   org's slug), and set the `ANTHROPIC_API_KEY` and `MAGELLAN_LINEAR_API_KEY`
+   secrets.
 
 The session dies on logout-everywhere, on removal from the org, or when
 session storage is reset. When it dies, `keepalive` fails with a message
@@ -67,7 +69,15 @@ pointing here.
 
 The agent's rules for a shared org: it only touches data it named
 `Magellan <time>`, deletes that data before it finishes, never changes
-org settings, and never sends anything outside the product.
+org settings, and never sends anything outside the product. A run that times
+out can leave its data behind; the next run deletes `Magellan` data older
+than a day before it starts.
+
+The agent never sees the session: the script logs the browser in before the
+agent starts, deletes the state file, and denies the agent the
+`playwright-cli` commands that read cookies or run code in the page. Its
+writes are limited to the run directory, and the workflow refuses to file if
+the checkout changed.
 
 ## Not yet
 

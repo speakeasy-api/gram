@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { test as base, expect, type Page } from "@playwright/test";
 
 // Shared by every flow.spec.ts. Login runs once per worker through dev-idp
@@ -15,10 +16,11 @@ function mustEnv(name: string): string {
   return value;
 }
 
-// A suffix for data a flow creates, so a rerun never collides with an earlier
-// run against the same stack.
+// A suffix for data a flow creates, so a rerun or a parallel run never
+// collides with another run against the same stack. The random part keeps two
+// calls in the same millisecond apart.
 export function runId(): string {
-  return Date.now().toString(36);
+  return `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
 }
 
 export type Project = { orgSlug: string; projectSlug: string };

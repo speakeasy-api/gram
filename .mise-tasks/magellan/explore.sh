@@ -19,25 +19,46 @@ run_dir="e2e/.magellan/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$run_dir"
 touch "$run_dir/findings.jsonl"
 
+# Commands the agent must not run: they read or replace the bot's login, or
+# run arbitrary code in the page, any of which could leak the session.
+denied=()
+
 if [ -n "${MAGELLAN_SITE_URL:-}" ]; then
     : "${MAGELLAN_ORG:?MAGELLAN_ORG is required with MAGELLAN_SITE_URL}"
     : "${MAGELLAN_SESSION:?MAGELLAN_SESSION is required with MAGELLAN_SITE_URL}"
     site_url="${MAGELLAN_SITE_URL%/}"
+    case "$site_url" in
+        https://*) ;;
+        *)
+            echo "MAGELLAN_SITE_URL must use https://" >&2
+            exit 1
+            ;;
+    esac
     org="$MAGELLAN_ORG"
     pw="playwright-cli -s=magellan"
     allowed_pw="Bash(playwright-cli -s=magellan:*)"
+    for cmd in state-save state-load cookie-list cookie-get cookie-set cookie-delete cookie-clear run-code; do
+        denied+=(--disallowedTools "Bash(playwright-cli -s=magellan ${cmd}:*)")
+    done
 
-    # Outside the run directory, which gets uploaded: this file is a login.
+    # Outside the run directory, which the agent can read: this file is a
+    # login. It exists only until the browser has loaded it.
     state_file="$(mktemp -t magellan-state.XXXXXX)"
     trap 'rm -f "$state_file"' EXIT
-    host="$(node -e 'console.log(new URL(process.argv[1]).hostname)' "$site_url")"
-    node -e '
-      const [host, token, file] = process.argv.slice(1);
-      const cookie = { name: "gram_session", value: token, domain: host, path: "/",
+    # The token goes through the environment, not argv, so `ps` never shows it.
+    MAGELLAN_STATE_FILE="$state_file" node -e '
+      const { MAGELLAN_SITE_URL: site, MAGELLAN_SESSION: token, MAGELLAN_STATE_FILE: file } = process.env;
+      const cookie = { name: "gram_session", value: token, domain: new URL(site).hostname, path: "/",
         expires: Math.floor(Date.now() / 1000) + 86400, httpOnly: true, secure: true, sameSite: "Lax" };
       require("node:fs").writeFileSync(file, JSON.stringify({ cookies: [cookie], origins: [] }));
-    ' "$host" "$MAGELLAN_SESSION" "$state_file"
-    login="You are already logged in as a bot user. Start with \`$pw open\`, \`$pw state-load $state_file\`, then \`$pw goto $site_url/$org\`. Never log out: it ends the bot's session for good. Do not read the state file."
+    '
+    # Log the browser in before the agent starts, so neither the token nor the
+    # state file is ever in its reach.
+    $pw open >/dev/null
+    $pw state-load "$state_file" >/dev/null
+    rm -f "$state_file"
+    unset MAGELLAN_SESSION
+    login="The browser session \`magellan\` is already open and logged in as a bot user; go to \`$site_url/$org\`. Never log out: it ends the bot's session for good."
 else
     mise run ensure-stack
     site_url="$GRAM_SITE_URL"
@@ -48,15 +69,18 @@ else
 fi
 
 # What changed recently is where new bugs are most likely. The agent maps
-# these files to routes itself.
-git fetch --quiet origin main || true
+# these files to routes itself. File paths only: commit subjects are free text
+# that would reach the agent as instructions.
+git fetch --quiet origin main || echo "warning: could not fetch origin/main; focus may be stale" >&2
+# Tests and the generated SDK change no page a user sees.
+# A failing git log stops the run here instead of passing for a quiet day.
+changed="$(git log origin/main --since="${usage_since:?}" --format= --name-only -- \
+    client/dashboard/src ':!client/dashboard/src/sdk' ':!*.test.ts' ':!*.test.tsx')"
+changed="$(printf '%s\n' "$changed" | grep -v '^$' | sort -u || true)"
 {
-    echo "# Dashboard changes on main since ${usage_since:?}"
+    echo "# Dashboard files changed on main since ${usage_since}"
     echo
-    # Tests and the generated SDK change no page a user sees.
-    git log origin/main --since="$usage_since" --format='## %h %s' --name-only -- \
-        client/dashboard/src ':!client/dashboard/src/sdk' ':!*.test.ts' ':!*.test.tsx' |
-        grep -v '^$' || echo "(none — roam instead)"
+    echo "${changed:-(none — roam instead)}"
 } >"$run_dir/focus.md"
 
 # `#` delimits sed below, so none of the substituted values may contain one.
@@ -68,8 +92,8 @@ sed -e "s#{{RUN_DIR}}#${run_dir}#g" \
     -e "s#{{LOGIN}}#${login}#g" \
     e2e/magellan/EXPLORE.md |
     claude -p \
-        --permission-mode acceptEdits \
-        --allowedTools "Read,Write,Edit,Glob,Grep,${allowed_pw},Bash(git log:*),Bash(git diff:*),Bash(date:*)" \
+        --allowedTools "Read,Glob,Grep,Edit(./${run_dir}/**),Write(./${run_dir}/**),${allowed_pw},Bash(git log:*),Bash(git diff:*),Bash(date:*)" \
+        ${denied[@]+"${denied[@]}"} \
         --max-turns 200 \
         >"$run_dir/transcript.txt"
 

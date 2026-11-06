@@ -17,7 +17,9 @@ export default defineConfig({
   testMatch: "**/flow.spec.ts",
   // Flows create their own uniquely named data, so they can share a stack.
   fullyParallel: true,
-  timeout: 3 * 60 * 1000,
+  // Above the slowest flow's worst case: assistant-create waits up to
+  // 150s + 150s + 60s on the builder.
+  timeout: 8 * 60 * 1000,
   expect: { timeout: 15_000 },
   // A retry would hide exactly the drift this suite exists to catch. Flakes go
   // to the heal agent, which re-walks the story and says which it was.

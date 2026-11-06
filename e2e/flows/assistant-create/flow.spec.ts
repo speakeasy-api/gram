@@ -5,7 +5,13 @@ import { test, expect, rpc, runId } from "../fixtures.js";
 type Assistant = { id: string; name: string };
 type ChatMessage = { role: string; content?: string };
 
+// Without a key the builder never answers, so the flow cannot be judged: skip
+// rather than report it broken. CI's per-PR job has no key; set
+// OPENROUTER_DEV_KEY (mise run zero:openrouter) to run it.
+const llmKey = process.env["OPENROUTER_DEV_KEY"];
+
 test("assistant-create", async ({ page, project }) => {
+  test.skip(!llmKey || llmKey === "unset", "OPENROUTER_DEV_KEY is not set");
   const name = `Flow bot ${runId()}`;
   const listPath = `/${project.orgSlug}/projects/${project.projectSlug}/assistants`;
 
@@ -65,7 +71,7 @@ test("assistant-create", async ({ page, project }) => {
       .toBe(name);
   });
 
-  await test.step("Go back to the assistants list", async () => {
+  await test.step("Go back to the assistants list and find the new assistant", async () => {
     await page.getByRole("link", { name: /^Assistants/ }).click();
     await expect(page).toHaveURL(new RegExp(`${listPath}$`));
     await expect(

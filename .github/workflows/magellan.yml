@@ -32,7 +32,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: magellan-${{ github.event.schedule || 'dispatch' }}
+  # Every explore run shares one group, so two runs never file at once.
+  group: ${{ github.event.schedule == '0 15 * * *' && 'magellan-keepalive' || 'magellan' }}
   cancel-in-progress: false
 
 jobs:
@@ -50,10 +51,13 @@ jobs:
           SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
           SESSION: ${{ secrets.MAGELLAN_SESSION }}
         run: |
-          status=$(curl -s -o /dev/null -w '%{http_code}' \
+          status=$(curl --proto '=https' --max-time 30 -s -o /dev/null -w '%{http_code}' \
             -H "Gram-Session: $SESSION" "${SITE_URL%/}/rpc/auth.info")
-          if [ "$status" != 200 ]; then
+          if [ "$status" = 401 ] || [ "$status" = 403 ]; then
             echo "::error::The Magellan bot session is no longer valid (auth.info returned $status). Capture a new one; see e2e/magellan/README.md."
+            exit 1
+          elif [ "$status" != 200 ]; then
+            echo "::error::auth.info returned $status. Retry, or check MAGELLAN_SITE_URL (it must be https)."
             exit 1
           fi
 
@@ -82,7 +86,9 @@ jobs:
         run: mise run playwright:install-browser
 
       - name: Install Claude Code
-        run: curl -fsSL https://claude.ai/install.sh | bash
+        # A pinned npm release, checked against the registry's integrity hash,
+        # rather than a mutable install script.
+        run: mise exec -- npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code@2.1.311
 
       - name: Explore
         env:
@@ -92,6 +98,16 @@ jobs:
           MAGELLAN_SESSION: ${{ secrets.MAGELLAN_SESSION }}
           SINCE: ${{ inputs.since || '24 hours ago' }}
         run: PATH="$HOME/.local/bin:$PATH" mise run magellan:explore --since "$SINCE"
+
+      # The agent may only write under e2e/.magellan (git-ignored). Filing runs
+      # repo code with a Linear key, so refuse if anything else changed.
+      - name: Check the agent left the checkout alone
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::The explore step changed tracked files; not filing."
+            git status --porcelain
+            exit 1
+          fi
 
       - name: File findings
         env:
