@@ -114,34 +114,35 @@ const consentFormMaxFields = toolfilter.MaxTools + 64
 // parseConsentForm keeps the consent budget independent of net/url's default
 // 10,000-parameter limit, which also counts the form's non-tool fields.
 func parseConsentForm(w http.ResponseWriter, r *http.Request) error {
-	if r.PostForm != nil {
-		return r.ParseForm()
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
-	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || contentType != "application/x-www-form-urlencoded" {
-		return r.ParseForm()
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return err
-	}
-	raw := string(body)
-	if strings.Count(raw, "&")+1 > consentFormMaxFields {
-		return fmt.Errorf("consent form exceeds %d fields", consentFormMaxFields)
-	}
-	form := make(url.Values)
-	for field := range strings.SplitSeq(raw, "&") {
-		values, err := url.ParseQuery(field)
-		if err != nil {
-			return err
+	if r.PostForm == nil {
+		r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
+		contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err == nil && contentType == "application/x-www-form-urlencoded" {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				return fmt.Errorf("read consent form: %w", err)
+			}
+			raw := string(body)
+			if strings.Count(raw, "&")+1 > consentFormMaxFields {
+				return fmt.Errorf("consent form exceeds %d fields", consentFormMaxFields)
+			}
+			form := make(url.Values)
+			for field := range strings.SplitSeq(raw, "&") {
+				values, err := url.ParseQuery(field)
+				if err != nil {
+					return fmt.Errorf("decode consent form field: %w", err)
+				}
+				for key, fieldValues := range values {
+					form[key] = append(form[key], fieldValues...)
+				}
+			}
+			r.PostForm = form
 		}
-		for key, fieldValues := range values {
-			form[key] = append(form[key], fieldValues...)
-		}
 	}
-	r.PostForm = form
-	return r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		return fmt.Errorf("parse consent form: %w", err)
+	}
+	return nil
 }
 
 type consentApprovalError struct {
