@@ -1,0 +1,417 @@
+// rbac.zed is the authorization schema. It is SpiceDB schema language,
+// embedded with go:embed and compiled by SpiceDB's own schema compiler at
+// startup and in tests. No SpiceDB server is involved: grant rows stay in
+// principal_grants and are read as if they were relationships.
+//
+// Naming rules, checked by the loader:
+//   - A grant relation is its stored scope with ":" written as "_":
+//     relation mcp_connect holds rows with scope mcp:connect.
+//   - <scope>_direct holds the same rows when they were written for one user
+//     by name, name one concrete resource and were not inferred. It exists
+//     only on the type the row names, never on project or organization.
+//   - <block>_own holds a block written for the user being checked. Blocks
+//     written for a role or for everyone stay in the plain block relation.
+//   - A relation typed by a resource definition (project, organization,
+//     agent) is an edge. Edges are never stored; their value comes from the
+//     checked reference or the caller's organization.
+//   - Permissions starting with has_ or blocked_ are building blocks. Go code
+//     cannot name them.
+//
+// Where a row lands is decided by its selector: a concrete resource_id puts it
+// on that resource; resource_id "*" with project_id puts it on the project;
+// resource_id "*" alone puts it on the organization. That is why the grant
+// sets below are partials spliced into the resource, its project and its
+// organization.
+//
+// Precedence: a user's own grant naming one resource overrides a block that
+// reaches them through a role or everyone, and the user's own block beats
+// everything. Every blockable permission therefore reads
+//
+//     ((inherited grants - inherited blocks) + direct grants) - own blocks
+//
+// Agents are intersected with their owner and credential outside this file:
+// the client evaluates the schema once per policy and every one must allow.
+
+use partial
+
+definition user {}
+
+definition api_key {}
+
+definition role {
+    relation member: user
+}
+
+definition agent {
+    relation owner: user with agent_live // agents.owner_user_id
+
+    permission is_owner = owner
+}
+
+definition organization {
+    relation org_read: user | user:* | role#member | agent
+    relation org_admin: user | user:* | role#member | agent
+    relation org_device_agent_sync: user | user:* | role#member | agent
+    relation org_hooks_ingest: user with in_project | user:* with in_project | role#member with in_project | agent with in_project
+    relation org_read_direct: user
+    relation org_admin_direct: user
+    relation org_blocked_read: user:* | role#member | agent
+    relation org_blocked_admin: user:* | role#member | agent
+    relation org_blocked_read_own: user
+    relation org_blocked_admin_own: user
+
+    // root satisfies every grant except upstream auth clients. Candidate for
+    // deletion: nothing outside authz writes it today.
+    relation root: user | user:* | role#member | agent
+
+    // rows that name every resource of a kind in the organization
+    ...project_grants
+    ...mcp_grants
+    ...mcp_auth_grants
+    ...environment_grants
+    ...skill_grants
+    ...assistant_grants
+    ...chat_grants
+    ...inference_grants
+
+    permission has_admin = org_admin + root
+    permission has_read = org_read + has_admin
+
+    permission read = ((has_read - org_blocked_read) + org_read_direct + org_admin_direct) - org_blocked_read_own
+    permission administer = ((has_admin - org_blocked_admin - org_blocked_read) + org_admin_direct) - org_blocked_admin_own - org_blocked_read_own
+    permission sync_device_agent = org_device_agent_sync + has_admin
+    permission ingest_hooks = org_hooks_ingest + has_admin
+}
+
+definition project {
+    relation organization: organization
+
+    // rows that name this project, or every resource of a kind in it
+    ...project_grants
+    ...mcp_grants
+    ...environment_grants
+    ...skill_grants
+    ...assistant_grants
+    ...chat_grants
+    ...inference_grants
+    relation project_read_direct: user
+    relation project_write_direct: user
+    relation plugin_write_direct: user
+
+    permission has_write = project_write + organization->project_write + organization->root
+    permission has_read = project_read + organization->project_read + has_write
+    permission has_plugin_write = plugin_write + organization->plugin_write + organization->root
+    permission blocked_read = project_blocked_read + organization->project_blocked_read
+    permission blocked_write = project_blocked_write + organization->project_blocked_write
+    permission blocked_plugin_write = plugin_blocked_write + organization->plugin_blocked_write
+    permission blocked_read_own = project_blocked_read_own + organization->project_blocked_read_own
+    permission blocked_write_own = project_blocked_write_own + organization->project_blocked_write_own
+    permission blocked_plugin_write_own = plugin_blocked_write_own + organization->plugin_blocked_write_own
+
+    permission read = ((has_read - blocked_read) + project_read_direct + project_write_direct) - blocked_read_own
+    permission write = ((has_write - blocked_write - blocked_read) + project_write_direct) - blocked_write_own - blocked_read_own
+    permission publish_plugin = ((has_plugin_write - blocked_plugin_write) + plugin_write_direct) - blocked_plugin_write_own
+    permission read_logs = log_read + organization->log_read + organization->root
+
+    // Either branch allows. A plugin block still vetoes the administer branch,
+    // as it does today.
+    permission plugin_publication = (publish_plugin + organization->administer) - blocked_plugin_write - blocked_plugin_write_own
+    permission read_or_organization_read = read + organization->read
+    permission write_or_administer = write + organization->administer
+
+    // Every resource of a kind in this project: listing and creating. Only
+    // rows written for the whole project or organization answer these, and
+    // direct grants never do, because they name one resource.
+    permission has_mcp_write = mcp_write + organization->mcp_write + organization->root
+    permission has_mcp_read = mcp_read + organization->mcp_read + has_mcp_write
+    permission read_mcp_servers = has_mcp_read - mcp_blocked_read - organization->mcp_blocked_read - mcp_blocked_read_own - organization->mcp_blocked_read_own
+    permission create_mcp_server = has_mcp_write - mcp_blocked_write - organization->mcp_blocked_write - mcp_blocked_write_own - organization->mcp_blocked_write_own
+
+    permission has_environment_write = environment_write + organization->environment_write + organization->root
+    permission has_environment_read = environment_read + organization->environment_read + has_environment_write
+    permission blocked_environment_read = environment_blocked_read + organization->environment_blocked_read + environment_blocked_read_own + organization->environment_blocked_read_own
+    permission read_environments = has_environment_read - blocked_environment_read
+    permission create_environment = has_environment_write - environment_blocked_write - organization->environment_blocked_write - environment_blocked_write_own - organization->environment_blocked_write_own - blocked_environment_read
+
+    permission has_skill_write = skill_write + organization->skill_write + organization->root
+    permission has_skill_read = skill_read + organization->skill_read + has_skill_write
+    permission blocked_skill_read = skill_blocked_read + organization->skill_blocked_read + skill_blocked_read_own + organization->skill_blocked_read_own
+    permission read_skills = has_skill_read - blocked_skill_read
+    permission write_skills = has_skill_write - skill_blocked_write - organization->skill_blocked_write - skill_blocked_write_own - organization->skill_blocked_write_own - blocked_skill_read
+
+    permission has_assistant_write = assistant_write + organization->assistant_write + organization->root
+    permission has_assistant_read = assistant_read + organization->assistant_read + has_assistant_write
+    permission blocked_assistant_read = assistant_blocked_read + organization->assistant_blocked_read + assistant_blocked_read_own + organization->assistant_blocked_read_own
+    permission read_assistants = has_assistant_read - blocked_assistant_read
+    permission create_assistant = has_assistant_write - assistant_blocked_write - organization->assistant_blocked_write - assistant_blocked_write_own - organization->assistant_blocked_write_own - blocked_assistant_read
+
+    permission read_chats = chat_read + chat_write + organization->chat_read + organization->chat_write + organization->root
+}
+
+definition mcp_server {
+    relation project: project
+    relation organization: organization
+
+    ...mcp_grants
+    relation mcp_read_direct: user with mcp_tools_direct
+    relation mcp_write_direct: user with mcp_tools_direct
+    relation mcp_connect_direct: user with mcp_tools_direct
+
+    permission has_write = mcp_write + project->mcp_write + organization->mcp_write + organization->root
+    permission has_read = mcp_read + project->mcp_read + organization->mcp_read + has_write
+    permission has_connect = mcp_connect + project->mcp_connect + organization->mcp_connect + has_read
+    permission has_write_direct = mcp_write_direct
+    permission has_read_direct = mcp_read_direct + has_write_direct
+    permission has_connect_direct = mcp_connect_direct + has_read_direct
+
+    permission blocked_read = mcp_blocked_read + project->mcp_blocked_read + organization->mcp_blocked_read
+    permission blocked_write = mcp_blocked_write + project->mcp_blocked_write + organization->mcp_blocked_write
+    permission blocked_connect = mcp_blocked_connect + project->mcp_blocked_connect + organization->mcp_blocked_connect
+    permission blocked_read_own = mcp_blocked_read_own + project->mcp_blocked_read_own + organization->mcp_blocked_read_own
+    permission blocked_write_own = mcp_blocked_write_own + project->mcp_blocked_write_own + organization->mcp_blocked_write_own
+    permission blocked_connect_own = mcp_blocked_connect_own + project->mcp_blocked_connect_own + organization->mcp_blocked_connect_own
+
+    // A read block does not stop edit or connect: "cannot see the
+    // configuration" must not mean "cannot use the server".
+    permission read = ((has_read - blocked_read) + has_read_direct) - blocked_read_own
+    permission edit = ((has_write - blocked_write) + has_write_direct) - blocked_write_own
+    permission connect = ((has_connect - blocked_connect) + has_connect_direct) - blocked_connect_own
+
+    permission project_read_or_edit = project->read + edit
+}
+
+definition mcp_auth_client {
+    relation organization: organization
+
+    ...mcp_auth_grants
+    relation mcp_auth_direct: user with auth_client_match
+
+    // root does not reach upstream auth clients
+    permission has_auth = mcp_auth + organization->mcp_auth
+    permission blocked_auth = mcp_blocked_auth + organization->mcp_blocked_auth
+    permission blocked_auth_own = mcp_blocked_auth_own + organization->mcp_blocked_auth_own
+
+    permission use = ((has_auth - blocked_auth) + mcp_auth_direct) - blocked_auth_own
+}
+
+definition environment {
+    relation project: project
+    relation organization: organization
+
+    ...environment_grants
+    relation environment_read_direct: user
+    relation environment_write_direct: user
+
+    permission has_write = environment_write + project->environment_write + organization->environment_write + organization->root
+    permission has_read = environment_read + project->environment_read + organization->environment_read + has_write
+    permission blocked_read = environment_blocked_read + project->environment_blocked_read + organization->environment_blocked_read
+    permission blocked_write = environment_blocked_write + project->environment_blocked_write + organization->environment_blocked_write
+    permission blocked_read_own = environment_blocked_read_own + project->environment_blocked_read_own + organization->environment_blocked_read_own
+    permission blocked_write_own = environment_blocked_write_own + project->environment_blocked_write_own + organization->environment_blocked_write_own
+
+    permission read = ((has_read - blocked_read) + environment_read_direct + environment_write_direct) - blocked_read_own
+    permission write = ((has_write - blocked_write - blocked_read) + environment_write_direct) - blocked_write_own - blocked_read_own
+}
+
+definition skill {
+    relation project: project
+    relation organization: organization
+
+    ...skill_grants
+    relation skill_read_direct: user
+    relation skill_write_direct: user
+
+    permission has_write = skill_write + project->skill_write + organization->skill_write + organization->root
+    permission has_read = skill_read + project->skill_read + organization->skill_read + has_write
+    permission blocked_read = skill_blocked_read + project->skill_blocked_read + organization->skill_blocked_read
+    permission blocked_write = skill_blocked_write + project->skill_blocked_write + organization->skill_blocked_write
+    permission blocked_read_own = skill_blocked_read_own + project->skill_blocked_read_own + organization->skill_blocked_read_own
+    permission blocked_write_own = skill_blocked_write_own + project->skill_blocked_write_own + organization->skill_blocked_write_own
+
+    permission read = ((has_read - blocked_read) + skill_read_direct + skill_write_direct) - blocked_read_own
+    permission write = ((has_write - blocked_write - blocked_read) + skill_write_direct) - blocked_write_own - blocked_read_own
+}
+
+definition assistant {
+    relation project: project
+    relation organization: organization
+
+    ...assistant_grants
+    relation assistant_read_direct: user
+    relation assistant_write_direct: user
+
+    permission has_write = assistant_write + project->assistant_write + organization->assistant_write + organization->root
+    permission has_read = assistant_read + project->assistant_read + organization->assistant_read + has_write
+    permission blocked_read = assistant_blocked_read + project->assistant_blocked_read + organization->assistant_blocked_read
+    permission blocked_write = assistant_blocked_write + project->assistant_blocked_write + organization->assistant_blocked_write
+    permission blocked_read_own = assistant_blocked_read_own + project->assistant_blocked_read_own + organization->assistant_blocked_read_own
+    permission blocked_write_own = assistant_blocked_write_own + project->assistant_blocked_write_own + organization->assistant_blocked_write_own
+
+    permission read = ((has_read - blocked_read) + assistant_read_direct + assistant_write_direct) - blocked_read_own
+    permission write = ((has_write - blocked_write - blocked_read) + assistant_write_direct) - blocked_write_own - blocked_read_own
+}
+
+definition inference {
+    relation project: project
+    relation organization: organization
+
+    // granted on the project or the organization only, never on an inference object
+    permission execute = project->inference_execute + organization->inference_execute + organization->root
+}
+
+definition chat {
+    relation project: project
+    relation organization: organization
+    relation author: user // chats.user_id
+    relation agent: agent with agent_only_chat // chats.agent_id
+
+    ...chat_grants
+
+    permission write_grant = chat_write + project->chat_write + organization->chat_write + organization->root
+    permission read_grant = chat_read + project->chat_read + organization->chat_read + write_grant
+
+    permission read = read_grant + author + agent->is_owner
+    permission write = write_grant + author
+}
+
+definition risk_policy {
+    relation risk_policy_evaluate: user with server_match | user:* with server_match | role#member with server_match | agent with server_match
+    relation risk_policy_bypass: user with server_match_strict | user:* with server_match_strict | role#member with server_match_strict | agent with server_match_strict
+    relation risk_policy_block: user with server_match | user:* with server_match | role#member with server_match | agent with server_match
+
+    // a bypass exempts from the policy; it is not a block, so precedence
+    // does not apply
+    permission evaluate = risk_policy_evaluate - risk_policy_bypass
+    permission bypass = risk_policy_bypass
+    permission block = risk_policy_block
+}
+
+partial project_grants {
+    relation project_read: user | user:* | role#member | agent
+    relation project_write: user | user:* | role#member | agent
+    relation plugin_write: user | user:* | role#member | agent
+    relation log_read: user | user:* | role#member | agent
+    relation project_blocked_read: user:* | role#member | agent
+    relation project_blocked_write: user:* | role#member | agent
+    relation plugin_blocked_write: user:* | role#member | agent
+    relation project_blocked_read_own: user
+    relation project_blocked_write_own: user
+    relation plugin_blocked_write_own: user
+}
+
+partial mcp_grants {
+    relation mcp_read: user with mcp_tools_allow | user:* with mcp_tools_allow | role#member with mcp_tools_allow | agent with mcp_tools_allow
+    relation mcp_write: user with mcp_tools_allow | user:* with mcp_tools_allow | role#member with mcp_tools_allow | agent with mcp_tools_allow
+    relation mcp_connect: user with mcp_tools_allow | user:* with mcp_tools_allow | role#member with mcp_tools_allow | agent with mcp_tools_allow | api_key
+    relation mcp_blocked_read: user:* with mcp_tools_block | role#member with mcp_tools_block | agent with mcp_tools_block
+    relation mcp_blocked_write: user:* with mcp_tools_block | role#member with mcp_tools_block | agent with mcp_tools_block
+    relation mcp_blocked_connect: user:* with mcp_tools_block | role#member with mcp_tools_block | agent with mcp_tools_block | api_key
+    relation mcp_blocked_read_own: user with mcp_tools_block
+    relation mcp_blocked_write_own: user with mcp_tools_block
+    relation mcp_blocked_connect_own: user with mcp_tools_block
+}
+
+partial mcp_auth_grants {
+    relation mcp_auth: user with auth_client_match | user:* with auth_client_match | role#member with auth_client_match | agent with auth_client_match | api_key with auth_client_match
+    relation mcp_blocked_auth: user:* with auth_client_match | role#member with auth_client_match | agent with auth_client_match | api_key with auth_client_match
+    relation mcp_blocked_auth_own: user with auth_client_match
+}
+
+partial environment_grants {
+    relation environment_read: user | user:* | role#member | agent
+    relation environment_write: user | user:* | role#member | agent
+    relation environment_blocked_read: user:* | role#member | agent
+    relation environment_blocked_write: user:* | role#member | agent
+    relation environment_blocked_read_own: user
+    relation environment_blocked_write_own: user
+}
+
+partial skill_grants {
+    relation skill_read: user | user:* | role#member | agent
+    relation skill_write: user | user:* | role#member | agent
+    relation skill_blocked_read: user:* | role#member | agent
+    relation skill_blocked_write: user:* | role#member | agent
+    relation skill_blocked_read_own: user
+    relation skill_blocked_write_own: user
+}
+
+partial assistant_grants {
+    relation assistant_read: user | user:* | role#member | agent
+    relation assistant_write: user | user:* | role#member | agent
+    relation assistant_blocked_read: user:* | role#member | agent
+    relation assistant_blocked_write: user:* | role#member | agent
+    relation assistant_blocked_read_own: user
+    relation assistant_blocked_write_own: user
+}
+
+partial chat_grants {
+    relation chat_read: user | user:* | role#member | agent
+    relation chat_write: user | user:* | role#member | agent
+}
+
+partial inference_grants {
+    relation inference_execute: user | user:* | role#member | agent
+}
+
+// Caveat parameters named granted_* come from the grant row's selector, with
+// a missing key or "*" written as "". The others come from the check, and the
+// typed methods always pass every one of them ("" when not known yet, such
+// as the tool at session open).
+
+// An allow matches permissively: a value the check does not carry yet is not
+// held against it.
+caveat mcp_tools_allow(tool string, disposition string, granted_tool string, granted_disposition string) {
+    (tool == "" || granted_tool == "" || tool == granted_tool) &&
+    (disposition == "" || granted_disposition == "" || disposition == granted_disposition)
+}
+
+// A block matches strictly: a block on one tool does not stop opening the
+// server, only calling that tool.
+caveat mcp_tools_block(tool string, disposition string, granted_tool string, granted_disposition string) {
+    (granted_tool == "" || tool == granted_tool) &&
+    (granted_disposition == "" || disposition == granted_disposition)
+}
+
+// A direct grant proves server-level access whatever it names, but overrides
+// a block on a tool call only when it names everything the call carries.
+caveat mcp_tools_direct(tool string, disposition string, granted_tool string, granted_disposition string) {
+    tool == "" ||
+    ((granted_tool == "" || tool == granted_tool) &&
+     (granted_disposition == "" || disposition == granted_disposition))
+}
+
+// Upstream auth client grants match strictly in both directions. A grant
+// naming the represented user as connection owner matches the user the
+// request acts for.
+caveat auth_client_match(client_type string, connection_owner string, project_id string, upstream_client string, represented_user string,
+                         granted_client_type string, granted_connection_owner string, granted_project_id string, granted_upstream_client string) {
+    (granted_client_type == "" || client_type == granted_client_type) &&
+    (granted_connection_owner == "" || connection_owner == granted_connection_owner ||
+     (granted_connection_owner == "$represented_user" && represented_user != "" && connection_owner == represented_user)) &&
+    (granted_project_id == "" || project_id == granted_project_id) &&
+    (granted_upstream_client == "" || upstream_client == granted_upstream_client)
+}
+
+caveat in_project(project_id string, granted_project_id string) {
+    granted_project_id == "" || project_id == granted_project_id
+}
+
+caveat server_match(server_identity string, server_url string, granted_server_identity string, granted_server_url string) {
+    (server_identity == "" || granted_server_identity == "" || server_identity == granted_server_identity) &&
+    (server_url == "" || granted_server_url == "" || server_url == granted_server_url)
+}
+
+// A bypass names every server dimension it is bounded by, so it matches
+// strictly: a bypass for one server never skips the policy elsewhere.
+caveat server_match_strict(server_identity string, server_url string, granted_server_identity string, granted_server_url string) {
+    (granted_server_identity == "" || server_identity == granted_server_identity) &&
+    (granted_server_url == "" || server_url == granted_server_url)
+}
+
+caveat agent_live(deleted bool, owner_reassignment_required bool) {
+    !deleted && !owner_reassignment_required
+}
+
+caveat agent_only_chat(user_id string, external_user_id string) {
+    user_id == "" && external_user_id == ""
+}

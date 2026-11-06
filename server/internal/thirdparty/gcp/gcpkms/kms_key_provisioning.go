@@ -40,8 +40,9 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 	}
 
 	key, err := c.kms.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
-		Parent:      params.KeyRing,
-		CryptoKeyId: params.KeyID,
+		Parent:                 params.KeyRing,
+		CryptoKeyId:            params.KeyID,
+		TrustedWrappingEnabled: false,
 		CryptoKey: &kmspb.CryptoKey{
 			Name:             "",
 			Primary:          nil,
@@ -208,6 +209,8 @@ func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName st
 	_, err := c.kms.UpdateCryptoKeyVersion(ctx, &kmspb.UpdateCryptoKeyVersionRequest{
 		CryptoKeyVersion: &kmspb.CryptoKeyVersion{
 			Name:                             versionName,
+			TrustedWrappingEnabled:           false,
+			HsmTrusted:                       false,
 			State:                            kmspb.CryptoKeyVersion_DISABLED,
 			ProtectionLevel:                  kmspb.ProtectionLevel_PROTECTION_LEVEL_UNSPECIFIED,
 			Algorithm:                        kmspb.CryptoKeyVersion_CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED,
