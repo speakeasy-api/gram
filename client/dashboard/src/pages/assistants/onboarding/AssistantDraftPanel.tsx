@@ -148,7 +148,6 @@ export function AssistantDraftPanel(): JSX.Element {
         <div
           role="status"
           aria-label="Loading assistant"
-          aria-busy="true"
           className="flex-1 space-y-4 px-4 py-4"
         >
           <Skeleton className="h-8 w-64 max-w-full" />

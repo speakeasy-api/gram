@@ -1793,7 +1793,7 @@ function ChatDetailPanel({
         <SheetDescription className="sr-only">
           Fetching chat session details...
         </SheetDescription>
-        <Skeleton label="Loading chat session details">
+        <Skeleton>
           <div className="h-7 w-64" />
           <div className="h-4 w-40" />
           <div className="mt-4 h-24 w-full" />

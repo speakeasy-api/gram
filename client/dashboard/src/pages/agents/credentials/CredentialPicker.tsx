@@ -141,10 +141,10 @@ function PlatformPresets({
   }
   if (isPending)
     return (
-      <div role="status" aria-label="Loading platforms" className="contents">
+      <>
+        <Skeleton label="Loading platforms" className="h-20 w-full" />
         <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-20 w-full" />
-      </div>
+      </>
     );
   return (
     <>
