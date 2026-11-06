@@ -156,7 +156,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: alternativeID, Source: "admin"}))
 				seedPrincipalGrant(t, ctx, ti, orgID, principal, authz.ScopeMCPAuth, alternativeID.String())
 				advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, registration), []string{"issuer:default", "openid"})
-				cacheResourceScopes(t, ctx, fx, consentUpstreamA, []string{"target:read"})
+				cacheResourceScopes(t, ctx, fx, consentUpstreamA, []string{"target:read", "openid"})
 			}
 			loc := postConnectAction(t, fx, registration)
 			if scenario == "typed_alternatives" {
