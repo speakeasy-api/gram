@@ -1,4 +1,8 @@
 import { SalesforceTask } from "./SalesforceTask";
+import {
+  SnowflakeTask,
+  SnowflakeCredentialInstructions,
+} from "./SnowflakeTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
@@ -127,12 +131,16 @@ function Credentials() {
         : "Secret status unavailable";
   return (
     <>
-      <InProvider
-        actions={credentialInstructions(
-          s.provider,
-          s.values.appChoice === "existing",
-        )}
-      />
+      {s.provider === "snowflake" ? (
+        <SnowflakeCredentialInstructions />
+      ) : (
+        <InProvider
+          actions={credentialInstructions(
+            s.provider,
+            s.values.appChoice === "existing",
+          )}
+        />
+      )}
       <SetupField
         field="clientId"
         label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
@@ -460,6 +468,8 @@ export function ProviderTask({
   serverName: string;
 }): JSX.Element {
   const { s } = useSetup();
+  if (s.provider === "snowflake" && s.step !== "credentials")
+    return <SnowflakeTask />;
   if (s.provider === "salesforce" && s.step !== "credentials")
     return <SalesforceTask />;
   if (s.step === "begin") return <Plan />;

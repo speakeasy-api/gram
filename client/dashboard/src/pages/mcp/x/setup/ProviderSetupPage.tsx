@@ -1,4 +1,5 @@
 import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
+import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import { salesforceSelectionForUrl } from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer, useRef, type ReactNode } from "react";
@@ -39,7 +40,7 @@ import {
   setupProviderForUrl,
   loadProviderProgress,
   saveProviderProgress,
-  salesforceSourceFingerprint,
+  providerSourceFingerprint,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -82,6 +83,16 @@ export function ProviderSetupPage({
     );
   const provider = setupProviderForUrl(remote.data?.url);
   if (!provider) return <Navigate to={overview} replace />;
+  if (provider === "snowflake")
+    return (
+      <ProviderSetupFlow
+        provider="snowflake"
+        serverUrl={remote.data?.url ?? ""}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+        initialValues={snowflakeSelectionForUrl(remote.data?.url) ?? undefined}
+      />
+    );
   if (provider === "salesforce")
     return (
       <SalesforceSetupEntry
@@ -218,8 +229,8 @@ function RetainedProviderSetup({
       provider,
       key,
       initialValues,
-      provider === "salesforce"
-        ? salesforceSourceFingerprint(mcpServer.remoteMcpServerId, {
+      provider === "salesforce" || provider === "snowflake"
+        ? providerSourceFingerprint(mcpServer.remoteMcpServerId, {
             url: serverUrl,
             instanceUrl: sourceInstance,
           })

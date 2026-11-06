@@ -326,3 +326,47 @@ it("retains the unresolved support branch with a real correction action and no s
   ).toBeDefined();
   expect(screen.queryByText(/Simulate/)).toBeNull();
 });
+
+describe("Snowflake instructions", () => {
+  function task(step: string, values = {}, saved = false) {
+    const initial = initialState("snowflake"),
+      dispatch = vi.fn<() => void>();
+    return render(
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step,
+            saved,
+            values: { ...initial.values, ...values },
+          },
+          dispatch,
+          live: connectionFixture(dispatch, {
+            loading: false,
+            callbackUrl: "https://retained.example/callback",
+          }),
+        }}
+      >
+        <ProviderTask serverName="Snowflake" />
+      </SetupContext>,
+    );
+  }
+  it("withholds incomplete SQL", () => {
+    task("create");
+    expect(screen.queryByRole("button", { name: "Copy SQL" })).toBeNull();
+  });
+  it.each([false, true])("uses the actual callback (saved=%s)", (saved) => {
+    const { container } = task(
+      "oauth",
+      { oauthIntegration: "SPEAKEASY_OAUTH" },
+      saved,
+    );
+    const text = container.querySelector('[data-sql="oauth"]')?.textContent;
+    expect(text).toContain(
+      saved
+        ? "https://retained.example/callback"
+        : "https://current.example/callback",
+    );
+    expect(text).toContain("OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'");
+  });
+});

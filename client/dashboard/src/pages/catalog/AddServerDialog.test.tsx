@@ -1,3 +1,4 @@
+import { snowflakeRemoteTemplate } from "./snowflake-install";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
@@ -125,7 +126,7 @@ function mockConfigureWorkflow(selectedServer = server): void {
       {
         server: selectedServer,
         name: "Test Server",
-        remotes: server.remotes,
+        remotes: selectedServer.remotes,
         identityMode: "user",
         agentAuthorization: "",
         headerValues: {},
@@ -597,3 +598,111 @@ it.each([{ headless: true }, { autoStartInstall: true }])(
     expect(mocks.navigate).not.toHaveBeenCalled();
   },
 );
+
+it("collects native Snowflake URL values with accessible labels", async () => {
+  const snowflake = {
+    ...server,
+    registrySpecifier: "com.snowflake/cortex-mcp",
+    remotes: [
+      {
+        url: snowflakeRemoteTemplate,
+        transportType: "streamable-http" as const,
+      },
+    ],
+  };
+  mockConfigureWorkflow(snowflake);
+  renderDialog(snowflake);
+  const field = await screen.findByRole("textbox", {
+    name: "Public account hostname (required)",
+  });
+  fireEvent.change(field, {
+    target: { value: "example.snowflakecomputing.com" },
+  });
+  expect(mocks.updateServerConfig).toHaveBeenCalledWith(0, {
+    snowflakeVariables: { account_url: "example.snowflakecomputing.com" },
+  });
+  for (const name of [
+    "MCP database (required)",
+    "MCP schema (required)",
+    "MCP server name (required)",
+  ])
+    expect(screen.getByRole("textbox", { name })).toBeDefined();
+});
+it("does not add Snowflake connection fields to other providers", () => {
+  renderDialog();
+  expect(screen.queryByText("Snowflake connection")).toBeNull();
+});
+
+it.each([{ headless: true }, { autoStartInstall: true }])(
+  "reports missing Snowflake values instead of hanging: %j",
+  async (props) => {
+    const snowflake = {
+      ...server,
+      registrySpecifier: "com.snowflake/cortex-mcp",
+      remotes: [
+        {
+          url: snowflakeRemoteTemplate,
+          transportType: "streamable-http" as const,
+        },
+      ],
+    };
+    mockConfigureWorkflow(snowflake);
+    mocks.workflow.mockReturnValue({ ...mocks.workflow(), canInstall: false });
+    const finished = vi.fn<() => void>();
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[snowflake]}
+          open
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          onInstallFinished={finished}
+          {...props}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() =>
+      expect(finished).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+          failedCount: 1,
+          error: expect.stringContaining("Add it through the catalog"),
+        }),
+      ),
+    );
+    expect(finished).toHaveBeenCalledOnce();
+    expect(mocks.startInstall).not.toHaveBeenCalled();
+  },
+);
+it("keeps interactive Snowflake configuration open while inputs are missing", async () => {
+  const snowflake = {
+    ...server,
+    registrySpecifier: "com.snowflake/cortex-mcp",
+    remotes: [
+      {
+        url: snowflakeRemoteTemplate,
+        transportType: "streamable-http" as const,
+      },
+    ],
+  };
+  mockConfigureWorkflow(snowflake);
+  mocks.workflow.mockReturnValue({ ...mocks.workflow(), canInstall: false });
+  const finished = vi.fn<() => void>();
+  render(
+    <TooltipProvider>
+      <AddServerDialog
+        servers={[snowflake]}
+        open
+        onOpenChange={(open) => {
+          mocks.onOpenChange(open);
+        }}
+        onInstallFinished={finished}
+      />
+    </TooltipProvider>,
+  );
+  expect(
+    await screen.findByLabelText("Public account hostname (required)"),
+  ).toBeDefined();
+  expect(finished).not.toHaveBeenCalled();
+});
