@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -100,7 +101,7 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 
 			if tc.resourceDisplay {
 				registerPageClient(t, ctx, fx)
-				_, err := remotesessionsrepo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+				display, err := remotesessionsrepo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
 					ID: registration, ProjectID: fx.projectID, OrganizationID: fx.orgID,
 					ResourceIdentifier: conv.ToPGText(upstream), ResourceName: "Typed member resource",
 					ResourcePolicyUri: "https://typed-member.example.com/policy",
@@ -108,8 +109,25 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 				require.NoError(t, err)
 				code, html, _ := render(t, fx)
 				require.Equal(t, http.StatusOK, code, html)
-				require.Contains(t, html, "Typed member resource")
-				require.Contains(t, html, `href="https://typed-member.example.com/policy"`)
+				// Gateway pages render member names, not the resource branding on
+				// flat service cards. Check the display ownership rows directly.
+				q := metamcprepo.New(fx.ti.conn)
+				var resources []metamcprepo.ListMetaMCPProxiedMemberResourcesRow
+				if tc.orgGateway {
+					rows, err := q.ListOrganizationProxiedMCPServerResources(ctx, metamcprepo.ListOrganizationProxiedMCPServerResourcesParams{TypedOffers: true, OrganizationID: fx.orgID})
+					require.NoError(t, err)
+					for _, row := range rows {
+						resources = append(resources, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
+					}
+				} else {
+					resources, err = q.ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{TypedOffers: true, MetaMcpServerID: metaServerID, ProjectID: fx.projectID})
+					require.NoError(t, err)
+				}
+				require.Len(t, resources, 1)
+				require.Equal(t, registration, resources[0].RemoteSessionClientID)
+				require.Equal(t, member.mcpServerID, resources[0].McpServerID)
+				require.NotEmpty(t, display.ResourceIdentifier.String)
+				require.Equal(t, display.ResourceIdentifier.String, resources[0].UpstreamUrl)
 			}
 			if tc.orgClient {
 				// No grant exists: validation must find the typed offer's project,
