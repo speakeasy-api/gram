@@ -1564,6 +1564,8 @@ RETURNING *;
 -- name: GetSpentUserSessionByRefreshTokenHash :one
 -- Finds a used or revoked session by refresh-token hash for the issuer and
 -- client that presented it, so a refusal can say why the token is dead.
+-- Project scoping is intentionally NOT applied here -- the OAuth surface is
+-- public and the issuer_id is the authoritative scope.
 SELECT subject_urn, refresh_expires_at
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id

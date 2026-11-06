@@ -1929,6 +1929,8 @@ type GetSpentUserSessionByRefreshTokenHashRow struct {
 
 // Finds a used or revoked session by refresh-token hash for the issuer and
 // client that presented it, so a refusal can say why the token is dead.
+// Project scoping is intentionally NOT applied here -- the OAuth surface is
+// public and the issuer_id is the authoritative scope.
 func (q *Queries) GetSpentUserSessionByRefreshTokenHash(ctx context.Context, arg GetSpentUserSessionByRefreshTokenHashParams) (GetSpentUserSessionByRefreshTokenHashRow, error) {
 	row := q.db.QueryRow(ctx, getSpentUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.UserSessionClientID, arg.RefreshTokenHash)
 	var i GetSpentUserSessionByRefreshTokenHashRow
