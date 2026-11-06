@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -475,21 +476,25 @@ func TestMemberFailureExhaustedTunnelCause(t *testing.T) {
 	}
 }
 
-// Our own failure to resolve an upstream session writes a row; a caller that left writes none.
-func TestRemoteSessionResolveFailureRecordsInternalError(t *testing.T) {
+// A resolve failure answered with a 500 writes one row by its cause and no rejection metric; a caller that left writes none.
+func TestRemoteSessionResolveFailureRecordsOutcome(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		meta uuid.NullUUID
+		err  error
+		want mcpconnectionattempts.Code
 	}{
-		{name: "direct", meta: uuid.NullUUID{}},
-		{name: "gateway", meta: validUUID(uuid.New())},
+		{name: "direct", meta: uuid.NullUUID{}, err: errors.New("database unavailable"), want: mcpconnectionattempts.CodeInternalError},
+		{name: "gateway", meta: validUUID(uuid.New()), err: errors.New("database unavailable"), want: mcpconnectionattempts.CodeInternalError},
+		{name: "gateway chosen client unbound", meta: validUUID(uuid.New()), err: remotesessions.ErrChosenClientUnbound, want: mcpconnectionattempts.CodeInvalidRemoteSession},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
-			s := &Service{logger: testenv.NewLogger(t), metrics: metrics, connections: rec.Recorder, upstreamTokens: &fakeUpstreamTokens{clientErr: errors.New("database unavailable")}}
+			reader := sdkmetric.NewManualReader()
+			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
+			s := &Service{logger: testenv.NewLogger(t), metrics: metrics, connections: rec.Recorder, upstreamTokens: &fakeUpstreamTokens{clientErr: tc.err}}
 			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org", ProjectID: uuid.New(), McpServerID: validUUID(uuid.New()), MetaMcpServerID: tc.meta}
 			authentication := &issuerGateAuthentication{endpoint: endpoint, subject: urn.NewUserSubject("user"), chosenClient: validUUID(uuid.New())}
 
@@ -497,8 +502,15 @@ func TestRemoteSessionResolveFailureRecordsInternalError(t *testing.T) {
 			shareable, ok := errors.AsType[*oops.ShareableError](err)
 			require.True(t, ok, err)
 			require.Equal(t, oops.CodeUnexpected, shareable.Code)
-			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
 			require.Equal(t, issuerGateReasonRemoteSessionResolveFailed, row.SubReason)
+			var collected metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &collected))
+			for _, scope := range collected.ScopeMetrics {
+				for _, metric := range scope.Metrics {
+					require.NotEqual(t, mcpmetrics.InstrumentMCPRequestRejected, metric.Name)
+				}
+			}
 
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()

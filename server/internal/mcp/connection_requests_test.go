@@ -833,11 +833,11 @@ func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
+	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
 	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireNothing()
 
-	_, err = servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+	_, err = servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
 	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
 	require.Len(t, rec.Rows(), 1)
@@ -855,12 +855,35 @@ func TestDirectHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
+	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
 	shareable, ok := errors.AsType[*oops.ShareableError](err)
 	require.True(t, ok, err)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// A gateway member's security check failing on our side writes one row for that member.
+func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	ti.service.SetEnvironmentLoader(failingSystemEnv{})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "execute_tool",
+		"arguments": map[string]any{"name": member.slug + "--test_tool", "arguments": map[string]any{}},
+	})
+	_, _ = servePublicHTTP(t, t.Context(), ti, slug, body, "", nil)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, member.serverID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1)
 }
 
