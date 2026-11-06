@@ -117,6 +117,11 @@ const MaxTools = 10000
 
 // Serialized policies include overlapping annotation snapshots.
 const selectionMaxRawBytes = 16 << 20
+
+// Leave 1 MiB for JSONB's added separator whitespace when policies are read back.
+// The tool and entry limits bound that expansion to fewer than 100,000 bytes.
+const selectionMaxWriteBytes = selectionMaxRawBytes - (1 << 20)
+
 const selectionMaxNameBytes = 200
 
 // NewSessionSelection assembles, canonicalizes, and validates a selection:
@@ -167,8 +172,8 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool selection: %w", err)
 	}
-	if len(raw) > selectionMaxRawBytes {
-		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxRawBytes)
+	if len(raw) > selectionMaxWriteBytes {
+		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxWriteBytes)
 	}
 	return selection, nil
 }

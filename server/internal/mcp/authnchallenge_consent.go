@@ -136,8 +136,8 @@ func parseConsentForm(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		for key, values := range values {
-			form[key] = append(form[key], values...)
+		for key, fieldValues := range values {
+			form[key] = append(form[key], fieldValues...)
 		}
 	}
 	r.PostForm = form

@@ -3,6 +3,7 @@ package toolfilter
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -248,4 +249,28 @@ func TestSelectionRejectsOversizedUnion(t *testing.T) {
 		{Type: AllowTypeAnnotation, Name: AnnotationIdempotent, Mode: &mode, Tools: &second},
 	})
 	require.ErrorContains(t, err, "distinct tools")
+}
+
+func TestSelectionWriteBudgetReservesStorageHeadroom(t *testing.T) {
+	t.Parallel()
+	names := make([]string, MaxTools)
+	for i := range names {
+		names[i] = strings.Repeat("\x01", 39) + fmt.Sprintf("%0161d", i)
+	}
+	mode := AnnotationModeSnapshot
+	entries := make([]AllowEntry, 0, len(KnownAnnotations))
+	for _, annotation := range KnownAnnotations {
+		entries = append(entries, AllowEntry{Type: AllowTypeAnnotation, Name: annotation, Mode: &mode, Tools: &names})
+	}
+	selection := &SessionSelection{Resource: testResource, GrantID: uuid.MustParse(testGrantID), Allow: entries}
+	raw, err := json.Marshal(selection)
+	require.NoError(t, err)
+	require.Greater(t, len(raw), selectionMaxWriteBytes)
+	require.Less(t, len(raw), selectionMaxRawBytes)
+	_, err = ParseSessionSelection(raw)
+	require.NoError(t, err, "existing documents retain the larger read budget")
+	_, err = NewSessionSelection(testResource, uuid.MustParse(testGrantID), entries)
+	require.ErrorContains(t, err, "document exceeds")
+	_, err = json.Marshal(PolicyForSelection(selection))
+	require.ErrorContains(t, err, "policy exceeds")
 }
