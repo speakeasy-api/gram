@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -547,9 +548,65 @@ type availabilityCheckKey struct{}
 // subject may proceed, and obtaining it here would wait on an upstream token
 // endpoint while callers hold admission locks. A broken self credential is
 // reported when a request needs it.
-func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
-	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), attribution, projectID, organizationID, issuerID, subject)
+//
+// When mcpServerID is valid the check covers that proxied server's own clients,
+// as ResolveServerAccessTokens does; otherwise it covers every client the
+// issuer binds.
+func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject, mcpServerID uuid.NullUUID) error {
+	checkCtx := context.WithValue(ctx, availabilityCheckKey{}, true)
+	if mcpServerID.Valid {
+		_, err := m.ResolveServerAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject, mcpServerID.UUID, false)
+		return err
+	}
+	_, err := m.ResolveAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject)
 	return err
+}
+
+// ResolveServerAccessTokens resolves the caller's credentials for one proxied
+// MCP server that shares a user session issuer with other servers: only the
+// clients associated with mcpServerID are required, so a client another server
+// on the issuer signs in through cannot refuse this server's callers. Each
+// credential still routes to the backend by its recorded resource.
+//
+// A server with no associated client bound to the issuer resolves every client
+// the issuer binds, as ResolveAccessTokens does, so a server whose clients are
+// unknown stays fail-closed rather than calling its upstream with no credential.
+func (m *ChallengeManager) ResolveServerAccessTokens(
+	ctx context.Context,
+	attribution RefreshAttribution,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	mcpServerID uuid.UUID,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	associated, err := upstreamclientsrepo.New(m.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
+		McpServerIds:   []uuid.UUID{mcpServerID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list server associated clients: %w", err)
+	}
+	own := make([]remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, 0, len(associated))
+	for _, client := range clients {
+		if slices.ContainsFunc(associated, func(row upstreamclientsrepo.ListServerAssociatedClientsRow) bool {
+			return row.RemoteSessionClientID == client.ClientID
+		}) {
+			own = append(own, client)
+		}
+	}
+	if len(own) == 0 {
+		own = clients
+	}
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, own, skipUnusable)
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP

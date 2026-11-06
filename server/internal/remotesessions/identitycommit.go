@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -89,6 +90,7 @@ const (
 	identityChainingBindingsMessage      = "active identity-chaining bindings reference this configuration; explicitly unlink them before changing or deleting it"
 	ambiguousCurrentProviderMessage      = "this MCP server's user session issuer is bound to more than one Remote Identity Provider; remove the extra clients from the Remote Identity Provider settings before changing it"
 	clientTakenMessage                   = "a remote session client is already bound to this user session issuer for the same remote session issuer"
+	providerClientInUseMessage           = "this Remote Identity Provider already has a client on this server's User Identity issuer, and each issuer keeps one client per provider. Use the existing client instead"
 )
 
 // IdentityError is a refusal whose Message is safe to show the caller. Kind is
@@ -300,9 +302,10 @@ type RegistrationPolicy struct {
 type BoundPolicy int
 
 const (
-	// ReplaceBound unbinds the clients of the server's current provider, read
-	// from the live bindings, and requires the plan's provider to have no
-	// other client bound.
+	// ReplaceBound changes the plan's MCP server to the plan's client without
+	// taking a client from another server: decideBoundClients says what happens
+	// to each client bound to the issuer. A plan with no MCP server configures
+	// the issuer alone and unbinds the clients replacedClients picks.
 	ReplaceBound BoundPolicy = iota + 1
 
 	// ReuseBound keeps a client already bound for the plan's provider, which
@@ -497,11 +500,20 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 	switch c.plan.Bound {
 	case ReplaceBound:
 		// A new provider has no id yet, so every bound client belongs to another.
-		replaced, err := replacedClients(bound, c.provider.ID, c.plan.Client.keep())
+		decision, err := decideBoundClients(ctx, q, boundClientsRequest{
+			OrganizationID:      c.plan.Scope.OrganizationID,
+			UserSessionIssuerID: c.plan.UserSessionIssuerID,
+			MCPServerID:         c.plan.MCPServerID,
+			Bound:               bound,
+			ProviderID:          c.provider.ID,
+			Keep:                c.plan.Client.keep(),
+			RegistersClient:     c.plan.Client.kind == clientRegister,
+		})
 		if err != nil {
 			return err
 		}
-		for _, client := range replaced {
+		c.reusable = decision.reuse
+		for _, client := range decision.detach {
 			if err := c.refuseOrgWideBinding(client); err != nil {
 				return err
 			}
@@ -907,13 +919,38 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		if err != nil {
 			return err
 		}
-		replaced, err := replacedClients(bound, c.provider.ID, c.plan.Client.keep())
+		decision, err := decideBoundClients(ctx, tx.q, boundClientsRequest{
+			OrganizationID:      c.plan.Scope.OrganizationID,
+			UserSessionIssuerID: c.plan.UserSessionIssuerID,
+			MCPServerID:         c.plan.MCPServerID,
+			Bound:               bound,
+			ProviderID:          c.provider.ID,
+			Keep:                c.plan.Client.keep(),
+			RegistersClient:     c.plan.Client.kind == clientRegister,
+		})
 		if err != nil {
 			return err
 		}
-		for _, current := range replaced {
+		for _, current := range decision.detach {
 			if err := c.detachClient(ctx, tx, current); err != nil {
 				return err
+			}
+		}
+		for _, current := range decision.release {
+			if err := c.releaseClient(ctx, tx, current); err != nil {
+				return err
+			}
+		}
+		if decision.reuse {
+			row, found, err := c.boundClient(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if found {
+				client, attached, reused = row.RemoteSessionClient, row.UserSessionIssuerIds, true
+				// Another commit bound this provider's client after Register
+				// made one upstream, which is now left behind there.
+				c.recordOrphanedRegistration(ctx)
 			}
 		}
 	case ReuseBound:
@@ -1037,6 +1074,174 @@ func replacedClients(bound []repo.RemoteSessionClient, providerID, keep uuid.UUI
 		return nil, identityRefusal(ErrIdentityConflict, nil, clientTakenMessage)
 	}
 	return others, nil
+}
+
+// boundClientsRequest is what decideBoundClients decides from.
+type boundClientsRequest struct {
+	// OrganizationID scopes the reads.
+	OrganizationID string
+
+	// UserSessionIssuerID is the issuer the clients are bound to.
+	UserSessionIssuerID uuid.UUID
+
+	// MCPServerID is the server being configured; uuid.Nil configures the
+	// issuer alone.
+	MCPServerID uuid.UUID
+
+	// Bound lists the clients bound to the issuer that the project can see.
+	Bound []repo.RemoteSessionClient
+
+	// ProviderID is the plan's provider; uuid.Nil is one the commit creates.
+	ProviderID uuid.UUID
+
+	// Keep is the client the commit links, if any.
+	Keep uuid.UUID
+
+	// RegistersClient reports that the plan asks for a client automatically,
+	// without naming one or supplying credentials.
+	RegistersClient bool
+}
+
+// boundClientsDecision is what a commit does with the clients bound to the user
+// session issuer. A client in none of its lists is left as it is.
+type boundClientsDecision struct {
+	// detach lists clients only the configured server uses, which the commit
+	// unbinds.
+	detach []repo.RemoteSessionClient
+
+	// release lists clients other servers also use. They stay bound and only
+	// the configured server's association with them is removed.
+	release []repo.RemoteSessionClient
+
+	// reuse reports that the plan's provider already has a client on the issuer
+	// and the commit uses it rather than making another.
+	reuse bool
+}
+
+// decideBoundClients decides what changing one MCP server to the plan's client
+// does to the clients bound to its user session issuer. A binding is shared by
+// every consumer of the issuer, so the server's current clients come from its
+// own associations, and no client another consumer uses is ever unbound.
+//
+//   - A client of another provider is released when others use it and detached
+//     when they do not. One this server does not use is left alone.
+//   - A client of the plan's provider is reused when the plan asks for a client
+//     automatically and is kept when the plan links it. A plan naming a
+//     different client replaces it only when this server alone uses it, since an
+//     issuer keeps one client per provider. Otherwise the plan is refused,
+//     because the choice between them is the administrator's.
+//
+// Asking for a client automatically never replaces one: only credentials or a
+// client the administrator named can do that.
+func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRequest) (boundClientsDecision, error) {
+	var decision boundClientsDecision
+	if req.MCPServerID == uuid.Nil {
+		replaced, err := replacedClients(req.Bound, req.ProviderID, req.Keep)
+		if err != nil {
+			return decision, err
+		}
+		decision.detach = replaced
+		return decision, nil
+	}
+	if len(req.Bound) == 0 {
+		return decision, nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.Bound))
+	for _, client := range req.Bound {
+		ids = append(ids, client.ID)
+	}
+	uses, err := q.DescribeBoundClientUse(ctx, repo.DescribeBoundClientUseParams{
+		McpServerID:            req.MCPServerID,
+		OrganizationID:         req.OrganizationID,
+		UserSessionIssuerID:    req.UserSessionIssuerID,
+		RemoteSessionClientIds: ids,
+	})
+	if err != nil {
+		return decision, fmt.Errorf("describe bound client use: %w", err)
+	}
+	consumers, err := q.DescribeUserSessionIssuerConsumers(ctx, repo.DescribeUserSessionIssuerConsumersParams{
+		UserSessionIssuerID: req.UserSessionIssuerID,
+		McpServerID:         req.MCPServerID,
+		OrganizationID:      req.OrganizationID,
+	})
+	if err != nil {
+		return decision, fmt.Errorf("describe user session issuer consumers: %w", err)
+	}
+	use := make(map[uuid.UUID]repo.DescribeBoundClientUseRow, len(uses))
+	for _, row := range uses {
+		use[row.RemoteSessionClientID] = row
+	}
+	// The issuer's only consumer owns its bindings whether or not an association
+	// records it.
+	ownClient := func(id uuid.UUID) bool {
+		return use[id].AssociatedWithMcpServer || consumers.SoleConsumer
+	}
+	sharedClient := func(id uuid.UUID) bool {
+		return len(use[id].OtherMcpServerIds) > 0 || consumers.ReadsBindings
+	}
+
+	if countProviderClients(req.Bound, req.ProviderID) > 1 {
+		return decision, identityRefusal(ErrIdentityInvariant, nil, "more than one client is bound to this user session issuer for the same Remote Identity Provider")
+	}
+	var detachProvider uuid.UUID
+	for _, client := range req.Bound {
+		switch {
+		case client.ID == req.Keep:
+		case client.RemoteSessionIssuerID == req.ProviderID && req.RegistersClient:
+			decision.reuse = true
+		case client.RemoteSessionIssuerID == req.ProviderID:
+			if !ownClient(client.ID) || sharedClient(client.ID) {
+				return boundClientsDecision{}, identityRefusal(ErrIdentityConflict, nil, providerClientInUseMessage)
+			}
+			decision.detach = append(decision.detach, client)
+		case !ownClient(client.ID):
+		case sharedClient(client.ID):
+			decision.release = append(decision.release, client)
+		default:
+			if detachProvider != uuid.Nil && detachProvider != client.RemoteSessionIssuerID {
+				return boundClientsDecision{}, identityRefusal(ErrIdentityConflict, nil, ambiguousCurrentProviderMessage)
+			}
+			detachProvider = client.RemoteSessionIssuerID
+			decision.detach = append(decision.detach, client)
+		}
+	}
+	return decision, nil
+}
+
+// releaseClient removes the configured server's association with a client that
+// stays bound for other servers. The row is soft-deleted, the record of an
+// explicit detach, so capture does not hand the client back to the server. Bind
+// synchronizes the server's typed auth clients afterwards.
+func (c *IdentityCommit) releaseClient(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	if _, err := upstreamclientsrepo.New(tx.tx).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		McpServerID:           c.plan.MCPServerID,
+		RemoteSessionClientID: client.ID,
+		ProjectID:             c.plan.Scope.ProjectID,
+	}); err != nil {
+		return fmt.Errorf("release client from mcp server: %w", err)
+	}
+	server, err := mcpserversrepo.New(tx.tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        c.plan.MCPServerID,
+		ProjectID: c.plan.Scope.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("get mcp server releasing client: %w", err)
+	}
+	if err := c.committer.audit.LogRemoteSessionClientDetachMcpServer(ctx, tx.tx, audit.LogRemoteSessionClientDetachMcpServerEvent{
+		OrganizationID:         c.plan.Scope.OrganizationID,
+		ProjectID:              c.plan.Scope.ProjectID,
+		Actor:                  c.plan.Scope.Actor,
+		ActorDisplayName:       c.plan.Scope.ActorDisplayName,
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
+		ClientID:               client.ClientID,
+		McpServerURN:           urn.NewMcpServer(server.ID),
+		McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
+	}); err != nil {
+		return fmt.Errorf("audit client release: %w", err)
+	}
+	return nil
 }
 
 func countProviderClients(bound []repo.RemoteSessionClient, providerID uuid.UUID) int {
@@ -1191,6 +1396,24 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 	}
 	if err := refuseLiveAgentBindings(ctx, tx.q, c.plan.Scope, client.ID, c.plan.UserSessionIssuerID); err != nil {
 		return err
+	}
+	if c.plan.MCPServerID != uuid.Nil {
+		// The decision read other projects' associations before this client's
+		// lock, which their capture takes a share of, so read them again here.
+		uses, err := tx.q.DescribeBoundClientUse(ctx, repo.DescribeBoundClientUseParams{
+			McpServerID:            c.plan.MCPServerID,
+			OrganizationID:         c.plan.Scope.OrganizationID,
+			UserSessionIssuerID:    c.plan.UserSessionIssuerID,
+			RemoteSessionClientIds: []uuid.UUID{client.ID},
+		})
+		if err != nil {
+			return fmt.Errorf("recheck bound client use: %w", err)
+		}
+		for _, use := range uses {
+			if len(use.OtherMcpServerIds) > 0 {
+				return identityRefusal(ErrIdentityConflict, nil, "another MCP server started using this client while saving; retry")
+			}
+		}
 	}
 	affected, err := tx.q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: client.ID,

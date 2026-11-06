@@ -96,6 +96,7 @@ func (s *Service) identityChainingRequestForKind(ctx context.Context, kind mcpid
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
+	authentication.ownClientsOnly = true
 	// A credential's own choice for the server replaces the issuer derived
 	// for it: the chosen client's issuer is the one it routes and chains by.
 	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)

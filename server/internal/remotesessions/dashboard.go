@@ -257,9 +257,10 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 	return &out
 }
 
-// plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationResource is what a
-// registered client without scopes will discover at login.
+// plan describes the request as an identity plan: this server moves to the
+// requested client, and no client another server uses is unbound.
+// registrationResource is what a registered client without scopes will discover
+// at login.
 func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin bool, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
@@ -378,8 +379,10 @@ func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string
 	}
 	providerTier := scopeOf(res.Provider).String()
 	clientTier := conv.Ternary(res.Client.ProjectID.Valid, "project-specific", "organization-level")
-	status := conv.Ternary(clientMode == serverIdentityClientModeExisting, serverIdentityStatusLinked, serverIdentityStatusRegistered)
-	method := string(res.Method)
+	status := conv.Ternary(clientMode == serverIdentityClientModeExisting || res.Reused, serverIdentityStatusLinked, serverIdentityStatusRegistered)
+	// Reusing the provider's bound client links a stored client, as far as the
+	// caller can tell.
+	method := conv.Ternary(res.Reused, string(RegistrationLinked), string(res.Method))
 	providerPath := serverIdentityProviderPath(res.Provider.ID)
 	clientPath := serverIdentityClientPath(res.Provider.ID, res.Client.ID)
 	return &gen.CommitServerIdentityConfigurationResult{

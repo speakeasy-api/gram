@@ -22,6 +22,7 @@ import {
   invalidateAllServerClientAssociations,
   useServerClientAssociations,
 } from "@gram/client/react-query/serverClientAssociations.js";
+import { useDetachServerClientAssociationMutation } from "@gram/client/react-query/detachServerClientAssociation.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import {
   invalidateAllGetRemoteMcpServerScopes,
@@ -80,6 +81,7 @@ import {
 import {
   invalidateSharedIssuerImpact,
   needsSharedIssuerConfirm,
+  planLeavingUserIdentity,
   sharedIssuerChangeBlocked,
   useSharedIssuerImpact,
 } from "@/lib/remote-identity/model/upstreamRepointing";
@@ -256,7 +258,10 @@ export function RemoteMcpIdentitySectionBody({
     { mcpServerId: target.permissionResourceId },
     undefined,
     {
-      enabled: canRead && identityResolved && selectedMode === "user",
+      enabled:
+        canRead &&
+        identityResolved &&
+        (selectedMode === "user" || actualMode === "user"),
       throwOnError: false,
     },
   );
@@ -326,6 +331,7 @@ export function RemoteMcpIdentitySectionBody({
   );
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
+  const detachAssociation = useDetachServerClientAssociationMutation();
 
   // Picking a card only changes the draft. Nothing is written, removed or
   // confirmed until Save — the panel has one commit point and this is it.
@@ -410,14 +416,31 @@ export function RemoteMcpIdentitySectionBody({
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
     if (!userSessionIssuerId) return false;
-    for (const linked of clients) {
+    const associations = associationsQuery.data?.associations;
+    if (!associations) {
+      throw new Error(
+        "Couldn't check which clients this server uses. Reload and try again.",
+      );
+    }
+    const plan = planLeavingUserIdentity(clients, associations);
+    for (const id of plan.unbind) {
       await detachIssuer.mutateAsync({
         // The generated detach request reuses the attach form's field name;
         // the endpoint it posts to is what distinguishes them.
         request: {
           attachUserSessionIssuerForm: {
-            id: linked.id,
+            id,
             userSessionIssuerId,
+          },
+        },
+      });
+    }
+    for (const remoteSessionClientId of plan.release) {
+      await detachAssociation.mutateAsync({
+        request: {
+          detachServerClientAssociationRequestBody: {
+            mcpServerId: target.mcpServerId ?? target.permissionResourceId,
+            remoteSessionClientId,
           },
         },
       });
