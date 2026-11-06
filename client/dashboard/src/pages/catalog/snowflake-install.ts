@@ -1,7 +1,7 @@
 import {
   snowflakeConnection,
   publicSnowflakeHost,
-  idValid,
+  mcpNameValid,
 } from "./provider-setup/snowflake";
 
 export const snowflakeRemoteTemplate =
@@ -33,9 +33,9 @@ export function snowflakeInstallErrors(
     "mcp_schema",
     "mcp_server_name",
   ] as const) {
-    if (!idValid(values[field] ?? ""))
+    if (!mcpNameValid(values[field] ?? ""))
       errors[field] =
-        "Enter a valid name. Use double quotes for spaces or case-sensitive names.";
+        "Enter a valid name. Use double quotes for spaces or case-sensitive names; dot-only names are unsupported.";
   }
   return errors;
 }

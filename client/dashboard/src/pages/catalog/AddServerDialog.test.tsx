@@ -621,12 +621,18 @@ it("collects native Snowflake URL values with accessible labels", async () => {
   expect(mocks.updateServerConfig).toHaveBeenCalledWith(0, {
     snowflakeVariables: { account_url: "example.snowflakecomputing.com" },
   });
-  for (const name of [
-    "MCP database (required)",
-    "MCP schema (required)",
-    "MCP server name (required)",
-  ])
-    expect(screen.getByRole("textbox", { name })).toBeDefined();
+  for (const [name, key] of [
+    ["MCP database (required)", "mcp_database"],
+    ["MCP schema (required)", "mcp_schema"],
+    ["MCP server name (required)", "mcp_server_name"],
+  ]) {
+    fireEvent.change(screen.getByRole("textbox", { name }), {
+      target: { value: "EXAMPLE" },
+    });
+    expect(mocks.updateServerConfig).toHaveBeenCalledWith(0, {
+      snowflakeVariables: { [key!]: "EXAMPLE" },
+    });
+  }
 });
 it("does not add Snowflake connection fields to other providers", () => {
   renderDialog();

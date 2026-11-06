@@ -30,6 +30,8 @@ const identifier = (value: string): string =>
   value.trim().startsWith('"') ? value.trim() : value.trim().toUpperCase();
 const rawIdentifier = (value: string): string =>
   identifier(value).replace(/^"|"$/g, "").replace(/""/g, '"');
+export const mcpNameValid = (value: string): boolean =>
+  idValid(value) && ![".", ".."].includes(rawIdentifier(value));
 const identifierParts = (value: string): string[] =>
   value.trim().match(/"(?:[^"]|"")+"|[^.]+/g) ?? [];
 export const agentValid = (value: string): boolean => {
@@ -119,7 +121,7 @@ export function snowflakeConnection(
   const host = publicSnowflakeHost(values.host);
   if (
     !host ||
-    ![values.database, values.schema, values.serverName].every(idValid)
+    ![values.database, values.schema, values.serverName].every(mcpNameValid)
   )
     return null;
   const issuer = `https://${host}`;
@@ -174,7 +176,7 @@ export function snowflakeSelectionForUrl(
 }
 
 export const serverValid = (values: SnowflakeValues): boolean =>
-  [values.database, values.schema, values.serverName].every(idValid) &&
+  [values.database, values.schema, values.serverName].every(mcpNameValid) &&
   agentValid(values.agent);
 
 /** Only complete statements are returned. These are displayed, never executed. */

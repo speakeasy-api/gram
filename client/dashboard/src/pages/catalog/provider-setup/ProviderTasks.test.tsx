@@ -4,7 +4,7 @@ import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce } from "./state";
+import { initialState, reduce, validate, type State } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
@@ -337,7 +337,12 @@ it("retains the unresolved support branch with a real correction action and no s
 });
 
 describe("Snowflake instructions", () => {
-  function task(step: string, values = {}, saved = false) {
+  function task(
+    step: string,
+    values = {},
+    saved = false,
+    errors: State["errors"] = {},
+  ) {
     const initial = initialState("snowflake"),
       dispatch = vi.fn<() => void>();
     return render(
@@ -347,6 +352,7 @@ describe("Snowflake instructions", () => {
             ...initial,
             step,
             saved,
+            errors,
             values: { ...initial.values, ...values },
           },
           dispatch,
@@ -360,6 +366,30 @@ describe("Snowflake instructions", () => {
       </SetupContext>,
     );
   }
+
+  it("routes credentials to the Snowflake SQL and required fields", () => {
+    const { container } = task("credentials", {
+      oauthIntegration: "EXAMPLE_OAUTH",
+    });
+    expect(
+      container.querySelector('[data-sql="credentials"]')?.textContent,
+    ).toContain("SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('EXAMPLE_OAUTH')");
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(screen.getByLabelText("Client Secret")).toBeDefined();
+  });
+  it("shows invalid connection recovery on the credentials step", () => {
+    const state = { ...initialState("snowflake"), step: "credentials" };
+    task("credentials", {}, false, validate(state));
+    expect(
+      screen.getByText(/Review the Snowflake account and server details/),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review account" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review server details" }),
+    ).toBeDefined();
+  });
   it("withholds incomplete SQL", () => {
     const { container } = task("create", {
       creatorRole: "EXAMPLE_CREATOR",

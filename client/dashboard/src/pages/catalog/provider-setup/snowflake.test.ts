@@ -47,6 +47,8 @@ describe("Snowflake native setup contract", () => {
     "example.snowflakecomputing.com.evil.test",
     "https://example.snowflakecomputing.com:8443",
     "example.snowflakecomputing.cn",
+    "example.us-gov-west-1.snowflakecomputing.com",
+    "example.us-dod-east-1.snowflakecomputing.com",
   ])("rejects unsupported account addresses: %s", (host) => {
     expect(publicSnowflakeHost(host)).toBeNull();
   });
@@ -201,5 +203,13 @@ it.each(["SYSADMIN", "USERADMIN", '"SYSADMIN"', '"USERADMIN"'])(
       snowflakeSql({ ...values, accessRole }, "https://local.example/callback")
         .oauth,
     ).toBeUndefined();
+  },
+);
+
+it.each(['"."', '".."'])(
+  "rejects URL-normalizing MCP identifier %s",
+  (name) => {
+    for (const field of ["database", "schema", "serverName"] as const)
+      expect(snowflakeConnection({ ...values, [field]: name })).toBeNull();
   },
 );

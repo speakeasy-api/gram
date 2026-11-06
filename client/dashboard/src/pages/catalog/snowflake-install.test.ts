@@ -56,3 +56,15 @@ it("normalizes copied account names with underscores to the equivalent hostname"
     "https://example-example-account.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
   );
 });
+
+it.each(['"."', '".."'])(
+  "blocks normalized path segments in catalog names: %s",
+  (name) => {
+    for (const field of [
+      "mcp_database",
+      "mcp_schema",
+      "mcp_server_name",
+    ] as const)
+      expect(resolveSnowflakeInstall({ ...values, [field]: name })).toBeNull();
+  },
+);
