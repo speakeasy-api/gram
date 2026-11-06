@@ -58,7 +58,10 @@ export function checkResourceLabel(group: CheckGroup): string {
 }
 
 /** "Denied 4 times", "Allowed once". */
-export function checkCountLabel(outcome: "allow" | "deny", count: number) {
+export function checkCountLabel(
+  outcome: "allow" | "deny",
+  count: number,
+): string {
   const verb = outcome === "deny" ? "Denied" : "Allowed";
   if (count === 1) return `${verb} once`;
   return `${verb} ${count.toLocaleString()} times`;

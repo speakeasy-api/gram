@@ -250,8 +250,12 @@ it("lists failed checks first, grouped by scope and resource, with when they las
       <AgentIdentityChallenges agent={agent} />
     </MemoryRouter>,
   );
-  const text = document.body.textContent ?? "";
-  expect(text.indexOf("Failed")).toBeLessThan(text.indexOf("Allowed"));
+  const failedHeading = screen.getByRole("heading", { name: "Failed" });
+  const allowedHeading = screen.getByRole("heading", { name: "Allowed" });
+  expect(
+    failedHeading.compareDocumentPosition(allowedHeading) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getByText(/Denied 2 times/)).toBeTruthy();
   expect(screen.getByText(/Allowed once/)).toBeTruthy();
   expect(screen.getByText(/mcp server_linear/)).toBeTruthy();
@@ -267,6 +271,25 @@ it("says when the agent had no failed checks in the period", () => {
   );
   expect(
     screen.getByText("No failed checks for this agent in this period."),
+  ).toBeTruthy();
+});
+it("says a slice could not be loaded rather than that it had no checks", () => {
+  mocks.challenges.mockImplementation(({ outcome }: { outcome: string }) =>
+    outcome === "deny"
+      ? { isError: true, refetch: vi.fn() }
+      : { data: { challenges: [], total: 0 }, refetch: vi.fn() },
+  );
+  render(
+    <MemoryRouter>
+      <AgentIdentityChallenges agent={agent} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("Failed checks could not be loaded.")).toBeTruthy();
+  expect(
+    screen.queryByText("No failed checks for this agent in this period."),
+  ).toBeNull();
+  expect(
+    screen.getByText("No allowed checks for this agent in this period."),
   ).toBeTruthy();
 });
 it("shows failed authorization reads as an error rather than no checks", () => {

@@ -164,7 +164,11 @@ const ALLOWED_CHECKS_LIMIT = 100;
 /** A label over one outcome's rows inside the checks panel. */
 function ChecksHeading({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="border-border bg-muted/40 text-muted-foreground border-b px-4 py-1.5 text-xs font-medium">
+    <div
+      role="heading"
+      aria-level={3}
+      className="border-border bg-muted/40 text-muted-foreground border-b px-4 py-1.5 text-xs font-medium"
+    >
       {children}
     </div>
   );
@@ -198,6 +202,36 @@ function CheckGroupRow({
       trailing={outcome === "deny" ? "Denied" : "Allowed"}
       accent={outcome === "deny" ? "destructive" : undefined}
     />
+  );
+}
+
+/**
+ * One outcome's grouped checks. A slice whose own read failed says so rather
+ * than claiming the agent had no such checks; its last loaded rows stay shown
+ * under the panel's refresh banner.
+ */
+function CheckSection({
+  groups,
+  outcome,
+  loadFailed,
+  emptyText,
+  failedText,
+}: {
+  groups: CheckGroup[];
+  outcome: "allow" | "deny";
+  loadFailed: boolean;
+  emptyText: string;
+  failedText: string;
+}): JSX.Element {
+  if (loadFailed) return <IdentityPanelEmpty>{failedText}</IdentityPanelEmpty>;
+  if (groups.length === 0)
+    return <IdentityPanelEmpty>{emptyText}</IdentityPanelEmpty>;
+  return (
+    <>
+      {groups.map((group) => (
+        <CheckGroupRow key={group.key} group={group} outcome={outcome} />
+      ))}
+    </>
   );
 }
 
@@ -270,25 +304,21 @@ export function AgentIdentityChallenges({
       }
     >
       <ChecksHeading>Failed</ChecksHeading>
-      {failed.length === 0 ? (
-        <IdentityPanelEmpty>
-          No failed checks for this agent in this period.
-        </IdentityPanelEmpty>
-      ) : (
-        failed.map((group) => (
-          <CheckGroupRow key={group.key} group={group} outcome="deny" />
-        ))
-      )}
+      <CheckSection
+        groups={failed}
+        outcome="deny"
+        loadFailed={failedQuery.isError && !failedQuery.data}
+        emptyText="No failed checks for this agent in this period."
+        failedText="Failed checks could not be loaded."
+      />
       <ChecksHeading>Allowed</ChecksHeading>
-      {allowed.length === 0 ? (
-        <IdentityPanelEmpty>
-          No allowed checks for this agent in this period.
-        </IdentityPanelEmpty>
-      ) : (
-        allowed.map((group) => (
-          <CheckGroupRow key={group.key} group={group} outcome="allow" />
-        ))
-      )}
+      <CheckSection
+        groups={allowed}
+        outcome="allow"
+        loadFailed={allowedQuery.isError && !allowedQuery.data}
+        emptyText="No allowed checks for this agent in this period."
+        failedText="Allowed checks could not be loaded."
+      />
     </IdentityPanel>
   );
 }
