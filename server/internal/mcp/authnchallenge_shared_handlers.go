@@ -241,8 +241,7 @@ func (s *Service) HandleSharedConsent(w http.ResponseWriter, r *http.Request) er
 	}
 	stateID := r.URL.Query().Get("state")
 	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
-		if err := r.ParseForm(); err != nil {
+		if err := parseConsentForm(w, r); err != nil {
 			return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, issuer.logger)
 		}
 		stateID = r.PostForm.Get("state")

@@ -3,15 +3,19 @@ package mcp
 import (
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -40,14 +44,36 @@ func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
 	}
 	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	f.enforce()
+	members := []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
+	require.NoError(t, f.service.withTypedMemberRegistrations(t.Context(), f.orgID, members))
 	calls := 0
 	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
 		calls++
-		return []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}, nil
+		return members, nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{f.registration: f.projectID}, typed)
 	require.Equal(t, 1, calls)
+}
+
+func TestTypedConsentRegistrationsReuseMemberSnapshot(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_consent_snapshot")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.enforce()
+	registration, legacyRegistration := uuid.New(), uuid.New()
+	members := []metaMember{
+		{projectID: uuid.New(), associatedClients: map[uuid.UUID]bool{legacyRegistration: true}},
+		{projectID: f.projectID, typedRegistrations: true, associatedClients: map[uuid.UUID]bool{registration: true}},
+		{projectID: uuid.New(), typedRegistrations: true, associatedClients: map[uuid.UUID]bool{registration: true}},
+	}
+	endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, MetaMcpServerID: validUUID(uuid.New())}
+	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
+		return members, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{registration: f.projectID}, typed, "reuse only typed registrations; the first member owns a shared registration's project")
 }
 
 // Where typed auth client resolution is enforced, a proxied member is matched
@@ -120,4 +146,47 @@ func TestTypedRegistrationStatusesReplaceSignInStatuses(t *testing.T) {
 		map[uuid.UUID]uuid.UUID{f.registration: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.RemoteSessionState{signInOnly: connected}, statuses, "the resolver serves no session for the typed registration")
+}
+
+// A typed registration keeps the caller's consented session even when the
+// sign-in's status snapshot has no entry for that registration.
+func TestTypedRegistrationStatusesPreserveConsentedSession(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_registration_session")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	ctx := t.Context()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+
+	consentedUnder := uuid.New()
+	require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{
+		ID: consentedUnder, ProjectID: validUUID(f.projectID), Slug: "usi-" + consentedUnder.String()[:8],
+	}))
+	subject := urn.NewUserSubject("user_1")
+	accessEnc, err := f.service.enc.Encrypt([]byte("typed-upstream-token"))
+	require.NoError(t, err)
+	session, err := remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   consentedUnder,
+		RemoteSessionClientID: f.registration,
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+
+	signInOnly := uuid.New()
+	connected := remotesessions.RemoteSessionState{Status: remotesessions.RemoteSessionActive}
+	statuses, err := f.service.withTypedRegistrationStatuses(ctx, f.orgID, subject,
+		map[uuid.UUID]remotesessions.RemoteSessionState{signInOnly: connected},
+		map[uuid.UUID]uuid.UUID{f.registration: f.projectID})
+	require.NoError(t, err)
+	require.Len(t, statuses, 2)
+	typedStatus, ok := statuses[f.registration]
+	require.True(t, ok, "a typed registration must retain its consented session without a sign-in link")
+	require.Equal(t, session.ID, typedStatus.ID)
+	require.Equal(t, remotesessions.RemoteSessionActive, typedStatus.Status)
+	require.Equal(t, connected, statuses[signInOnly], "unrelated sign-in statuses remain unchanged")
 }

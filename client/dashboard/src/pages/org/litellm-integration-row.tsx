@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -297,9 +298,11 @@ export function LiteLLMIntegrationRow(): JSX.Element {
                   disabled={instancesQuery.isFetching}
                 >
                   <Button.LeftIcon>
-                    <RefreshCw
-                      className={`size-3.5 ${instancesQuery.isFetching ? "animate-spin" : ""}`}
-                    />
+                    {instancesQuery.isFetching ? (
+                      <Spinner className="mr-0 size-3.5" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
                   </Button.LeftIcon>
                   <Button.Text>Refresh</Button.Text>
                 </Button>

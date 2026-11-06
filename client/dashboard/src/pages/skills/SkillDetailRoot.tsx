@@ -3,7 +3,6 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
@@ -90,15 +89,8 @@ function SkillDetailLoading(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth className="gap-0">
-        <div
-          aria-label="Loading skill"
-          className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8"
-        >
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-80 w-full" />
-          <Skeleton className="h-48 w-full" />
-        </div>
+      <Page.Body fullWidth className="gap-0" isLoading>
+        {null}
       </Page.Body>
     </Page>
   );

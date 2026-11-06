@@ -33,11 +33,6 @@ const (
 	// consumes the state, so a longer TTL would only keep dead entries.
 	consentToolInventoryTTL = 10 * time.Minute
 
-	// consentInventoryMaxTools bounds upstream-controlled inventory size; a
-	// server exceeding it fails the attempt rather than truncating, which
-	// would present an incomplete approval surface.
-	consentInventoryMaxTools = 1000
-
 	// consentInventoryMaxNameBytes bounds a single upstream tool name.
 	consentInventoryMaxNameBytes = 200
 
@@ -60,6 +55,10 @@ var errConsentConfigurationChanged = errors.New("server configuration changed; r
 // errConsentCaptureSuperseded marks a gateway capture a later page load
 // replaced while it was still discovering; only the newest capture publishes.
 var errConsentCaptureSuperseded = errors.New("a newer consent page replaced this capture; reload consent")
+
+// errConsentInventoryTooManyTools marks an inventory over its tool cap.
+// Retrying cannot help; an administrator must reduce the inventory.
+var errConsentInventoryTooManyTools = errors.New("inventory has too many tools")
 
 // consentInventoryTool is one captured tool: name plus the known annotation
 // values whose raw hints are explicitly true. Source names the member server
@@ -221,6 +220,9 @@ func mergeConsentInventoryPage(
 	if requestCursor != draft.ExpectedCursor {
 		return draft, fmt.Errorf("tools/list cursor is out of order for this attempt")
 	}
+	if len(draft.Tools)+len(pageTools) > toolfilter.MaxTools {
+		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, toolfilter.MaxTools)
+	}
 
 	seen := make(map[string]bool, len(draft.Tools)+len(pageTools))
 	for _, tool := range draft.Tools {
@@ -240,10 +242,6 @@ func mergeConsentInventoryPage(
 		seen[tool.Name] = true
 		tool.Annotations = normalizeKnownAnnotations(tool.Annotations)
 	}
-	if len(draft.Tools)+len(pageTools) > consentInventoryMaxTools {
-		return draft, fmt.Errorf("inventory exceeds %d tools", consentInventoryMaxTools)
-	}
-
 	if len(nextCursor) > consentInventoryMaxCursorBytes {
 		return draft, fmt.Errorf("inventory pagination cursor exceeds %d bytes", consentInventoryMaxCursorBytes)
 	}

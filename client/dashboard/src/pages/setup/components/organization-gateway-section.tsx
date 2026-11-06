@@ -10,6 +10,7 @@ import { organizationGatewayInstallPlatforms } from "@/pages/mcp/organization-ga
 import { useOrgRoutes } from "@/routes";
 import { platformSteps } from "../setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // The Organization Gateway as a Claude connector, inside the Anthropic admin
 // controls card. The gateway read is the only gate: its URL shows once the
@@ -31,7 +32,7 @@ export function OrganizationGatewayConnectorSection(): JSX.Element {
   });
 
   if (permissionsLoading) {
-    return <Muted>Checking your access…</Muted>;
+    return <GatewaySkeleton label="Checking your access" />;
   }
   if (!canRead) {
     return (
@@ -44,7 +45,7 @@ export function OrganizationGatewayConnectorSection(): JSX.Element {
   // A cached answer (from the MCP list or the gateway page) may be stale, so
   // hold the URL back until this card's own read has come back.
   if (gateway.isLoading || !gateway.isFetchedAfterMount) {
-    return <Muted>Loading the Organization Gateway…</Muted>;
+    return <GatewaySkeleton label="Loading the Organization Gateway" />;
   }
   const retry = (
     <Button
@@ -86,6 +87,18 @@ export function OrganizationGatewayConnectorSection(): JSX.Element {
       canManage={canManage}
       retry={retry}
     />
+  );
+}
+
+function GatewaySkeleton({ label }: { label: string }): JSX.Element {
+  return (
+    <div role="status" aria-label={label}>
+      <Skeleton>
+        <div className="h-4 w-3/4" />
+        <div className="h-9 w-full" />
+        <div className="h-4 w-1/2" />
+      </Skeleton>
+    </div>
   );
 }
 

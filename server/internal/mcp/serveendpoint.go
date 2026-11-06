@@ -853,6 +853,7 @@ func (s *Service) agentKeyUngatedUpstream(
 		subject:                urn.NewAgentSubject(agentID),
 		refreshableUserSession: false,
 		directWorkloadHandoff:  false,
+		ownClientsOnly:         false,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,

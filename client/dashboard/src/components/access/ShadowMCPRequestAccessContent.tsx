@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
@@ -211,7 +212,7 @@ function RequestAccessMessage({
         >
           {pending && (
             <Button.LeftIcon>
-              <Icon name="loader-circle" className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0 h-4 w-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>{pending ? "Sending" : "Send request"}</Button.Text>
@@ -238,10 +239,7 @@ function RequestAccessMessage({
   if (state === "authenticating") {
     return (
       <Stack gap={3} align="center">
-        <Icon
-          name="loader-circle"
-          className="text-muted-foreground h-6 w-6 animate-spin"
-        />
+        <Spinner className="text-muted-foreground mr-0 h-6 w-6" />
         <Text muted small className="text-center">
           Redirecting to sign in...
         </Text>
@@ -288,10 +286,7 @@ function RequestAccessMessage({
 
   return (
     <Stack gap={3} align="center">
-      <Icon
-        name="loader-circle"
-        className="text-muted-foreground h-6 w-6 animate-spin"
-      />
+      <Spinner className="text-muted-foreground mr-0 h-6 w-6" />
       <Text muted small className="text-center">
         Preparing request...
       </Text>

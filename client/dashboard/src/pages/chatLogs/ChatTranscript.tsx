@@ -22,10 +22,10 @@ import {
   ChevronUp,
   Ellipsis,
   GitBranch,
-  Loader2,
   Paperclip,
 } from "lucide-react";
 import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   MessageContent,
   type SectionMatch,
@@ -1136,7 +1136,7 @@ function LoadDivider({
         className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Spinner className="mr-0 size-3.5" />
         ) : (
           <Glyph className="size-3.5" />
         )}

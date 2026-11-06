@@ -3,7 +3,7 @@ import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -687,9 +687,12 @@ function HooksInnerContent({
                 className="mx-auto w-full"
               />
             ) : isLoading ? (
-              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                <Spinner className="mr-0 size-5" />
-                <span>Loading tool usage...</span>
+              <div role="status" aria-label="Loading tool usage">
+                <Skeleton>
+                  <div className="h-28 w-full" />
+                  <div className="h-64 w-full" />
+                  <div className="h-64 w-full" />
+                </Skeleton>
               </div>
             ) : !hasSummaryData &&
               activeFilters.length === 0 &&
