@@ -408,7 +408,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
-		metric.WithDescription("MCP connection attempt steps by outcome, step, reason and who fixes it."),
+		metric.WithDescription("Stored MCP connection attempt steps by outcome, step, reason, who fixes it and known provider."),
 		metric.WithUnit("{step}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSteps), attr.SlogError(err))
@@ -557,7 +557,6 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
 	}
-	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
 			r.stampClient(&row)
@@ -730,7 +729,10 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(events(rows...), func() {
-				if !r.insert(rows) && stopping() {
+				switch {
+				case r.insert(rows):
+					r.countSteps(rows)
+				case stopping():
 					drainFailed = true
 				}
 			})
@@ -774,7 +776,6 @@ func (r *Recorder) run() {
 	addPending := func(rows []Row) {
 		for _, row := range rows {
 			r.unfinished.Add(1)
-			r.countStep(context.Background(), row)
 			add(row)
 		}
 	}
@@ -853,16 +854,20 @@ func (r *Recorder) insert(rows []Row) bool {
 	return false
 }
 
-func (r *Recorder) countStep(ctx context.Context, row Row) {
+// countSteps counts stored rows only, so dropped rows never reach the metric.
+func (r *Recorder) countSteps(rows []Row) {
 	if r.steps == nil {
 		return
 	}
-	r.steps.Add(ctx, 1, metric.WithAttributes(
-		attr.ConnectionOutcome(row.Outcome),
-		attr.ConnectionStep(row.Step),
-		attr.ConnectionReason(row.Reason),
-		attr.ConnectionWhoFixes(row.WhoFixes),
-	))
+	for _, row := range rows {
+		r.steps.Add(context.Background(), 1, metric.WithAttributes(
+			attr.ConnectionOutcome(row.Outcome),
+			attr.ConnectionStep(row.Step),
+			attr.ConnectionReason(row.Reason),
+			attr.ConnectionWhoFixes(row.WhoFixes),
+			attr.ConnectionProvider(ProviderLabel(row.ProviderHost)),
+		))
+	}
 }
 
 func (r *Recorder) drop(ctx context.Context, reason dropReason, n int, cause error) {

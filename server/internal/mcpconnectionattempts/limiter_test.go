@@ -217,8 +217,7 @@ func TestOnce_HeldBackRowsNeverBlockOrReachTheQueue(t *testing.T) {
 func TestOnce_AHeldBackRowCountsNoStep(t *testing.T) {
 	t.Parallel()
 
-	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, testConfig())
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
 	scope := testScope()
 	for range onceKeyBurst + 2 {
 		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
