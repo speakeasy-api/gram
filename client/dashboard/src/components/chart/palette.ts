@@ -90,13 +90,19 @@ export function otherSeriesForTheme(isDark: boolean): string {
   return isDark ? OTHER_SERIES_DARK : OTHER_SERIES;
 }
 
+// The rollup neutral as a status dot class: OTHER_SERIES on light and
+// OTHER_SERIES_DARK on dark, so a pending dot in Tool logs matches the pending
+// bars of the outcome charts. Kept literal so Tailwind sees the classes.
+export const PENDING_DOT_CLASS = "bg-[hsl(0,0%,78%)] dark:bg-[hsl(0,0%,33%)]";
+
 // Tool call outcomes, as base.css paints them: --bg-success-default,
 // --bg-destructive-default and --bg-warning-default (feedback green, red and
 // orange 500, the same in both themes). The status dots use those tokens as
-// classes, so a bar and a dot of one outcome are one color. Every chart of
-// call outcomes draws from here, so success and failure never change color
-// between two charts of the same calls. Pending takes the rollup neutral
-// (otherSeriesForTheme), since it has no outcome yet.
+// classes, so a bar and a dot of one outcome are one color. The outcome
+// charts built by toolOutcomeDatasets (an agent's Tool calls and the Tool logs
+// timeline strip) draw from here, so success and failure never change color
+// between them. Pending takes the rollup neutral (otherSeriesForTheme, or
+// PENDING_DOT_CLASS on a dot), since it has no outcome yet.
 export const OUTCOME = {
   ok: "hsl(108, 24%, 41%)",
   failed: ACCENT_RED,

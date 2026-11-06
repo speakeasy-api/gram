@@ -64,6 +64,31 @@ describe("toolOutcomeDatasets", () => {
   });
 });
 
+describe("toolOutcomeDatasets edges", () => {
+  it("counts a bucket that starts before the window in the first bar", () => {
+    const datasets = toolOutcomeDatasets(
+      [point(new Date(from.getTime() - 30 * 60_000), { event: 2, failed: 1 })],
+      { fromMs: from.getTime(), bucketMs: HOUR_MS, bucketCount: 2 },
+      "grey",
+    );
+    expect(datasets.find((d) => d.label === "Failed")?.data).toEqual([1, 0]);
+    expect(datasets.find((d) => d.label === "Succeeded")?.data).toEqual([1, 0]);
+  });
+
+  it("never counts negative successes when outcomes exceed the total", () => {
+    const datasets = toolOutcomeDatasets(
+      [point(from, { event: 3, failed: 2, blocked: 1, pending: 1 })],
+      { fromMs: from.getTime(), bucketMs: HOUR_MS, bucketCount: 1 },
+      "grey",
+    );
+    expect(datasets.map(({ label }) => label)).toEqual([
+      "Failed",
+      "Blocked",
+      "Pending",
+    ]);
+  });
+});
+
 describe("buildToolOutcomeTimeSeries", () => {
   it("returns no grid when there are no calls", () => {
     const chart = buildToolOutcomeTimeSeries(

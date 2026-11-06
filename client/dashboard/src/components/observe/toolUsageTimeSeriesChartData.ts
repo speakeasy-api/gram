@@ -40,7 +40,7 @@ export function pickTimeBucketMs(timeRangeMs: number): number {
   return TIME_BUCKET_STEPS_MS[TIME_BUCKET_STEPS_MS.length - 1]!;
 }
 
-export function bucketStartNsToMs(bucketStartNs: string): number | null {
+function bucketStartNsToMs(bucketStartNs: string): number | null {
   try {
     const ms = Number(BigInt(bucketStartNs) / 1_000_000n);
     return Number.isFinite(ms) ? ms : null;

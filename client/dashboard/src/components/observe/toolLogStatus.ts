@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import { isStalePendingToolCall } from "@/lib/toolCallStatus";
 
@@ -51,7 +52,7 @@ export function getToolLogStatusConfig(
         );
         return {
           className: "text-muted-foreground",
-          dotClassName: "bg-muted-foreground/30",
+          dotClassName: PENDING_DOT_CLASS,
           label: isStalePendingToolCall(startedAtMs, nowMs)
             ? "Unknown"
             : "Pending",

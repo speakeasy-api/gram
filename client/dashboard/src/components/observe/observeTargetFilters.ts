@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type {
   FilterChip,
   ObserveStatusFilterValue,
@@ -73,7 +74,7 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   {
     label: "Pending or unknown",
     value: "pending",
-    dotClassName: "bg-muted-foreground/30",
+    dotClassName: PENDING_DOT_CLASS,
   },
 ];
 
