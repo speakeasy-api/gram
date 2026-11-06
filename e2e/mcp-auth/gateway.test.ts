@@ -44,6 +44,13 @@ test("progressive gateway discovery describes exact members before executing", a
     tools.map((tool) => tool.qualifiedName),
     ["alpha--fixture_echo", "project.beta--fixture_echo"],
   );
+  assert.deepEqual(calls, [
+    { name: "list_servers", args: undefined },
+    { name: "describe_server", args: { server: "alpha" } },
+    { name: "describe_tools", args: { tools: ["alpha--fixture_echo"] } },
+    { name: "describe_server", args: { server: "project.beta" } },
+    { name: "describe_tools", args: { tools: ["project.beta--fixture_echo"] } },
+  ]);
   await tools[1]!.call({ marker: "only-beta" });
   assert.deepEqual(calls.at(-1), {
     name: "execute_tool",
@@ -93,4 +100,46 @@ test("direct gateway mode invokes the exact qualified member tool", async () => 
   const tools = await gatewayEchoes(driver, ["beta"]);
   await tools[0]!.call({});
   assert.deepEqual(calls, ["beta--fixture_echo"]);
+});
+
+test("ambiguous progressive and direct members fail instead of routing to the first match", async () => {
+  for (const progressive of [true, false]) {
+    const driver = {
+      async listTools() {
+        return {
+          tools: progressive
+            ? [{ name: "list_servers" }]
+            : [
+                { name: "one.alpha--fixture_echo" },
+                { name: "two.alpha--fixture_echo" },
+              ],
+        };
+      },
+      async callTool() {
+        return {
+          structuredContent: {
+            servers: [{ slug: "one.alpha" }, { slug: "two.alpha" }],
+          },
+        };
+      },
+    };
+    await assert.rejects(gatewayEchoes(driver, ["alpha"]), /ambiguous/);
+  }
+});
+
+test("present malformed hidden inventory fails even without an observer", async () => {
+  for (const hidden of [null, {}, "unexpected"]) {
+    const driver = {
+      async listTools() {
+        return { tools: [{ name: "list_servers" }] };
+      },
+      async callTool() {
+        return { structuredContent: { servers: [], hidden } };
+      },
+    };
+    await assert.rejects(
+      gatewayEchoes(driver, []),
+      /Invalid gateway hidden member list/,
+    );
+  }
 });

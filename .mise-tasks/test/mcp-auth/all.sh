@@ -24,9 +24,16 @@ result=0
 export MCP_AUTH_RUN_DIR="$(pwd -P)/$output/run"
 export MCP_AUTH_KEEP_SHARED_PROJECT=1
 mkdir -p "$MCP_AUTH_RUN_DIR"
-mise exec -- node e2e/mcp-auth/mock-host.ts "$MCP_AUTH_RUN_DIR" > "$output/mock-host.log" 2>&1 &
+node_bin="$(mise which node)"
+"$node_bin" e2e/mcp-auth/mock-host.ts "$MCP_AUTH_RUN_DIR" > "$output/mock-host.log" 2>&1 &
 mock_host=$!
-trap 'kill "$mock_host" 2>/dev/null || true' EXIT
+cleanup() {
+  kill "$mock_host" 2>/dev/null || true
+  wait "$mock_host" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 for _ in $(seq 1 600); do
   [ -f "$MCP_AUTH_RUN_DIR/host.json" ] && break
   kill -0 "$mock_host" 2>/dev/null || break
@@ -51,7 +58,10 @@ for phase in scenarios org-wide-scenarios; do
   fi
   workers=1
   [ "$phase" = scenarios ] && workers="${MCP_AUTH_WORKERS:-3}"
-  if MCP_AUTH_WORKERS="$workers" mise run test:mcp-auth --project="$phase" --global-timeout=14400000 > "$output/$phase.log" 2>&1; then
+  phase_args=(--project="$phase" --global-timeout=14400000)
+  # The regular project already finished in the previous phase.
+  [ "$phase" = org-wide-scenarios ] && phase_args+=(--no-deps)
+  if MCP_AUTH_WORKERS="$workers" mise run test:mcp-auth "${phase_args[@]}" > "$output/$phase.log" 2>&1; then
     code=0
   else
     code=$?

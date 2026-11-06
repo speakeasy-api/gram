@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { createServer, request } from "node:https";
 import { test } from "node:test";
+import { getCACertificates, setDefaultCACertificates } from "node:tls";
+import { FixtureMcpClient } from "./client.ts";
 import {
   EMA_GRANT,
   localTLS,
@@ -16,8 +18,10 @@ test("EMA validates HTTPS JWKS, exact claims and client authentication before ex
   });
   const kid = randomUUID();
   let jwksReads = 0;
-  const jwks = createServer(tls, (_req, res) => {
+  let holdJWKS: (() => Promise<void>) | undefined;
+  const jwks = createServer(tls, async (_req, res) => {
     jwksReads++;
+    await holdJWKS?.();
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
@@ -211,7 +215,29 @@ test("EMA validates HTTPS JWKS, exact claims and client authentication before ex
       upstream.journal.filter((event) => event.kind === "oauth_code").length,
       1,
     );
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    holdJWKS = () => {
+      entered();
+      return blocked;
+    };
+    const offset = upstream.journal.length;
+    const inFlight = exchange(mint());
+    await started;
     upstream.deny();
+    release();
+    assert.equal((await inFlight).status, 400);
+    assert.equal(
+      upstream.journal.slice(offset).some((event) => event.kind === "exchange"),
+      false,
+    );
+    holdJWKS = undefined;
     assert.equal((await exchange(mint())).status, 400);
     assert.equal(
       (
@@ -244,5 +270,40 @@ test("EMA validates HTTPS JWKS, exact claims and client authentication before ex
       jwks.close((error) => (error ? reject(error) : resolve()));
       jwks.closeAllConnections();
     });
+  }
+});
+
+test("the standalone browser client requests EMA's advertised scope and exchanges its code", async () => {
+  const tls = await localTLS();
+  const certificates = getCACertificates("default");
+  setDefaultCACertificates([...certificates, ...tls.ca]);
+  const upstream = await startEMAUpstream();
+  upstream.trust({
+    issuer: "https://localhost/fixture-issuer",
+    jwksURL: "https://localhost/fixture-jwks",
+    subject: "fixture:user",
+    email: "fixture@example.test",
+  });
+  const client = new FixtureMcpClient({ endpoint: upstream.resource });
+  try {
+    const auth = await client.beginAuthorization();
+    assert.equal(
+      new URL(auth.authorizationUrl).searchParams.get("scope"),
+      upstream.scope,
+    );
+    const redirect = await fetch(auth.authorizationUrl, { redirect: "manual" });
+    assert.equal(redirect.status, 302);
+    await fetch(redirect.headers.get("location")!);
+    await auth.complete();
+    await client.initialize();
+    await client.callTool("identity");
+    assert.equal(
+      upstream.journal.filter((event) => event.kind === "oauth_code").length,
+      1,
+    );
+  } finally {
+    await client.close();
+    await upstream.close();
+    setDefaultCACertificates(certificates);
   }
 });

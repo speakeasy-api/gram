@@ -18,7 +18,7 @@ The authoritative temporal ledger is [PATH-EVIDENCE.md](./PATH-EVIDENCE.md): lat
 
 ## Focused reconciliation
 
-These interpretations supplement the historical sections below, not replace attempt history. [PATH-EVIDENCE.md](./PATH-EVIDENCE.md) owns changing, non-atomic outcomes; C02 remains pending in this reconciliation. Every latest measured case has fresh persisted enforcement and a graph attachment.
+These interpretations supplement the historical sections below, not replace attempt history. [PATH-EVIDENCE.md](./PATH-EVIDENCE.md) owns changing, non-atomic outcomes; C02 has a measured failed pre-invocation boundary in the current ledger; its identity-tool turns remain unmeasured. Every latest measured case has fresh persisted enforcement and a graph attachment.
 
 - **Healthy card journeys:** the four journeys use opt-in HTTPS mocks with the existing trusted workload certificate/FQDN and DNS answers exclusively `127.0.0.1`. C15 strict revoke → 303 → reconnect passed. Earlier HTTP `jwks_uri` failed strict HTTPS validation and explains missing metadata; no healthy-provider revocation bug is established.
 - **G12 passed:** honor the actual 30-second Retry-After once, then one recovery invoke and two upstream refreshes. No retry-to-green or manual bypass.
@@ -27,13 +27,13 @@ These interpretations supplement the historical sections below, not replace atte
 - **C29:** stale calls produced hard zero forwarding and real same-client reconsent worked. The remaining soft red is `action_required` instead of `needs_consent`, not an execution bypass.
 - **C48:** own-binding loss is not a standalone alias defect. The endpoint-pinned guard prevents B same-label fallback.
 - **EMA2:** separate backend `sign-in-enforcement` readiness defaults false. Local flags can use an in-memory startup provider, not necessarily PostHog. No approved dashboard/staff UI control was found. Authorization for local uncommitted configuration plus restart/restore was requested but not received or performed; no automatic bypass is authorized.
-- **Cleanup:** failures now capture graphs/journals before closing fixtures, restoring policy and reverse-order UI deletion of only owned `createdProjects`. Private artifacts preserve attempts, not live failed projects. Three older owned synthetic projects were UI-cleaned after report-window/unique-name verification using read-only diagnostics, without quota override or SQL writes. Cleanup failures remain distinct from runtime failures.
+- **Cleanup:** failures now capture graphs/journals before closing fixtures, restoring policy and reverse-order UI deletion of only owned `createdProjects`. Private artifacts preserve attempts; failed project deletions remain separate cleanup diagnostics and can leave live synthetic projects. Three older owned synthetic projects were UI-cleaned after report-window/unique-name verification using read-only diagnostics, without quota override or SQL writes. Cleanup failures remain distinct from runtime failures.
 
 No product or CI change, commit, external issue creation, or new unit run accompanies this reconciliation. Private standalone bug drafts are not external tickets. Historical infrastructure successes do not establish new runtime coverage.
 
 ## Enforced-only verification contract
 
-Every browser scenario now calls `Dashboard.enforce()` in shared `beforeEach`, before project/fixture creation. The helper enables persisted `upstream_auth_enforced` through the staff UI where needed, reloads that page, and requires both **Upstream auth enforced** status and **Stop enforcing**. Missing readiness, staff access, or persisted enforcement fails setup, with no shadow/legacy fallback. An `auth-path` annotation is emitted only after this prerequisite succeeds; setup failures before verification have no such annotation and earn no enforced-path coverage. Header setup uses typed credential controls only; the old Custom Headers fallback was removed.
+The current Playwright project depends on `enforcement-setup`, whose setup test calls `Dashboard.enforce()` before browser scenarios. This is a project dependency, not a shared `beforeEach`; `ui.spec.ts` has its own login/project `beforeEach`. Historically the shared `auth` fixture performed the enforcement prerequisite lazily, so tests not requesting `auth` did not inherit that fixture mechanism. The helper enables persisted `upstream_auth_enforced` through the staff UI where needed, reloads that page, and requires both **Upstream auth enforced** status and **Stop enforcing**. Missing readiness, staff access, or persisted enforcement fails setup, with no shadow/legacy fallback. An `auth-path` annotation is emitted only after this prerequisite succeeds; setup failures before verification have no such annotation and earn no enforced-path coverage. Header setup uses typed credential controls only; the old Custom Headers fallback was removed.
 
 ### Earlier seven-scenario enforcement smoke run — 2026-11-04
 

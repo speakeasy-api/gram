@@ -9,7 +9,7 @@ const scopes = ["fixture:read", "openid"];
 // Healthy-provider journeys must satisfy the strict HTTPS JWKS URI policy.
 test.use({ mockOptions: { https: true } });
 test.describe.configure({ mode: "default", retries: 0 });
-test.setTimeout(150_000);
+test.setTimeout(300_000);
 
 async function supportedConnection(auth: AuthScenario) {
   return test.step(

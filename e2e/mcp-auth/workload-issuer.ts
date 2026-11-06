@@ -136,28 +136,33 @@ export function handleWorkloadRequest(
 
 export async function startWorkloadIssuer() {
   const host = await acquireHost();
-  const { id, files } = createScenario(host.runDir, "workload");
-  const origin = `${hostOrigin(host.info.workload)}/s/${id}`;
-  const signer = workloadSigner();
-  files.map<unknown>("signer").set("jwk", signer.jwk);
-  const jwksReads = files.journal<true>("jwks-reads");
-  const exchanges: {
-    status: number;
-    resourceScoped: boolean;
-    errorCode?: string;
-  }[] = [];
-  return {
-    origin,
-    jwksURL: `${origin}/jwks`,
-    subject: "fixture:workload:runner",
-    exchanges,
-    get jwksReads() {
-      return jwksReads.list().length;
-    },
-    issue: (audience: string) =>
-      signer.issue(origin, "fixture:workload:runner", audience),
-    close: () => host.release(),
-  };
+  try {
+    const { id, files } = createScenario(host.runDir, "workload");
+    const origin = `${hostOrigin(host.info.workload)}/s/${id}`;
+    const signer = workloadSigner();
+    files.map<unknown>("signer").set("jwk", signer.jwk);
+    const jwksReads = files.journal<true>("jwks-reads");
+    const exchanges: {
+      status: number;
+      resourceScoped: boolean;
+      errorCode?: string;
+    }[] = [];
+    return {
+      origin,
+      jwksURL: `${origin}/jwks`,
+      subject: "fixture:workload:runner",
+      exchanges,
+      get jwksReads() {
+        return jwksReads.list().length;
+      },
+      issue: (audience: string) =>
+        signer.issue(origin, "fixture:workload:runner", audience),
+      close: () => host.release(),
+    };
+  } catch (error) {
+    await host.release();
+    throw error;
+  }
 }
 
 /** Creates the assignment and trust policy exclusively through the real agent wizard. */

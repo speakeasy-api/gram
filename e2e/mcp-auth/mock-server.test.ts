@@ -347,7 +347,11 @@ test("standalone OAuth and MCP fixtures", async (t) => {
     "rejected authorization targets remain visible without secrets",
     async () => {
       const { params } = await authorize();
-      for (const target of [undefined, server.profiles.oauthBeta]) {
+      for (const target of [
+        undefined,
+        server.profiles.oauthBeta,
+        "https://example.test/resource?credential=private-query-secret",
+      ]) {
         const request = new URLSearchParams({
           ...params,
           scope: "fixture:read openid",
@@ -367,11 +371,15 @@ test("standalone OAuth and MCP fixtures", async (t) => {
             kind: "authorize",
             provider: "alpha",
             clientId: alpha.clientId,
-            resource: target ?? "",
+            resource: target === server.profiles.oauthBeta ? target : "",
             scopes: ["fixture:read", "openid"],
             outcome: "invalid_target",
           },
         ]);
+        assert.doesNotMatch(
+          JSON.stringify(server.events),
+          /private-query-secret/,
+        );
       }
     },
   );
@@ -849,6 +857,31 @@ test("standalone OAuth and MCP fixtures", async (t) => {
     },
   );
   await t.test(
+    "reset cancels blocked refresh without recreating cleared grants",
+    async () => {
+      const tokens = await grant();
+      const barrier = server.pauseNextRefresh("alpha");
+      const pending = post(`${alpha.issuer}/token`, {
+        ...credentials,
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+      });
+      await bounded(barrier.started);
+      server.reset();
+      assert.equal((await bounded(pending)).status, 400);
+      barrier.release();
+      assert.equal(server.events.length, 0);
+      assert.equal(
+        (
+          await rpc(resource, {
+            Authorization: `Bearer ${tokens.access_token}`,
+          })
+        ).status,
+        401,
+      );
+    },
+  );
+  await t.test(
     "static, pass-through, multiple and anonymous identities stay distinct",
     async () => {
       for (const [url, headers, expected] of [
@@ -974,3 +1007,122 @@ test(
     }
   },
 );
+
+test("dynamic registrations enforce their declared token authentication and reset removes them", async () => {
+  const server = await startMockAuthServer();
+  try {
+    const issuer = server.providers.alpha.issuer;
+    const registrations: {
+      client_id: string;
+      client_secret?: string;
+      token_endpoint_auth_method: string;
+    }[] = [];
+    for (const method of [
+      "none",
+      "client_secret_post",
+      "client_secret_basic",
+    ]) {
+      const response = await fetch(`${issuer}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          redirect_uris: ["http://127.0.0.1/callback"],
+          token_endpoint_auth_method: method,
+        }),
+      });
+      assert.equal(response.status, 201);
+      const registration = await response.json();
+      registrations.push(registration);
+      for (const supplied of [
+        "none",
+        "client_secret_post",
+        "client_secret_basic",
+      ]) {
+        const params = new URLSearchParams({
+          grant_type: "unsupported_fixture_grant",
+          client_id: registration.client_id,
+        });
+        const headers: Record<string, string> = {};
+        if (supplied === "client_secret_post")
+          params.set("client_secret", registration.client_secret ?? "");
+        if (supplied === "client_secret_basic")
+          headers.Authorization = `Basic ${Buffer.from(`${registration.client_id}:${registration.client_secret ?? ""}`).toString("base64")}`;
+        const result = await fetch(`${issuer}/token`, {
+          method: "POST",
+          body: params,
+          headers,
+        });
+        assert.equal(
+          result.status,
+          supplied === method ? 400 : 401,
+          `${method} via ${supplied}`,
+        );
+        assert.equal(
+          (await result.json()).error,
+          supplied === method ? "unsupported_grant_type" : "invalid_client",
+        );
+      }
+    }
+    server.setTokenFailure("alpha", { status: 503 });
+    server.setAdvertisedLifetime(1);
+    server.setResourceAuth(server.profiles.noAuth, true);
+    server.setResourceScopes(server.profiles.oauthAlpha, ["fixture:write"]);
+    server.reset();
+    assert.equal(server.events.length, 0);
+    for (const registration of registrations) {
+      const params = new URLSearchParams({
+        client_id: registration.client_id,
+        grant_type: "unsupported_fixture_grant",
+      });
+      const headers: Record<string, string> = {};
+      if (registration.token_endpoint_auth_method === "client_secret_post")
+        params.set("client_secret", registration.client_secret!);
+      if (registration.token_endpoint_auth_method === "client_secret_basic")
+        headers.Authorization = `Basic ${Buffer.from(`${registration.client_id}:${registration.client_secret}`).toString("base64")}`;
+      assert.equal(
+        (
+          await fetch(`${issuer}/token`, {
+            method: "POST",
+            body: params,
+            headers,
+          })
+        ).status,
+        401,
+      );
+    }
+    assert.equal(
+      (
+        await fetch(`${issuer}/token`, {
+          method: "POST",
+          body: new URLSearchParams({
+            client_id: server.providers.alpha.clientId,
+            client_secret: server.providers.alpha.clientSecret,
+            grant_type: "unsupported_fixture_grant",
+          }),
+        })
+      ).status,
+      400,
+    );
+    const metadata = await (
+      await fetch(
+        server.profiles.oauthAlpha.replace(
+          "/mcp/",
+          "/.well-known/oauth-protected-resource/mcp/",
+        ),
+      )
+    ).json();
+    assert.deepEqual(metadata.scopes_supported, ["fixture:read", "openid"]);
+    assert.equal(
+      (
+        await fetch(server.profiles.noAuth, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+        })
+      ).status,
+      200,
+    );
+  } finally {
+    await server.close();
+  }
+});

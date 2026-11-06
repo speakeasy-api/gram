@@ -15,7 +15,7 @@ The five focused failures all verified persisted upstream-auth enforcement, but 
 - Typed-only G5 now reaches initial authorization with an empty resource, strict `invalid_target`, and rendered resource-rejection metadata correlated with `challenge.go:2171`; the old selector blocker is superseded, and this is not a reconnect/admission/missing-bridge diagnosis.
 - G10 completes owner reconnect with the exact grant and two authorized calls, yet same-workload exchange remains `setup_required` HTTP 400. Source excludes Workload callers from personal-offer candidates before owner-aware readiness; this differs from graph-binding loss.
 - G27 explicitly selects the second static offer (`static-alt-user`) on its first turn, then observes selected-connection access denial with zero execution, not a personal/default first turn.
-- Both EMA scenarios now pass the sign-in-enforcement prerequisite, which was a bootstrap gap, and reach a live EMA exchange. They stop at consent: with the EMA choice selected, the direct tool inventory returns 409 and **Give access** stays disabled on a page with other offers. Independent assessment is pending, so this is not yet two established product bugs.
+- Both EMA scenarios now pass the sign-in-enforcement prerequisite, which was a bootstrap gap, and reach the consent boundary before EMA exchange. They stop at consent: with the EMA choice selected, the direct tool inventory returns 409 and **Give access** stays disabled on a page with other offers. Independent assessment is pending, so this is not yet two established product bugs.
 
 Latest Code Mode G9 diagnostics prove initial anonymous execution and no stale dispatch/forwarding, then `tools.connect` returns `execution_failed`. Neither runtime outage nor the historical reason mismatch is established; full frozen-catalog recovery is unproved. Refer to the path ledger for latest non-atomic statuses rather than treating scenario failures as a bug count. Historical infrastructure checks recorded **42 passing unit tests plus repository type-check, formatter and whitespace checks**; none were rerun for this documentation reconciliation.
 
@@ -51,7 +51,7 @@ The first resource run encountered a helper gap: Reconnect was not recognized. T
 
 ## Evidence boundaries
 
-- No API/SQL fixture insertion or automatic issuer-link repair.
+- These incident fixtures use UI setup, without API/SQL fixture insertion or automatic issuer-link repair. Separately authorized EMA bootstrap may use the supported API and a local rollout CSV; that exception is not incident-fixture setup.
 - Typed attach is the existing UI's AttachAuthClientToMcpServer workflow. The inspected backend writes typed server/client edges; the UI Used on assertion verifies reuse instead of a clone. A separate bounded, loopback-only read-only SQL diagnostic checks shared typed edges, issuer bridges and direct legacy server links without reading credentials. Current diagnostic coverage is recorded below; it does not administer or repair fixtures.
 - Browser/setup failures are not reclassified as resource/scope failures when no provider authorization attempt occurred.
 - Tests retain success expectations; no xfail, assertion inversion, retries to green, or product fixes.

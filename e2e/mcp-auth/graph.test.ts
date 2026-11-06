@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { PassThrough } from "node:stream";
 import { captureAuthGraph } from "./graph.ts";
 
 const project = "https://localhost:9443/fixture-org/projects/auth-e2e-example";
@@ -44,4 +47,54 @@ test("graph aliases reject an unsafe scope before connecting", async () => {
   await assert.rejects(captureAuthGraph([project], "unsafe' scope"), {
     message: "AUTH_GRAPH_INVALID_ALIAS_SCOPE",
   });
+});
+
+test("graph query requires a live provider in the server tenant before declaring list eligibility", async (t) => {
+  let sql = "";
+  const original = process.env.GRAM_DATABASE_URL;
+  const stub = t.mock.method(childProcess, "execFile", (...args: unknown[]) => {
+    const callback = args.at(-1) as (error: null, output: string) => void;
+    const stdin = new PassThrough();
+    stdin.on("data", (chunk) => {
+      sql += chunk.toString();
+    });
+    stdin.on("finish", () =>
+      callback(
+        null,
+        JSON.stringify({
+          projects: ["project-1"],
+          servers: [],
+          gateways: [],
+          automaticGateways: {
+            organization: "not_captured",
+            project: "not_captured",
+          },
+        }),
+      ),
+    );
+    return { stdin } as unknown as ReturnType<typeof childProcess.execFile>;
+  });
+  syncBuiltinESMExports();
+  process.env.GRAM_DATABASE_URL =
+    "postgres://fixture:fixture@localhost/fixture";
+  try {
+    await captureAuthGraph([project]);
+    const cte = sql.slice(
+      sql.indexOf("gateway_registration_edges AS ("),
+      sql.indexOf("SELECT json_build_object("),
+    );
+    assert.match(
+      cte,
+      /NOT c\.deleted AND i\.id IS NOT NULL AND NOT i\.deleted/,
+    );
+    assert.match(
+      cte,
+      /LEFT JOIN remote_session_issuers i ON i\.id = c\.remote_session_issuer_id\s+AND \(i\.project_id = s\.project_id\s+OR \(i\.project_id IS NULL AND \(i\.organization_id = s\.organization_id OR i\.organization_id IS NULL\)\)\)/,
+    );
+  } finally {
+    stub.mock.restore();
+    syncBuiltinESMExports();
+    if (original === undefined) delete process.env.GRAM_DATABASE_URL;
+    else process.env.GRAM_DATABASE_URL = original;
+  }
 });

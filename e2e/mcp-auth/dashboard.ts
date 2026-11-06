@@ -853,11 +853,24 @@ export class Dashboard {
         ),
         "UI_ENFORCEMENT_READINESS_BLOCKER: staff readiness must finish before testing auth",
       ).toBeVisible({ timeout: 60_000 });
+      const verifyPersisted = async () => {
+        await staff.reload();
+        await expect(filter).toBeVisible();
+        await filter.fill(this.organizationSlug);
+        await expect(row).toHaveCount(1);
+        await expect(
+          row.getByText("Upstream auth enforced", { exact: true }),
+        ).toBeVisible({ timeout: 60_000 });
+        await expect(stopped).toBeVisible();
+      };
       const stopped = row.getByRole("button", {
         name: "Stop enforcing",
         exact: true,
       });
-      if (await stopped.isVisible()) return;
+      if (await stopped.isVisible()) {
+        await verifyPersisted();
+        return;
+      }
       const migrate = row.getByRole("button", {
         name: /^(Migrate|Run again)$/,
       });
@@ -874,7 +887,10 @@ export class Dashboard {
         ),
         "UI_ENFORCEMENT_READINESS_BLOCKER: staff readiness must finish before testing auth",
       ).toBeVisible({ timeout: 60_000 });
-      if (await stopped.isVisible()) return;
+      if (await stopped.isVisible()) {
+        await verifyPersisted();
+        return;
+      }
       const enforce = row.getByRole("button", { name: "Enforce", exact: true });
       await expect(
         enforce,
@@ -886,6 +902,7 @@ export class Dashboard {
         .getByRole("button", { name: "Enforce", exact: true })
         .click();
       await expect(stopped).toBeVisible();
+      await verifyPersisted();
     } finally {
       await staff.close();
     }

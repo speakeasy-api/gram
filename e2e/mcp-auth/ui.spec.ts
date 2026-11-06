@@ -80,7 +80,12 @@ test.afterEach(async ({}, testInfo) => {
     projectDeleteFailures: 0,
     mockCloseFailed: false,
   };
-  if (dashboard?.createdProjects.length > 0) {
+  if (
+    dashboard?.createdProjects.length > 0 &&
+    graphFailure === undefined &&
+    revoked.every((result) => result.status === "fulfilled") &&
+    closed.every((result) => result.status === "fulfilled")
+  ) {
     for (const project of [...dashboard.createdProjects].reverse()) {
       try {
         dashboard.projectURL = project.url;
@@ -179,9 +184,9 @@ async function authorizeTypedResource(
   for (const grant of grants) {
     if (expected.scopes)
       expect(
-        grant.scopes,
+        [...(grant.scopes ?? [])].sort(),
         "TYPED_SCOPE_REGRESSION: issuer defaults must not replace the selected server scopes",
-      ).toEqual(expect.arrayContaining(expected.scopes));
+      ).toEqual([...expected.scopes].sort());
     expect(
       grant,
       "TYPED_RESOURCE_REGRESSION: the shared registration must authorize the selected server, not its legacy sibling",
@@ -376,16 +381,21 @@ test("enforced: regular user OAuth, fresh upstream expiry, refresh and revocatio
     ),
   ).toBe(true);
   await value.refresh();
+  // Let the newly refreshed two-second upstream grant expire before measuring.
+  await new Promise((resolve) => setTimeout(resolve, 2_100));
+  const expiryOffset = mock.events.length;
   await expect
     .poll(
       async () => {
         await invoke(value, mock.profiles.oauthAlpha);
-        return mock.events.some(
-          (event) =>
-            event.kind === "refresh" &&
-            event.provider === "alpha" &&
-            event.outcome === "success",
-        );
+        return mock.events
+          .slice(expiryOffset)
+          .some(
+            (event) =>
+              event.kind === "refresh" &&
+              event.provider === "alpha" &&
+              event.outcome === "success",
+          );
       },
       {
         message:

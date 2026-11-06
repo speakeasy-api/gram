@@ -20,6 +20,7 @@ export interface Discovery {
   authorizationEndpoint: string;
   tokenEndpoint: string;
   registrationEndpoint?: string;
+  scopes?: string[];
 }
 export interface TranscriptEvent {
   operation: string;
@@ -91,6 +92,7 @@ function errorDiagnostics(value: unknown): Partial<TranscriptEvent> {
     "invalid_grant",
     "invalid_request",
     "invalid_scope",
+    "invalid_target",
     "server_error",
     "temporarily_unavailable",
     "unauthorized_client",
@@ -297,6 +299,8 @@ export class FixtureMcpClient {
     return url;
   }
 
+  private responseEvents = new WeakMap<Response, TranscriptEvent>();
+
   private async request(
     url: string,
     operation: string,
@@ -336,6 +340,7 @@ export class FixtureMcpClient {
         await this.captureProtocolFailure(operation, failure.body);
     }
     this.events.push(event);
+    this.responseEvents.set(response, event);
     return response;
   }
 
@@ -431,6 +436,9 @@ export class FixtureMcpClient {
       throw new Error("Authorization server does not support S256");
     const metadata: Discovery = {
       resource,
+      ...(Array.isArray(resourceMetadata.scopes_supported)
+        ? { scopes: resourceMetadata.scopes_supported.map(string) }
+        : {}),
       authorizationServer: string(servers[0]),
       authorizationEndpoint: this.safeUrl(string(as.authorization_endpoint))
         .href,
@@ -564,7 +572,9 @@ export class FixtureMcpClient {
       this.tokenAuthMethod =
         typeof registration.token_endpoint_auth_method === "string"
           ? registration.token_endpoint_auth_method
-          : "none";
+          : registration.client_secret
+            ? "client_secret_basic"
+            : "none";
       if (
         !["none", "client_secret_post", "client_secret_basic"].includes(
           this.tokenAuthMethod,
@@ -587,6 +597,9 @@ export class FixtureMcpClient {
           .digest("base64url"),
         code_challenge_method: "S256",
         resource: metadata.resource,
+        ...(metadata.scopes?.length
+          ? { scope: metadata.scopes.join(" ") }
+          : {}),
       };
       for (const [key, value] of Object.entries(params))
         url.searchParams.set(key, value);
@@ -760,11 +773,8 @@ export class FixtureMcpClient {
     if (!message || message.id !== id || message.jsonrpc !== "2.0")
       throw new Error("Invalid JSON-RPC response");
     if ("error" in message) {
-      this.events.push({
-        operation: method,
-        status: response.status,
-        ...errorDiagnostics(message),
-      });
+      const event = this.responseEvents.get(response);
+      if (event) Object.assign(event, errorDiagnostics(message));
       await this.captureProtocolFailure(method, message);
       throw new Error(`${method} returned JSON-RPC error`);
     }

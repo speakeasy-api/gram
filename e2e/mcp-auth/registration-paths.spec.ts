@@ -16,76 +16,82 @@ test("G18 enforced: typed registration picker labels, ownership eligibility, and
 }) => {
   const registration = await createOAuthRegistration(auth);
   const accounts = new ServiceAccountActions(auth);
-  const selfName = await test.step(
-    "G18 UI: create uniquely named service-account registration",
-    () => accounts.registration(),
-    { timeout: 40_000 },
-  );
-  const resource = auth.mock.profiles.oauthAlpha;
-  auth.mock.setResourceScopes(resource, registration.scopes);
-  const server = await test.step(
-    "G18 UI: create target and inspect both typed registration pickers",
-    async () => {
-      const server = await auth.dashboard.remote(
-        `auth-e2e-picker-${randomUUID().slice(0, 8)}`,
-        resource,
-        "none",
-        true,
-      );
-      await auth.page
-        .getByRole("button", { name: "Add credential", exact: true })
-        .click();
-      const sheet = auth.page.getByRole("dialog", {
-        name: "Add a credential",
-        exact: true,
-      });
-      const personal = sheet.locator("#add-credential-remote_session");
-      await personal.focus();
-      await personal.press("Space");
-      await expect(personal).toBeChecked();
-      await sheet
-        .getByRole("combobox", { name: "Sign-in", exact: true })
-        .click();
-      // Match the exact registration identity in the option description, not
-      // the composite accessible name containing its issuer label.
-      const registrationOption = (name: string) => {
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        return auth.page.getByRole("option").filter({
-          has: auth.page.locator(".text-muted-foreground").filter({
-            hasText: new RegExp(`(?:^| · )${escaped}$`),
-          }),
+  try {
+    const selfName = await test.step(
+      "G18 UI: create uniquely named service-account registration",
+      () => accounts.registration(),
+      { timeout: 40_000 },
+    );
+    const resource = auth.mock.profiles.oauthAlpha;
+    auth.mock.setResourceScopes(resource, registration.scopes);
+    const server = await test.step(
+      "G18 UI: create target and inspect both typed registration pickers",
+      async () => {
+        const server = await auth.dashboard.remote(
+          `auth-e2e-picker-${randomUUID().slice(0, 8)}`,
+          resource,
+          "none",
+          true,
+        );
+        await auth.page
+          .getByRole("button", { name: "Add credential", exact: true })
+          .click();
+        const sheet = auth.page.getByRole("dialog", {
+          name: "Add a credential",
+          exact: true,
         });
-      };
-      await expect(registrationOption(registration.name)).toHaveCount(1);
-      await expect(registrationOption(selfName)).toHaveCount(0);
-      await auth.page.keyboard.press("Escape");
-      const self = sheet.getByRole("radio", { name: /^Service account/ });
-      await self.focus();
-      await self.press("Space");
-      await expect(self).toBeChecked();
-      await sheet
-        .getByRole("combobox", { name: "Sign-in", exact: true })
-        .click();
-      await expect(registrationOption(selfName)).toHaveCount(1);
-      await expect(registrationOption(registration.name)).toHaveCount(0);
-      await auth.page.keyboard.press("Escape");
-      await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
-      await expect(sheet).not.toBeVisible();
-      await addPersonalOffer(auth.page, registration.name, registration.name);
-      return server;
-    },
-    { timeout: 45_000 },
-  );
-  await test.step(
-    "G18 runtime: newly created personal registration authorizes exact resource and scopes",
-    async () => {
-      const caller = auth.client(server.endpoint);
-      await auth.authorize(caller);
-      assertGrant(auth, registration.clientId, resource, registration.scopes);
-      await auth.invoke(caller, resource, "alpha-user");
-    },
-    { timeout: 40_000 },
-  );
+        const personal = sheet.locator("#add-credential-remote_session");
+        await personal.focus();
+        await personal.press("Space");
+        await expect(personal).toBeChecked();
+        await sheet
+          .getByRole("combobox", { name: "Sign-in", exact: true })
+          .click();
+        // Match the exact registration identity in the option description, not
+        // the composite accessible name containing its issuer label.
+        const registrationOption = (name: string) => {
+          const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return auth.page.getByRole("option").filter({
+            has: auth.page.locator(".text-muted-foreground").filter({
+              hasText: new RegExp(`(?:^| · )${escaped}$`),
+            }),
+          });
+        };
+        await expect(registrationOption(registration.name)).toHaveCount(1);
+        await expect(registrationOption(selfName)).toHaveCount(0);
+        await auth.page.keyboard.press("Escape");
+        const self = sheet.getByRole("radio", { name: /^Service account/ });
+        await self.focus();
+        await self.press("Space");
+        await expect(self).toBeChecked();
+        await sheet
+          .getByRole("combobox", { name: "Sign-in", exact: true })
+          .click();
+        await expect(registrationOption(selfName)).toHaveCount(1);
+        await expect(registrationOption(registration.name)).toHaveCount(0);
+        await auth.page.keyboard.press("Escape");
+        await sheet
+          .getByRole("button", { name: "Cancel", exact: true })
+          .click();
+        await expect(sheet).not.toBeVisible();
+        await addPersonalOffer(auth.page, registration.name, registration.name);
+        return server;
+      },
+      { timeout: 45_000 },
+    );
+    await test.step(
+      "G18 runtime: newly created personal registration authorizes exact resource and scopes",
+      async () => {
+        const caller = auth.client(server.endpoint);
+        await auth.authorize(caller);
+        assertGrant(auth, registration.clientId, resource, registration.scopes);
+        await auth.invoke(caller, resource, "alpha-user");
+      },
+      { timeout: 40_000 },
+    );
+  } finally {
+    await accounts.cleanup();
+  }
 });
 
 test("G19 enforced: OAuth registration rotation preserves scopes and attachments with a new client identity", async ({

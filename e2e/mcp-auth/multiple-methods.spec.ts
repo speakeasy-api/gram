@@ -152,18 +152,19 @@ async function assertDenied(
       (value) => ({ kind: "result" as const, value }),
       (error) => ({ kind: "error" as const, error: String(error) }),
     );
-  if (result.kind === "result")
+  if (result.kind === "result") {
+    expect(JSON.stringify(result.value)).toMatch(
+      /unauthoriz|forbidden|access.denied|reconnect|credential.*(?:disabled|detached|unavailable)/i,
+    );
     expect(
       result.value,
       "RUNTIME_ENFORCEMENT_FAILURE: denied credential must not produce a successful tool result",
     ).toMatchObject({ isError: true });
-  else
+  } else
     expect(
       result.error,
       "RUNTIME_ENFORCEMENT_FAILURE: require auth denial, not a timeout or transport outage",
-    ).toMatch(
-      /401|403|unauthoriz|forbidden|credential|access.denied|reconnect|returned JSON-RPC error/i,
-    );
+    ).toMatch(/\b(?:401|403)\b/i);
   expect(
     auth.mock.events
       .slice(offset)

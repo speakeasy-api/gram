@@ -94,72 +94,78 @@ export async function startScenarioHost(
     return origin;
   };
 
-  let httpRoot = "";
-  const httpHost = options.host ?? "127.0.0.1";
-  const http = await listen(
-    createServer(listener(() => httpRoot)),
-    httpHost,
-    options.port ?? 0,
-    (port) =>
-      `http://${httpHost.includes(":") ? `[${httpHost}]` : httpHost}:${port}`,
-    (origin) => {
-      httpRoot = origin;
-    },
-  );
-
-  // A missing certificate only affects scenarios that need that listener.
-  let workloadRoot = "";
-  const workload = await loadWorkloadTLS().then(
-    ({ hostname, cert, key }) =>
-      listen(
-        createHTTPSServer(
-          { cert, key },
-          listener(() => workloadRoot),
-        ),
-        "127.0.0.1",
-        0,
-        (port) => `https://${hostname}:${port}`,
-        (origin) => {
-          workloadRoot = origin;
-        },
+  async function close() {
+    closing = true;
+    await Promise.all(
+      servers.map(
+        (server) =>
+          new Promise<void>((done, reject) => {
+            server.close((error) => (error ? reject(error) : done()));
+            server.closeAllConnections();
+          }),
       ),
-    (error: Error) => ({ unavailable: error.message }),
-  );
-  let localhostRoot = "";
-  const localhost = await localTLS().then(
-    ({ cert, key }) =>
-      listen(
-        createHTTPSServer(
-          { cert, key },
-          listener(() => localhostRoot),
-        ),
-        "127.0.0.1",
-        0,
-        (port) => `https://localhost:${port}`,
-        (origin) => {
-          localhostRoot = origin;
-        },
-      ),
-    (error: Error) => ({ unavailable: error.message }),
-  );
+    );
+  }
+  try {
+    let httpRoot = "";
+    const httpHost = options.host ?? "127.0.0.1";
+    const http = await listen(
+      createServer(listener(() => httpRoot)),
+      httpHost,
+      options.port ?? 0,
+      (port) =>
+        `http://${httpHost.includes(":") ? `[${httpHost}]` : httpHost}:${port}`,
+      (origin) => {
+        httpRoot = origin;
+      },
+    );
 
-  const info: HostInfo = { http, workload, localhost };
-  writeJSONFile(hostInfoPath(runDir), info);
-  return {
-    info,
-    async close() {
-      closing = true;
-      await Promise.all(
-        servers.map(
-          (server) =>
-            new Promise<void>((done, reject) => {
-              server.close((error) => (error ? reject(error) : done()));
-              server.closeAllConnections();
-            }),
+    // A missing certificate only affects scenarios that need that listener.
+    let workloadRoot = "";
+    const workload = await loadWorkloadTLS().then(
+      ({ hostname, cert, key }) =>
+        listen(
+          createHTTPSServer(
+            { cert, key },
+            listener(() => workloadRoot),
+          ),
+          "127.0.0.1",
+          0,
+          (port) => `https://${hostname}:${port}`,
+          (origin) => {
+            workloadRoot = origin;
+          },
         ),
-      );
-    },
-  };
+      (error: Error) => ({ unavailable: error.message }),
+    );
+    let localhostRoot = "";
+    const localhost = await localTLS().then(
+      ({ cert, key }) =>
+        listen(
+          createHTTPSServer(
+            { cert, key },
+            listener(() => localhostRoot),
+          ),
+          "127.0.0.1",
+          0,
+          (port) => `https://localhost:${port}`,
+          (origin) => {
+            localhostRoot = origin;
+          },
+        ),
+      (error: Error) => ({ unavailable: error.message }),
+    );
+
+    const info: HostInfo = { http, workload, localhost };
+    writeJSONFile(hostInfoPath(runDir), info);
+    return {
+      info,
+      close,
+    };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 /**
@@ -176,7 +182,10 @@ export async function acquireHost(options?: { host?: string; port?: number }) {
     };
   }
   const runDir = mkdtempSync(join(tmpdir(), "mcp-auth-host-"));
-  const host = await startScenarioHost(runDir, options);
+  const host = await startScenarioHost(runDir, options).catch((error) => {
+    rmSync(runDir, { recursive: true, force: true });
+    throw error;
+  });
   return {
     runDir,
     info: host.info,

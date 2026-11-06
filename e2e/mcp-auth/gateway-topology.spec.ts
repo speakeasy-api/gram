@@ -23,7 +23,7 @@ async function member(
       ? auth.mock.profiles.oauthAlpha
       : auth.mock.profiles.oauthBeta;
   const server = await auth.dashboard.remote(
-    name,
+    `${name}-${randomUUID().slice(0, 8)}`,
     resource,
     "user",
     projectIssuer,

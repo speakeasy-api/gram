@@ -15,7 +15,7 @@ Latest completed attempt per scenario identity, not a sum of historical reruns. 
 - Graph counts are projects / logical servers / stored gateways from the widest-scope attached snapshot; they do not merge unrelated capture aliases. They observe actual UI-created state. Automatic organization/project gateway membership is explicitly `not_captured`; protocol assertions, not these counts, establish that inventory.
 - Aliases are local to each capture and must not be compared across snapshots. Graphs exclude raw record IDs, credential values and identities. Production topology/audit data remains separate and private.
 - Failed synthetic projects remain for diagnosis; successful fixtures are cleaned through UI controls. Enforcement restoration is cleanup, never legacy-path/rollback coverage.
-- The 21 recipe families / 135 model expansions are an independently validated inventory, not 135 executed browser scenarios. EMA, second-human isolation, workload federation and complete recovery/stale-selection transitions remain gaps.
+- Model expansions are not executed browser scenarios. This historical ledger does not establish EMA, second-human isolation, workload federation or complete recovery/stale-selection coverage; consult the current exact-title ledger for later measurements.
 
 ## Latest per-case outcomes
 

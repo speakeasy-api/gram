@@ -41,7 +41,7 @@ for (const kind of ["remote", "tunnel"] as const) {
     });
     await auth.graph();
     const existing = auth.client(unsigned.endpoint);
-    await auth.authorize(existing);
+    await existing.initialize();
     await auth.invoke(existing, auth.mock.profiles.noAuth, "anonymous");
     test.info().annotations.push({
       type: "auth-stage",
@@ -86,7 +86,7 @@ for (const kind of ["remote", "tunnel"] as const) {
             try {
               const client =
                 session === "old" ? existing : auth.client(unsigned.endpoint);
-              if (session === "fresh") await auth.authorize(client);
+              if (session === "fresh") await client.initialize();
               await auth.invoke(client, auth.mock.profiles.noAuth, "anonymous");
             } catch (error) {
               // Only availability refusals are soft. Identity, routing, protocol,

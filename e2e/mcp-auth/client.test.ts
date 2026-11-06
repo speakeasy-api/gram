@@ -10,11 +10,11 @@ async function body(req: IncomingMessage): Promise<string> {
   return value;
 }
 
-async function fixture() {
+async function fixture(implicitBasic = false) {
   let origin = "";
   let redirect = "";
   let challenge = "";
-  let revoked = false;
+  const revokedTokens: string[] = [];
   let refreshes = 0;
   const calls: Array<{
     path: string;
@@ -45,6 +45,7 @@ async function fixture() {
         json({
           resource: `${origin}/mcp`,
           authorization_servers: [`${origin}/issuer`],
+          scopes_supported: ["fixture:read"],
         });
       } else if (path === "/.well-known/oauth-authorization-server/issuer") {
         json({
@@ -62,10 +63,13 @@ async function fixture() {
         assert.equal(new URL(redirect).hostname, "127.0.0.1");
         json({
           client_id: "fixture-client",
-          token_endpoint_auth_method: "none",
+          ...(implicitBasic
+            ? { client_secret: "private-client-secret" }
+            : { token_endpoint_auth_method: "none" }),
         });
       } else if (path === "/authorize") {
         const url = new URL(req.url!, origin);
+        assert.equal(url.searchParams.get("scope"), "fixture:read");
         assert.equal(url.searchParams.get("code_challenge_method"), "S256");
         assert.equal(url.searchParams.get("redirect_uri"), redirect);
         assert.equal(url.searchParams.get("resource"), `${origin}/mcp`);
@@ -77,7 +81,13 @@ async function fixture() {
           .end();
       } else if (path === "/token") {
         const params = new URLSearchParams(await body(req));
-        assert.equal(params.get("client_id"), "fixture-client");
+        if (implicitBasic) {
+          assert.equal(
+            req.headers.authorization,
+            `Basic ${Buffer.from("fixture-client:private-client-secret").toString("base64")}`,
+          );
+          assert.equal(params.has("client_secret"), false);
+        } else assert.equal(params.get("client_id"), "fixture-client");
         assert.equal(params.get("resource"), `${origin}/mcp`);
         if (params.get("grant_type") === "authorization_code") {
           assert.equal(params.get("code"), "private-code");
@@ -104,12 +114,16 @@ async function fixture() {
             params.get("token")!,
           ),
         );
-        revoked = true;
+        revokedTokens.push(params.get("token")!);
         res.end();
       } else if (path === "/mcp" && req.method === "POST") {
         if (
-          revoked ||
-          (!req.headers.authorization &&
+          revokedTokens.length > 0 ||
+          (![
+            "Bearer private-access",
+            "Bearer private-refreshed",
+            "Bearer private-bearer",
+          ].includes(req.headers.authorization ?? "") &&
             req.headers["x-agent-key"] !== "private-key")
         ) {
           res.writeHead(401).end();
@@ -162,6 +176,7 @@ async function fixture() {
   return {
     origin,
     calls,
+    revokedTokens,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
@@ -207,6 +222,10 @@ test("OAuth discovery, DCR, strict state, PKCE, SSE, refresh and revocation", as
     assert.equal(f.calls.at(-1)?.authorization, "Bearer private-refreshed");
     assert.equal(f.calls.at(-1)?.session, "fixture-session");
     await client.revoke();
+    assert.deepEqual([...f.revokedTokens].sort(), [
+      "private-refresh",
+      "private-refreshed",
+    ]);
     await assert.rejects(client.initialize(), /401/);
     await assert.rejects(client.callTool("echo"), /401/);
     await assert.rejects(client.refresh(), /No refresh token/);
@@ -523,5 +542,85 @@ test("caller header changes preserve authorization and cancellation closes real 
       server.close(() => resolve());
       server.closeAllConnections();
     });
+  }
+});
+
+test("registration defaults to basic when a secret is returned without an auth method", async () => {
+  const f = await fixture(true);
+  const client = new FixtureMcpClient({
+    endpoint: `${f.origin}/mcp`,
+    allowInsecureLoopback: true,
+  });
+  try {
+    const auth = await client.beginAuthorization();
+    await fetch(auth.authorizationUrl);
+    await auth.complete();
+    await client.callTool("echo");
+    assert.equal(f.calls.at(-1)?.authorization, "Bearer private-access");
+  } finally {
+    await client.close();
+    await f.close();
+  }
+});
+
+test("one HTTP-success RPC error produces exactly one enriched transcript event", async () => {
+  const server = createServer(async (req, res) => {
+    const message = JSON.parse(await body(req));
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32000,
+          message: "session authorization is no longer valid",
+        },
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const client = new FixtureMcpClient({
+    endpoint: `http://127.0.0.1:${address.port}/mcp`,
+    allowInsecureLoopback: true,
+  });
+  try {
+    await assert.rejects(client.callTool("echo"), /JSON-RPC error/);
+    assert.deepEqual(client.transcript, [
+      {
+        operation: "tools/call",
+        status: 200,
+        sessionSent: false,
+        protocolCode: -32000,
+        reason: "session_authorization_invalid",
+      },
+    ]);
+  } finally {
+    await client.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("invalid_target is retained as a safe OAuth diagnostic", async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_target" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const client = new FixtureMcpClient({
+    endpoint: `http://127.0.0.1:${address.port}/mcp`,
+    allowInsecureLoopback: true,
+  });
+  try {
+    await assert.rejects(client.discover());
+    assert.equal(client.transcript[0]?.protocolCode, "invalid_target");
+  } finally {
+    await client.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

@@ -28,7 +28,9 @@ export class ProfileActions {
     await dialog
       .getByRole("combobox", { name: "Credential", exact: true })
       .click();
-    const option = page.getByRole("option").filter({ hasText: credential });
+    const option = page.getByRole("option", {
+      name: new RegExp(`^${escapeRegex(credential)} · `),
+    });
     await expect(option).toHaveCount(1);
     // Match the full name prefix, not an issuer-looking or first available option.
     await expect(option).toHaveText(

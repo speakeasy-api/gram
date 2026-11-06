@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { createPublicKey, verify } from "node:crypto";
 import { test } from "node:test";
@@ -116,5 +120,37 @@ test("workload DNS rejects missing, mixed, IPv6 and non-loopback answers", () =>
       () => validateWorkloadAddresses(addresses),
       /ENV_WORKLOAD_ISSUER/,
     );
+  }
+});
+
+test("failed workload initialization releases its private host and directory", () => {
+  const directory = mkdtempSync(join(tmpdir(), "workload-failure-"));
+  try {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      TMPDIR: directory,
+      MCP_AUTH_WORKLOAD_HOST: "invalid",
+    };
+    delete env["MCP_AUTH_RUN_DIR"];
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+      import assert from 'node:assert/strict';
+      import { readdirSync } from 'node:fs';
+      import { tmpdir } from 'node:os';
+      import { startWorkloadIssuer } from './e2e/mcp-auth/workload-issuer.ts';
+      await assert.rejects(startWorkloadIssuer(), /ENV_WORKLOAD_ISSUER/);
+      assert.deepEqual(readdirSync(tmpdir()), []);
+    `,
+      ],
+      { env, encoding: "utf8", timeout: 15_000 },
+    );
+    assert.equal(child.error, undefined);
+    assert.equal(child.status, 0, child.stderr);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

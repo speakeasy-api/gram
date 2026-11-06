@@ -54,11 +54,29 @@ export function scopedCSV(source: string, organization: string): string {
   const lines = source.split(/\r?\n/);
   const missing = scopedFlags
     .map((flag) => `${organization},${flag},true`)
-    .filter((row) => !lines.includes(row));
+    .filter((row) => {
+      const key = row.slice(0, row.lastIndexOf(",") + 1);
+      return [...lines].reverse().find((line) => line.startsWith(key)) !== row;
+    });
   if (missing.length === 0) return source;
   return (
     source + (source.endsWith("\n") ? "" : "\n") + missing.join("\n") + "\n"
   );
+}
+export function originalFlagsPath(
+  configured: string | undefined,
+  output: string,
+  manifest?: { previousEffective?: Record<string, string | null> },
+): string | undefined {
+  if (configured !== output) return configured;
+  const previous = manifest?.previousEffective;
+  requireSafe(
+    previous && "GRAM_LOCAL_FEATURE_FLAGS_CSV" in previous,
+    "ORIGINAL_FLAGS_SNAPSHOT_REQUIRED",
+  );
+  const source = previous.GRAM_LOCAL_FEATURE_FLAGS_CSV ?? undefined;
+  requireSafe(source !== output, "RECURSIVE_FLAGS_SNAPSHOT");
+  return source;
 }
 function contained(root: string, path: string) {
   const rel = relative(root, path);
@@ -123,20 +141,27 @@ async function main() {
     !configuredAccount || configuredAccount === serviceAccount,
     "UNRELATED_SIGNING_SERVICE_ACCOUNT",
   );
-  const sourcePath = process.env.GRAM_LOCAL_FEATURE_FLAGS_CSV;
+  const outputPath = join(root, "server/.mcp-auth/flags.local.csv");
+  const manifestPath = join(root, ".logs/mcp-auth/bootstrap/manifest.json");
+  const configuredSource = process.env.GRAM_LOCAL_FEATURE_FLAGS_CSV;
+  const sourcePath = originalFlagsPath(
+    configuredSource,
+    outputPath,
+    existsSync(manifestPath)
+      ? JSON.parse(readFileSync(manifestPath, "utf8"))
+      : undefined,
+  );
   if (sourcePath) {
     requireSafe(isAbsolute(sourcePath), "ABSOLUTE_FLAGS_CSV_REQUIRED");
     contained(join(root, "server"), sourcePath);
     if (existsSync(sourcePath))
       requireSafe(lstatSync(sourcePath).isFile(), "FLAGS_CSV_NOT_REGULAR_FILE");
   }
-  // A missing local override has no rows to preserve; never enable wildcard flags.
+  // Rebuild from the original input, never from a previous organization's rollout.
   const source =
     sourcePath && existsSync(sourcePath)
       ? readFileSync(sourcePath, "utf8")
       : "distinct_id,flag,enabled\n";
-  const outputPath = join(root, "server/.mcp-auth/flags.local.csv");
-  const manifestPath = join(root, ".logs/mcp-auth/bootstrap/manifest.json");
   const config = join(root, "mise.local.toml");
   for (const path of [outputPath, manifestPath, config]) contained(root, path);
   for (const path of [outputPath, manifestPath]) {

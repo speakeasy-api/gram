@@ -31,7 +31,11 @@ export type MockEvent = {
   tokenPresent?: boolean;
 };
 type Provider = "alpha" | "beta";
-type Client = { secret: string; redirects: string[] };
+type Client = {
+  secret: string;
+  redirects: string[];
+  authMethod?: "none" | "client_secret_post" | "client_secret_basic";
+};
 type Grant = {
   provider: Provider;
   clientId: string;
@@ -46,7 +50,11 @@ const hash = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
 
 type TokenFailure = { status: number; error?: string; body?: string };
-type Settings = { accessTTL: number; advertisedLifetime: number };
+type Settings = {
+  accessTTL: number;
+  advertisedLifetime: number;
+  resetVersion: number;
+};
 type SigningKey = { privateKey: string; jwk: Record<string, unknown> };
 
 const providerClients = {
@@ -121,6 +129,7 @@ export function handleMockRequest(
     nonces,
     signing: signingStore,
   } = mockStores(request.files);
+  const resetVersion = settings.get("resetVersion") ?? 0;
   const signing = signingStore.get("key")!;
   const jwk = signing.jwk;
   const issuer = (provider: Provider) => `${origin}/${provider}`;
@@ -308,12 +317,21 @@ export function handleMockRequest(
           )
         )
           return fail(res, "invalid_redirect_uri");
+        const authMethod =
+          data.token_endpoint_auth_method ?? "client_secret_basic";
+        if (
+          !["none", "client_secret_post", "client_secret_basic"].includes(
+            authMethod,
+          )
+        )
+          return fail(res, "invalid_client_metadata");
         const clientId = `fixture-${provider}-${opaque()}`;
         const secret =
           data.token_endpoint_auth_method === "none" ? "" : opaque();
         clients[provider].set(clientId, {
           secret,
           redirects: data.redirect_uris,
+          authMethod: authMethod as Client["authMethod"],
         });
         events.push({
           kind: "register",
@@ -373,7 +391,9 @@ export function handleMockRequest(
               kind: "authorize",
               provider,
               clientId,
-              resource,
+              resource: Object.values(profiles).includes(resource)
+                ? resource
+                : "",
               scopes,
               outcome: error,
             });
@@ -492,6 +512,19 @@ export function handleMockRequest(
           secret = decodeURIComponent(decoded.slice(colon + 1));
         }
         const client = clients[provider].get(clientId);
+        const authMethod = req.headers.authorization?.startsWith("Basic ")
+          ? "client_secret_basic"
+          : params.has("client_secret")
+            ? "client_secret_post"
+            : "none";
+        const authenticated =
+          client !== undefined &&
+          secret === client.secret &&
+          (client.authMethod === undefined ||
+            client.authMethod === authMethod) &&
+          !(
+            authMethod === "client_secret_basic" && params.has("client_secret")
+          );
         if (endpoint === "revoke") {
           // Record arrival before rejecting authentication, without secrets or
           // unknown client identifiers. Successful revoke events stay separate.
@@ -506,17 +539,12 @@ export function handleMockRequest(
                 ? "post"
                 : "none",
             clientKnown: client !== undefined,
-            clientAuthenticated:
-              client !== undefined && secret === client.secret,
+            clientAuthenticated: authenticated,
             tokenPresent: (params.get("token") ?? "") !== "",
-            outcome:
-              client !== undefined && secret === client.secret
-                ? "authenticated"
-                : "invalid_client",
+            outcome: authenticated ? "authenticated" : "invalid_client",
           });
         }
-        if (!client || secret !== client.secret)
-          return fail(res, "invalid_client", 401);
+        if (!authenticated) return fail(res, "invalid_client", 401);
         if (endpoint !== "token") {
           const token =
             access.get(params.get("token") ?? "") ??
@@ -656,11 +684,14 @@ export function handleMockRequest(
             while (
               !disconnected &&
               !request.closing() &&
+              (settings.get("resetVersion") ?? 0) === resetVersion &&
               barrierStates.get(barrier) !== "released"
             )
               await sleep(10);
             res.off("close", onClose);
           }
+          if ((settings.get("resetVersion") ?? 0) !== resetVersion)
+            return fail(res, "invalid_grant");
           return issue(res, { ...token, scopes }, token.family);
         }
         return fail(res, "unsupported_grant_type");
@@ -979,11 +1010,21 @@ export async function startMockAuthServer(
       const barrier = randomUUID();
       stores.pausedRefreshes.set(provider, barrier);
       openBarriers.add(barrier);
+      const resetVersion = stores.settings.get("resetVersion") ?? 0;
       const started = (async () => {
-        while (!closed && !stores.barrierStates.has(barrier)) await sleep(10);
+        while (
+          !closed &&
+          (stores.settings.get("resetVersion") ?? 0) === resetVersion &&
+          !stores.barrierStates.has(barrier)
+        )
+          await sleep(10);
       })();
       const release = () => {
-        if (closed) return;
+        if (
+          closed ||
+          (stores.settings.get("resetVersion") ?? 0) !== resetVersion
+        )
+          return;
         stores.barrierStates.set(barrier, "released");
         openBarriers.delete(barrier);
       };
@@ -1005,11 +1046,28 @@ export async function startMockAuthServer(
       stores.resourceScopes.set(resource, [...new Set(scopes)]);
     },
     reset() {
+      const resetVersion = (stores.settings.get("resetVersion") ?? 0) + 1;
       stores.events.clear();
       stores.codes.clear();
       stores.nonces.clear();
       stores.access.clear();
       stores.refresh.clear();
+      stores.tokenFailures.clear();
+      stores.resourceAuth.clear();
+      stores.resourceScopes.clear();
+      stores.settings.clear();
+      stores.settings.set("accessTTL", accessTTL);
+      stores.settings.set("resetVersion", resetVersion);
+      stores.pausedRefreshes.clear();
+      stores.barrierStates.clear();
+      openBarriers.clear();
+      for (const provider of ["alpha", "beta"] as const) {
+        stores.clients[provider].clear();
+        stores.clients[provider].set(providers[provider].clientId, {
+          secret: providers[provider].clientSecret,
+          redirects: [],
+        });
+      }
     },
     expireTokens() {
       for (const [key, token] of stores.access.entries())

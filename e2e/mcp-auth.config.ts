@@ -45,7 +45,7 @@ export default defineConfig({
     {
       name: "org-wide-scenarios",
       testMatch: orgWideSpecs,
-      dependencies: ["enforcement-setup"],
+      dependencies: ["scenarios"],
       teardown: "shared-project-cleanup",
     },
     {

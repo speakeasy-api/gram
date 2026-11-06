@@ -44,10 +44,7 @@ test("G10 headless: personal-only offer requires setup; disconnecting its connec
       expect(
         mock.events
           .slice(offset)
-          .filter(
-            (event) =>
-              event.method === "tools/call" && event.outcome === "authorized",
-          ),
+          .filter((event) => event.method === "tools/call"),
       ).toHaveLength(0);
     });
     test.info().annotations.push({

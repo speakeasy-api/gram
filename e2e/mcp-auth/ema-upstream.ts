@@ -221,7 +221,7 @@ export function handleEMARequest(
   const trust = trustStore.get("value");
   const scope = emaScope;
   void (async () => {
-    const permitted = !denied.has("value");
+    const permitted = () => !denied.has("value");
     response.setHeader("Content-Type", "application/json");
     response.setHeader("Cache-Control", "no-store");
     const send = (status: number, data: unknown) =>
@@ -295,7 +295,7 @@ export function handleEMARequest(
       const challenge = params.get("code_challenge") || "";
       if (
         !trust ||
-        !permitted ||
+        !permitted() ||
         !redirects.get(clientID)?.includes(redirect) ||
         params.get("response_type") !== "code" ||
         params.get("resource") !== resource ||
@@ -351,7 +351,7 @@ export function handleEMARequest(
         codes.delete(code);
         const verifier = form.get("code_verifier") || "";
         if (
-          !permitted ||
+          !permitted() ||
           !grant ||
           grant.expiresAt <= Date.now() ||
           grant.clientID !== clientID ||
@@ -401,8 +401,8 @@ export function handleEMARequest(
           tls.ca,
         );
         if (seen.has(identity.jti)) throw new Error("assertion_replay");
+        if (!permitted()) throw new Error("permission_denied");
         seen.set(identity.jti, true);
-        if (!permitted) throw new Error("permission_denied");
         const accessToken = randomUUID();
         tokens.set(accessToken, {
           ...identity,
@@ -433,7 +433,7 @@ export function handleEMARequest(
       const identity = authorization.startsWith("Bearer ")
         ? tokens.get(authorization.slice(7))
         : undefined;
-      if (!identity || identity.expiresAt <= Date.now() || !permitted) {
+      if (!identity || identity.expiresAt <= Date.now() || !permitted()) {
         response.setHeader(
           "WWW-Authenticate",
           `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
@@ -446,6 +446,10 @@ export function handleEMARequest(
         return;
       }
       const rpc = JSON.parse(await body(request));
+      if (!permitted() || identity.expiresAt <= Date.now()) {
+        send(401, { error: "unauthorized" });
+        return;
+      }
       if (rpc.id === undefined) {
         response.writeHead(202).end();
         return;

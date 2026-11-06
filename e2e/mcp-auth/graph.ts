@@ -336,7 +336,7 @@ p AS (
     EXISTS (SELECT 1 FROM remote_session_client_user_session_issuers b
       WHERE b.remote_session_client_id = x.registration_id
         AND b.user_session_issuer_id = g.issuer_id) AS gateway_issuer_link,
-    coalesce((NOT c.deleted AND i.id IS NOT NULL AND
+    coalesce((NOT c.deleted AND i.id IS NOT NULL AND NOT i.deleted AND
       (c.project_id = s.project_id OR
         (c.project_id IS NULL AND c.organization_id = s.organization_id))), false) AS organization_client_list_eligible,
     c.deleted AS registration_deleted, i.deleted AS provider_deleted
@@ -344,6 +344,8 @@ p AS (
   JOIN gateway_roles g ON g.project_id = s.project_id
   JOIN remote_session_clients c ON c.id = x.registration_id
   LEFT JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id
+    AND (i.project_id = s.project_id
+      OR (i.project_id IS NULL AND (i.organization_id = s.organization_id OR i.organization_id IS NULL)))
 )
 SELECT json_build_object(
   'capturedAt', transaction_timestamp(),

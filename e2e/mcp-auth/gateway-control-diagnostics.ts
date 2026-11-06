@@ -83,6 +83,8 @@ export function sourceTopology(graph: AuthGraph, names: string[]) {
         .map((offer) => ({
           client: offer.client,
           type: offer.type,
+          source: offer.source,
+          bindingSource: offer.bindingSource,
           enabled: offer.enabled,
           deleted: offer.deleted,
           bindingDeleted: offer.bindingDeleted,

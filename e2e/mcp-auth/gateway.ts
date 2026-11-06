@@ -32,6 +32,19 @@ export type GatewayInventoryObservation = {
   otherHiddenCount: number;
 };
 
+function matchesSlug(value: unknown, slug: string): boolean {
+  return (
+    typeof value === "string" && (value === slug || value.endsWith(`.${slug}`))
+  );
+}
+function unique<T>(rows: T[], slug: string): T | undefined {
+  if (rows.length > 1)
+    throw new Error(
+      `GATEWAY_CATALOG_FAILURE: fixture member ${slug} is ambiguous`,
+    );
+  return rows[0];
+}
+
 /** Follow the real discovery contract; progressive gateways do not list member tools directly. */
 export async function gatewayEchoes(
   driver: Driver,
@@ -46,29 +59,45 @@ export async function gatewayEchoes(
   const members = inventory.servers;
   if (progressive && !Array.isArray(members))
     throw new Error("Invalid gateway member list");
+  if (inventory.hidden !== undefined && !Array.isArray(inventory.hidden))
+    throw new Error("Invalid gateway hidden member list");
+  const rows = (members as unknown[]).map(record);
+  const hidden = ((inventory.hidden ?? []) as unknown[]).map(record);
+  const membersBySlug = expectedSlugs.map((slug) =>
+    unique(
+      rows.filter((row) => matchesSlug(row.slug, slug)),
+      slug,
+    ),
+  );
+  const hiddenBySlug = expectedSlugs.map((slug) =>
+    unique(
+      hidden.filter((row) => matchesSlug(row.slug, slug)),
+      slug,
+    ),
+  );
+  const directBySlug = expectedSlugs.map((slug) =>
+    unique(
+      tools.filter(
+        (tool) =>
+          tool.name.endsWith("--fixture_echo") &&
+          matchesSlug(tool.name.slice(0, -"--fixture_echo".length), slug),
+      ),
+      slug,
+    ),
+  );
   if (observe) {
-    const rows = (members as unknown[]).map(record);
-    const hidden = Array.isArray(inventory.hidden)
-      ? inventory.hidden.map(record)
-      : [];
     const matches = (row: Record<string, unknown>, slug: string) =>
-      typeof row.slug === "string" &&
-      (row.slug === slug || row.slug.endsWith(`.${slug}`));
+      matchesSlug(row.slug, slug);
     await observe({
       progressive,
       expected: expectedSlugs.map((slug, index) => {
-        const row = rows.find((value) => matches(value, slug));
+        const row = membersBySlug[index];
         return {
           member: index + 1,
           present: progressive
             ? row !== undefined
-            : tools.some(
-                (tool) =>
-                  tool.name.endsWith("--fixture_echo") &&
-                  (tool.name.startsWith(`${slug}--`) ||
-                    tool.name.includes(`.${slug}--`)),
-              ),
-          hidden: hidden.some((value) => matches(value, slug)),
+            : directBySlug[index] !== undefined,
+          hidden: hiddenBySlug[index] !== undefined,
           status:
             row &&
             ["unknown", "available", "unavailable"].includes(String(row.status))
@@ -85,16 +114,10 @@ export async function gatewayEchoes(
     });
   }
   const calls = [];
-  for (const slug of expectedSlugs) {
+  for (const [index, slug] of expectedSlugs.entries()) {
     let qualifiedName: string | undefined;
     if (progressive) {
-      const member = (members as unknown[])
-        .map(record)
-        .find(
-          (row) =>
-            typeof row.slug === "string" &&
-            (row.slug === slug || row.slug.endsWith(`.${slug}`)),
-        );
+      const member = membersBySlug[index];
       if (!member || typeof member.slug !== "string")
         throw new Error(
           `GATEWAY_FILTER_REGRESSION: fixture member ${slug} is missing`,
@@ -126,12 +149,7 @@ export async function gatewayEchoes(
         }
       }
     } else {
-      qualifiedName = tools.find(
-        (tool) =>
-          tool.name.endsWith("--fixture_echo") &&
-          (tool.name.startsWith(`${slug}--`) ||
-            tool.name.includes(`.${slug}--`)),
-      )?.name;
+      qualifiedName = directBySlug[index]?.name;
     }
     if (!qualifiedName)
       throw new Error(

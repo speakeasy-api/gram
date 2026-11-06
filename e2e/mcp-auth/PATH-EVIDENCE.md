@@ -1,8 +1,8 @@
 # Auth-path execution evidence
 
-**Baseline: 77 current scenarios in 22 files. Latest exact-title measurements: 26 passed, 51 failed, 0 not measured. This is NOT an atomic full-suite run.**
+**Historical exact-title ledger subset: 77 scenarios in 22 files. Latest exact-title measurements: 26 passed, 51 failed, 0 not measured. This is NOT an atomic full-suite run.**
 
-This ledger reconciles preserved machine reports with the current list-only inventory. A failed scenario may have executed useful earlier steps, but neither those steps nor skipped/unrun cases count as passing auth coverage. Failure messages containing “REGRESSION” are assertion labels, not independent diagnoses of production defects.
+This ledger reconciles preserved machine reports with the list-only inventory captured for this snapshot, not a live suite inventory. Run `mise run test:mcp-auth --list` for current cases; cases absent from this historical snapshot have no measurement established by this ledger. A failed scenario may have executed useful earlier steps, but neither those steps nor skipped/unrun cases count as passing auth coverage. Failure messages containing “REGRESSION” are assertion labels, not independent diagnoses of production defects.
 
 ## Measurement rules and provenance
 

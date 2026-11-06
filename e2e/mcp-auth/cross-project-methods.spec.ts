@@ -102,10 +102,13 @@ test("enforced cross-project: organization-scoped static client shares rotation 
     await auth.invoke(personalB, resource, "alpha-user");
     passed = true;
   } finally {
-    await auth.graph([second.projectURL]);
-    // Revoke before deleting B's issuer and release base-cleanup ownership.
-    for (const grant of secondGrants) await auth.revoke(grant);
-    if (passed) await second.removeProject();
+    try {
+      await auth.graph([second.projectURL]);
+    } finally {
+      // Revoke before deleting B's issuer and release base-cleanup ownership.
+      for (const grant of secondGrants) await auth.revoke(grant);
+      if (passed) await second.removeProject();
+    }
   }
 });
 
@@ -213,9 +216,12 @@ test("enforced cross-project: project-scoped static is absent from other project
     await auth.invoke(personalB, resource, "alpha-user");
     passed = true;
   } finally {
-    await auth.graph([second.projectURL]);
-    await revokeKey(auth, credentialsURL);
-    for (const grant of secondGrants) await auth.revoke(grant);
-    if (passed) await second.removeProject();
+    try {
+      await auth.graph([second.projectURL]);
+    } finally {
+      await revokeKey(auth, credentialsURL);
+      for (const grant of secondGrants) await auth.revoke(grant);
+      if (passed) await second.removeProject();
+    }
   }
 });

@@ -1,6 +1,6 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { access, mkdtemp, rm } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import { expect, type AuthScenario } from "./fixtures.ts";
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL("../../", import.meta.url));
+let workerBinary: Promise<string> | undefined;
 
 export type TunneledSource = {
   name: string;
@@ -18,8 +19,6 @@ export type TunneledSource = {
 
 /** A real UI-created tunnel, driven by the repository's WebSocket/yamux agent. */
 export class TunnelActions {
-  private directory: string | undefined;
-  private executable: string | undefined;
   private children: ChildProcess[] = [];
 
   constructor(private readonly auth: AuthScenario) {}
@@ -57,7 +56,6 @@ export class TunnelActions {
   }
 
   private async binary() {
-    if (this.executable) return this.executable;
     const configured = process.env.MCP_AUTH_TUNNEL_AGENT_BIN;
     if (configured) {
       const path = resolve(repository, configured);
@@ -68,13 +66,25 @@ export class TunnelActions {
           "ENV_TUNNEL_AGENT: MCP_AUTH_TUNNEL_AGENT_BIN must name an executable native agent",
         );
       }
-      this.executable = path;
       return path;
     }
+    // Share the in-flight build across every scenario in this worker. Scenario
+    // teardown must not remove an executable another scenario will reuse.
+    workerBinary ??= this.buildBinary().catch((error: unknown) => {
+      workerBinary = undefined;
+      throw error;
+    });
+    return workerBinary;
+  }
+
+  private async buildBinary() {
     // No dedicated build:tunnel-agent task exists. Use the repository's mise
     // toolchain and compile its actual command, never a substitute transport.
-    this.directory = await mkdtemp(join(tmpdir(), "mcp-auth-tunnel-"));
-    const path = join(this.directory, "tunnel-agent");
+    const directory = await mkdtemp(join(tmpdir(), "mcp-auth-tunnel-"));
+    process.once("exit", () =>
+      rmSync(directory, { recursive: true, force: true }),
+    );
+    const path = join(directory, "tunnel-agent");
     try {
       await execute(
         "mise",
@@ -96,11 +106,11 @@ export class TunnelActions {
         },
       );
     } catch {
+      await rm(directory, { recursive: true, force: true });
       throw new Error(
         "ENV_TUNNEL_AGENT_BUILD: native tunnel/cmd/tunnel-agent could not build with mise go -mod=readonly; provide MCP_AUTH_TUNNEL_AGENT_BIN or repair the Go toolchain",
       );
     }
-    this.executable = path;
     return path;
   }
 
@@ -281,7 +291,5 @@ export class TunnelActions {
         child.kill("SIGTERM");
       });
     }
-    if (this.directory)
-      await rm(this.directory, { recursive: true, force: true });
   }
 }

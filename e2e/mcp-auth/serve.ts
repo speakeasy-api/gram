@@ -35,6 +35,9 @@ async function stop() {
   input.close();
   await fixture.close();
 }
+input.once("close", () => {
+  void stop();
+});
 input.on("line", (line) => {
   switch (line.trim()) {
     case "reset":

@@ -15,7 +15,9 @@ for (const connection of ["new", "existing"] as const) {
         await test.step(
           "G4 prerequisite: initial typed grant and authorized tool call",
           async () => {
-            await auth.authorize(auth.client(server.endpoint));
+            const caller = auth.client(server.endpoint);
+            await auth.authorize(caller);
+            await auth.invoke(caller, resource, "alpha-user");
             assertGrant(
               auth,
               registration.clientId,
