@@ -54,6 +54,8 @@ func TestGitHubAppOriginSchema(t *testing.T) {
 					{"https://github.com/#fragment", false},
 					{"https://github.com#", false},
 					{"https://github.com:invalid", false},
+					{"https://github.com:", false},
+					{"https://[::1]:", false},
 					{"https://git example.com", false},
 					{"https://github.com/%zz", false},
 					{"https://" + strings.Repeat("a", 2048), false},

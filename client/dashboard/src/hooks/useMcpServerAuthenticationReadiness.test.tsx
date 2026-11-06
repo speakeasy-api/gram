@@ -47,11 +47,18 @@ describe("shared authentication readiness with GitHub App identity", () => {
   });
 
   it("reports a bound GitHub App as a ready shared credential without probing", () => {
-    mocks.github.mockReturnValue({ bound: { id: "client-fixture" }, loading: false, error: false });
+    mocks.github.mockReturnValue({ bound: { id: "client-fixture", enabled: true }, loading: false, error: false });
     const { result } = renderHook(() => useMcpServerAuthenticationReadiness(server));
     expect(mocks.github).toHaveBeenCalledWith(server.id, true);
     expect(result.current).toMatchObject({ ready: true, loading: false, unavailable: false, remoteIdentityMode: "agent" });
     expect(result.current.description).toContain("shared credential");
+    expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
+  });
+
+  it("treats a disabled binding as unavailable rather than anonymous", () => {
+    mocks.github.mockReturnValue({ bound: { enabled: false }, loading: false, error: false });
+    const { result } = renderHook(() => useMcpServerAuthenticationReadiness(server));
+    expect(result.current).toMatchObject({ ready: false, unavailable: true, remoteIdentityMode: "none" });
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
   });
 
@@ -74,7 +81,9 @@ describe("shared authentication readiness with GitHub App identity", () => {
 
   it("gates the GitHub lookup on organization read access", () => {
     mocks.hasScope.mockReturnValue(false);
-    renderHook(() => useMcpServerAuthenticationReadiness(server));
+    const { result } = renderHook(() => useMcpServerAuthenticationReadiness(server));
+    expect(result.current.unavailable).toBe(true);
+    expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
     expect(mocks.hasScope).toHaveBeenCalledWith("org:read");
     expect(mocks.github).toHaveBeenCalledWith(server.id, false);
   });

@@ -76,12 +76,20 @@ export function useMcpServerAuthenticationReadiness(
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
-    !!githubApp.bound,
+    !!githubApp.bound?.enabled,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError || githubApp.error;
+    isRemoteSessionClientsError ||
+    isRemoteHeadersError ||
+    githubApp.error ||
+    (remoteMcpServerId !== "" &&
+      upstreamAuth === "legacy" &&
+      gitHubAppIdentityUnavailable(
+        githubApp.bound,
+        !rbacLoading && hasScope("org:read"),
+      ));
   // Enforcing organizations configure upstream identity through credentials,
   // so the summary reads their status instead of the legacy identity mode.
   const enforcedIdentity =
@@ -194,4 +202,12 @@ export function useMcpServerAuthenticationReadiness(
     upstreamAuthQuery,
     identityProbeStatus,
   };
+}
+
+/** An unreadable or disabled binding is not an anonymous server to probe. */
+export function gitHubAppIdentityUnavailable(
+  bound: { enabled: boolean } | undefined,
+  canRead: boolean,
+): boolean {
+  return !canRead || (!!bound && !bound.enabled);
 }

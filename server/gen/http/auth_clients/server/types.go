@@ -6937,7 +6937,7 @@ func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAut
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_url", *body.InstanceURL, goa.FormatURI))
 	}
 	if body.InstanceURL != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.instance_url", *body.InstanceURL, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.instance_url", *body.InstanceURL, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]+)?/?$"))
 	}
 	if body.InstanceURL != nil {
 		if utf8.RuneCountInString(*body.InstanceURL) > 2048 {
@@ -6959,7 +6959,7 @@ func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAut
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_origin", *body.UpstreamOrigin, goa.FormatURI))
 	}
 	if body.UpstreamOrigin != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.upstream_origin", *body.UpstreamOrigin, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.upstream_origin", *body.UpstreamOrigin, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]+)?/?$"))
 	}
 	if body.UpstreamOrigin != nil {
 		if utf8.RuneCountInString(*body.UpstreamOrigin) > 2048 {

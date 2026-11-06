@@ -5177,14 +5177,14 @@ examples:
   configureGitHubAppAuthClient:
     speakeasy-default-configure-git-hub-app-auth-client:
       requestBody:
-        application/json: {"app_id": "<id>", "installation_id": "<id>", "instance_url": "https://github.com", "mcp_server_id": "f6968669-2b49-48a4-a8c1-661c8f3411a2", "name": "<value>", "private_key": "<value>", "upstream_origin": "<value>"}
+        application/json: {"app_id": "<id>", "installation_id": "<id>", "instance_url": "https://github.com", "mcp_server_id": "f6968669-2b49-48a4-a8c1-661c8f3411a2", "name": "<value>", "private_key": "<value>", "upstream_origin": "https://scratchy-order.net"}
       responses:
         "200":
-          application/json: {"client_type": "static_credential", "created_at": "2026-02-21T19:49:53.795Z", "enabled": false, "headers": [{"has_stored_value": false, "is_required": true, "is_secret": false, "name": "<value>"}], "id": "cd3ab91c-e03c-42e4-9ea1-e4e05917bd7d", "name": "<value>", "personal": true, "servers": [{"id": "8489ed5f-c648-4cab-8c32-855848a0372a", "project_id": "8ac295b2-0792-402a-8bd3-0b9153b0d063", "public": true}], "source": "admin", "updated_at": "2025-10-06T14:41:12.106Z"}
+          application/json: {"client_type": "static_credential", "created_at": "2024-10-09T12:06:14.713Z", "enabled": false, "headers": [{"has_stored_value": false, "is_required": true, "is_secret": false, "name": "<value>"}], "id": "b91ce03c-2e4e-4a1e-94e0-5917bd7d4598", "name": "<value>", "personal": false, "servers": [{"id": "ed5fc648-cabc-4328-8558-48a0372a38ac", "project_id": "95b20792-02ab-4d30-ab91-53b0d06312b9", "public": true}], "source": "backfill", "updated_at": "2025-08-10T13:47:48.263Z"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   configureSlackApp:
     speakeasy-default-configure-slack-app:
       requestBody:

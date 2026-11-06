@@ -3,6 +3,8 @@ import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useAuthClientsInfinite } from "@gram/client/react-query/authClients.js";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAuthClientQueries } from "@/pages/mcp/x/tabs/settings/sections/authentication/authClientQueries";
 import {
   gitHubAppReady,
   newGitHubAppDraft,
@@ -29,6 +31,7 @@ export function useGitHubAppDraft(
   enabled: boolean,
 ): GitHubAppDraftState {
   const client = useSdkClient();
+  const queryClient = useQueryClient();
   const { bound, loading, error, retry } = useBoundGitHubApp(serverId, enabled);
   const [draft, setDraft] = useState<GitHubAppDraft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,7 +60,7 @@ export function useGitHubAppDraft(
         },
       });
       setDraft(null);
-      await retry();
+      await Promise.all([invalidateAuthClientQueries(queryClient), retry()]);
       toast.success("GitHub App service account saved");
       return true;
     } catch {
@@ -78,7 +81,7 @@ export function useGitHubAppDraft(
       },
     });
     setDraft(null);
-    await retry();
+    await Promise.all([invalidateAuthClientQueries(queryClient), retry()]);
   };
   return {
     value,

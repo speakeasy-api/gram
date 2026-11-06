@@ -1,3 +1,4 @@
+import { gitHubAppIdentityUnavailable } from "@/hooks/useMcpServerAuthenticationReadiness";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -115,6 +116,19 @@ describe("RemoteIdentitySummary", () => {
         name: "What do these identity modes mean?",
       }),
     ).toBeDefined();
+  });
+
+  it("treats a disabled App as unavailable rather than an absent identity eligible for probing", () => {
+    const unavailable = gitHubAppIdentityUnavailable({ enabled: false }, true);
+    expect(unavailable).toBe(true);
+    renderSummary({ mode: "none", unavailable });
+    expect(screen.getByText("Identity unavailable")).toBeDefined();
+    expect(
+      screen.queryByRole("link", { name: /Manual|Service Account/ }),
+    ).toBeNull();
+    expect(gitHubAppIdentityUnavailable({ enabled: true }, true)).toBe(false);
+    expect(gitHubAppIdentityUnavailable(undefined, true)).toBe(false);
+    expect(gitHubAppIdentityUnavailable(undefined, false)).toBe(true);
   });
 
   it("keeps the problem out of the rail until hovered", () => {

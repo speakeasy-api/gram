@@ -72,6 +72,24 @@ describe("CreationIdentityChoice", () => {
     });
     expect(screen.queryByText("GitHub App") !== null).toBe(visible);
   });
+  it("does not warn about replacing identity during new setup", () => {
+    renderChoice({
+      value: "agent",
+      upstreamUrls: ["https://api.githubcopilot.com/mcp"],
+      canConfigureGitHub: true,
+      githubApp: {
+        instanceUrl: "https://github.com",
+        appId: "123",
+        installationId: "456",
+        privateKey: "",
+      },
+      onGitHubAppChange: vi.fn(),
+    });
+    expect(screen.getByLabelText("App ID")).toBeDefined();
+    expect(
+      screen.queryByText(/existing connections must reconnect/),
+    ).toBeNull();
+  });
   it("hides GitHub App for mixed catalog endpoints", () => {
     renderChoice({
       value: "agent",

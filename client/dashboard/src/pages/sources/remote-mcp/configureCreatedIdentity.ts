@@ -115,7 +115,7 @@ export async function configureCreatedRemoteMcpIdentity({
             configureGitHubAppAuthClientRequestBody: {
               ...githubApp,
               mcpServerId: mcpServer.id,
-              name: `${mcpServer.name ?? "GitHub"} service account`,
+              name: gitHubServiceAccountName(mcpServer.name ?? "GitHub"),
               upstreamOrigin: new URL(remoteMcpServer.url).origin,
             },
           },
@@ -472,4 +472,18 @@ function setupRequired(
     message,
     userIdentity,
   };
+}
+
+function gitHubServiceAccountName(serverName: string): string {
+  const suffix = " service account";
+  const encoder = new TextEncoder();
+  let prefix = "";
+  let bytes = suffix.length;
+  // The runtime bounds the UTF-8 byte length, not just the character count.
+  for (const character of serverName) {
+    bytes += encoder.encode(character).length;
+    if (bytes > 100) break;
+    prefix += character;
+  }
+  return prefix + suffix;
 }

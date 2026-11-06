@@ -9,6 +9,9 @@ func TestNormalization(t *testing.T) {
 		strict    bool
 	}{
 		{"https://EXAMPLE.com:443/", "https://example.com", true},
+		{"https://EXAMPLE.com:0443/", "https://example.com", true},
+		{"https://[::1]:00443", "https://[::1]", true},
+		{"https://example.com:08443/mcp", "https://example.com:8443", false},
 		{"HTTPS://EXAMPLE.com", "https://example.com", true},
 		{"https://example.com:8443", "https://example.com:8443", true},
 		{"https://[2001:DB8::1]:443/", "https://[2001:db8::1]", true},
@@ -33,7 +36,7 @@ func TestNormalization(t *testing.T) {
 
 func TestRejectInvalidOrigins(t *testing.T) {
 	t.Parallel()
-	for _, raw := range []string{"", "http://example.com", "//example.com", "https:///", "https:example.com", "https://user:password@example.com", "https://user@example.com/mcp", "https://example.com:bad", "https://[::1"} {
+	for _, raw := range []string{"", "http://example.com", "//example.com", "https:///", "https:example.com", "https://user:password@example.com", "https://user@example.com/mcp", "https://example.com:bad", "https://example.com:", "https://[::1]:", "https://example.com:65536", "https://[::1"} {
 		t.Run(raw, func(t *testing.T) {
 			for _, parse := range []func(string) (string, error){Parse, FromURL} {
 				got, err := parse(raw)

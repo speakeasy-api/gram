@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockConfigureGitHub = vi.fn();
 const mockCreatePolicy = vi.fn();
 const mockCreateServer = vi.fn();
 const mockDeleteServer = vi.fn();
@@ -22,6 +23,7 @@ const mockUseEffectiveUserSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
+  authClients: { configureGitHubApp: mockConfigureGitHub },
   risk: { policies: { create: mockCreatePolicy } },
   remoteMcp: {
     createServer: mockCreateServer,
@@ -611,6 +613,52 @@ describe("useRemoteMcpInstallWorkflow", () => {
       await result.current.startInstall();
     });
   }
+
+  it("does not install a stale OAuth selection when GitHub App is selected", async () => {
+    mockConfigureGitHub.mockResolvedValue({ id: "app-client" });
+    const servers = [
+      makeServer({
+        title: "GitHub",
+        remotes: [remote("https://api.githubcopilot.com/mcp")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    act(() => {
+      if (result.current.phase !== "configure")
+        throw new Error("unexpected phase");
+      result.current.updateServerConfig(0, {
+        identityMode: "agent",
+        githubApp: {
+          instanceUrl: "https://github.com",
+          appId: "123",
+          installationId: "456",
+          privateKey: "-----BEGIN PRIVATE KEY-----",
+        },
+        serviceAccountClient: {
+          format: "signing-key",
+          issuerId: "issuer-1",
+          issuerName: "Old issuer",
+          clientRowId: "old-client",
+        },
+      });
+    });
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockConfigureGitHub).toHaveBeenCalledOnce();
+    expect(mockCommitIdentity).not.toHaveBeenCalled();
+    expect(mockMcpServersUpdate).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: "mcp-server-1",
+          visibility: "private",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  });
 
   it("probes, creates disabled, then enables a remote MCP server", async () => {
     const servers = [makeServer({ title: "My Server" })];

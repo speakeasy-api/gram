@@ -22,6 +22,7 @@ func TestAPIBase(t *testing.T) {
 		{"", "https://api.github.com"}, {"https://github.com/", "https://api.github.com"},
 		{"https://GITHUB.COM", "https://api.github.com"},
 		{"https://github.com:443", "https://api.github.com"},
+		{"https://github.com:0443", "https://api.github.com"},
 		{"https://git.example.com", "https://git.example.com/api/v3"},
 		{"https://git.example.com:8443/", "https://git.example.com:8443/api/v3"},
 		{"https://[fe80::1%25eth0]:8443/", "https://[fe80::1%25eth0]:8443/api/v3"},
@@ -33,7 +34,7 @@ func TestAPIBase(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
-	for _, raw := range []string{"http://github.com", "https://user:secret@github.com", "https://github.com/api/v3", "https://github.com?", "https://github.com?q=1", "https://github.com/#frag", "//github.com", "https:///", "https://github.com/%2f"} {
+	for _, raw := range []string{"https://github.com:", "http://github.com", "https://user:secret@github.com", "https://github.com/api/v3", "https://github.com?", "https://github.com?q=1", "https://github.com/#frag", "//github.com", "https:///", "https://github.com/%2f"} {
 		t.Run(raw, func(t *testing.T) { _, err := APIBase(raw); require.Error(t, err) })
 	}
 }
@@ -75,14 +76,14 @@ func TestInstallationExchange(t *testing.T) {
 	t.Run("refreshes before expiry", func(t *testing.T) {
 		t.Parallel()
 		calls := 0
-		client, err := NewInstanceClient(123, private, "https://github.com", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		client, err := NewInstanceClient(123, private, "https://github.com", &guardian.HTTPClient{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			calls++
 			expires := time.Now().Add(time.Hour)
 			if calls == 1 {
 				expires = time.Now().Add(4 * time.Minute)
 			}
 			return jsonResponse(t, http.StatusCreated, map[string]any{"token": "TEST_INSTALLATION_TOKEN", "expires_at": expires}), nil
-		})})
+		})}, noop.NewTracerProvider())
 		require.NoError(t, err)
 		_, err = client.InstallationToken(t.Context(), 456)
 		require.NoError(t, err)

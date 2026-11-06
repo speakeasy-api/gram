@@ -532,7 +532,7 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 			return res, clientHeaders.err
 		}
 		if res.githubApp {
-			res, err = s.prepareGitHubApp(ctx, permit.OrganizationID, permit.ServerID, res, clientHeaders.headers)
+			res, err = s.prepareGitHubApp(ctx, permit, res, clientHeaders.headers)
 			if err != nil {
 				return res, err
 			}

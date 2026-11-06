@@ -1,9 +1,15 @@
 package mcp
 
 import (
+	"context"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -48,4 +54,29 @@ func TestGitHubSelectionMissing(t *testing.T) {
 	require.True(t, githubSelectionMissing(&authClientResolution{outcome: authClientLegacy}))
 	require.False(t, githubSelectionMissing(&authClientResolution{outcome: authClientResolved, clientID: uuid.New(), githubApp: true}))
 	require.False(t, githubSelectionMissing(&authClientResolution{outcome: authClientGap}))
+}
+
+func TestGitHubAppAuthorizationRechecksRevokedPermission(t *testing.T) {
+	t.Parallel()
+	grants := []authz.Grant{authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}
+	admissions := 0
+	service := &Service{authz: authz.NewEngine(testenv.NewLogger(t), nil,
+		func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+				admissions++
+				return authz.PrincipalCredentialAdmission{
+					OwnerUserID: "user_owner", Credential: grants, Agent: grants, Owner: grants,
+					Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: grants}, LegacyAuthCeiling: false,
+				}, nil
+			},
+		})}
+	orgID := "org_test"
+	agentID, clientID := uuid.New(), uuid.New()
+	ctx := admittedAgentContext(t, orgID, agentID)
+	permit := authClientPermitRequest{OrganizationID: orgID, ProjectID: uuid.New(), ServerID: uuid.New(), ClientID: clientID, ClientType: authClientTypeServiceAccount, Subject: urn.NewAgentSubject(agentID)}
+	res := authClientResolution{outcome: authClientResolved, clientID: clientID, clientType: authClientTypeServiceAccount, githubApp: true}
+	require.NoError(t, service.authorizeGitHubApp(ctx, permit, res))
+	grants = []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}
+	require.ErrorContains(t, service.authorizeGitHubApp(ctx, permit, res), "no longer authorized")
+	require.Equal(t, 2, admissions, "renewal must read current authorization, not a captured decision")
 }

@@ -3,7 +3,9 @@ package httpsorigin
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +28,23 @@ func normalize(raw string, strict bool) (string, error) {
 	if strict && (u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/")) {
 		return "", fmt.Errorf("expected an HTTPS origin without path, query, or fragment")
 	}
-	origin := &url.URL{Scheme: "https", Host: strings.TrimSuffix(strings.ToLower(u.Host), ":443")}
+	if strings.HasSuffix(u.Host, ":") {
+		return "", fmt.Errorf("expected a non-empty HTTPS port")
+	}
+	host := strings.ToLower(u.Hostname())
+	if port := u.Port(); port != "" {
+		numericPort, err := strconv.ParseUint(port, 10, 16)
+		if err != nil {
+			return "", fmt.Errorf("expected a valid HTTPS port")
+		}
+		if numericPort != 443 {
+			host = net.JoinHostPort(host, strconv.FormatUint(numericPort, 10))
+		} else if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	origin := &url.URL{Scheme: "https", Host: host}
 	return origin.String(), nil
 }
