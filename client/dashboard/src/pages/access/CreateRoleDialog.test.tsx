@@ -77,12 +77,14 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
               {
                 slug: "org:read",
                 resourceType: "org",
+                category: "org",
                 visibility: "user_visible",
                 label: "Read organization",
               },
               {
                 slug: "project:read",
                 resourceType: "project",
+                category: "project",
                 visibility: "user_visible",
                 description: "Read projects",
                 exclusionScope: "project:blocked_read",
@@ -90,6 +92,7 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
               {
                 slug: "inference:execute",
                 resourceType: "inference",
+                category: "inference",
                 visibility: "user_visible",
                 label: "Run inference",
                 description: "Call the inference API in the selected projects.",
@@ -107,6 +110,7 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
               ...(["connect", "read", "write"] as const).map((action) => ({
                 slug: `mcp:${action}`,
                 resourceType: "mcp",
+                category: "mcp",
                 visibility: "user_visible",
                 exclusionScope: `mcp:blocked_${action}`,
               })),

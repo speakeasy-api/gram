@@ -282,6 +282,12 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
+	return scopeCatalogueResult(), nil
+}
+
+// scopeCatalogueResult is the catalogue as access.listScopes serves it. It is
+// the same for every caller, so the dashboard's tests read a fixture of it.
+func scopeCatalogueResult() *gen.ListScopesResult {
 	catalog := authz.ScopeCatalog()
 	result := make([]*gen.ScopeDefinition, 0, len(catalog))
 	for _, entry := range catalog {
@@ -302,7 +308,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		})
 	}
 
-	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}, nil
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}
 }
 
 func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {

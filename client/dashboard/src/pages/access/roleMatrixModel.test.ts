@@ -1,11 +1,17 @@
 // @vitest-environment node
+import { ListScopesResult$inboundSchema } from "@gram/client/models/components/listscopesresult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import { describe, expect, it } from "vitest";
 
+import servedCatalogue from "./listScopes.fixture.json";
 import { grantKeysString } from "./roleDialogState";
-import { grantsFromRole, sdkGrantsFromForm } from "./roleGrantTransform";
+import {
+  diffGrants,
+  grantsFromRole,
+  sdkGrantsFromForm,
+} from "./roleGrantTransform";
 import {
   type McpRow,
   mcpAllows,
@@ -336,6 +342,46 @@ describe("platform areas", () => {
     ]);
     expect(platformBlock(blocked, "project:read")).toBe("all");
     expect(save(setPlatformBlocked(blocked, area, false))).toEqual([]);
+  });
+});
+
+describe("the catalogue as the server serves it", () => {
+  // listScopes.fixture.json is written by the server's
+  // TestListScopes_DashboardFixture, so these run against the real catalogue.
+  const served = ListScopesResult$inboundSchema.parse(servedCatalogue).scopes;
+  const evaluate = {
+    scope: "risk_policy:evaluate" as Scope,
+    selectors: [{ resourceKind: "risk_policy", resourceId: "policy-1" }],
+  };
+
+  it("renders no row for risk policy permissions, which role writes reject", () => {
+    const areas = platformAreas(served);
+    expect(areas.map((a) => a.category)).not.toContain("risk_policy");
+    const slugs = areas.flatMap((a) =>
+      [a.view, a.manage, ...a.extras].flatMap((d) => (d ? [d.slug] : [])),
+    );
+    expect(slugs.filter((slug) => slug.startsWith("risk_policy:"))).toEqual([]);
+    expect(slugs).toContain("log:read");
+  });
+
+  it("keeps a role's risk policy grants through Reset and Save", () => {
+    const stored = grantsFromRole(
+      {
+        grants: [evaluate, { scope: "project:read" as Scope }],
+      } as unknown as Parameters<typeof grantsFromRole>[0],
+      served,
+    );
+    const reset = clearPlatform(stored, platformAreas(served));
+    expect(sdkGrantsFromForm(reset, served)).toEqual([evaluate]);
+    expect(
+      diffGrants(
+        sdkGrantsFromForm(stored, served),
+        sdkGrantsFromForm(reset, served),
+      ),
+    ).toEqual({
+      addGrants: [],
+      removeGrants: [{ scope: "project:read", selectors: undefined }],
+    });
   });
 });
 

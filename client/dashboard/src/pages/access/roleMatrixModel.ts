@@ -530,10 +530,6 @@ const CATEGORY_COPY: Record<string, { label: string; description: string }> = {
   skill: { label: "Skills", description: "Skills shared in a project" },
   plugin: { label: "Plugins", description: "Plugins published in a project" },
   assistant: { label: "Assistants", description: "Assistants in a project" },
-  risk_policy: {
-    label: "Risk policies",
-    description: "Policies that gate risky tool calls",
-  },
   session: {
     label: "Agent sessions",
     description: "Other members' session transcripts",
@@ -566,8 +562,13 @@ function categoryCopy(category: string): {
   };
 }
 
-/** MCP servers have their own table; auth clients are provisioned, not edited. */
-const OWN_TABLE_CATEGORIES = new Set(["mcp", "mcp_auth_client"]);
+/**
+ * Categories the matrix has no rows for. MCP servers have their own table;
+ * auth clients are provisioned, not edited; risk policy grants are written by
+ * the risk policy surface and the role endpoints reject them. Grants of these
+ * stay in the form as stored, so Reset and Save never touch them.
+ */
+const OWN_TABLE_CATEGORIES = new Set(["mcp", "mcp_auth_client", "risk_policy"]);
 
 function scopeAction(slug: string): string {
   return slug.slice(slug.indexOf(":") + 1);
@@ -583,19 +584,16 @@ function scopeAction(slug: string): string {
 export function platformAreas(scopes: ScopeDefinition[]): PlatformArea[] {
   const byCategory = new Map<string, ScopeDefinition[]>();
   for (const scope of scopes) {
-    // A server that predates the catalogue sends no category; the resource
-    // type is the next best grouping.
-    const category: string = scope.category ?? scope.resourceType;
     if (
       scope.visibility !== "user_visible" ||
       scope.slug.includes(":blocked_") ||
-      OWN_TABLE_CATEGORIES.has(category)
+      OWN_TABLE_CATEGORIES.has(scope.category)
     ) {
       continue;
     }
-    const inCategory = byCategory.get(category) ?? [];
+    const inCategory = byCategory.get(scope.category) ?? [];
     inCategory.push(scope);
-    byCategory.set(category, inCategory);
+    byCategory.set(scope.category, inCategory);
   }
   return [...byCategory].map(([category, inCategory]) => {
     const view = inCategory.find((s) => scopeAction(s.slug) === "read");

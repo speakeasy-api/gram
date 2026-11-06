@@ -1068,9 +1068,7 @@ function PlatformMatrix({
   onRemoveRule: (scope: Scope, ruleIndex: number) => void;
 }): JSX.Element {
   const areas = useMemo(() => platformAreas(scopes), [scopes]);
-  const extras = areas.flatMap((area) =>
-    area.extras.map((scope) => ({ area, scope })),
-  );
+  const extras = areas.flatMap((area) => area.extras);
 
   const cellState = (
     area: PlatformArea,
@@ -1230,7 +1228,7 @@ function PlatformMatrix({
               </tr>
             );
           })}
-        {extras.map(({ scope }) => {
+        {extras.map((scope) => {
           const checked = platformAllows(grants, scope.slug);
           const blockedEverywhere = platformBlock(grants, scope.slug) === "all";
           return (
