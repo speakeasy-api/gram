@@ -1,10 +1,14 @@
 package platformmcp
 
 import (
+	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testing.T) {
@@ -65,4 +69,32 @@ func TestIdentityProviderAttachmentReturnsOnlyBoundedResults(t *testing.T) {
 	result, ok := identityProviderAttachmentError(ErrIdentityProviderAttachmentUnavailable)
 	require.False(t, ok)
 	require.Nil(t, result)
+}
+
+func TestIdentityProviderAttachmentPreservesSafeCommitConflictMessage(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []error{remotesessions.ErrIdentityConflict, remotesessions.ErrIdentityInvariant, remotesessions.ErrIdentityOrgWideBinding} {
+		t.Run(kind.Error(), func(t *testing.T) {
+			t.Parallel()
+			refusal := &remotesessions.IdentityError{
+				Kind:    kind,
+				Message: "This client serves another MCP server. Reuse it or assign a dedicated User Identity issuer.",
+				Err:     errors.New("private database error"),
+			}
+			err := attachmentCommitError("bind identity-provider client", refusal)
+			require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
+			result, ok := identityProviderAttachmentError(err)
+			require.True(t, ok)
+			require.True(t, result.IsError)
+			require.Len(t, result.Content, 1)
+			content, ok := result.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			var output identityProviderAttachmentErrorResult
+			require.NoError(t, json.Unmarshal([]byte(content.Text), &output))
+			require.Equal(t, "identity_provider_attachment_conflict", output.Code)
+			require.Equal(t, refusal.Message, output.Message)
+			require.NotContains(t, content.Text, "private database error")
+			require.NotContains(t, content.Text, "bind identity-provider client")
+		})
+	}
 }

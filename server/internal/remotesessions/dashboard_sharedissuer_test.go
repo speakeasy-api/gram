@@ -26,6 +26,8 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Several MCP servers usually share one user session issuer, and a client's
@@ -218,13 +220,23 @@ func TestCommitServerIdentityConfigurationReplacesTheServersOwnClientUnderEnforc
 	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "enforced-own-issuer")
 	target, _ := sourceBackedTarget(t, ctx, ti, "enforced-own-target", userIssuerID)
-	// A second server shares the issuer without using the client.
-	sourceBackedTarget(t, ctx, ti, "enforced-own-bystander", userIssuerID)
+	// A second server shares the issuer but has no legacy association. Its
+	// explicit offer below uses the registration without depending on a binding.
+	bystander, _ := sourceBackedTarget(t, ctx, ti, "enforced-own-bystander", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "enforced-own-provider", "", false, []string{"none"})
 	first, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(target, providerID, "enforced-own-first-client"))
 	require.NoError(t, err)
 	firstClient, err := uuid.Parse(first.Client.ID)
 	require.NoError(t, err)
+
+	// A typed offer is not another consumer of the issuer binding: replacing
+	// the target's own binding must leave the other server's offer usable.
+	offerID := offerRegistration(t, ctx, ti.conn, orgID, projectID, bystander, firstClient)
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, bystander))
+	enc := testenv.NewEncryptionClient(t)
+	manager := newResolveManager(t, ti.conn, enc)
+	subject := urn.NewUserSubject("enforced-own-offered-user")
+	session := upsertLiveSession(t, ctx, ti.conn, enc, subject, userIssuerID, firstClient, "EXAMPLE-OFFERED-TOKEN")
 
 	second, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(target, providerID, "enforced-own-second-client"))
 	require.NoError(t, err)
@@ -238,6 +250,18 @@ func TestCommitServerIdentityConfigurationReplacesTheServersOwnClientUnderEnforc
 		[]uuid.UUID{authclientbackfill.OAuthClientID(orgID, secondClient, authclientbackfill.TypeRemoteSession)},
 		offeredAuthClients(t, ctx, ti.conn, target),
 	)
+	require.Equal(t, []uuid.UUID{offerID}, offeredAuthClients(t, ctx, ti.conn, bystander))
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, bystander))
+	tokens, err := manager.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+		ProjectID:           projectID,
+		OrganizationID:      orgID,
+		UserSessionIssuerID: userIssuerID,
+		Subject:             subject,
+		RegistrationID:      firstClient,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "EXAMPLE-OFFERED-TOKEN", tokens[providerID].Token)
+	require.Equal(t, session.ID, tokens[providerID].RemoteSessionID)
 }
 
 func TestCommitServerIdentityConfigurationRefusesTakingAnotherServersClientWithoutEnforcement(t *testing.T) {
