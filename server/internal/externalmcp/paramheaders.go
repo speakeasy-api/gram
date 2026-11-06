@@ -28,6 +28,8 @@ const (
 // mcp/streamable_headers.go (SEP-2243). It validates annotations before reading
 // arguments, and never rewrites the argument bytes or includes their values in
 // errors. Like the SDK, it follows properties, not $ref or schema combinators.
+// An annotation anywhere else (the root, items, a combinator, $defs) makes the
+// tool definition invalid, as MCP 2026-07-28 requires.
 func ParameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.Header, error) {
 	if len(schema) > maxParameterHeaderSchemaBytes {
 		return nil, errors.New("MCP tool input schema exceeds byte limit")
@@ -36,6 +38,15 @@ func ParameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.H
 	remainingNodes := maxParameterHeaderNodes
 	if err := collectParameterHeaders(schema, nil, make(map[string]bool), &bindings, &remainingNodes); err != nil {
 		return nil, err
+	}
+	if bytes.Contains(schema, []byte(`"x-mcp-header"`)) {
+		var decoded any
+		if err := json.Unmarshal(schema, &decoded); err != nil {
+			return nil, parameterHeaderJSONError("invalid MCP tool input schema", err)
+		}
+		if countSchemaAnnotations(decoded, false) != len(bindings) {
+			return nil, errors.New("x-mcp-header outside a chain of properties keys")
+		}
 	}
 	if len(bindings) == 0 || len(bytes.TrimSpace(arguments)) == 0 {
 		return nil, nil
@@ -194,4 +205,33 @@ func parameterHeaderValue(raw json.RawMessage) (string, bool) {
 		value = "=?base64?" + base64.StdEncoding.EncodeToString([]byte(value)) + "?="
 	}
 	return value, true
+}
+
+// parameterHeaderDataKeywords hold instance values, not schemas, so an
+// x-mcp-header key inside them is data rather than an annotation.
+var parameterHeaderDataKeywords = map[string]bool{"const": true, "default": true, "enum": true, "examples": true}
+
+// countSchemaAnnotations counts x-mcp-header annotations anywhere in a decoded
+// schema. inProperties marks a properties map, whose keys are property names.
+func countSchemaAnnotations(node any, inProperties bool) int {
+	count := 0
+	switch n := node.(type) {
+	case map[string]any:
+		if _, ok := n["x-mcp-header"]; ok && !inProperties {
+			count++
+		}
+		for key, child := range n {
+			switch {
+			case inProperties:
+				count += countSchemaAnnotations(child, false)
+			case !parameterHeaderDataKeywords[key]:
+				count += countSchemaAnnotations(child, key == "properties")
+			}
+		}
+	case []any:
+		for _, child := range n {
+			count += countSchemaAnnotations(child, false)
+		}
+	}
+	return count
 }

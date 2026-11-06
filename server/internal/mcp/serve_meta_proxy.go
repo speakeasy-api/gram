@@ -627,6 +627,30 @@ const (
 	memberCallRetryParameterHeaders memberCallRetry = "parameter_headers"
 )
 
+// memberHeaderListingShare is the fraction of the member call timeout a
+// listing for parameter headers may spend, so the call keeps most of it.
+const memberHeaderListingShare = 4
+
+// listMemberToolSchema lists the member's tools on the call's session to read
+// one tool's schema, recording what it saw. Its exchanges are classified on
+// their own attempt, so a failed listing never colours the call's failure;
+// on failure the call goes out without headers.
+func (s *Service) listMemberToolSchema(ctx context.Context, logger *slog.Logger, ms *memberSession, member metaMember, toolName string) json.RawMessage {
+	attempt := newMemberAttempt(ms.dial.build)
+	listCtx, cancel := context.WithTimeout(context.WithValue(ctx, memberAttemptKey{}, attempt), s.metaRuntime.MemberCallTimeout/memberHeaderListingShare)
+	defer cancel()
+	catalog, err := listMemberSessionTools(listCtx, logger, ms.session, attempt, ms.dial, member)
+	if err != nil {
+		logger.WarnContext(ctx, "list member tools for parameter headers", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
+		return nil
+	}
+	s.rememberMemberToolSchemas(ctx, logger, member, ms.dial.sessionKey, catalog, time.Now())
+	if tool, ok := catalog.byName[toolName]; ok {
+		return tool.InputSchema
+	}
+	return nil
+}
+
 // callOnMemberSession runs one tools/call on the member's session. On a
 // session that negotiated MCP 2026-07-28 it sends the Mcp-Param headers the
 // tool's x-mcp-header annotations require, from the schema the gateway already
@@ -643,29 +667,20 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		var schema json.RawMessage
 		known := false
 		if !relist {
-			schema, known = s.knownMemberToolSchema(ctx, gate, member, toolName)
+			schema, known = s.knownMemberToolSchema(ctx, gate, member, ms.dial.sessionKey, toolName, time.Now())
 		}
 		if !known {
-			catalog, err := listMemberSessionTools(ctx, logger, ms.session, ms.outcome, ms.dial, member)
-			if err != nil {
-				// A member that refuses the headerless call gets one retry.
-				logger.WarnContext(ctx, "list member tools for parameter headers", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
-			} else {
-				s.rememberMemberToolSchemas(ctx, logger, member, catalog, time.Now())
-				// An unlisted tool is called as named, so the member reports it.
-				if tool, ok := catalog.byName[toolName]; ok {
-					schema = tool.InputSchema
-				}
-			}
+			schema = s.listMemberToolSchema(ctx, logger, ms, member, toolName)
 		}
 		// An empty set still replaces any Mcp-Param headers the SDK derived.
 		headers := http.Header{}
 		if declaresParameterHeaders(schema) {
 			computed, err := externalmcp.ParameterHeaders(schema, arguments)
-			if err != nil {
-				return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q tool %q has parameter headers the gateway cannot send: %s", member.slug, toolName, err.Error())}
-			}
-			if computed != nil {
+			switch {
+			case err != nil:
+				// The tool definition is invalid; the member decides on a headerless call.
+				logger.WarnContext(ctx, "skip parameter headers for invalid member tool schema", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
+			case computed != nil:
 				headers = computed
 			}
 		}
@@ -753,7 +768,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		ms.fail(ctx)
 		return nil, err
 	}
-	s.rememberMemberToolSchemas(ctx, logger, member, catalog, time.Now())
+	s.rememberMemberToolSchemas(ctx, logger, member, ms.dial.sessionKey, catalog, time.Now())
 	return catalog, nil
 }
 
@@ -767,6 +782,8 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	dropped := map[string]struct{}{}
 	cursor := ""
 	seenCursors := map[string]bool{}
+	cacheTTL := time.Duration(-1)
+	cachePrivate := false
 	for page := 0; ; page++ {
 		if page >= maxProxiedListPages {
 			logger.WarnContext(ctx, "meta MCP member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
@@ -777,6 +794,12 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 		if cerr != nil {
 			return nil, memberClientFailure(ctx, logger, rt, dial, member, cerr)
 		}
+		// The listing is as fresh as its stalest page; an absent or negative ttlMs is stale at once.
+		pageTTL := time.Duration(max(pageResult.TTLMs, 0)) * time.Millisecond
+		if cacheTTL < 0 || pageTTL < cacheTTL {
+			cacheTTL = pageTTL
+		}
+		cachePrivate = cachePrivate || pageResult.CacheScope == "private"
 		upstreamResult, merr := json.Marshal(pageResult)
 		if merr != nil {
 			return nil, fmt.Errorf("marshal member tool listing: %w", merr)
@@ -818,7 +841,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, cacheTTL: max(cacheTTL, 0), cachePrivate: cachePrivate}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

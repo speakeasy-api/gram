@@ -325,3 +325,30 @@ func TestParameterHeadersAnnotationFreeBudgets(t *testing.T) {
 		})
 	}
 }
+
+func TestParameterHeadersRejectsUnreachableAnnotations(t *testing.T) {
+	t.Parallel()
+
+	for name, schema := range map[string]string{
+		"root":    `{"type":"object","x-mcp-header":"Root","properties":{}}`,
+		"items":   `{"properties":{"list":{"type":"array","items":{"type":"string","x-mcp-header":"Item"}}}}`,
+		"oneOf":   `{"properties":{"v":{"oneOf":[{"type":"string","x-mcp-header":"V"}]}}}`,
+		"$defs":   `{"properties":{},"$defs":{"d":{"type":"string","x-mcp-header":"D"}}}`,
+		"sibling": `{"properties":{"ok":{"type":"string","x-mcp-header":"Ok"}},"anyOf":[{"properties":{"bad":{"type":"string","x-mcp-header":"Bad"}}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{}`))
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestParameterHeadersIgnoresAnnotationNamesInData(t *testing.T) {
+	t.Parallel()
+
+	schema := json.RawMessage(`{"properties":{"x-mcp-header":{"type":"string","default":{"x-mcp-header":"Data"}},"owner":{"type":"string","x-mcp-header":"Owner"}}}`)
+	headers, err := ParameterHeaders(schema, json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, "octo", headers.Get("Mcp-Param-Owner"))
+}

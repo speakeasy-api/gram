@@ -379,6 +379,13 @@ type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
 	incomplete bool
+
+	// cacheTTL is the shortest ttlMs the member's listing pages carried, zero
+	// when a page carried none or the catalog did not come from a listing.
+	cacheTTL time.Duration
+
+	// cachePrivate marks a listing the member scoped "private" to its caller.
+	cachePrivate bool
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -409,7 +416,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, cacheTTL: 0, cachePrivate: false}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		// External-MCP passthrough tools are excluded from the meta MCP

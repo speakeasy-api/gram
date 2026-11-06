@@ -20,23 +20,23 @@ import (
 )
 
 const (
-	// memberToolSchemasTTL bounds how long a member's listed schemas stand in
-	// for a fresh listing. A member that adds or changes x-mcp-header
-	// annotations sooner refuses the call, and the gateway lists again and
-	// retries once.
-	memberToolSchemasTTL = 6 * time.Hour
+	// maxMemberToolSchemasTTL caps how long a member's listed schemas stand in
+	// for a fresh listing, even when its listing allows longer. A member that
+	// adds or changes x-mcp-header annotations sooner refuses the call, and the
+	// gateway lists again and retries once.
+	maxMemberToolSchemasTTL = 6 * time.Hour
 
 	// maxMemberToolSchemaBytes skips recording one annotated schema. Real
 	// annotated schemas are a few KiB; a larger one is listed per call instead.
 	maxMemberToolSchemaBytes = 64 << 10 // 64 KiB
 
-	// maxMemberToolSchemasBytes bounds one member's recorded schemas in total,
-	// so a member with many large annotated tools cannot grow its record past
-	// what a cache read should carry per call.
+	// maxMemberToolSchemasBytes bounds one record's schemas in total, so a
+	// member with many large annotated tools cannot grow its record past what
+	// a cache read should carry per call.
 	maxMemberToolSchemasBytes = 1 << 20 // 1 MiB
 
 	// memberToolSchemasLocalSize bounds the in-process copies kept for when the
-	// shared cache is unavailable, one per member backend.
+	// shared cache is unavailable, one per record.
 	memberToolSchemasLocalSize = 1024
 )
 
@@ -46,11 +46,16 @@ var parameterHeaderAnnotation = []byte(`"x-mcp-header"`)
 // memberToolSchemas records the tools the member's recent listings included,
 // so a gateway call can send the Mcp-Param headers its tool requires without
 // listing first. Listings pass through per-caller filters, so a tool absent
-// from the record is unknown, never known to need no headers.
+// from the record is unknown, never known to need no headers. A listing the
+// member marked "private" is recorded for its caller's credential only.
 type memberToolSchemas struct {
 	// Destination is the member's routed backend, so a swapped backend
 	// never reuses another backend's schemas.
 	Destination string `json:"destination"`
+
+	// Caller fingerprints the route and credential of a private listing,
+	// empty for a public one.
+	Caller string `json:"caller,omitempty"`
 
 	// StoredAt is when the record was last written.
 	StoredAt time.Time `json:"stored_at"`
@@ -68,17 +73,17 @@ type memberToolSchema struct {
 	// which a call lists instead.
 	Oversized bool `json:"oversized,omitempty"`
 
-	// SeenAt is when a listing last included the tool. Tools unseen for
-	// memberToolSchemasTTL are dropped, so removed tools do not accumulate.
-	SeenAt time.Time `json:"seen_at"`
+	// ExpiresAt is when the listing that last included the tool goes stale:
+	// its ttlMs, capped at maxMemberToolSchemasTTL.
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func (m memberToolSchemas) CacheKey() string { return memberToolSchemasKey(m.Destination) }
+func (m memberToolSchemas) CacheKey() string { return memberToolSchemasKey(m.Destination, m.Caller) }
 
-func (m memberToolSchemas) TTL() time.Duration { return memberToolSchemasTTL }
+func (m memberToolSchemas) TTL() time.Duration { return maxMemberToolSchemasTTL }
 
-func memberToolSchemasKey(destination string) string {
-	sum := sha256.Sum256([]byte(destination))
+func memberToolSchemasKey(destination, caller string) string {
+	sum := sha256.Sum256([]byte(destination + "\x00" + caller))
 	return "member_tool_schemas:" + hex.EncodeToString(sum[:])
 }
 
@@ -90,12 +95,17 @@ func declaresParameterHeaders(schema json.RawMessage) bool {
 }
 
 // knownMemberToolSchema returns the tool's input schema from the freshest
-// record the gateway holds: the member's recent listings, then the consented
-// catalog. known is false when neither covers the tool.
-func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateContext, member metaMember, toolName string) (schema json.RawMessage, known bool) {
+// record the gateway holds: the caller's private listings, the member's
+// public listings, then the consented catalog. caller fingerprints the
+// route and credential the call uses. known is false when none covers the tool.
+func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateContext, member metaMember, caller, toolName string, now time.Time) (schema json.RawMessage, known bool) {
 	destination := codeMemberDestination(member)
-	if record, ok := s.readMemberToolSchemas(ctx, destination); ok {
-		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized && time.Since(tool.SeenAt) < memberToolSchemasTTL {
+	for _, scope := range []string{caller, ""} {
+		record, ok := s.readMemberToolSchemas(ctx, destination, scope)
+		if !ok {
+			continue
+		}
+		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized && now.Before(tool.ExpiresAt) {
 			return tool.InputSchema, true
 		}
 	}
@@ -112,38 +122,48 @@ func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateConte
 
 // readMemberToolSchemas reads the shared record, or this process's copy when
 // the shared cache is unavailable, so an outage does not cost a listing per call.
-func (s *Service) readMemberToolSchemas(ctx context.Context, destination string) (memberToolSchemas, bool) {
-	key := memberToolSchemasKey(destination)
+func (s *Service) readMemberToolSchemas(ctx context.Context, destination, caller string) (memberToolSchemas, bool) {
+	none := memberToolSchemas{Destination: "", Caller: "", StoredAt: time.Time{}, Tools: nil}
+	key := memberToolSchemasKey(destination, caller)
 	record, err := s.memberToolSchemaCache.Get(ctx, key)
 	switch {
 	case errors.Is(err, redisCache.ErrCacheMiss):
-		return memberToolSchemas{Destination: "", StoredAt: time.Time{}, Tools: nil}, false
+		return none, false
 	case err != nil:
 		local, ok := s.memberToolSchemaLocal.Get(key)
 		if !ok {
-			return memberToolSchemas{Destination: "", StoredAt: time.Time{}, Tools: nil}, false
+			return none, false
 		}
 		record = local
 	}
-	return record, record.Destination == destination
+	return record, record.Destination == destination && record.Caller == caller
 }
 
-// rememberMemberToolSchemas merges a listing into the member's record. Concurrent
-// merges are not locked: a lost update only costs a later listing. Only
-// annotated schemas within the byte limits are kept, spent in tool-name
-// order; an annotated tool over them is marked, so a call lists it instead.
-// An unchanged record is rewritten once it is half its lifetime old.
-func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Logger, member metaMember, catalog *memberCatalog, now time.Time) {
+// rememberMemberToolSchemas merges a listing into the record its cacheScope
+// selects. A listing with no positive ttlMs is stale at once and recorded
+// nowhere. Concurrent merges are not locked: a lost update only costs a later
+// listing. Only annotated schemas within the byte limits are kept, spent in
+// tool-name order; an annotated tool over them is marked, so a call lists it
+// instead. An unchanged record is rewritten once its tools are half-way stale.
+func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Logger, member metaMember, caller string, catalog *memberCatalog, now time.Time) {
+	ttl := min(catalog.cacheTTL, maxMemberToolSchemasTTL)
+	if ttl <= 0 {
+		return
+	}
+	if !catalog.cachePrivate {
+		caller = ""
+	}
 	destination := codeMemberDestination(member)
-	previous, found := s.readMemberToolSchemas(ctx, destination)
-	record := memberToolSchemas{Destination: destination, StoredAt: now, Tools: make(map[string]memberToolSchema, len(previous.Tools)+len(catalog.byName))}
+	previous, found := s.readMemberToolSchemas(ctx, destination, caller)
+	record := memberToolSchemas{Destination: destination, Caller: caller, StoredAt: now, Tools: make(map[string]memberToolSchema, len(previous.Tools)+len(catalog.byName))}
 	for name, tool := range previous.Tools {
-		if now.Sub(tool.SeenAt) < memberToolSchemasTTL {
+		if now.Before(tool.ExpiresAt) {
 			record.Tools[name] = tool
 		}
 	}
+	expiresAt := now.Add(ttl)
 	for name, entry := range catalog.byName {
-		tool := memberToolSchema{InputSchema: nil, Oversized: false, SeenAt: now}
+		tool := memberToolSchema{InputSchema: nil, Oversized: false, ExpiresAt: expiresAt}
 		if declaresParameterHeaders(entry.InputSchema) {
 			tool.InputSchema = entry.InputSchema
 		}
@@ -156,14 +176,14 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 			continue
 		}
 		if len(tool.InputSchema) > maxMemberToolSchemaBytes || total+len(tool.InputSchema) > maxMemberToolSchemasBytes {
-			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: true, SeenAt: tool.SeenAt}
+			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: true, ExpiresAt: tool.ExpiresAt}
 			continue
 		}
 		total += len(tool.InputSchema)
 	}
 	key := record.CacheKey()
 	s.memberToolSchemaLocal.Add(key, record)
-	if found && sameMemberToolSchemas(previous, record) && now.Sub(previous.StoredAt) < memberToolSchemasTTL/2 && seenRecently(previous, catalog, now) {
+	if found && sameMemberToolSchemas(previous, record) && freshEnough(previous, catalog, now, ttl) {
 		return
 	}
 	if err := s.memberToolSchemaCache.Store(ctx, record); err != nil {
@@ -171,11 +191,11 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 	}
 }
 
-// seenRecently reports whether every tool in the listing was seen in the stored
-// record within half its lifetime, so skipping the write cannot expire it.
-func seenRecently(previous memberToolSchemas, catalog *memberCatalog, now time.Time) bool {
+// freshEnough reports whether every listed tool keeps at least half its
+// lifetime in the stored record, so skipping the write cannot expire it.
+func freshEnough(previous memberToolSchemas, catalog *memberCatalog, now time.Time, ttl time.Duration) bool {
 	for name := range catalog.byName {
-		if now.Sub(previous.Tools[name].SeenAt) >= memberToolSchemasTTL/2 {
+		if previous.Tools[name].ExpiresAt.Sub(now) < ttl/2 {
 			return false
 		}
 	}

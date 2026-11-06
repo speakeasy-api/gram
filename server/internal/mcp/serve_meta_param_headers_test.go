@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -327,4 +328,82 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HeaderMismatchAfterDispatchNotRetr
 	}))
 	require.True(t, isError)
 	require.Equal(t, 1, frontCount(counts, "tools/call"), "the call must not run twice")
+}
+
+// A listing without a positive ttlMs is stale at once, so each call lists
+// again rather than reuse it, and is never refused.
+func TestServePublic_MetaEndpoint_ExecuteTool_UncacheableListingListsEachCall(t *testing.T) {
+	t.Parallel()
+
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(parameterHeaderSchema()), withStatelessUpstream(), withListCaching(0, ""))
+	gateway := newParameterHeaderGateway(t, upstream.url)
+
+	gateway.execute(t)
+	gateway.execute(t)
+	methods := rpcMethodCounts(upstream)
+	require.Equal(t, 2, methods["tools/call"], "the member must not refuse a call")
+	require.Equal(t, 2, methods["tools/list"])
+}
+
+// A private listing is reused for the caller that listed it.
+func TestServePublic_MetaEndpoint_ExecuteTool_PrivateListingReusedByItsCaller(t *testing.T) {
+	t.Parallel()
+
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(parameterHeaderSchema()), withStatelessUpstream(), withListCaching(time.Hour, "private"))
+	gateway := newParameterHeaderGateway(t, upstream.url)
+
+	gateway.execute(t)
+	gateway.execute(t)
+	methods := rpcMethodCounts(upstream)
+	require.Equal(t, 2, methods["tools/call"])
+	require.Equal(t, 1, methods["tools/list"])
+}
+
+// An annotation outside a chain of properties keys makes the definition
+// invalid: the gateway computes no headers and the member decides.
+func TestServePublic_MetaEndpoint_ExecuteTool_InvalidAnnotationCallsWithoutHeaders(t *testing.T) {
+	t.Parallel()
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"paths": map[string]any{"type": "array", "items": map[string]any{"type": "string", "x-mcp-header": "path"}},
+		},
+	}
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(schema), withStatelessUpstream())
+	gateway := newParameterHeaderGateway(t, upstream.url)
+
+	text, isError := metaToolResultText(t, decodeToolsCall(t, gateway.ti, gateway.slug, gateway.bearer, "execute_tool", map[string]any{
+		"name": "repo--get_file_contents", "arguments": map[string]any{"paths": []string{"README.md"}},
+	}))
+	require.False(t, isError, text)
+	for _, req := range upstream.journal() {
+		if req.rpcMethod == "tools/call" {
+			require.Empty(t, req.paramHeaders)
+		}
+	}
+}
+
+// A private remote member records its tool catalog from the same listing the
+// headers read, so a cold call lists the member once.
+func TestServePublic_MetaEndpoint_ExecuteTool_PrivateMemberColdCallListsOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-param-private-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(parameterHeaderSchema()), withStatelessUpstream())
+	member := createMetaMemberWithVisibility(t, ctx, ti.conn, projectID, meta.ID, "repo", upstream.url, uuid.NullUUID{}, 0, "private")
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, member.mcpServerID)
+	subject := createTestUser(t, ctx, ti, "meta-param-private-"+uuid.NewString())
+	gateway := parameterHeaderGateway{ti: ti, slug: slug, metaID: meta.ID, bearer: mintMetaIssuerBearer(t, ti, slug, issuerID, subject), recorder: nil}
+
+	gateway.execute(t)
+	methods := rpcMethodCounts(upstream)
+	require.Equal(t, 1, methods["tools/call"])
+	require.Equal(t, 1, methods["tools/list"], "the tool catalog and the parameter headers share one listing")
 }

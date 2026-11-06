@@ -720,7 +720,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		memberToolSchemaLocal:  expirable.NewLRU[string, memberToolSchemas](memberToolSchemasLocalSize, nil, memberToolSchemasTTL),
+		memberToolSchemaLocal:  expirable.NewLRU[string, memberToolSchemas](memberToolSchemasLocalSize, nil, maxMemberToolSchemasTTL),
 		connectionCatalogCache: cacheImpl,
 		staleNoAuthLog:         newOnceLog(),
 		staleChoiceConsent:     expirable.NewLRU[string, bool](staleChoiceConsentSize, nil, staleChoiceConsentTTL),

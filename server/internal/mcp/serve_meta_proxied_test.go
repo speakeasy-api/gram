@@ -85,6 +85,10 @@ type recordingUpstream struct {
 	// stateless serves without sessions, so the gateway negotiates MCP 2026-07-28.
 	stateless bool
 
+	// listTTL and listCacheScope are the caching hints its tools/list carries.
+	listTTL        time.Duration
+	listCacheScope string
+
 	// holdMetadataProbe makes the recorder hold protected resource metadata
 	// requests until a tools/call response has completed, forcing the probe
 	// to arrive after the credentialed call.
@@ -119,9 +123,20 @@ func withInputSchema(schema map[string]any) recordingUpstreamOption {
 }
 
 // withStatelessUpstream serves the upstream without sessions, so the gateway
-// negotiates MCP 2026-07-28 with it.
+// negotiates MCP 2026-07-28 with it. Its tools/list is public for an hour.
 func withStatelessUpstream() recordingUpstreamOption {
-	return func(u *recordingUpstream) { u.stateless = true }
+	return func(u *recordingUpstream) {
+		u.stateless = true
+		u.listTTL = time.Hour
+	}
+}
+
+// withListCaching sets the caching hints the upstream's tools/list carries.
+func withListCaching(ttl time.Duration, scope string) recordingUpstreamOption {
+	return func(u *recordingUpstream) {
+		u.listTTL = ttl
+		u.listCacheScope = scope
+	}
 }
 
 // newRecordingUpstream stands up a real MCP SDK server behind a reverse
@@ -133,6 +148,8 @@ func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstre
 		url:                     "",
 		inputSchema:             map[string]any{"type": "object", "properties": map[string]any{}},
 		stateless:               false,
+		listTTL:                 0,
+		listCacheScope:          "",
 		holdMetadataProbe:       false,
 		toolCallServed:          make(chan struct{}),
 		toolCallServedOnce:      sync.Once{},
@@ -154,7 +171,9 @@ func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstre
 				Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
 			},
 		}},
-		Stateless: u.stateless,
+		Stateless:      u.stateless,
+		ListTTL:        u.listTTL,
+		ListCacheScope: u.listCacheScope,
 	})
 	t.Cleanup(mock.Close)
 
