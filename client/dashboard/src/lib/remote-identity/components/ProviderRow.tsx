@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -46,7 +47,6 @@ import {
   ChevronRight,
   Info,
   KeyRound,
-  Loader2,
   Settings,
   X,
 } from "lucide-react";
@@ -367,7 +367,7 @@ export function UserIdentityRow({
           draft.discoveryStatus === "loading" &&
           !draft.issuerEditorOpen ? (
             <div role="status" className="flex items-center gap-2">
-              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
               <Text muted small>
                 Checking OAuth metadata
               </Text>
@@ -390,10 +390,7 @@ export function UserIdentityRow({
               >
                 {draft.discoveryStatus === "loading" ? (
                   <div role="status" className="flex items-center gap-2">
-                    <Loader2
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0 animate-spin"
-                    />
+                    <Spinner className="mr-0 size-3.5 shrink-0" />
                     <Text muted small>
                       Checking OAuth metadata
                     </Text>
@@ -481,7 +478,7 @@ export function UserIdentityRow({
 
       {draft.status.kind === "pending" ? (
         <div className="flex items-center gap-2">
-          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          <Spinner className="mr-0 size-3.5" />
           <Text muted small>
             Registering with {selected?.name ?? "the authorization server"}…
           </Text>

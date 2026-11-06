@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
@@ -41,7 +42,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
   getSelectableMembers,
@@ -1197,7 +1198,7 @@ export function CreateRoleDialog({
             <Button onClick={handleSubmit} disabled={saveDisabled}>
               {isMutating && (
                 <Button.LeftIcon>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>

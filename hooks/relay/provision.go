@@ -32,6 +32,8 @@ type PluginConfig struct {
 	// AgentKey marks HooksAPIKey as an agent identity's own key, so it
 	// outranks a cached personal sign-in (see Config.AgentKey).
 	AgentKey bool
+	// InstallRoute is baked into speakeasy.json (see Config.InstallRoute).
+	InstallRoute string
 }
 
 const pluginName = "speakeasy-observability"
@@ -221,6 +223,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		AgentKey:     cfg.AgentKey,
 		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  false,
+		InstallRoute: cfg.InstallRoute,
 	})
 }
 

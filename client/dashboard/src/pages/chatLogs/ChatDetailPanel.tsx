@@ -10,7 +10,6 @@ import {
   ChevronUp,
   GitBranch,
   Info,
-  Loader2,
   Pin,
   Search,
   SlidersHorizontal,
@@ -116,6 +115,8 @@ import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
 
@@ -1165,7 +1166,7 @@ function SessionSummarySection({
         >
           <Button.LeftIcon>
             {summarize.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
@@ -1788,8 +1789,17 @@ function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <SheetTitle>Loading</SheetTitle>
-        <SheetDescription>Fetching chat session details...</SheetDescription>
+        <SheetTitle className="sr-only">Loading</SheetTitle>
+        <SheetDescription className="sr-only">
+          Fetching chat session details...
+        </SheetDescription>
+        <Skeleton>
+          <div className="h-7 w-64" />
+          <div className="h-4 w-40" />
+          <div className="mt-4 h-24 w-full" />
+          <div className="h-24 w-full" />
+          <div className="h-24 w-full" />
+        </Skeleton>
       </div>
     );
   }
@@ -1932,7 +1942,7 @@ function ChatDetailPanel({
               className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
             >
               {loadingAllMessages ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Spinner className="mr-0 size-3.5" />
               ) : (
                 <ChevronsDown className="size-3.5" />
               )}

@@ -239,22 +239,6 @@ type Service interface {
 	// binary version) each organization's new sessions use per day, inference hook
 	// traffic per Claude app, and device agent versions per day.
 	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
-	// Lists every live server across all organizations whose latest toolset
-	// version proxies an external MCP attachment on its project's active
-	// deployment, with the blockers that stop each one from migrating.
-	ListExternalMcpMigrationCandidates(context.Context, *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error)
-	// Runs each server's migration or deletion inside a transaction that is rolled
-	// back, reporting what would happen without changing anything.
-	PreviewExternalMcpMigration(context.Context, *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error)
-	// Switches each server in place from its external MCP attachment to a remote
-	// MCP source on the same sign-in provider, keeping its ID, address and
-	// everything that references it, and disables the old toolset. A candidate
-	// left with nothing to migrate is deleted instead, with its server, addresses
-	// and plugin entries, as the toolset delete API does. Servers run one at a
-	// time, each in its own transaction, and the run stops at the first failure.
-	// Never creates a sign-in provider or a client and never registers one with
-	// the upstream.
-	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// List observed remote MCP candidates and durable promotion delivery status.
 	// Active excludes endpoints already in the catalogue; candidate includes all
 	// unpublished active entries. No source URLs or credentials are returned.
@@ -384,6 +368,11 @@ type Service interface {
 	// grant, in every organization. The connect grant's selectors are ignored.
 	// Safe to run more than once.
 	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
+	// Adds an explicit mcp:connect grant, with the same principal, selectors and
+	// expiry, for every unexpired mcp:read or mcp:write grant in every
+	// organization, ahead of read and write no longer implying connect. Never
+	// removes access. Safe to run more than once.
+	BackfillMcpConnectGrants(context.Context, *BackfillMcpConnectGrantsPayload) (res *AdminBackfillMCPConnectGrantsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -406,7 +395,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [105]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
+var MethodNames = [103]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants"}
 
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
@@ -450,6 +439,19 @@ type AdminAuditLog struct {
 type AdminBackfillMCPAuthGrantsResult struct {
 	// How many principals gained the mcp:auth grant.
 	Granted int64
+}
+
+// AdminBackfillMCPConnectGrantsResult is the result type of the admin service
+// backfillMcpConnectGrants method.
+type AdminBackfillMCPConnectGrantsResult struct {
+	// How many mcp:connect grants were written.
+	Inserted int64
+	// How many existing temporary mcp:connect grants were extended to last as long
+	// as the access they mirror.
+	Extended int64
+	// How many mcp:connect grants provisioned by the default auth permission
+	// backfill became explicit grants.
+	TakenOver int64
 }
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
@@ -542,97 +544,6 @@ type AdminDeviceAgentCell struct {
 	// Machines whose agent polled on this day, by the last version each reported
 	// that day.
 	Machines int64
-}
-
-// A toolset backed by an external MCP attachment, with what running it does:
-// migrate its server in place, or delete it.
-type AdminExternalMcpMigrationCandidate struct {
-	// The toolset behind the server.
-	ToolsetID string
-	// Organization ID.
-	OrganizationID string
-	// Organization name.
-	OrganizationName string
-	// Organization slug.
-	OrganizationSlug string
-	// Project ID.
-	ProjectID string
-	// Project name.
-	ProjectName string
-	// Project slug.
-	ProjectSlug string
-	// The server's display name.
-	ServerName string
-	// The slug in the server's /mcp/<slug> address. Absent when the server has
-	// none.
-	McpSlug *string
-	// The attachment's upstream URL. Absent when the server proxies several.
-	RemoteURL *string
-	// The upstream URL the server will dial as a remote MCP server: the one
-	// resource its signed-in sessions recorded, otherwise the attachment's URL
-	// without unfilled template query parameters.
-	ReplacementURL *string
-	// The server's user session issuer and the upstream authorization servers
-	// behind it. Absent when the server has none.
-	SignInProvider *string
-	// Tool calls over the last tool_call_window_days. Absent when telemetry is
-	// unavailable.
-	ToolCalls *int64
-	// What running the candidate does: migrate switches its server in place to a
-	// remote MCP server; delete removes the toolset because nothing is left to
-	// migrate, along with any server, addresses and plugin entries it still owns.
-	// A server already migrated in place is kept and keeps working.
-	Action string
-	// Why the candidate is deleted rather than migrated. Empty when it migrates.
-	DeleteReasons []string
-	// Why the server cannot be migrated. Empty when it can.
-	Blockers []string
-	// What migrating the server drops or cannot carry over. Warnings do not stop
-	// it.
-	Warnings []string
-}
-
-// What happened, or in a preview what would happen, to one server.
-type AdminExternalMcpMigrationOutcome struct {
-	// The candidate's toolset.
-	ToolsetID string
-	// What the run did, or would do, with the candidate. Absent when it was not
-	// attempted.
-	Action *string
-	// migrated, deleted and previewed completed every step; deleted removed the
-	// toolset and any server it still owned, so mcp_server_id,
-	// remote_mcp_server_id and remote_url are absent; failed left the server
-	// unchanged; not_attempted follows an earlier failure.
-	MigrationStatus string
-	// Why the server failed or was not attempted.
-	Reason *string
-	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
-	// toolset still owns removes it.
-	McpSlug *string
-	// The server, which keeps its ID.
-	McpServerID *string
-	// The remote MCP source the server proxies once migrated. Absent when the
-	// server failed; a preview's source is rolled back.
-	RemoteMcpServerID *string
-	// The upstream URL the server dials once migrated. Absent when the server
-	// failed.
-	RemoteURL *string
-	// Each change, in order.
-	Actions []string
-	// What the migration could not carry over.
-	Warnings []string
-}
-
-type AdminExternalMcpMigrationRequest struct {
-	// The candidate's toolset.
-	ToolsetID string
-}
-
-// AdminExternalMcpMigrationResult is the result type of the admin service
-// previewExternalMcpMigration method.
-type AdminExternalMcpMigrationResult struct {
-	// One outcome per requested server, in request order.
-	Outcomes []*AdminExternalMcpMigrationOutcome
 }
 
 // An organization that appears in any of the fleet health grids.
@@ -753,15 +664,6 @@ type AdminInferenceSpendMonth struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string
 	SpendUsd  string
-}
-
-// AdminListExternalMcpMigrationCandidatesResult is the result type of the
-// admin service listExternalMcpMigrationCandidates method.
-type AdminListExternalMcpMigrationCandidatesResult struct {
-	// Every candidate across all organizations.
-	Candidates []*AdminExternalMcpMigrationCandidate
-	// Days of tool calls each candidate's tool_calls covers.
-	ToolCallWindowDays int
 }
 
 // AdminListOrganizationActivityResult is the result type of the admin service
@@ -1998,6 +1900,15 @@ type BackfillMcpAuthGrantsPayload struct {
 	AdminSessionToken *string
 }
 
+// BackfillMcpConnectGrantsPayload is the payload type of the admin service
+// backfillMcpConnectGrants method.
+type BackfillMcpConnectGrantsPayload struct {
+	AdminSessionToken *string
+	// Only copy grants created before this time. Set it to when read and write
+	// stopped implying connect, so grants written since are left alone.
+	CreatedBefore *string
+}
+
 // BulkUpdateAccountTypePayload is the payload type of the admin service
 // bulkUpdateAccountType method.
 type BulkUpdateAccountTypePayload struct {
@@ -2662,12 +2573,6 @@ type ListCustomerUsagePayload struct {
 	Interval string
 }
 
-// ListExternalMcpMigrationCandidatesPayload is the payload type of the admin
-// service listExternalMcpMigrationCandidates method.
-type ListExternalMcpMigrationCandidatesPayload struct {
-	AdminSessionToken *string
-}
-
 // ListGlobalIssuerConvergenceCandidatesPayload is the payload type of the
 // admin service listGlobalIssuerConvergenceCandidates method.
 type ListGlobalIssuerConvergenceCandidatesPayload struct {
@@ -2937,14 +2842,6 @@ type MeterUsageWindow struct {
 	To string
 }
 
-// MigrateExternalMcpServersPayload is the payload type of the admin service
-// migrateExternalMcpServers method.
-type MigrateExternalMcpServersPayload struct {
-	AdminSessionToken *string
-	// Servers to migrate or delete, in order.
-	Servers []*AdminExternalMcpMigrationRequest
-}
-
 // MigrateRemoteSessionIssuerResult is the result type of the admin service
 // migrateToGlobalIssuer method.
 type MigrateRemoteSessionIssuerResult struct {
@@ -2974,14 +2871,6 @@ type MigrateToGlobalIssuerPayload struct {
 type OpenOrganizationInDashboardPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
-}
-
-// PreviewExternalMcpMigrationPayload is the payload type of the admin service
-// previewExternalMcpMigration method.
-type PreviewExternalMcpMigrationPayload struct {
-	AdminSessionToken *string
-	// Servers to migrate or delete, in order.
-	Servers []*AdminExternalMcpMigrationRequest
 }
 
 type ProductFeatureName string

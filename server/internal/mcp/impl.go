@@ -60,7 +60,6 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -239,7 +238,6 @@ type Service struct {
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
 	chatSessionsManager    *chatsessions.Manager
-	externalmcpRepo        *externalmcp_repo.Queries
 	deploymentsRepo        *deployments_repo.Queries
 	enc                    *encryption.Client
 	authz                  *authz.Engine
@@ -266,7 +264,7 @@ type Service struct {
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
-	// userSessionRefreshReplayCoordination elects the database rotation winner and claims attemptEndMarker.
+	// userSessionRefreshReplayCoordination elects the database rotation winner, claims attemptEndMarker and keeps member statuses.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
@@ -628,7 +626,6 @@ func NewService(
 		mcpMetadataRepo:           metadata_repo.New(db),
 		orgsRepo:                  organizations_repo.New(db),
 		deploymentsRepo:           deployments_repo.New(db),
-		externalmcpRepo:           externalmcp_repo.New(db),
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
@@ -1667,11 +1664,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
 	// their OAuth flow, so we can't defer this to individual RPC handlers.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
+	// A notification has no response, so its refusal tells no one anything.
+	if (err != nil || !satisfied) && req.ID.IsSet() {
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+	}
 	if err != nil {
 		return err
 	}
 	if !satisfied {
-		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 		if oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",

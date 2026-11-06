@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
@@ -438,7 +439,7 @@ function ProviderConfigDrawer({
           >
             {form.isMutating ? (
               <Button.LeftIcon>
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Spinner className="mr-0 h-3 w-3" />
               </Button.LeftIcon>
             ) : null}
             <Button.Text>{form.isMutating ? "Saving..." : "Save"}</Button.Text>

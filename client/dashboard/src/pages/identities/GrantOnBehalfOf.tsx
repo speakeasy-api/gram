@@ -21,7 +21,7 @@ export function GrantOnBehalfOf({
   /** The server id the grant's selector names. */
   resourceId: string;
 }): JSX.Element | null {
-  const inventory = useServerInventory();
+  const inventory = useServerInventory({ lookupOnly: true });
   const server = inventory.servers.find(
     (candidate) =>
       candidate.resourceId === resourceId || candidate.id === resourceId,

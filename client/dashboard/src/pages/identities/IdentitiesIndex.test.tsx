@@ -230,6 +230,14 @@ it("keeps agents visible and refetches their permissions when the RBAC override 
   expect(screen.getByText("New agent identity")).toBeTruthy();
 });
 
+it("does not read the people roster on the agents roster", async () => {
+  mocks.agents.mockResolvedValue({ items: [] });
+  setup("", "agent");
+  await waitFor(() => expect(mocks.agents).toHaveBeenCalled());
+  expect(mocks.roster).not.toHaveBeenCalled();
+  expect(mocks.coverage).not.toHaveBeenCalled();
+});
+
 // Ported from the agent-management page's tests when that page was retired.
 // A support session is reading on someone else's behalf, and an agent's
 // management API answers to the owner — so the roster does not read it at all
@@ -241,7 +249,7 @@ it("does not read agents in an organization override session", async () => {
     impersonatorEmail: undefined,
   };
   setup("", "agent");
-  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  await screen.findByTestId("filters");
   expect(mocks.agents).not.toHaveBeenCalled();
   expect(screen.queryByText("New agent identity")).toBeNull();
 });
@@ -253,7 +261,7 @@ it("does not read agents while impersonating", async () => {
     impersonatorEmail: "support@example.test",
   };
   setup("", "agent");
-  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  await screen.findByTestId("filters");
   expect(mocks.agents).not.toHaveBeenCalled();
   expect(screen.queryByText("New agent identity")).toBeNull();
 });

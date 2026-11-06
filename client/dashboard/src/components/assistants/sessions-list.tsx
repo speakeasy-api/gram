@@ -5,6 +5,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -23,7 +24,6 @@ import { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const SESSION_PAGE_LIMIT = 8;
@@ -164,9 +164,13 @@ function SessionListResult({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Stack align="center" justify="center" className="py-12">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </Stack>
+      <Skeleton label="Loading sessions">
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+      </Skeleton>
     );
   }
   if (error) {

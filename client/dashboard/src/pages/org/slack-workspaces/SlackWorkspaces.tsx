@@ -9,7 +9,7 @@ import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseAsString, useQueryState } from "nuqs";
-import { Hash, Plus, LoaderCircle } from "lucide-react";
+import { Hash, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { useOrganization } from "@/contexts/Auth";
@@ -18,6 +18,7 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -349,12 +350,11 @@ function SlackWorkspacesContent(): JSX.Element {
       )}
 
       {query.isPending && (
-        <div
-          role="status"
-          className="text-muted-foreground flex items-center gap-2 py-8 text-sm"
-        >
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading workspaces…
+        <div role="status" aria-label="Loading workspaces">
+          <Skeleton>
+            <div className="h-24 w-full" />
+            <div className="h-24 w-full" />
+          </Skeleton>
         </div>
       )}
       {query.data && connections.length === 0 && (

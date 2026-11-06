@@ -26,12 +26,6 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// consentToolNameLimit caps how many explicit tool names one approve form
-// may submit. Matches consentInventoryMaxTools so any subset of a full
-// inventory — including all of it — is submittable; the approve POST's 1 MiB
-// body cap covers the worst case with URL-encoding inflation.
-const consentToolNameLimit = consentInventoryMaxTools
-
 // consentPrefillAttr serializes the subject's stored selection for the
 // island's server-rendered bootstrap: annotation grants with their modes
 // plus manually picked tool names. Snapshot expansions are omitted — the
@@ -323,8 +317,8 @@ func chosenToolSelection(form url.Values, inventory *consentToolInventory) (*too
 	// Manual picks: strict duplicates, per-name cap, unknown intersected
 	// away, grant-covered picks canonicalized away.
 	submitted := form["tools"]
-	if len(submitted) > consentToolNameLimit {
-		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), consentToolNameLimit)
+	if len(submitted) > toolfilter.MaxTools {
+		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), toolfilter.MaxTools)
 	}
 	displayed := make(map[string]bool, len(inventory.Tools))
 	for _, tool := range inventory.Tools {
