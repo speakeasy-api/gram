@@ -207,6 +207,7 @@ export default function SignalDetail(): JSX.Element {
 function SignalDetailPage(): JSX.Element {
   const { ruleId = "" } = useParams();
   const title = getRuleTitleFallback(ruleId);
+  const { search } = useLocation();
   return (
     <Page>
       <Page.Header>
@@ -215,6 +216,9 @@ function SignalDetailPage(): JSX.Element {
             [ruleId]: title,
             [encodeURIComponent(ruleId)]: title,
           }}
+          // The Watchdog crumb returns to the list with the same range and
+          // filters this page was opened from.
+          urlSubstitutions={{ "/watchdog": `/watchdog${search}` }}
         />
       </Page.Header>
       <Page.Body fullWidth>
@@ -409,8 +413,8 @@ function SignalDetailContent({
       </Page.Section.Description>
       <Page.Section.CTA>{controls}</Page.Section.CTA>
       <Page.Section.Body>
-        <div className="space-y-10">
-          {suppressAction && <div className="-mt-4">{suppressAction}</div>}
+        <div className="space-y-6">
+          {suppressAction && <div className="-mt-2">{suppressAction}</div>}
           {signalsQuery.error ? (
             <InlineEmptyState
               icon="circle-alert"
@@ -486,8 +490,9 @@ function SignalDetailContent({
                   title="Findings over time"
                   meta={rangeLabel}
                   action={
-                    <span
-                      className="text-muted-foreground font-mono text-xs"
+                    <Text
+                      small
+                      muted
                       title={`First seen ${signal.firstSeen.toLocaleString()} · last seen ${signal.lastSeen.toLocaleString()}`}
                     >
                       First seen{" "}
@@ -498,29 +503,29 @@ function SignalDetailContent({
                       {formatDistanceToNow(signal.lastSeen, {
                         addSuffix: true,
                       })}
-                    </span>
+                    </Text>
                   }
                 />
-                <div className="bg-card border p-4">
+                <div>
                   {/* A range change keeps the previous response on screen until
                       the new one lands, and its buckets belong to the old
                       window — plotting them against the new one would shift
                       every bar. Hold the chart's height instead. */}
                   {signalsQuery.isPlaceholderData ? (
-                    <Skeleton className="h-[240px] w-full" />
+                    <Skeleton className="h-[180px] w-full" />
                   ) : (
                     <SignalTimeline
                       sparkline={signal.sparkline}
                       from={from}
                       to={to}
                       color={SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)]}
-                      height={240}
+                      height={180}
                     />
                   )}
                 </div>
               </section>
 
-              <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                 <section className="space-y-4">
                   <SectionHeading
                     title="Top affected users"
@@ -656,7 +661,8 @@ function SignalDetailContent({
   );
 }
 
-/** Section head in the list page's idiom: thin serif title, mono meta. */
+/** Sub-section head in the list page's idiom ("Exposure by data type"):
+ * an eyebrow naming the section and its window, extras on the right. */
 function SectionHeading({
   title,
   meta,
@@ -667,17 +673,8 @@ function SectionHeading({
   action?: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-baseline gap-3">
-        <span className="font-display text-3xl leading-none font-thin">
-          {title}
-        </span>
-        {meta && (
-          <span className="text-muted-foreground font-mono text-sm">
-            {meta}
-          </span>
-        )}
-      </div>
+    <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <h3 className="text-eyebrow">{meta ? `${title} · ${meta}` : title}</h3>
       {action}
     </div>
   );
