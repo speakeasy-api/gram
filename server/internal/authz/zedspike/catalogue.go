@@ -140,7 +140,7 @@ var ScopeCatalogue = map[Scope]ScopeInfo{
 	ScopeMCPBlockedRead:          block(4, mcpSelectors...),
 	ScopeMCPBlockedWrite:         block(4, mcpSelectors...),
 	ScopeMCPBlockedConnect:       block(4, mcpSelectors...),
-	ScopeMCPBlockedAuth:          ScopeInfo{Block: true, Strict: true, DelegatableSince: 5, Selectors: authClientSelectors},
+	ScopeMCPBlockedAuth:          {Block: true, Strict: true, DelegatableSince: 5, Selectors: authClientSelectors},
 	ScopeEnvironmentBlockedRead:  block(4, projectSelector...),
 	ScopeEnvironmentBlockedWrite: block(4, projectSelector...),
 	ScopeSkillBlockedRead:        block(4, projectSelector...),
