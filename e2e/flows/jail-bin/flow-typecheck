@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Inside the agent jail: type-check the e2e package (what CI's lint runs).
-set -euo pipefail
-cd "${JAIL_WORK:?}/e2e"
-exec node node_modules/typescript/bin/tsc --noEmit -p .

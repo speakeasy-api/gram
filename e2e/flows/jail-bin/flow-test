@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Inside the agent jail: replay this run's flow against the local stack.
-set -euo pipefail
-cd "${JAIL_WORK:?}/e2e"
-exec node node_modules/@playwright/test/cli.js test --config flows.config.ts "flows/${FLOW:?}/"

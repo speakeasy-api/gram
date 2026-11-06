@@ -43,35 +43,32 @@ not change the story. A removed step or a new required step does.
 
 ## The loop
 
-1. **Replay** — `mise run test:flows` runs every `flow.spec.ts` against the
-   local stack. It needs no LLM of its own, so it is cheap. CI runs this on
-   PRs that touch the dashboard.
-2. **Heal** — when a replay fails, `mise run flows:heal <flow>` hands the story,
-   the failure, and the branch diff to a Claude Code agent. The agent walks the
-   story in a real browser and returns one verdict:
+CI runs `.github/workflows/flow-checks.md`, a
+[GitHub Agentic Workflow](https://github.github.com/gh-aw/) compiled to
+`flow-checks.lock.yml` with `gh aw compile flow-checks`:
+
+1. **Replay** — ordinary workflow steps boot the stack and run
+   `mise run test:flows`. No LLM. If every flow passes, the run stops there.
+2. **Heal** — otherwise a Claude Code agent re-walks each failing story in a
+   real browser (`.github/prompts/heal-flow.md`) and returns one verdict:
    - `healed` — the flow still works; the UI moved. It rewrites
-     `flow.spec.ts` and the replay passes again.
-   - `broken` — a user can no longer finish the flow. It names the step that
-     fails and leaves a screenshot.
+     `flow.spec.ts` until the replay passes.
+   - `broken` — a user can no longer finish the flow.
    - `changed` — the diff intentionally changes the flow. The story needs a
      human edit; the agent proposes one.
-3. **Report** — CI posts the verdicts as one PR comment, with the commands to
-   replay and heal each failing flow on your machine. A healed script is in
-   the run's `flow-checks` artifact under `healed/<flow>/`; review it before
-   you commit it. The check does not block merges yet.
+3. **Report** — one PR comment with the verdicts and the commands to replay
+   and heal each failing flow on your machine. Healed scripts are in the
+   run's `healed-flows` artifact; review one before you commit it. The check
+   does not block merges yet.
 
-## Healing in CI
+The agent runs in gh-aw's AWF sandbox: a container whose network is limited
+to the stack's dashboard, server and dev-idp ports on the runner, and whose
+Anthropic key is held by AWF's API proxy, not the agent. It writes nothing
+back except through gh-aw's safe outputs (the comment and the artifact).
+`ATLAS_TOKEN` exists only in the step that boots the stack.
 
-CI heals inside the agent jail (`../agent-jail/README.md`): the agent sees a
-copy of `e2e/` and the branch diff, reaches only the local stack and the
-Anthropic proxy, and holds no secret. The job that boots the stack drops
-`ATLAS_TOKEN` after boot and leaves no GitHub token on disk, and the PR
-comment is posted by a separate job that runs no repository code. In the jail
-the agent uses `flow-browser`, `flow-test` and `flow-typecheck`
-(`jail-bin/`) instead of the `mise` tasks.
-
-Locally, `mise run flows:heal` runs the same prompt (`HEAL.md`) without a
-jail, against your own stack.
+Locally, `mise run flows:heal <flow>` runs the same prompt against your own
+stack, with no sandbox: the agent runs as you.
 
 ## Writing a new flow
 

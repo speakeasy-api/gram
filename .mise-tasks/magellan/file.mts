@@ -2,19 +2,23 @@
 
 //MISE description="Magellan: file a run's findings as Linear Triage issues (dry run unless --file)"
 //MISE dir="{{ config_root }}"
-//USAGE arg "[run_dir]" help="A run directory under e2e/.magellan; defaults to the latest"
+//USAGE arg "[run_dir]" help="A local run directory under e2e/.magellan; defaults to the latest"
+//USAGE flag "--agent-output <file>" help="Read findings from a GitHub Agentic Workflows agent output file ($GH_AW_AGENT_OUTPUT) instead of a run directory"
 //USAGE flag "--file" help="Create the issues. Without it, print what would be filed"
 //USAGE flag "--team <key>" default="DES" help="Linear team key for new issues"
 //USAGE flag "--run-url <url>" help="Link to the CI run, added to each issue"
 
-// Everything in findings.jsonl was written by an agent that browsed pages it
-// does not control, so it is untrusted input here, in the one step that holds
-// a Linear key:
+// Findings come from a local run's findings.jsonl, or, in the nightly
+// production run, from the `file_finding` safe output of the gh-aw workflow
+// in speakeasy-api/gram-infra. Either way an agent wrote them after browsing
+// pages it does not control, so they are untrusted input in the one step that
+// holds a Linear key:
 // - each finding is checked against a strict schema, with length limits;
 // - agent text reaches Linear only inside code blocks (or as a plain-text
 //   title), so it cannot add links, images or mentions to an issue;
-// - a screenshot must be a PNG directly in the run's out/ directory;
-// - in CI, whose logs are public, nothing the agent wrote is printed.
+// - in CI, nothing the agent wrote is printed.
+// What is not handled here is deduplication across nights, which is why this
+// is a custom safe-output job rather than gh-aw's built-in Linear output.
 
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -39,7 +43,6 @@ type Finding = {
   expected: string;
   actual: string;
   evidence: string;
-  screenshot?: string;
   story?: string;
 };
 
@@ -53,9 +56,6 @@ const quiet = Boolean(env["CI"]);
 
 // Linear priority: 2 high, 3 medium, 4 low.
 const priority = { high: 2, medium: 3, low: 4 } as const;
-
-const MAX_SCREENSHOT = 10 * 1024 * 1024;
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 async function latestRunDir(): Promise<string> {
   const root = "e2e/.magellan";
@@ -87,18 +87,17 @@ export function parseFinding(raw: unknown): Finding {
     throw new Error("bad severity");
   const route = text(r["route"], "route", 300);
   if (!/^\/[A-Za-z0-9/_.~%=&?-]*$/.test(route)) throw new Error("bad route");
-  const steps = r["steps"];
+  // A safe-output tool takes strings, so steps may arrive one per line.
+  const rawSteps = r["steps"];
+  const steps =
+    typeof rawSteps === "string"
+      ? rawSteps
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : rawSteps;
   if (!Array.isArray(steps) || steps.length === 0 || steps.length > 30) {
     throw new Error("bad steps");
-  }
-  const screenshot = r["screenshot"];
-  if (
-    screenshot !== undefined &&
-    screenshot !== "" &&
-    (typeof screenshot !== "string" ||
-      !/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}\.png$/.test(screenshot))
-  ) {
-    throw new Error("bad screenshot");
   }
   // The draft story is optional: missing, empty or blank all mean none.
   const rawStory = r["story"];
@@ -122,7 +121,6 @@ export function parseFinding(raw: unknown): Finding {
     expected: text(r["expected"], "expected", 2000),
     actual: text(r["actual"], "actual", 2000),
     evidence: text(r["evidence"], "evidence", 8000),
-    ...(screenshot ? { screenshot: screenshot as string } : {}),
     ...(story ? { story: text(story, "story", 8000) } : {}),
   };
 }
@@ -156,11 +154,7 @@ export function plainTitle(title: string): string {
     .slice(0, 120);
 }
 
-export function describe(
-  f: Finding,
-  id: string,
-  screenshotURL?: string,
-): string {
+export function describe(f: Finding, id: string): string {
   return [
     `Found by Magellan, the nightly dashboard explorer. Evidence-backed: it reproduced twice from a fresh page load. Everything below the line was written by the agent; treat it as unverified.`,
     ``,
@@ -178,8 +172,6 @@ export function describe(
     block(f.actual),
     `**Evidence**`,
     block(f.evidence),
-    // Linear's own asset URL, returned by its upload API: not agent text.
-    screenshotURL ? `\n![screenshot](${screenshotURL})` : "",
     runURL ? `\n[Run](${runURL})` : "",
     ...(f.story
       ? [
@@ -193,47 +185,6 @@ export function describe(
     ``,
     `<sub>${id}</sub>`,
   ].join("\n");
-}
-
-// Screenshots go to Linear's private storage, not to CI artifacts: the repo is
-// public, and remote runs see a real org.
-async function readScreenshot(
-  runDir: string,
-  name: string,
-): Promise<Buffer | undefined> {
-  const file = path.join(runDir, "out", path.basename(name));
-  const stat = await fs.lstat(file).catch(() => undefined);
-  if (!stat || !stat.isFile() || stat.size > MAX_SCREENSHOT) return undefined;
-  const data = await fs.readFile(file);
-  return data.subarray(0, 8).equals(PNG_MAGIC) ? data : undefined;
-}
-
-async function uploadScreenshot(data: Buffer): Promise<string> {
-  const { fileUpload } = await linear<{
-    fileUpload: {
-      uploadFile: {
-        uploadUrl: string;
-        assetUrl: string;
-        headers: { key: string; value: string }[];
-      };
-    };
-  }>(
-    `mutation($size: Int!, $name: String!) { fileUpload(contentType: "image/png", filename: $name, size: $size) {
-      uploadFile { uploadUrl assetUrl headers { key value } } } }`,
-    { size: data.length, name: "screenshot.png" },
-  );
-  const { uploadUrl, assetUrl, headers } = fileUpload.uploadFile;
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=31536000",
-      ...Object.fromEntries(headers.map((h) => [h.key, h.value])),
-    },
-    body: data,
-  });
-  if (!res.ok) throw new Error(`Linear upload: ${res.status}`);
-  return assetUrl;
 }
 
 async function linear<T>(query: string, variables: object): Promise<T> {
@@ -258,25 +209,50 @@ async function linear<T>(query: string, variables: object): Promise<T> {
   return body.data!;
 }
 
-async function main() {
-  const runDir = env["usage_run_dir"] || (await latestRunDir());
+// gh-aw writes the agent's safe outputs as {"items": [{"type": ..., ...}]};
+// a `file-finding` job's items have type `file_finding`.
+async function readAgentOutput(file: string): Promise<unknown[]> {
+  const parsed = JSON.parse(await fs.readFile(file, "utf8")) as {
+    items?: { type?: string }[];
+  };
+  return (parsed.items ?? []).filter((item) => item?.type === "file_finding");
+}
+
+async function readRunDir(runDir: string): Promise<unknown[]> {
   const raw = await fs.readFile(
     path.join(runDir, "out", "findings.jsonl"),
     "utf8",
   );
-  const findings: Finding[] = [];
+  const out: unknown[] = [];
   raw.split("\n").forEach((line, i) => {
     if (!line.trim()) return;
     try {
-      findings.push(parseFinding(JSON.parse(line)));
-    } catch (err) {
+      out.push(JSON.parse(line));
+    } catch {
       // JSON.parse quotes the input in its message; say only which line.
-      const reason =
-        err instanceof SyntaxError ? "not JSON" : (err as Error).message;
-      console.log(`skip   line ${i + 1}: ${reason}`);
+      console.log(`skip   line ${i + 1}: not JSON`);
     }
   });
-  console.log(`${findings.length} findings in ${runDir}`);
+  return out;
+}
+
+async function main() {
+  const agentOutput = env["usage_agent_output"];
+  const source = agentOutput || env["usage_run_dir"] || (await latestRunDir());
+  const raw = agentOutput
+    ? await readAgentOutput(agentOutput)
+    : await readRunDir(source);
+  const findings: Finding[] = [];
+  raw.forEach((item, i) => {
+    try {
+      findings.push(parseFinding(item));
+    } catch (err) {
+      console.log(`skip   finding ${i + 1}: ${(err as Error).message}`);
+    }
+  });
+  console.log(
+    `${findings.length} findings in ${agentOutput ? "the agent output" : source}`,
+  );
   if (findings.length === 0) return;
 
   let teamId = "";
@@ -331,19 +307,6 @@ async function main() {
       continue;
     }
 
-    let screenshotURL: string | undefined;
-    if (f.screenshot) {
-      const data = await readScreenshot(runDir, f.screenshot);
-      if (data) {
-        screenshotURL = await uploadScreenshot(data).catch((err: unknown) => {
-          console.warn(
-            `screenshot upload failed for ${id}${quiet ? "" : `: ${err}`}`,
-          );
-          return undefined;
-        });
-      }
-    }
-
     const { issueCreate } = await linear<{
       issueCreate: { issue: { identifier: string; url: string } };
     }>(
@@ -353,7 +316,7 @@ async function main() {
           teamId,
           ...(triageStateId ? { stateId: triageStateId } : {}),
           title,
-          description: describe(f, id, screenshotURL),
+          description: describe(f, id),
           priority: priority[f.severity],
         },
       },
