@@ -80,17 +80,23 @@ var validAuthClientTypes = map[string]bool{
 }
 
 // Matches reports whether this (grant) selector satisfies the given check
-// selector. A nil/empty grant selector matches any check (defensive fallback).
-// For each key present in BOTH the grant and check selectors, the values must
-// be equal or the grant value must be "*". Keys present in the grant but absent
-// from the check are skipped — the check is not constraining that dimension.
-// This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
-// match connection-level checks that don't yet specify a disposition.
+// selector. A grant selector without both resource_kind and resource_id
+// matches no check, nil and empty included: ValidateSelector requires both on
+// every write, so a selector missing one names no resource rather than all of
+// them. For each key present in BOTH the grant and check selectors, the values
+// must be equal or the grant value must be "*". Keys present in the grant but
+// absent from the check are skipped — the check is not constraining that
+// dimension. This allows disposition-scoped grants (e.g.
+// {"disposition":"read_only"}) to match connection-level checks that don't yet
+// specify a disposition.
 func (s Selector) Matches(check Selector) bool {
 	return s.matches(check, "")
 }
 
 func (s Selector) matches(check Selector, representedUser string) bool {
+	if !s.hasResourceKeys() {
+		return false
+	}
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
@@ -107,6 +113,7 @@ func (s Selector) matches(check Selector, representedUser string) bool {
 // StrictMatches is like Matches but requires every key in the grant selector
 // to be present in the check selector. Exclusion scopes use strict matching so
 // a tool-scoped exclusion does not match a dimensionless server-level check.
+// As with Matches, a grant selector missing a resource key matches nothing.
 func (s Selector) StrictMatches(check Selector) bool {
 	return s.strictMatches(check, "")
 }
@@ -119,6 +126,9 @@ func (s Selector) StrictMatchesFor(check Selector, representedUser string) bool 
 }
 
 func (s Selector) strictMatches(check Selector, representedUser string) bool {
+	if !s.hasResourceKeys() {
+		return false
+	}
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
@@ -341,44 +351,37 @@ func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 	}
 }
 
-// ResourceID extracts the resource_id value from the selector.
-// Returns "*" if no resource_id key is present.
-func (s Selector) ResourceID() string {
-	if id, ok := s[SelectorKeyResourceID]; ok {
-		return id
-	}
-	return WildcardResource
+// hasResourceKeys reports whether the selector carries both resource_kind and
+// resource_id, which every grant selector needs to match a check.
+func (s Selector) hasResourceKeys() bool {
+	_, hasKind := s[SelectorKeyResourceKind]
+	_, hasID := s[SelectorKeyResourceID]
+	return hasKind && hasID
 }
 
-// IsRestricted reports whether the selector constrains at least one resource
-// dimension. A short wildcard selector is treated as unrestricted for backward
-// compatibility with pre-resource-kind rows that only carried resource_id.
-func (s Selector) IsRestricted() bool {
-	if len(s) == 0 {
-		return false
-	}
-	if len(s) == 1 {
-		id, ok := s[SelectorKeyResourceID]
-		return !ok || id != WildcardResource
-	}
-	if len(s) != 2 {
-		return true
-	}
+// ResourceID returns the selector's resource_id value, or "" when the key is
+// missing.
+func (s Selector) ResourceID() string {
+	return s[SelectorKeyResourceID]
+}
 
-	kind, hasKind := s[SelectorKeyResourceKind]
-	id, hasID := s[SelectorKeyResourceID]
-	if !hasKind || !hasID {
-		return true
-	}
-	return kind != WildcardResource || id != WildcardResource
+// IsRestricted reports whether the selector is anything other than the pure
+// wildcard {"resource_kind":"*","resource_id":"*"}. A selector missing either
+// resource key is restricted: it matches no check.
+func (s Selector) IsRestricted() bool {
+	return len(s) != 2 || s[SelectorKeyResourceKind] != WildcardResource || s[SelectorKeyResourceID] != WildcardResource
 }
 
 // CoversEveryResource reports whether the selector names every resource of
-// its kind: a wildcard resource id and no narrowing dimension such as a
-// project, tool or server URL. Unlike IsRestricted, a wildcard confined to one
-// resource kind still counts, since that is how an unrestricted grant of a
-// scope is stored.
+// its kind: a resource kind, a wildcard resource id and no narrowing
+// dimension such as a project, tool or server URL. Unlike IsRestricted, a
+// wildcard confined to one resource kind still counts, since that is how an
+// unrestricted grant of a scope is stored. A selector missing either resource
+// key covers nothing.
 func (s Selector) CoversEveryResource() bool {
+	if !s.hasResourceKeys() {
+		return false
+	}
 	for selectorKey, value := range s {
 		switch selectorKey {
 		case SelectorKeyResourceKind:

@@ -275,7 +275,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = $2
   AND scope = $3
-  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND selectors->>'resource_id' = '*'
   AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
 `
 
@@ -287,9 +287,9 @@ type DeletePrincipalWildcardGrantsParams struct {
 
 // Removes a principal's unrestricted rows for one scope: a selector naming at
 // most a resource kind and the wildcard resource ID. Older writers stored the
-// kind as "*" or under another name, or left out resource_id (which the grant
-// matcher reads as "*"), so matching on the kind the scope implies today would
-// leave those rows granting access after an administrator removed them.
+// kind as "*" or under another name, so matching on the kind the scope implies
+// today would leave those rows granting access after an administrator removed
+// them.
 func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
 	if err != nil {
@@ -1700,7 +1700,7 @@ WITH user_grants AS (
     s.id AS server_id,
     ug.scope,
     ug.direct,
-    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete,
+    ug.selectors->>'resource_id' <> '*' AS concrete,
     -- Whether this grant would also satisfy StrictMatches, which exclusions
     -- use: every dimension it names must be one the check constrains. A
     -- tool- or disposition-scoped block narrows something inside the server,
@@ -1821,7 +1821,7 @@ WITH user_grants AS (
     cs.id AS skill_id,
     ug.scope,
     ug.direct,
-    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete
+    ug.selectors->>'resource_id' <> '*' AS concrete
   FROM candidate_skills cs
   JOIN user_grants ug ON (
     ug.selectors->>'resource_kind' IN ('*', 'skill')

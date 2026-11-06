@@ -36,6 +36,73 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
+func TestLoadGrants_storedSelectorMissingResourceKeyGrantsNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	organizationID := "org_load_grants_missing_resource_key"
+	seedOrganization(t, ctx, conn, organizationID)
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+
+	tests := []struct {
+		name     string
+		scope    Scope
+		selector Selector
+		check    Check
+	}{
+		{
+			name:     "project grant missing resource_kind",
+			scope:    ScopeProjectRead,
+			selector: Selector{SelectorKeyResourceID: WildcardResource},
+			check:    Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil},
+		},
+		{
+			name:     "project grant missing resource_id",
+			scope:    ScopeProjectRead,
+			selector: Selector{SelectorKeyResourceKind: ResourceKindProject},
+			check:    Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil},
+		},
+		{
+			name:     "server grant missing resource_kind",
+			scope:    ScopeMCPConnect,
+			selector: Selector{SelectorKeyResourceID: "server_123"},
+			check:    MCPCheck(ScopeMCPConnect, "server_123", "proj_123"),
+		},
+		{
+			name:     "server grant missing resource_id",
+			scope:    ScopeMCPConnect,
+			selector: Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyProjectID: "proj_123"},
+			check:    MCPCheck(ScopeMCPConnect, "server_123", "proj_123"),
+		},
+		{
+			name:     "grant with only a narrowing key",
+			scope:    ScopeOrgAdmin,
+			selector: Selector{SelectorKeyProjectID: "proj_123"},
+			check:    Check{Scope: ScopeOrgRead, ResourceKind: "", ResourceID: organizationID, Dimensions: nil},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			principal := urn.NewPrincipal(urn.PrincipalTypeRole, uuid.NewString())
+			seedGrantWithSelector(t, ctx, conn, organizationID, principal, tt.scope, tt.selector)
+
+			grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
+			require.NoError(t, err)
+			require.Len(t, grants, 1)
+			require.Equal(t, tt.selector, grants[0].Selector)
+
+			requireForbidden(t, engine.Require(GrantsToContext(ctx, grants), tt.check))
+			scoped := GrantsToScopedGrants(grants)
+			require.Len(t, scoped, 1)
+			require.NotNil(t, scoped[0].Selectors, "the grant must not be listed as unrestricted")
+		})
+	}
+}
+
 func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	t.Parallel()
 
