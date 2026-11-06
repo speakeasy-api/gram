@@ -67,7 +67,7 @@ const (
 	unknownTableCode = 60
 )
 
-// dropReason says why rows were not written.
+// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start rows.
 type dropReason string
 
 const (
@@ -508,8 +508,8 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats and rows past its queue share are held back and written later as a
-// count; a held key evicted before then is lost as repeats_lost. It reports capture/queue acceptance, not eventual persistence; held-back
-// and rejected rows return false.
+// count; a held key evicted before then is lost as repeats_lost. It reports capture/queue
+// acceptance, not eventual persistence; held-back and rejected rows return false.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
@@ -543,11 +543,11 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			return false
 		}
 	case held == limitOnce:
-		if r.queueReserved() {
-			r.dropLostRepeats(ctx, r.limiter.holdBack(row))
+		decision, stopped := r.admitOnce(row)
+		if stopped {
+			r.drop(ctx, dropShutdown, 1, nil)
 			return false
 		}
-		decision := r.limiter.take(row, time.Now())
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
 			return false
@@ -572,6 +572,20 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return false
 	}
 	return true
+}
+
+// admitOnce applies the Once limits under stopMu, so a row held back before stopping is in the final pass.
+func (r *Recorder) admitOnce(row Row) (decision onceDecision, stopped bool) {
+	r.stopMu.RLock()
+	defer r.stopMu.RUnlock()
+
+	if r.stopped {
+		return onceDecision{allowed: false, repeats: 0, lost: 0}, true
+	}
+	if r.queueReserved() {
+		return onceDecision{allowed: false, repeats: 0, lost: r.limiter.holdBack(row)}, false
+	}
+	return r.limiter.take(row, time.Now()), false
 }
 
 // enqueue holds the lock only for a non-blocking send, and reports any drop after releasing it.
@@ -787,11 +801,11 @@ func (r *Recorder) run() {
 	}
 }
 
-// surviving runs fn and counts its rows as dropped if it panics.
-func (r *Recorder) surviving(rows int, fn func()) {
+// surviving runs fn and counts its n events as dropped if it panics.
+func (r *Recorder) surviving(n int, fn func()) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			r.drop(context.Background(), dropPanic, rows, fmt.Errorf("connection events writer: %v", recovered))
+			r.drop(context.Background(), dropPanic, n, fmt.Errorf("connection events writer: %v", recovered))
 		}
 	}()
 	fn()
@@ -851,10 +865,10 @@ func (r *Recorder) countStep(ctx context.Context, row Row) {
 	))
 }
 
-func (r *Recorder) drop(ctx context.Context, reason dropReason, rows int, cause error) {
-	r.dropTotals[reason].Add(int64(rows))
+func (r *Recorder) drop(ctx context.Context, reason dropReason, n int, cause error) {
+	r.dropTotals[reason].Add(int64(n))
 	if r.dropped != nil {
-		r.dropped.Add(ctx, int64(rows), metric.WithAttributes(attr.ConnectionDropReason(string(reason))))
+		r.dropped.Add(ctx, int64(n), metric.WithAttributes(attr.ConnectionDropReason(string(reason))))
 	}
 	// Expected for any organization with logs off, so it is only counted.
 	if reason == dropLogsOff {

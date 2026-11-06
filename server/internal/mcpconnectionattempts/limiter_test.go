@@ -229,6 +229,23 @@ func TestOnce_AHeldBackRowCountsNoStep(t *testing.T) {
 	require.Zero(t, recorder.dropped(t, dropRateLimited), "held-back rows are not lost")
 }
 
+func TestOnce_AHeldBackRowAfterShutdownIsCounted(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+	scope := testScope()
+	for range onceKeyBurst {
+		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.False(t, recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest))
+	require.Equal(t, int64(onceKeyBurst), conn.rows.Load())
+	require.Equal(t, int64(1), recorder.droppedTotal(t))
+	require.Equal(t, int64(1), recorder.dropped(t, dropShutdown))
+}
+
 // A burst across keys stops at its share of the queue, leaving room for real attempts.
 func TestOnce_LeavesTheQueueReserveForRealAttempts(t *testing.T) {
 	t.Parallel()
