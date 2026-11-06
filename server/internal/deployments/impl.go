@@ -806,20 +806,51 @@ func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
 	span.SetAttributes(attr.ProjectID(projectID.String()))
 
-	tx := s.repo.WithTx(dbtx)
-
 	deploymentID, err := uuid.Parse(payload.DeploymentID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, logger)
 	}
 
-	if _, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(deploymentID)); err != nil {
+	return prepareRedeploy(ctx, s.tracer, logger, s.audit, dbtx, redeployRequest{
+		OrganizationID:     organizationID,
+		ProjectID:          projectID,
+		SourceDeploymentID: deploymentID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:   authCtx.Email,
+	})
+}
+
+// redeployRequest names the deployment to clone and who is cloning it.
+type redeployRequest struct {
+	// OrganizationID owns the project; it scopes the audit entry.
+	OrganizationID string
+
+	// ProjectID must own SourceDeploymentID.
+	ProjectID uuid.UUID
+
+	// SourceDeploymentID is the deployment cloned.
+	SourceDeploymentID uuid.UUID
+
+	// Actor is who the audit entry names.
+	Actor urn.Principal
+
+	// ActorDisplayName is how the audit entry renders Actor.
+	ActorDisplayName *string
+}
+
+// prepareRedeploy clones a deployment and records the audit entry in the
+// caller's transaction. Authorizing the caller is the caller's job.
+func prepareRedeploy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, auditLogger *audit.Logger, dbtx pgx.Tx, req redeployRequest) (*types.Deployment, error) {
+	span := trace.SpanFromContext(ctx)
+	tx := repo.New(dbtx)
+
+	if _, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(req.ProjectID), mv.DeploymentID(req.SourceDeploymentID)); err != nil {
 		return nil, err
 	}
 
 	newID, err := cloneDeployment(
-		ctx, s.tracer, logger, tx,
-		ProjectID(projectID), DeploymentID(deploymentID),
+		ctx, tracer, logger, tx,
+		ProjectID(req.ProjectID), DeploymentID(req.SourceDeploymentID),
 		[]upsertOpenAPIv3{},
 		[]upsertFunctions{},
 		[]upsertPackage{},
@@ -839,24 +870,24 @@ func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
 	span.SetAttributes(attr.DeploymentID(newID.String()))
 
-	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
+	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(req.ProjectID), mv.DeploymentID(newID))
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
+	if err := auditLogger.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+		OrganizationID: req.OrganizationID,
+		ProjectID:      req.ProjectID,
 
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
+		Actor:            req.Actor,
+		ActorDisplayName: req.ActorDisplayName,
 		ActorSlug:        nil,
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentURN: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(req.SourceDeploymentID),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, logger)
 	}
 
 	return dep, nil
@@ -906,7 +937,7 @@ func (s *Service) processRedeploy(ctx context.Context, deploymentID string, nonB
 	}
 
 	if dep.Status == "created" {
-		status, err := s.startDeploymentWithExpectedActive(ctx, logger, projectID, id, dep, nonBlocking, expectedActive)
+		status, err := startDeploymentWithExpectedActive(ctx, s.temporalEnv, logger, projectID, id, dep, nonBlocking, expectedActive)
 		if err != nil {
 			return nil, err
 		}
@@ -1027,13 +1058,13 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
-	return s.startDeploymentWithExpectedActive(ctx, logger, projectID, deploymentID, dep, nonBlocking, nil)
+	return startDeploymentWithExpectedActive(ctx, s.temporalEnv, logger, projectID, deploymentID, dep, nonBlocking, nil)
 }
 
-func (s *Service) startDeploymentWithExpectedActive(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool, expectedActive *uuid.UUID) (string, error) {
+func startDeploymentWithExpectedActive(ctx context.Context, temporalEnv *temporal.Environment, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool, expectedActive *uuid.UUID) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
-		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporalEnv, projectID)
+		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, temporalEnv, projectID)
 		if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
 			logger.ErrorContext(
 				ctx, "failed to start project-scoped functions reaper workflow",
@@ -1042,7 +1073,7 @@ func (s *Service) startDeploymentWithExpectedActive(ctx context.Context, logger 
 		}
 	}()
 
-	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporalEnv, background.ProcessDeploymentWorkflowParams{
+	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, temporalEnv, background.ProcessDeploymentWorkflowParams{
 		ProjectID:                  projectID,
 		DeploymentID:               deploymentID,
 		IdempotencyKey:             conv.PtrValOr(dep.IdempotencyKey, ""),
