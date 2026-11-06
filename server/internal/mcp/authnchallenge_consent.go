@@ -2224,9 +2224,13 @@ func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint
 		}
 	}
 
-	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
-	if err != nil {
-		return nil, err
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	var routing consentRouting
+	if member == nil || member.backend != metaMemberBackendProxied {
+		statuses, routing, err = s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
+		if err != nil {
+			return nil, err
+		}
 	}
 	resource := ""
 
@@ -2241,15 +2245,23 @@ func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint
 				ids = append(ids, client.ID)
 			}
 		}
-		unqualified := statuses
 		statuses, err = s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, *challengeState.Subject, member.projectID, endpoint.OrganizationID, ids, resource)
 		if err != nil {
 			return nil, fmt.Errorf("member remote session statuses: %w", err)
 		}
+		missing := make([]uuid.UUID, 0, len(ids))
 		for _, id := range ids {
-			if _, ok := statuses[id]; ok {
-				continue
+			if _, ok := statuses[id]; !ok {
+				missing = append(missing, id)
 			}
+		}
+		// This singleton metadata read supplies only a disconnected reconnect
+		// marker. It never supplies readiness, identity, or lifecycle actions.
+		unqualified, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, *challengeState.Subject, member.projectID, endpoint.OrganizationID, missing, "")
+		if err != nil {
+			return nil, fmt.Errorf("read disconnected connection markers: %w", err)
+		}
+		for _, id := range missing {
 			if elsewhere, ok := unqualified[id]; ok && elsewhere.Resource != "" {
 				// Only a reconnect marker, never another audience's grant details/actions.
 				var marker remotesessions.RemoteSessionState
