@@ -436,6 +436,10 @@ type Client struct {
 	// backfillMcpAuthGrants endpoint.
 	BackfillMcpAuthGrantsDoer goahttp.Doer
 
+	// BackfillMcpConnectGrants Doer is the HTTP client used to make requests to
+	// the backfillMcpConnectGrants endpoint.
+	BackfillMcpConnectGrantsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -561,6 +565,7 @@ func NewClient(
 		EnableUpstreamAuthEnforcementDoer:           doer,
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
+		BackfillMcpConnectGrantsDoer:                doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -3089,6 +3094,30 @@ func (c *Client) BackfillMcpAuthGrants() goa.Endpoint {
 		resp, err := c.BackfillMcpAuthGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "backfillMcpAuthGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BackfillMcpConnectGrants returns an endpoint that makes HTTP requests to the
+// admin service backfillMcpConnectGrants server.
+func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBackfillMcpConnectGrantsRequest(c.encoder)
+		decodeResponse = DecodeBackfillMcpConnectGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBackfillMcpConnectGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BackfillMcpConnectGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "backfillMcpConnectGrants", err)
 		}
 		return decodeResponse(resp)
 	}

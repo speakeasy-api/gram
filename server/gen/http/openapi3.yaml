@@ -878,6 +878,85 @@ paths:
             x-speakeasy-name-override: backfillMcpAuthGrants
             x-speakeasy-react-hook:
                 name: AdminBackfillMcpAuthGrants
+    /admin/mcpConnectGrants.backfill:
+        post:
+            description: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.
+            operationId: adminBackfillMcpConnectGrants
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BackfillMcpConnectGrantsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminBackfillMCPConnectGrantsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: backfillMcpConnectGrants admin
+            tags:
+                - admin
+            x-speakeasy-name-override: backfillMcpConnectGrants
+            x-speakeasy-react-hook:
+                name: AdminBackfillMcpConnectGrants
     /admin/onboarding.playbooks:
         get:
             description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -96305,6 +96384,25 @@ components:
                     format: int64
             required:
                 - granted
+        AdminBackfillMCPConnectGrantsResult:
+            type: object
+            properties:
+                extended:
+                    type: integer
+                    description: How many existing temporary mcp:connect grants were extended to last as long as the access they mirror.
+                    format: int64
+                inserted:
+                    type: integer
+                    description: How many mcp:connect grants were written.
+                    format: int64
+                taken_over:
+                    type: integer
+                    description: How many mcp:connect grants provisioned by the default auth permission backfill became explicit grants.
+                    format: int64
+            required:
+                - inserted
+                - extended
+                - taken_over
         AdminBulkUpdateAccountTypeResult:
             type: object
             properties:
@@ -102112,6 +102210,13 @@ components:
                 - name
                 - created_at
                 - updated_at
+        BackfillMcpConnectGrantsRequestBody:
+            type: object
+            properties:
+                created_before:
+                    type: string
+                    description: Only copy grants created before this time. Set it to when read and write stopped implying connect, so grants written since are left alone.
+                    format: date-time
         BaseResourceAttributes:
             type: object
             properties:
