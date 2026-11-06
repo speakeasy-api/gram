@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { StatRow } from "@/components/stat-row";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -15,6 +16,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { Spinner } from "@/components/ui/Spinner";
@@ -47,26 +49,9 @@ import { EvidenceTitle } from "./EvidenceTitle";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
-import { SignalTrend } from "./SignalsList";
+import { SignalTimeline } from "./SignalTimeline";
 
 const EVIDENCE_ROWS = 5;
-
-function StatCell({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <div className="border-border rounded-md border p-3">
-      <Text small muted>
-        {label}
-      </Text>
-      <div className="pt-1 text-lg font-semibold tabular-nums">{children}</div>
-    </div>
-  );
-}
 
 /**
  * Shows only the first item with the rest behind a "Show N more" control, so
@@ -226,17 +211,23 @@ function EvidenceRow({
 }
 
 /**
- * Slide-over detail for one signal: stats, top affected users, redacted
- * evidence, and the signal-level action — create an exclusion rule for the
+ * Slide-over detail for one signal: findings over time, stats, top affected
+ * users, redacted evidence, and the signal-level action — create an exclusion rule for the
  * whole rule cluster.
  */
 export function SignalDrawer({
   signal,
+  window,
+  rangeLabel,
   mcpServerId,
   onClose,
   mcpFindingNames,
 }: {
   signal: RiskSignal | null;
+  /** The page's window, which the signal's counts and sparkline cover. */
+  window: { from: Date; to: Date };
+  /** Name of that window, e.g. "last 7 days". */
+  rangeLabel: string;
   mcpServerId?: string;
   onClose: () => void;
   mcpFindingNames?: MCPFindingNames;
@@ -470,6 +461,61 @@ export function SignalDrawer({
                   </SheetDescription>
                 </SheetHeader>
                 <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
+                  <section className="space-y-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <span className="text-eyebrow">
+                        Findings · {rangeLabel}
+                      </span>
+                      <Text
+                        small
+                        muted
+                        className="font-mono"
+                        title={`First seen ${signal.firstSeen.toLocaleString()} · last seen ${signal.lastSeen.toLocaleString()}`}
+                      >
+                        First seen{" "}
+                        {formatDistanceToNow(signal.firstSeen, {
+                          addSuffix: true,
+                        })}{" "}
+                        · last{" "}
+                        {formatDistanceToNow(signal.lastSeen, {
+                          addSuffix: true,
+                        })}
+                      </Text>
+                    </div>
+                    <SignalTimeline
+                      sparkline={signal.sparkline}
+                      from={window.from}
+                      to={window.to}
+                      color={SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)]}
+                    />
+                  </section>
+
+                  <StatRow
+                    metrics={[
+                      {
+                        key: "findings",
+                        label: "Findings",
+                        value: signal.findings.toLocaleString(),
+                        tone: "neutral",
+                        size: "xs",
+                        description: `${signal.previousFindings.toLocaleString()} in the previous period`,
+                      },
+                      {
+                        key: "users",
+                        label: "Users",
+                        value: signal.users.toLocaleString(),
+                        tone: "neutral",
+                        size: "xs",
+                        // Teams stay at zero until findings carry team
+                        // attribution, so say nothing rather than "0 teams".
+                        description:
+                          signal.teams > 0
+                            ? `Across ${pluralize(signal.teams, "team")}`
+                            : undefined,
+                      },
+                    ]}
+                  />
+
                   <div className="flex flex-wrap items-center gap-2">
                     {judgeSignal ? (
                       <>
@@ -500,36 +546,12 @@ export function SignalDrawer({
                   </div>
                   <div className="relative flex-1">
                     <div className="space-y-6">
-                      <Text small muted>
-                        First seen {signal.firstSeen.toLocaleString()} · last{" "}
-                        {signal.lastSeen.toLocaleString()}
-                      </Text>
-
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <StatCell label="Users">{signal.users}</StatCell>
-                        <StatCell label="Findings">
-                          {signal.findings.toLocaleString()}
-                        </StatCell>
-                        <StatCell label="Teams">
-                          {signal.teams > 0 ? signal.teams : "-"}
-                        </StatCell>
-                        <StatCell label="Trend">
-                          <SignalTrend sparkline={signal.sparkline} />
-                        </StatCell>
-                      </div>
-                      {/* Windowed stats vs unwindowed evidence can disagree
-                          — say so. */}
-                      <Text small muted>
-                        Counts reflect the page's selected time window.
-                      </Text>
-
                       {signal.topUsers.length > 0 && (
                         <>
-                          <Separator />
                           <div className="space-y-2">
-                            <Text small muted className="font-medium uppercase">
-                              Top affected users
-                            </Text>
+                            <span className="text-eyebrow">
+                              Top affected users · {rangeLabel}
+                            </span>
                             <ExpandableList
                               key={`users-${signal.key}`}
                               items={signal.topUsers}
@@ -587,11 +609,14 @@ export function SignalDrawer({
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <Text small muted className="font-medium uppercase">
+                          {/* Evidence is deliberately unwindowed (see the
+                              query above), so it says so rather than
+                              borrowing the window named above it. */}
+                          <span className="text-eyebrow">
                             {rationaleSignal
-                              ? "Latest evidence"
-                              : "Latest evidence · redacted"}
-                          </Text>
+                              ? "Latest evidence · any time"
+                              : "Latest evidence · any time · redacted"}
+                          </span>
                           {!rationaleSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (

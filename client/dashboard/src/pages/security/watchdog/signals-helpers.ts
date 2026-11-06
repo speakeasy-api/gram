@@ -226,3 +226,34 @@ export function toggleFilterValue(
     ? selection.filter((entry) => entry !== value)
     : [...selection, value];
 }
+
+/** Server bucket count for signal sparklines (risk/signals_ch.go). */
+const SIGNAL_SPARK_BUCKETS = 24;
+
+/**
+ * Start time (ms) of each sparkline bucket, oldest first. Mirrors the server's
+ * bucketing in risk/signals_ch.go: width is the window split into 24 buckets
+ * (ceiling, whole seconds, at least 60s), and buckets are epoch-aligned, so the
+ * first one can start before `from`. The server sends only counts, so the
+ * timestamps are rebuilt here from the same window the page requested.
+ */
+export function signalBucketStarts(
+  from: Date,
+  to: Date,
+  length: number,
+): { starts: number[]; bucketMs: number } {
+  const windowSeconds = Math.trunc((to.getTime() - from.getTime()) / 1000);
+  const bucketSeconds = Math.max(
+    Math.floor(
+      (windowSeconds + SIGNAL_SPARK_BUCKETS - 1) / SIGNAL_SPARK_BUCKETS,
+    ),
+    60,
+  );
+  const fromSeconds = Math.floor(from.getTime() / 1000);
+  const alignedFrom = Math.floor(fromSeconds / bucketSeconds) * bucketSeconds;
+  const bucketMs = bucketSeconds * 1000;
+  return {
+    starts: Array.from({ length }, (_, i) => alignedFrom * 1000 + i * bucketMs),
+    bucketMs,
+  };
+}

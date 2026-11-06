@@ -609,6 +609,8 @@ function WatchdogContent(): JSX.Element {
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
+            window={window}
+            rangeLabel={rangeLabel}
             mcpFindingNames={mcpFindingNames}
             mcpServerId={mcpServerId || undefined}
             onClose={() => setUrlParam("signal", null)}
