@@ -404,10 +404,11 @@ export function CredentialsWizard({
     throwOnError: false,
   });
   // `null` only once a read confirms there is no live key; `undefined` while
-  // the list is not read, loading or failed, so the step claims neither.
+  // the list is not read, loading or failed, so the step claims neither. A
+  // disabled query still reports a list cached before authorize was lost.
   const existingKey = useMemo(() => {
     if (!existing) return null;
-    if (!agentKeys.isSuccess) return undefined;
+    if (!agent.permissions.authorize || !agentKeys.isSuccess) return undefined;
     const now = Date.now();
     const live = agentKeys.data.keys.filter(
       (key) => !key.expiresAt || key.expiresAt.getTime() > now,
@@ -418,7 +419,7 @@ export function CredentialsWizard({
       .filter((at): at is Date => at !== undefined)
       .sort((a, b) => b.getTime() - a.getTime())[0];
     return { lastUsedAt };
-  }, [existing, agentKeys.isSuccess, agentKeys.data]);
+  }, [existing, agent, agentKeys.isSuccess, agentKeys.data]);
 
   // Opened for a named platform: the credential is settled and the agent is
   // named after what will be signing in, so the flow starts at the servers —
