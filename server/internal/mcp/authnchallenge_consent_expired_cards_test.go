@@ -284,7 +284,12 @@ func requireVerifyNotice(t *testing.T, fx validationFixture, clientID uuid.UUID,
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.True(t, strings.HasPrefix(location, consentPagePath(fx)+"&consent=required&validate_failed="+clientID.String()), location)
+	base := consentPagePath(fx) + "&consent=required&validate_failed=" + clientID.String()
+	require.Contains(t, []string{
+		base,
+		base + "&validate_notice=" + "reconnect",
+		base + "&validate_notice=" + "ours",
+	}, location)
 	require.Contains(t, renderConsentAt(t, fx, location), want)
 	if fx.member != nil {
 		require.Empty(t, fx.member.drain(), "no probe reached the member")
