@@ -15,12 +15,20 @@ import (
 const autoAttachMemberProviderClient = `-- name: AutoAttachMemberProviderClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT c.id, $1
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS l
-  ON l.remote_session_client_id = c.id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+JOIN mcp_servers AS s
+  ON s.id = a.mcp_server_id
+ AND s.project_id = a.project_id
 JOIN projects AS p
   ON p.id = $2
-WHERE l.user_session_issuer_id = $3
+LEFT JOIN remote_session_client_user_session_issuers AS own
+  ON own.remote_session_client_id = c.id
+ AND own.user_session_issuer_id = s.user_session_issuer_id
+WHERE a.mcp_server_id = $3
+  AND a.project_id = $2
+  AND a.deleted IS FALSE
   AND c.remote_session_issuer_id = $4
   AND c.deleted IS FALSE
   AND (c.project_id = $2
@@ -34,7 +42,7 @@ WHERE l.user_session_issuer_id = $3
     WHERE l2.user_session_issuer_id = $1
       AND c2.remote_session_issuer_id = $4
   )
-ORDER BY c.created_at
+ORDER BY own.remote_session_client_id IS NULL, c.created_at
 LIMIT 1
 ON CONFLICT DO NOTHING
 `
@@ -42,20 +50,22 @@ ON CONFLICT DO NOTHING
 type AutoAttachMemberProviderClientParams struct {
 	GatewayIssuerID uuid.UUID
 	ProjectID       uuid.UUID
-	MemberIssuerID  uuid.UUID
+	MemberServerID  uuid.UUID
 	RemoteIssuerID  uuid.UUID
 }
 
-// Bind the member's upstream OAuth client to the gateway's issuer so consent
-// can offer the member's provider. No-op when the gateway's issuer already
-// holds a client for that upstream (one client per upstream per issuer), or
-// when the member has no derivable client. Tenancy mirrors the resync
+// Bind the client the member is associated with to the gateway's issuer so
+// consent can offer the member's provider. A member can hold several clients
+// of one upstream, one per gateway it joined, so the client on its own issuer
+// wins, then the oldest. No-op when the gateway's issuer already holds a client
+// for that upstream (one client per upstream per issuer), or when the member
+// has no live association to the upstream. Tenancy mirrors the resync
 // derivation: the member's own project client, or an org-level client.
 func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAttachMemberProviderClientParams) (int64, error) {
 	result, err := q.db.Exec(ctx, autoAttachMemberProviderClient,
 		arg.GatewayIssuerID,
 		arg.ProjectID,
-		arg.MemberIssuerID,
+		arg.MemberServerID,
 		arg.RemoteIssuerID,
 	)
 	if err != nil {
@@ -76,9 +86,19 @@ WHERE l.remote_session_client_id = c.id
     -- the anti-join off a cross-tenant sequential scan.
     SELECT 1
     FROM mcp_servers AS s
+    JOIN mcp_server_remote_session_clients AS a
+      ON a.mcp_server_id = s.id
+     AND a.project_id = s.project_id
+     AND a.deleted IS FALSE
+    JOIN remote_session_clients AS consumer_client
+      ON consumer_client.id = a.remote_session_client_id
+     AND consumer_client.remote_session_issuer_id = $2
+     AND consumer_client.deleted IS FALSE
+    JOIN remote_session_issuers AS provider
+      ON provider.id = consumer_client.remote_session_issuer_id
+     AND provider.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND s.project_id = $3
-      AND s.remote_session_issuer_id = $2
       AND (
         s.user_session_issuer_id = $1
         OR EXISTS (
@@ -611,18 +631,31 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 }
 
 const listMemberProviderIdentities = `-- name: ListMemberProviderIdentities :many
-SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
+SELECT i.id AS remote_session_issuer_id, s.id AS mcp_server_id
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
  AND s.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+    WHERE a.mcp_server_id = s.id
+      AND a.deleted IS FALSE
+  )
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
-  AND s.remote_session_issuer_id IS NOT NULL
   AND s.user_session_issuer_id IS NOT NULL
-ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id
+ORDER BY i.id, s.id
 `
 
 type ListMemberProviderIdentitiesParams struct {
@@ -631,13 +664,14 @@ type ListMemberProviderIdentitiesParams struct {
 }
 
 type ListMemberProviderIdentitiesRow struct {
-	RemoteSessionIssuerID uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+	McpServerID           uuid.UUID
 }
 
-// Distinct provider identity pairs across a meta server's live members, for
-// re-running consent wiring when the gateway's issuer changes. Ordered so
-// callers take the per-remote-issuer binding locks deterministically.
+// Each live member's provider, for re-running consent wiring when the gateway's issuer changes. The provider
+// comes from the member's live client associations; a member with none or
+// several is left out. Ordered so callers take the per-remote-issuer binding
+// locks deterministically.
 func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemberProviderIdentitiesParams) ([]ListMemberProviderIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listMemberProviderIdentities, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -647,7 +681,7 @@ func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemb
 	var items []ListMemberProviderIdentitiesRow
 	for rows.Next() {
 		var i ListMemberProviderIdentitiesRow
-		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UserSessionIssuerID); err != nil {
+		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.McpServerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

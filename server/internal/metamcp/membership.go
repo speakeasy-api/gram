@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -237,35 +238,18 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	}
 
 	// Best-effort consent wiring: when both sides have the identity pieces —
-	// the gateway an issuer, the member a stamped upstream AS with a client —
-	// bind that client to the gateway's issuer so consent offers the member's
-	// provider without a manual attach ceremony.
-	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
-		// No DB constraint enforces one client per (issuer, upstream); every
-		// client-binding writer serializes on this advisory lock instead.
-		if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); err != nil {
-			return AddedMember{}, fmt.Errorf("lock remote session issuer for client binding: %w", err)
-		}
-		attached, err := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
-			GatewayIssuerID: meta.UserSessionIssuerID.UUID,
-			ProjectID:       actor.ProjectID,
-			MemberIssuerID:  server.UserSessionIssuerID.UUID,
-			RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
-		})
+	// the gateway an issuer, the member one upstream provider and an issuer —
+	// bind the provider's client to the gateway's issuer so consent offers the
+	// member's provider without a manual attach ceremony.
+	if meta.UserSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
+		upstream, err := upstreamclients.ServerUpstreamIssuers(ctx, tx, actor.ProjectID, server.ID)
 		if err != nil {
-			return AddedMember{}, fmt.Errorf("attach member provider client: %w", err)
+			return AddedMember{}, fmt.Errorf("read member upstream issuers: %w", err)
 		}
-		if attached > 0 {
-			w.Logger.InfoContext(ctx, "attached member provider client to meta mcp issuer",
-				attr.SlogMetaMcpServerID(meta.ID.String()),
-				attr.SlogMcpServerID(server.ID.String()))
-		} else {
-			// No bindable client, or the upstream is already bound: either
-			// way the skip should be visible, matching autoConfigureAuth's
-			// every-skip-has-a-reason posture.
-			w.Logger.InfoContext(ctx, "no member provider client attached to meta mcp issuer",
-				attr.SlogMetaMcpServerID(meta.ID.String()),
-				attr.SlogMcpServerID(server.ID.String()))
+		if provider := upstream.Sole(); provider.Valid {
+			if err := w.attachMemberProviderClient(ctx, tx, actor, meta, server, provider.UUID); err != nil {
+				return AddedMember{}, err
+			}
 		}
 	}
 
@@ -273,6 +257,60 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 		return AddedMember{}, fmt.Errorf("log meta mcp member addition: %w", err)
 	}
 	return AddedMember{Member: member, Server: server}, nil
+}
+
+// attachMemberProviderClient binds the client the member is associated with
+// for provider to the gateway's issuer.
+func (w GatewayWriter) attachMemberProviderClient(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, server mcpserversrepo.McpServer, provider uuid.UUID) error {
+	// No DB constraint enforces one client per (issuer, upstream); every
+	// client-binding writer serializes on this advisory lock instead.
+	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, provider); err != nil {
+		return fmt.Errorf("lock remote session issuer for client binding: %w", err)
+	}
+	attached, err := repo.New(tx).AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
+		GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+		ProjectID:       actor.ProjectID,
+		MemberServerID:  server.ID,
+		RemoteIssuerID:  provider,
+	})
+	if err != nil {
+		return fmt.Errorf("attach member provider client: %w", err)
+	}
+	if attached > 0 {
+		w.Logger.InfoContext(ctx, "attached member provider client to meta mcp issuer",
+			attr.SlogMetaMcpServerID(meta.ID.String()),
+			attr.SlogMcpServerID(server.ID.String()))
+		return nil
+	}
+	// No bindable client, or the upstream is already bound: either way the
+	// skip should be visible, matching autoConfigureAuth's every-skip-has-a-reason
+	// posture.
+	w.Logger.InfoContext(ctx, "no member provider client attached to meta mcp issuer",
+		attr.SlogMetaMcpServerID(meta.ID.String()),
+		attr.SlogMcpServerID(server.ID.String()))
+	return nil
+}
+
+// detachMemberProviderClient unbinds provider's client from the gateway's
+// issuer unless another consumer of that issuer still fronts the provider.
+func (w GatewayWriter) detachMemberProviderClient(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, server mcpserversrepo.McpServer, provider uuid.UUID) error {
+	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, provider); err != nil {
+		return fmt.Errorf("lock remote session issuer for client binding: %w", err)
+	}
+	detached, err := repo.New(tx).AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
+		GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+		RemoteIssuerID:  provider,
+		ProjectID:       actor.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("detach member provider client: %w", err)
+	}
+	if detached > 0 {
+		w.Logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
+			attr.SlogMetaMcpServerID(meta.ID.String()),
+			attr.SlogMcpServerID(server.ID.String()))
+	}
+	return nil
 }
 
 // RemoveMember removes one membership of a gateway.
@@ -307,22 +345,15 @@ func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor,
 			// server deletion); its binding is cleaned up on that path.
 		case err != nil:
 			return repo.MetaMcpServerMember{}, fmt.Errorf("load removed member server: %w", err)
-		case server.RemoteSessionIssuerID.Valid:
-			if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); err != nil {
-				return repo.MetaMcpServerMember{}, fmt.Errorf("lock remote session issuer for client binding: %w", err)
-			}
-			detached, err := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
-				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
-				RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
-				ProjectID:       actor.ProjectID,
-			})
+		default:
+			upstream, err := upstreamclients.ServerUpstreamIssuers(ctx, tx, actor.ProjectID, server.ID)
 			if err != nil {
-				return repo.MetaMcpServerMember{}, fmt.Errorf("detach member provider client: %w", err)
+				return repo.MetaMcpServerMember{}, fmt.Errorf("read removed member upstream issuers: %w", err)
 			}
-			if detached > 0 {
-				w.Logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
-					attr.SlogMetaMcpServerID(meta.ID.String()),
-					attr.SlogMcpServerID(server.ID.String()))
+			if provider := upstream.Sole(); provider.Valid {
+				if err := w.detachMemberProviderClient(ctx, tx, actor, meta, server, provider.UUID); err != nil {
+					return repo.MetaMcpServerMember{}, err
+				}
 			}
 		}
 	}

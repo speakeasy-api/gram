@@ -2,10 +2,12 @@ package upstreamclients_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -15,10 +17,12 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	oktarepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type issuerFixture struct {
@@ -48,9 +52,14 @@ func newIssuerFixture(t *testing.T, ctx context.Context) issuerFixture {
 	require.NoError(t, err)
 	backendID, err := oktarepo.New(conn).CreateRemoteBackendFixture(ctx, oktarepo.CreateRemoteBackendFixtureParams{ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug), Url: "https://" + slug + ".example/mcp"})
 	require.NoError(t, err)
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: projectID, OrganizationID: conv.ToPGText(organizationID), Slug: slug, AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
-		RemoteMcpServerID: conv.ToNullUUID(backendID), Visibility: "private",
+		RemoteMcpServerID: conv.ToNullUUID(backendID), UserSessionIssuerID: conv.ToNullUUID(issuer.ID), Visibility: "private",
 	})
 	require.NoError(t, err)
 	return issuerFixture{conn: conn, organizationID: organizationID, projectID: projectID, serverID: server.ID}
@@ -58,7 +67,9 @@ func newIssuerFixture(t *testing.T, ctx context.Context) issuerFixture {
 
 func (f issuerFixture) addProvider(t *testing.T, ctx context.Context) uuid.UUID {
 	t.Helper()
-	return provisiontest.CreateIssuer(t, ctx, f.conn, f.organizationID, conv.ToNullUUID(f.projectID), "https://as.example/token")
+	provider := provisiontest.CreateIssuer(t, ctx, f.conn, f.organizationID, conv.ToNullUUID(f.projectID), "https://as.example/token")
+	require.NoError(t, testrepo.New(f.conn).SetPreparationFixtureIssuerCapability(ctx, testrepo.SetPreparationFixtureIssuerCapabilityParams{ID: provider, ProjectID: conv.ToNullUUID(f.projectID)}))
+	return provider
 }
 
 func (f issuerFixture) addClient(t *testing.T, ctx context.Context, providerID uuid.UUID) uuid.UUID {
@@ -99,6 +110,43 @@ var upstreamIssuerReaders = map[string]func(t *testing.T, ctx context.Context, f
 		sole, err := testrepo.New(f.conn).GetMCPServerSoleUpstreamIssuerFixture(ctx, f.serverID)
 		require.NoError(t, err)
 		return sole
+	},
+	"ListEligibleServers": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
+		t.Helper()
+		rows, err := oktarepo.New(f.conn).ListEligibleServers(ctx, f.organizationID)
+		require.NoError(t, err)
+		for _, row := range rows {
+			if row.ID == f.serverID {
+				return uuid.NullUUID{UUID: row.IssuerID, Valid: true}
+			}
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	},
+	"GetEligibleServer": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
+		t.Helper()
+		row, err := oktarepo.New(f.conn).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: f.organizationID, McpServerID: f.serverID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		}
+		require.NoError(t, err)
+		return uuid.NullUUID{UUID: row.IssuerID, Valid: true}
+	},
+	"ListMemberProviderIdentities": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
+		t.Helper()
+		queries := metamcprepo.New(f.conn)
+		gateway, err := queries.CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+			OrganizationID: f.organizationID, ProjectID: f.projectID, Name: "gateway-" + uuid.NewString()[:8], Visibility: "private",
+		})
+		require.NoError(t, err)
+		_, err = queries.CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{ProjectID: f.projectID, MetaMcpServerID: gateway.ID, McpServerID: f.serverID})
+		require.NoError(t, err)
+		identities, err := queries.ListMemberProviderIdentities(ctx, metamcprepo.ListMemberProviderIdentitiesParams{MetaMcpServerID: gateway.ID, ProjectID: f.projectID})
+		require.NoError(t, err)
+		if len(identities) == 0 {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		}
+		require.Len(t, identities, 1)
+		return uuid.NullUUID{UUID: identities[0].RemoteSessionIssuerID, Valid: true}
 	},
 }
 
