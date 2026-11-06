@@ -632,34 +632,59 @@ func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
 		}},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx, ti := newTestService(t)
-			orgID := activeOrganizationID(t, ctx)
-			projectID := projectIDFromContext(t, ctx)
-			enforceUpstreamAuth(t, ctx, ti.conn, orgID)
-			shared := seedSharedIssuerOn(t, ctx, ti, "rollback", "", tc.issuer(t, ctx, ti))
-			providerID := createServerIdentityProvider(t, ctx, ti, "rollback-second-provider", "", false, []string{"none"})
-			result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(shared.second, providerID, "rollback-second-client"))
-			require.NoError(t, err)
-			secondClient, err := uuid.Parse(result.Client.ID)
-			require.NoError(t, err)
-			_, err = productfeaturesrepo.New(ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
-				OrganizationID: orgID,
-				FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
-			})
-			require.NoError(t, err)
-			if tc.deleteFirst {
-				_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
-				require.NoError(t, err)
+		for _, enabled := range []bool{true, false} {
+			state := "disabled"
+			if enabled {
+				state = "enabled"
 			}
+			t.Run(tc.name+"/"+state, func(t *testing.T) {
+				t.Parallel()
 
-			require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
+				ctx, ti := newTestService(t)
+				orgID := activeOrganizationID(t, ctx)
+				projectID := projectIDFromContext(t, ctx)
+				enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+				shared := seedSharedIssuerOn(t, ctx, ti, "rollback", "", tc.issuer(t, ctx, ti))
+				providerID := createServerIdentityProvider(t, ctx, ti, "rollback-second-provider", "", false, []string{"none"})
+				result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(shared.second, providerID, "rollback-second-client"))
+				require.NoError(t, err)
+				secondClient, err := uuid.Parse(result.Client.ID)
+				require.NoError(t, err)
+				queries := authclientsrepo.New(ti.conn)
+				listParams := authclientsrepo.ListServerAuthClientsParams{McpServerID: shared.second, ProjectID: projectID, OrganizationID: orgID}
+				offers, err := queries.ListServerAuthClients(ctx, listParams)
+				require.NoError(t, err)
+				require.Len(t, offers, 1)
+				if !enabled {
+					_, err = queries.UpdateAuthClient(ctx, authclientsrepo.UpdateAuthClientParams{Name: offers[0].Name, Enabled: false, ID: offers[0].ID, OrganizationID: orgID})
+					require.NoError(t, err)
+				}
+				_, err = productfeaturesrepo.New(ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+					OrganizationID: orgID,
+					FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+				})
+				require.NoError(t, err)
+				if tc.deleteFirst {
+					_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
+					require.NoError(t, err)
+				}
 
-			require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
-			requireOfferedOnServerOnly(t, ctx, ti, shared.second, secondClient, shared.userIssuerID)
-		})
+				require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
+
+				require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
+				// Disabling an explicit registration is not consent to route the
+				// issuer's different credentials to this server after rollback.
+				requireClientBound(t, ctx, ti, secondClient, shared.userIssuerID, false)
+				require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, shared.second))
+				offers, err = queries.ListServerAuthClients(ctx, listParams)
+				require.NoError(t, err)
+				require.Len(t, offers, 1)
+				require.Equal(t, conv.ToNullUUID(secondClient), offers[0].RemoteSessionClientID)
+				require.Equal(t, authz.AuthClientTypeRemoteSession, offers[0].ClientType)
+				require.Equal(t, "admin", offers[0].Source)
+				require.Equal(t, enabled, offers[0].Enabled)
+			})
+		}
 	}
 }
 

@@ -38,6 +38,8 @@ DO UPDATE SET updated_at = clock_timestamp();
 -- or a server-only identity commit gave an offer for another registration, since
 -- a binding on its issuer is not meant for it; a caller that has just configured
 -- the binding for this server clears it.
+-- Disabled admin offers still record explicit routing intent. Disabling that
+-- registration must not authorize capture of a different issuer-bound client.
 --
 -- Tenancy: the ids arrive from callers that already hold the issuer, but are
 -- re-pinned to the caller's project and organization so a foreign id writes
