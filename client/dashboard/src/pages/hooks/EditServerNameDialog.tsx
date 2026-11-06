@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -196,10 +197,7 @@ export function EditServerNameDialog({
                         className="h-7 shrink-0 px-2"
                       >
                         {deletingIds.has(server.id) ? (
-                          <Icon
-                            name="loader-circle"
-                            className="size-3 animate-spin"
-                          />
+                          <Spinner className="mr-0 size-3" />
                         ) : (
                           <Icon name="trash" className="size-3" />
                         )}
@@ -295,10 +293,7 @@ export function EditServerNameDialog({
             >
               {isDeleting ? (
                 <>
-                  <Icon
-                    name="loader-circle"
-                    className="mr-2 size-4 animate-spin"
-                  />
+                  <Spinner className="size-4" />
                   Removing...
                 </>
               ) : (
@@ -319,10 +314,7 @@ export function EditServerNameDialog({
           >
             {isUpserting ? (
               <>
-                <Icon
-                  name="loader-circle"
-                  className="mr-2 size-4 animate-spin"
-                />
+                <Spinner className="size-4" />
                 Saving...
               </>
             ) : (

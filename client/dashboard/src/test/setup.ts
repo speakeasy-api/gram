@@ -1,5 +1,17 @@
 import { format } from "node:util";
-import { beforeEach } from "vitest";
+import { createElement } from "react";
+import { beforeEach, vi } from "vitest";
+
+// The Rive runtime fetches and compiles WebAssembly, which the test DOM
+// cannot run. Render the logo loader as a plain canvas instead.
+vi.mock("@rive-app/react-canvas", () => ({
+  Rive: {},
+  RuntimeLoader: { setWasmUrl: () => {}, setWasmFallbackUrl: () => {} },
+  useRive: () => ({
+    rive: null,
+    RiveComponent: (props: object) => createElement("canvas", props),
+  }),
+}));
 
 // happy-dom 21 rejects Animation.finished on cancel() without marking the
 // promise handled, so animations that motion stops mid-flight surface as

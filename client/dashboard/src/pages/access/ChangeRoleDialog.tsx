@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -23,7 +24,7 @@ import {
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { memberRoleSource, shortMemberRoleSource } from "@/lib/member-roles";
 import {
@@ -234,7 +235,7 @@ export function ChangeRoleDialog({
               <Button onClick={handleUpdate} disabled={updateDisabled}>
                 {updateMemberRoles.isPending && (
                   <Button.LeftIcon>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner className="mr-0" />
                   </Button.LeftIcon>
                 )}
                 <Button.Text>

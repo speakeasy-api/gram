@@ -416,6 +416,11 @@ const (
 	// from remote_session_misconfigured because no caller connects that
 	// credential, so the answer carries no challenge.
 	issuerGateReasonClientCredentialMisconfigured = "client_credential_misconfigured"
+
+	// issuerGateReasonRemoteSessionResolveFailed: the bearer token was
+	// accepted but resolving the upstream remote session failed with a 500.
+	// Only the connection row carries it; it is not counted as a rejection.
+	issuerGateReasonRemoteSessionResolveFailed = "remote_session_resolve_failed"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -1049,6 +1054,11 @@ type issuerGateAuthentication struct {
 	// directWorkloadHandoff is enabled only by direct proxy dispatch.
 	directWorkloadHandoff bool
 
+	// ownClientsOnly limits a caller with no chosen client to the clients of
+	// the proxied server being served, rather than every client the issuer
+	// binds, which may belong to other servers sharing it.
+	ownClientsOnly bool
+
 	// chosenClient narrows upstream resolution to the one client the
 	// credential chose for the endpoint's server; invalid resolves every
 	// client the issuer binds unless chosenNoAuth is set.
@@ -1240,6 +1250,7 @@ func (s *Service) authenticateIssuerGate(
 
 		refreshableUserSession: refreshableUserSession,
 		directWorkloadHandoff:  false,
+		ownClientsOnly:         false,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
@@ -1276,7 +1287,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		}
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+			return nil, s.remoteSessionResolveFailed(ctx, s.logger, authentication, err)
 		}
 		return tokens, nil
 	}
@@ -1335,7 +1346,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		}
 		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	default:
-		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+		return s.remoteSessionResolveFailed(ctx, s.logger, authentication, err)
 	}
 }
 
@@ -1382,10 +1393,24 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogUserSessionSubjectKind(string(authentication.subject.Kind)),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+	s.recordRemoteSessionOutcome(ctx, authentication, reason, code, causes...)
+}
+
+// remoteSessionResolveFailed records an upstream remote session the gate
+// could not resolve and returns the logged 500.
+func (s *Service) remoteSessionResolveFailed(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication, err error) error {
+	s.recordRemoteSessionOutcome(ctx, authentication, issuerGateReasonRemoteSessionResolveFailed, resolveFailureHappened(err), err)
+	return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+}
+
+// recordRemoteSessionOutcome writes the request row for an upstream remote
+// session the gate could not use, unless a refresh already wrote it.
+func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication *issuerGateAuthentication, reason string, code mcpconnectionattempts.Code, causes ...error) {
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
 	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
 		return
 	}
+	endpoint := authentication.endpoint
 	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
 		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))

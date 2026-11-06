@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
@@ -12,7 +13,6 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { ThresholdConfig } from "./chartUtils";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
 export type StatTileProps = {
@@ -126,9 +126,9 @@ export function StatTile(props: StatTileProps): JSX.Element {
       )}
       {icon &&
         (isRefreshing ? (
-          <Loader2
-            aria-label={`Refreshing ${title}`}
-            className="text-muted-foreground size-3 animate-spin"
+          <Spinner
+            label={`Refreshing ${title}`}
+            className="text-muted-foreground mr-0 size-3"
           />
         ) : (
           <Icon name={icon} className="text-muted-foreground size-3" />

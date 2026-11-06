@@ -576,6 +576,15 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		}
 		return tokens, nil
 	}
+	if authentication.ownClientsOnly {
+		if serverID := endpoint.proxiedServerID(); serverID.Valid {
+			tokens, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
+			if err != nil {
+				return nil, fmt.Errorf("resolve server clients: %w", err)
+			}
+			return tokens, nil
+		}
+	}
 	if skipUnusable {
 		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 		if err != nil {
@@ -1254,11 +1263,13 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 // derived authorization server. A member with no associated client that
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.
+// A member whose clients are its typed registrations signs in only through
+// those.
 func memberNeedsSignIn(member metaMember) bool {
 	if len(member.associatedClients) > 0 {
 		return true
 	}
-	return member.remoteSessionIssuerID.Valid
+	return !member.typedRegistrations && member.remoteSessionIssuerID.Valid
 }
 
 // agentKeyMemberChoices serves the agent gateway members an agent key was set

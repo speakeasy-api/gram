@@ -2164,10 +2164,10 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 
 // ReapInactiveAssistantRuntimesParams configures one janitor sweep.
 type ReapInactiveAssistantRuntimesParams struct {
-	// InactivityThreshold is the minimum quiet period before an assistant's
-	// runtime rows become candidates for collection. The query compares
-	// against r.updated_at across all of an assistant's rows so a normal
-	// cold-warm-cold cycle keeps the assistant out of the candidate set.
+	// InactivityThreshold is the minimum assistant-wide quiet period for
+	// orphan collection. The query compares r.updated_at across all of an
+	// assistant's rows so a normal cold-warm-cold cycle delays orphan cleanup.
+	// Superseded-backend and retired Kit candidates bypass this threshold.
 	InactivityThreshold time.Duration
 	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
 	// activity duration bounded under Temporal's StartToCloseTimeout.
@@ -2179,10 +2179,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
 // runtime rows that are finalized (soft-deleted or ended) or belong to a
-// soft-deleted assistant, whose owning assistant has had no recorded
+// soft-deleted assistant or project, whose owning assistant has had no recorded
 // activity within InactivityThreshold, and tears down the backend resources
-// their Stop/Reap left behind. A live row under a live assistant is never a
-// candidate: an idle runtime keeps its VM until the assistant is deleted.
+// their Stop/Reap left behind. A live row under a live assistant and project is
+// never an orphan candidate: inactivity alone does not discard its workspace.
+// The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")

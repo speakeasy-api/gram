@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -223,8 +224,8 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
-			if len(tools) > 10000 {
-				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+			if len(tools) > toolfilter.MaxTools {
+				return nil, nil, oops.E(oops.CodeRequestTooLarge, errConsentInventoryTooManyTools, "gateway inventory exceeds %d tools", toolfilter.MaxTools)
 			}
 		}
 	}

@@ -7,6 +7,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ChevronRight, KeyRound, Waypoints } from "lucide-react";
@@ -138,7 +139,13 @@ function PlatformPresets({
       </div>
     );
   }
-  if (isPending) return <Text muted>Loading platforms…</Text>;
+  if (isPending)
+    return (
+      <>
+        <Skeleton label="Loading platforms" className="h-20 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </>
+    );
   return (
     <>
       {entries.map((entry) => {

@@ -650,6 +650,13 @@ const ROUTE_STRUCTURE = {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
+    // Layout route: renders the signal list (index) or one signal's detail.
+    subPages: {
+      signal: {
+        title: "Signal",
+        url: ":ruleId",
+      },
+    },
   },
   // Retired page: old links and bookmarks, including its drill-downs, land on
   // Watchdog.

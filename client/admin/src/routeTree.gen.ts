@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
-import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-migration'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
@@ -59,11 +58,6 @@ const IndexRoute = IndexRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExternalMcpMigrationRoute = ExternalMcpMigrationRouteImport.update({
-  id: '/external-mcp-migration',
-  path: '/external-mcp-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FleetHealthRoute = FleetHealthRouteImport.update({
@@ -277,7 +271,6 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -320,7 +313,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -356,7 +348,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -401,7 +392,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -444,7 +434,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -479,7 +468,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -523,7 +511,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
-  ExternalMcpMigrationRoute: typeof ExternalMcpMigrationRoute
   FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
@@ -553,13 +540,6 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/external-mcp-migration': {
-      id: '/external-mcp-migration'
-      path: '/external-mcp-migration'
-      fullPath: '/external-mcp-migration'
-      preLoaderRoute: typeof ExternalMcpMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fleet-health': {
@@ -975,7 +955,6 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomerUsageRoute: CustomerUsageRoute,
-  ExternalMcpMigrationRoute: ExternalMcpMigrationRoute,
   FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,

@@ -141,7 +141,9 @@ describe("OrganizationGatewayConnectorSection", () => {
 
     renderSection();
 
-    expect(screen.getByText(/Loading the Organization Gateway/)).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: /Loading the Organization Gateway/ }),
+    ).toBeTruthy();
     expectNoUrlOrSteps();
   });
 

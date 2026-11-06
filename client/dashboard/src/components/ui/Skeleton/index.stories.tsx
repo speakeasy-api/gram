@@ -25,6 +25,15 @@ export const FromChildren: Story = {
   ),
 };
 
+export const AnnouncedLoading: Story = {
+  render: () => (
+    <Skeleton label="Loading activity">
+      <div className="h-12 w-96" />
+      <div className="h-12 w-96" />
+    </Skeleton>
+  ),
+};
+
 export const Paragraph: Story = {
   render: () => (
     <div className="w-96">

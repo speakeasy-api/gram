@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { IdentityLink } from "@/components/identity-link";
 import {
   EvidenceGroup,
@@ -34,7 +35,7 @@ import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/
 import { useStartMcpResearchMutation } from "@gram/client/react-query/startMcpResearch.js";
 import { RequireScope } from "@/components/require-scope";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -538,7 +539,7 @@ function ResearchReports({
         >
           {running && (
             <Button.LeftIcon>
-              <Loader2 className="animate-spin" />
+              <Spinner className="mr-0" />
             </Button.LeftIcon>
           )}
           <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
@@ -626,9 +627,7 @@ function ResearchReportCard({
     <div className="border-border border p-2.5 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 font-medium">
-          {report.status === "running" && (
-            <Loader2 className="size-3 animate-spin" />
-          )}
+          {report.status === "running" && <Spinner className="mr-0 size-3" />}
           {reportStatusLabel(report.status)}
         </span>
         <span className="text-muted-foreground shrink-0 text-xs">
