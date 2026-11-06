@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -808,9 +809,10 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			if tc.providedBy != "" {
 				setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, tc.providedBy)
 			}
+			key := ti.createTestAPIKey(ctx, t)
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
-			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
+			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
 			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
@@ -819,6 +821,68 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
+}
+
+// Only an identified caller's tool calls record, as on direct servers: handshakes,
+// notifications and anonymous callers still get the 401 but write no row.
+func TestDirectHostedMissingSecurityRecordsOnlyIdentifiedToolCalls(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		body      []byte
+		anonymous bool
+	}{
+		{name: "initialize", body: makeInitializeBody()},
+		{name: "notification", body: []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)},
+		{name: "tools list", body: []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)},
+		{name: "anonymous tools call", body: makeToolsCallBody("test_tool"), anonymous: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+			ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+			setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, "user")
+			key := ""
+			if !tc.anonymous {
+				key = ti.createTestAPIKey(ctx, t)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, tc.body, key, nil)
+			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+			rec.RequireNothing()
+		})
+	}
+}
+
+// Our own failure during the security check writes a row naming us.
+func TestDirectHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	key := ti.createTestAPIKey(ctx, t)
+	ti.service.SetEnvironmentLoader(failingSystemEnv{})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, err)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// failingSystemEnv fails the security check's system environment read.
+type failingSystemEnv struct{ toolconfig.EnvironmentLoader }
+
+func (failingSystemEnv) LoadSystemEnv(context.Context, uuid.UUID, uuid.UUID, string, string) (*toolconfig.CaseInsensitiveEnv, error) {
+	return nil, errors.New("environment store unavailable")
 }
 
 func setSecurityVariableProvidedBy(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, providedBy string) {
@@ -878,7 +942,7 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "external-token", nil)
+	response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeToolsCallBody("test_tool"), "external-token", nil)
 	require.Error(t, err)
 	require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)

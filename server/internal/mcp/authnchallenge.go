@@ -416,6 +416,10 @@ const (
 	// from remote_session_misconfigured because no caller connects that
 	// credential, so the answer carries no challenge.
 	issuerGateReasonClientCredentialMisconfigured = "client_credential_misconfigured"
+
+	// issuerGateReasonRemoteSessionResolveFailed: the bearer token was
+	// accepted but resolving the upstream remote session failed on our side.
+	issuerGateReasonRemoteSessionResolveFailed = "remote_session_resolve_failed"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -1276,6 +1280,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		}
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
+			s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate failed: resolve remote session", issuerGateReasonRemoteSessionResolveFailed, mcpconnectionattempts.CodeInternalError, err)
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 		}
 		return tokens, nil
@@ -1335,6 +1340,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		}
 		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	default:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate failed: resolve remote session", issuerGateReasonRemoteSessionResolveFailed, mcpconnectionattempts.CodeInternalError, err)
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
 }
