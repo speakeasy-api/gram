@@ -1462,7 +1462,8 @@ func (m *ChallengeManager) setRemoteSessionAutoRefresh(ctx context.Context, subj
 // DisconnectRemoteSessionByRef permits an explicit legacy/unbound source to be
 // revoked independently. The reference must be selected and authorized by the
 // caller, not inferred from a focused server; subject, tenant, binding and CAS
-// checks prevent another user's or a stale grant from being changed.
+// checks prevent another user's or a stale grant from being changed. A missed
+// match returns a failed precondition, not a successful disconnect.
 func (m *ChallengeManager) DisconnectRemoteSessionByRef(ctx context.Context, ref RemoteSessionRef, userSessionIssuerID uuid.UUID) (int64, error) {
 	rows, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionByRef(ctx, remotesessions_repo.SoftDeleteRemoteSessionByRefParams{
 		ID: ref.ID, ExpectedUpdatedAt: conv.ToPGTimestamptz(ref.UpdatedAt), SubjectUrn: ref.Subject,
@@ -1470,6 +1471,9 @@ func (m *ChallengeManager) DisconnectRemoteSessionByRef(ctx context.Context, ref
 	})
 	if err != nil {
 		return 0, fmt.Errorf("disconnect explicit remote session: %w", err)
+	}
+	if len(rows) == 0 {
+		return 0, remoteSessionReferenceChanged()
 	}
 	for _, row := range rows {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{RemoteSessionClientID: row.RemoteSessionClientID, AccessTokenEncrypted: row.AccessTokenEncrypted, RefreshTokenEncrypted: row.RefreshTokenEncrypted})
@@ -1487,7 +1491,16 @@ func (m *ChallengeManager) SetRemoteSessionAutoRefreshByRef(ctx context.Context,
 	if err != nil {
 		return 0, fmt.Errorf("set explicit remote session auto refresh: %w", err)
 	}
+	if rows == 0 {
+		return 0, remoteSessionReferenceChanged()
+	}
 	return rows, nil
+}
+
+// A missing, unauthorized or changed source is one bounded refusal. Do not
+// reveal whether a reference belongs to another tenant or user.
+func remoteSessionReferenceChanged() error {
+	return oops.E(oops.CodeFailedPrecondition, nil, "the selected connection changed or is unavailable; reload before retrying")
 }
 
 func focusedResourceRequired() error {
