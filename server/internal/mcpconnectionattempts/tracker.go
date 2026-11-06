@@ -75,13 +75,8 @@ func (t *Tracker) Consumed() {
 }
 
 // Refuse is the verdict for anything but success. It records one row, except an
-// outage code after the caller disconnected or the zero code, which record nothing.
+// outage code after the caller disconnected, which records nothing.
 func (t *Tracker) Refuse(ctx context.Context, code Code, opts ...Option) {
-	// The zero code is a refusal another request's row already covers.
-	if code.name == "" {
-		t.Continue()
-		return
-	}
 	// A caller disconnect is not evidence that the provider or sign-in failed.
 	if errors.Is(ctx.Err(), context.Canceled) {
 		switch code {

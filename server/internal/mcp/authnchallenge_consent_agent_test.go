@@ -324,16 +324,15 @@ func seedAgentOutageConnection(t *testing.T, ctx context.Context, ti *testInstan
 	return agent.ID, session
 }
 
-// consentRowReason is the reason the consent step recorded.
-func consentRowReason(t *testing.T, rec *mcpconnectionattemptstest.Recording) string {
-	t.Helper()
+// stepReasons lists the reasons recorded at step.
+func stepReasons(rec *mcpconnectionattemptstest.Recording, step mcpconnectionattempts.Step) []string {
+	var reasons []string
 	for _, row := range rec.Rows() {
-		if row.Step == mcpconnectionattempts.StepInboundConsent.String() {
-			return row.Reason
+		if row.Step == step.String() {
+			reasons = append(reasons, row.Reason)
 		}
 	}
-	require.Failf(t, "no consent row", "%+v", rec.Rows())
-	return ""
+	return reasons
 }
 
 // A provider outage while approving for an agent is the provider's, not a problem on our side.
@@ -360,7 +359,7 @@ func TestConsentAgentApprovalDuringProviderOutageNamesTheProvider(t *testing.T) 
 	upstream, err := url.Parse(provider.URL)
 	require.NoError(t, err)
 	require.Contains(t, page.Body.String(), upstream.Hostname(), "names the provider")
-	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable.String(), consentRowReason(t, rec))
+	require.Equal(t, []string{mcpconnectionattempts.CodeRemoteSessionUnavailable.String()}, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
 }
 
 // A cooldown whose outage record Redis lost is still the provider's outage on the consent row.
@@ -383,7 +382,29 @@ func TestConsentAgentApprovalDuringCooldownWithoutOutageRecord(t *testing.T) {
 	_, err := serveAgentConsentPost(t, ctx, ti, fx, agentID)
 	require.Error(t, err)
 	require.Zero(t, calls.Load(), "the cooldown holds the refresh")
-	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable.String(), consentRowReason(t, rec))
+	require.Equal(t, []string{mcpconnectionattempts.CodeRemoteSessionUnavailable.String()}, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
+}
+
+// Another request's refresh holds the lock: its row covers it, so consent writes none.
+func TestConsentAgentApprovalWhileRefreshLockHeldRecordsNoRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, session := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+	held, err := ti.cacheAdapter.Add(ctx, remotesessions.RefreshLockKey(session.SubjectUrn, session.RemoteSessionClientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	_, err = serveAgentConsentPost(t, ctx, ti, fx, agentID)
+	require.Error(t, err)
+	require.Empty(t, stepReasons(rec, mcpconnectionattempts.StepInboundConsent))
 }
 
 func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {

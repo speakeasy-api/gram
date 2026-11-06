@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -385,7 +384,7 @@ func TestResolveFailureHappened(t *testing.T) {
 		{"unclassified store", remotesessions.ErrRemoteSessionUnavailable, mcpconnectionattempts.CodeInternalError},
 		{"token endpoint", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: 503}), mcpconnectionattempts.CodeRemoteSessionUnavailable},
 		{"signer", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{Signing: true}), mcpconnectionattempts.CodeInternalError},
-		{"lock contention", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, mcpconnectionattempts.Code{}},
+		{"lock contention", errors.Join(remotesessions.ErrRemoteSessionUnavailable, remotesessions.ErrRefreshLockHeld), mcpconnectionattempts.Code{}},
 		{"misconfigured", remotesessions.ErrRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured},
 		{"no token", remotesessions.ErrNoValidToken, mcpconnectionattempts.CodeInvalidRemoteSession},
 		{"unknown", errors.New("database"), mcpconnectionattempts.CodeInternalError},
@@ -402,7 +401,7 @@ func TestRecordRemoteSessionRejectionSuppression(t *testing.T) {
 		cause error
 		want  int
 	}{
-		{"waited on another refresh", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, 0},
+		{"waited on another refresh", errors.Join(remotesessions.ErrRemoteSessionUnavailable, remotesessions.ErrRefreshLockHeld), 0},
 		{"token endpoint outage", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}), 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -351,7 +351,7 @@ func TestRefreshNow_UnstoredOutageRecordStillNamesTheProvider(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(err))
 }
 
-func TestRefreshNow_CooldownWithUnreadableOutageRecordIsCounted(t *testing.T) {
+func TestRefreshNow_CooldownWithUnreadableOutageRecordRecordsTheProviderOutage(t *testing.T) {
 	t.Parallel()
 	ctx, env := newSyntheticExpiryEnv(t, "outage-unreadable", tokenAnswer(http.StatusServiceUnavailable, `{}`))
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
@@ -367,4 +367,35 @@ func TestRefreshNow_CooldownWithUnreadableOutageRecordIsCounted(t *testing.T) {
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(deferred))
 	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(deferred), "a cooldown is an outage, not a busy lock")
+}
+
+// A lease lost to our own slow setup is ours, not another request's busy refresh.
+func TestRefreshNow_LeaseLostInSetupRecordsInternalError(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "lease-lost", tokenAnswer(http.StatusOK, `{}`))
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), &leaseSpyCache{Cache: testenv.NewMemoryCache(), lost: true})
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	var failure *remotesessions.RefreshError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, remotesessions.ConnectionOutageHappened(err))
+}
+
+func TestRefreshNow_LockHeldElsewhereRecordsNoRow(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "lock-held-row", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	locks := testenv.NewMemoryCache()
+	held, err := locks.Add(ctx, remotesessions.RefreshLockKey(env.subject, env.clientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), locks)
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	require.True(t, remotesessions.RefreshBusy(err))
+	require.Equal(t, mcpconnectionattempts.Code{}, remotesessions.ConnectionOutageHappened(err))
 }

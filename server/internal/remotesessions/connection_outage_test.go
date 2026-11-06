@@ -38,16 +38,19 @@ func TestConnectionOutageHappened_UnrecordedOutage(t *testing.T) {
 		name    string
 		outcome remotesessionmetrics.RefreshOutcome
 		outage  RefreshOutageKind
+		cause   error
 		want    mcpconnectionattempts.Code
 	}{
-		{"provider outage record not stored", remotesessionmetrics.RefreshOutcomeUpstreamError, RefreshOutageProvider, mcpconnectionattempts.CodeRemoteSessionUnavailable},
-		{"tunnel outage record not stored", remotesessionmetrics.RefreshOutcomeUnreachable, RefreshOutageTunnel, mcpconnectionattempts.CodeTunnelUnavailable},
-		{"cooldown with unreadable record", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageProvider, mcpconnectionattempts.CodeRemoteSessionUnavailable},
-		{"waited on another request", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageNone, mcpconnectionattempts.Code{}},
+		{"provider outage record not stored", remotesessionmetrics.RefreshOutcomeUpstreamError, RefreshOutageProvider, errors.New("outage"), mcpconnectionattempts.CodeRemoteSessionUnavailable},
+		{"tunnel outage record not stored", remotesessionmetrics.RefreshOutcomeUnreachable, RefreshOutageTunnel, errors.New("outage"), mcpconnectionattempts.CodeTunnelUnavailable},
+		{"cooldown with unreadable record", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageProvider, &refreshDeferredError{wait: 0, why: refreshDeferralCooldown}, mcpconnectionattempts.CodeRemoteSessionUnavailable},
+		{"another request holds the lock", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageNone, &refreshDeferredError{wait: 0, why: refreshDeferralLockHeld}, mcpconnectionattempts.Code{}},
+		{"own setup used up the lock", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageNone, &refreshDeferredError{wait: 0, why: refreshDeferralSetupSlow}, mcpconnectionattempts.CodeInternalError},
+		{"lease lost after slow setup", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageNone, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: 0, why: refreshDeferralSetupSlow}), mcpconnectionattempts.CodeInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := &RefreshError{IssuerURL: "", Outcome: tc.outcome, retryAfter: 0, outageKind: RefreshOutageNone, outage: tc.outage, err: errors.New("outage")}
+			err := &RefreshError{IssuerURL: "", Outcome: tc.outcome, retryAfter: 0, outageKind: RefreshOutageNone, outage: tc.outage, err: tc.cause}
 			require.Equal(t, tc.want, ConnectionOutageHappened(&SessionOutageError{err: err}))
 		})
 	}

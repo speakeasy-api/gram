@@ -391,7 +391,8 @@ func refreshPostDeadline(lockAcquiredAt, now time.Time) time.Time {
 	return leaseEnd
 }
 
-func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
+// RefreshLockKey single-flights refreshes of one subject's grant on a client.
+func RefreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
 }
 
@@ -456,16 +457,37 @@ func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) 
 	}
 }
 
+// refreshDeferral says why a refresh made no upstream call.
+type refreshDeferral string
+
+const (
+	// refreshDeferralCooldown: an outage on this grant is still being paced.
+	refreshDeferralCooldown refreshDeferral = "cooldown"
+
+	// refreshDeferralLockHeld: another request holds the refresh lock; its own row covers it.
+	refreshDeferralLockHeld refreshDeferral = "lock_held"
+
+	// refreshDeferralSetupSlow: this request's own setup used up the lock or lease before the POST.
+	refreshDeferralSetupSlow refreshDeferral = "setup_slow"
+)
+
 // refreshDeferredError is a refresh that made no upstream call; retry after wait.
 type refreshDeferredError struct {
 	wait time.Duration
 
-	// noOutage: nothing failed; another request held the lock, or the lease ran out in setup.
-	noOutage bool
+	// why says whether an outage, another request, or our own setup stopped the call.
+	why refreshDeferral
 }
 
 func (e *refreshDeferredError) Error() string {
 	return fmt.Sprintf("refresh deferred, retry after %s", e.wait)
+}
+
+// ErrRefreshLockHeld marks a refresh deferred because another request holds the lock.
+var ErrRefreshLockHeld = errors.New("another request holds the refresh lock")
+
+func (e *refreshDeferredError) Is(target error) bool {
+	return target == ErrRefreshLockHeld && e.why == refreshDeferralLockHeld
 }
 
 // parseRetryAfter reads RFC 9110 §10.2.3 seconds or an HTTP date, zero when absent or past.
@@ -642,7 +664,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
 			recorded, _ := s.RecordedOutage(ctx, sess)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: recorded, outage: kind, failureRecorded: false, err: &refreshDeferredError{wait: wait, noOutage: false}}
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: recorded, outage: kind, failureRecorded: false, err: &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}}
 		}
 	}
 
@@ -676,7 +698,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		case outcome == remotesessionmetrics.RefreshOutcomeDeferred:
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
 				retryAfter = deferred.wait
-				if !deferred.noOutage {
+				if deferred.why == refreshDeferralCooldown {
 					outage = kind
 					failureKind, _ = s.RecordedOutage(ctx, attempted)
 				}
@@ -776,7 +798,7 @@ func (s *RefreshService) refresh(
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
 
-	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
+	lockKey := RefreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
 	// Only a renewable cache holds the lease through the store; Redis is one.
 	leases, renewable := s.locks.(cache.RenewableLeaseCache)
@@ -795,7 +817,7 @@ func (s *RefreshService) refresh(
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
-			return zero, nil, nil, &refreshDeferredError{wait: wait, noOutage: false}
+			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}
 		}
 		if err := ctx.Err(); err != nil {
 			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
@@ -804,7 +826,7 @@ func (s *RefreshService) refresh(
 		lockAcquiredAt = time.Now()
 		held, lockErr = acquire()
 		if lockErr == nil && !held {
-			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, noOutage: true}
+			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld}
 		}
 	}
 
@@ -913,7 +935,7 @@ func (s *RefreshService) refresh(
 	now := time.Now()
 	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
 	if !postDeadline.After(now) {
-		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, noOutage: true}
+		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow}
 	}
 
 	// The provider may consume the refresh token once the POST starts; keep its replacement.
@@ -931,7 +953,7 @@ func (s *RefreshService) refresh(
 			)
 		case !renewed:
 			// Another caller may be presenting this refresh token by now.
-			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, noOutage: true})
+			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow})
 		default:
 			// The renewed lease covers the POST and the store.
 			postDeadline = time.Now().Add(refreshUpstreamTimeout)
