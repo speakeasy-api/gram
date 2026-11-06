@@ -210,7 +210,7 @@ describe("AuthProvider organization telemetry group", () => {
 
       renderGate(destination);
 
-      expect(screen.getByRole("heading", { name: "Loading…" })).toBeTruthy();
+      expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
       expect(screen.queryByTestId("app")).toBeNull();
       expect(screen.queryByTestId("session")).toBeNull();
       expect(screen.queryByTestId("book-demo")).toBeNull();

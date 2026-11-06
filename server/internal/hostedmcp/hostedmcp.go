@@ -69,17 +69,6 @@ func (a Actor) Principal(ctx context.Context) (urn.Principal, bool) {
 	}
 }
 
-// LockDomains locks the organization's custom domains in id order and reports deleted ones.
-func LockDomains(ctx context.Context, tx pgx.Tx, organizationID string, ids ...uuid.NullUUID) (map[uuid.UUID]bool, error) {
-	valid := make([]uuid.UUID, 0, len(ids))
-	for _, id := range ids {
-		if id.Valid {
-			valid = append(valid, id.UUID)
-		}
-	}
-	return tombstone.LockCustomDomains(ctx, tx, organizationID, valid) //nolint:wrapcheck // tombstone already names the failing domain.
-}
-
 // Sync mirrors a locked toolset's name and tool variations group onto its existing canonical wrapper.
 // Hosting state (address, visibility, issuer, network mode) belongs to the wrapper and is left alone.
 func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) error {

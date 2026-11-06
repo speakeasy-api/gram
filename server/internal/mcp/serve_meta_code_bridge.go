@@ -382,7 +382,8 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
 				return nil, b.helperFailure(ctx, &callGate, member, stale)
 			}
-			if needsNewConsent(b.service.validateCatalogMember(ctx, &callGate, member)) {
+			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
+				b.service.recordConsentRefusal(ctx, &callGate, member, err)
 				return nil, codemode.ErrConsentRequired
 			}
 		}

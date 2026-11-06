@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -7,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
   type FieldChange,
   type MetadataField,
@@ -109,7 +110,7 @@ export function ToolMetadataDriftPanel({
             >
               <Button.LeftIcon>
                 {isSyncing ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 ) : (
                   <RefreshCw className="size-4" />
                 )}

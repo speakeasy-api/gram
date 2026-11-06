@@ -17,6 +17,11 @@ func GetMyConnectionsAgentPath() string {
 	return "/rpc/agent.getMyConnections"
 }
 
+// GetClaudeObservabilityPluginAgentPath returns the URL path to the agent service getClaudeObservabilityPlugin HTTP endpoint.
+func GetClaudeObservabilityPluginAgentPath() string {
+	return "/rpc/agent.getClaudeObservabilityPlugin"
+}
+
 // HideMcpServerAgentPath returns the URL path to the agent service hideMcpServer HTTP endpoint.
 func HideMcpServerAgentPath() string {
 	return "/rpc/agent.hideMcpServer"

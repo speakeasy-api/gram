@@ -1076,6 +1076,7 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
 		HooksAPIKey:  "gram_local_secret_xyz",
 		ProjectSlug:  "acme-prod",
 		BrowserLogin: true,
+		InstallRoute: InstallRouteMarketplace,
 	}
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
@@ -1090,7 +1091,8 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
   "project": "acme-prod",
   "org": "org_123",
   "hooks_api_key": "gram_local_secret_xyz",
-  "browser_login": true
+  "browser_login": true,
+  "install_route": "marketplace"
 }`, string(files[root+"/speakeasy.json"]), "%s/speakeasy.json", root)
 		require.NotEmpty(t, files[root+"/hooks/bootstrap.sh"], "%s/hooks/bootstrap.sh", root)
 		require.NotContains(t, string(files[root+"/hooks/bootstrap.sh"]), cfg.HooksAPIKey)

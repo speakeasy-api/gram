@@ -30,6 +30,7 @@ func TestConfirm_SharedResourceBatch(t *testing.T) {
 		RemoteMcpServerID: uuid.NullUUID{UUID: backend, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, f.projectID, second, f.issuerID)
 	for _, tc := range []struct {
 		name          string
 		id            uuid.UUID

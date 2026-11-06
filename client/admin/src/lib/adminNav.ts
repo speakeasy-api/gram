@@ -19,7 +19,6 @@ import {
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
-  ArrowRightLeftIcon,
   ActivityIcon,
 } from "lucide-react";
 
@@ -102,12 +101,6 @@ export const ADMIN_NAV_GROUPS = [
         label: "Upstream OAuth migration",
         keywords: "oauth clients associations credentials backfill migrate",
         icon: KeyRoundIcon,
-      },
-      {
-        to: "/external-mcp-migration",
-        label: "External MCP migration",
-        keywords: "external mcp attachments remote servers migrate cutover",
-        icon: ArrowRightLeftIcon,
       },
       {
         to: "/fleet-health",

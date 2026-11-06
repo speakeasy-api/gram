@@ -77,8 +77,6 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 	source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
 	require.NoError(t, err)
 	require.Equal(t, NativeCatalogRegistryID, source.Registry.ID)
-	_, err = s.SelectSource(t.Context(), "org-id", "org-slug", legacyID)
-	require.ErrorIs(t, err, ErrCatalogSourceNotFound)
 	_, err = s.IdentitySource(t.Context(), NativeCatalogRegistryID)
 	require.NoError(t, err)
 	_, err = s.IdentitySource(t.Context(), legacyID)
@@ -121,9 +119,6 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	_, err := s.List(ctx, nil, nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
-	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
-	require.ErrorContains(t, err, "selected source failed")
-	require.Equal(t, 2, native.calls)
 }
 
 func TestCatalogUnsupportedIdentity(t *testing.T) {

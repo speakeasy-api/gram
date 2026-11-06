@@ -84,6 +84,7 @@ var _ = Service("remoteSessions", func() {
 			Param("change")
 			Param("provider_id")
 			Param("client_id")
+			Param("replace_client")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -272,12 +273,18 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	Attribute("registration_method", String, "Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.", func() {
 		Enum("cimd", "dcr")
 	})
+	Attribute("replace_client", Boolean, "Replace the selected provider's client already bound to the user session issuer, rather than reuse it or be refused. Everyone signed in through the old client must sign in again, on this server and every other server that uses it. The other servers move to the new client. Refused when a gateway or a server that is not directly Remote MCP-backed shares the issuer, or when a server using the client is in another project.")
+	Attribute("replace_client_server_ids", ArrayOf(String), "With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
 
 	Required("mcp_server_id", "client_mode")
 })
 
 var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
-	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: made from a server, it moves that server to the chosen client without unbinding a client another server uses; made without one, the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds the clients only mcp_server_id uses, or every client the caller's project can see when made without a server. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
 
 	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
 		Format(FormatUUID)
@@ -294,6 +301,7 @@ var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
 	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("replace_client", Boolean, "Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.")
 
 	Required("user_session_issuer_id", "change")
 })
@@ -321,6 +329,16 @@ var ServerIdentityImpactResult = Type("ServerIdentityImpactResult", func() {
 
 	Attribute("servers", ArrayOf(ServerIdentityImpactServer), "Affected MCP servers the caller can read.")
 	Attribute("hidden_server_count", Int, "MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.")
+	Attribute("detach_client_ids", ArrayOf(String), "With change detach and mcp_server_id, the clients only that server uses, which leaving User Identity unbinds from the issuer.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Attribute("release_client_ids", ArrayOf(String), "With change detach and mcp_server_id, the clients other consumers also use. They stay bound, and leaving User Identity only removes that server's association with them.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
 
 	Required("servers", "hidden_server_count")
 })
@@ -596,5 +614,10 @@ var ServerClientAssociation = Type("ServerClientAssociation", func() {
 
 var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {
 	Attribute("associations", ArrayOf(ServerClientAssociation), "The server's associated upstream OAuth clients, oldest first.")
-	Required("associations")
+	Attribute("required_client_ids", ArrayOf(String), "The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Required("associations", "required_client_ids")
 })

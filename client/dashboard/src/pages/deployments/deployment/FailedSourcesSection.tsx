@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/Checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
@@ -15,7 +16,6 @@ import {
   CircleAlert,
   Code,
   FileCode,
-  Loader2,
   Network,
   Server,
   Wrench,
@@ -315,7 +315,7 @@ export function FailedSourcesSection({
               >
                 {pending && (
                   <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
+                    <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 )}
                 <Button.Text>

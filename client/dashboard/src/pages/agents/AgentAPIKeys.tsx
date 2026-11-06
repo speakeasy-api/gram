@@ -22,6 +22,7 @@ import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/rem
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { agentIssuanceBlocked } from "./agent-issuance";
 import {
   IdentityPanel,
@@ -971,7 +972,16 @@ function DelegableGrantSection({
   disabled: boolean;
   onRetry: () => void;
 }): JSX.Element {
-  if (isFetching) return <Text>Loading delegable permissions…</Text>;
+  if (isFetching)
+    return (
+      <div role="status" aria-label="Loading delegable permissions">
+        <Skeleton>
+          <div className="h-5 w-64" />
+          <div className="h-5 w-48" />
+          <div className="h-5 w-56" />
+        </Skeleton>
+      </div>
+    );
   if (isComplete)
     return (
       <AgentGrantSelector

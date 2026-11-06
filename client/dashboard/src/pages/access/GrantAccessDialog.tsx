@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -19,7 +21,6 @@ import {
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import {
@@ -186,8 +187,14 @@ export function GrantAccessDialog({
         )}
 
         {isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          <div
+            role="status"
+            aria-label="Loading members, roles and permissions"
+            className="space-y-2"
+          >
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         )}
 
@@ -368,7 +375,7 @@ function RoleSuggestionList({
           >
             {pendingRoleId === roleId && (
               <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>Assign</Button.Text>

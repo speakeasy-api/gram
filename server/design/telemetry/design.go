@@ -1089,6 +1089,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServerActivity", "type": "query"}`)
 	})
 
+	Method("getOrgMcpServerActivity", func() {
+		Description("Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.")
+
+		// Session-only, like mcpServers.listForOrg: an org-wide read has no
+		// project selector, and API-key auth is not RBAC-enforced.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetMcpServerActivityPayload)
+			security.SessionPayload()
+		})
+
+		Result(GetOrgMcpServerActivityResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrgMcpServerActivity")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrgMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrgMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrgMcpServerActivity", "type": "query"}`)
+	})
+
 	Method("listHooksTraces", func() {
 		Description("List hook traces aggregated by trace_id with user information")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -3073,6 +3098,26 @@ var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
 
 	Required("activity", "recent_window_days", "lookback_days")
+})
+
+var ProjectMcpServerActivity = Type("ProjectMcpServerActivity", func() {
+	Description("Recent MCP server activity for one project")
+
+	Attribute("project_id", String, "The project the activity belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server in the project with at least one tool call inside the recent window")
+
+	Required("project_id", "activity")
+})
+
+var GetOrgMcpServerActivityResult = Type("GetOrgMcpServerActivityResult", func() {
+	Description("Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.")
+
+	Attribute("projects", ArrayOf(ProjectMcpServerActivity), "One entry per readable project whose activity was read")
+	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
+
+	Required("projects", "recent_window_days")
 })
 
 var GetMcpNetworkTrafficPayload = Type("GetMcpNetworkTrafficPayload", func() {

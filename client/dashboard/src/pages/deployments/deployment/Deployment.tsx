@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { RefreshCcwIcon } from "lucide-react";
 import { Suspense } from "react";
 import { useParams } from "react-router";
@@ -64,34 +65,13 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
     throw error;
   }
 
-  if (isLoading || !deployment) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Skeleton>
-            <div className="h-4 w-1/3" />
-          </Skeleton>
-        </Page.Body>
-      </Page>
-    );
-  }
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>
-        <Suspense
-          fallback={
-            <Skeleton>
-              <div className="h-4 w-1/3" />
-            </Skeleton>
-          }
-        >
+      <Page.Body isLoading={isLoading || !deployment}>
+        <Suspense fallback={<SplashScreen />}>
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
       </Page.Body>

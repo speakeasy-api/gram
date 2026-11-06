@@ -55,6 +55,7 @@ import {
   summarizeLineage,
   type LineageSummary,
 } from "./sessionLinks";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -863,14 +864,7 @@ export function ChatLogsTable({
 
   if (isLoading && chats.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="border-muted-foreground/30 border-t-muted-foreground size-5 animate-spin rounded-full border-2" />
-          <span className="text-muted-foreground text-sm">
-            Loading traces...
-          </span>
-        </div>
-      </div>
+      <SkeletonTable label="Loading traces" className="bg-card border-none" />
     );
   }
 

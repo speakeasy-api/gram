@@ -1096,16 +1096,6 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/externalmcp/migration/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../internal/externalmcp/migration/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/adminmcp/queries.sql
     engine: postgresql
     gen:

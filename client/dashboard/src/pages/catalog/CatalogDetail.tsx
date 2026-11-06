@@ -2,7 +2,6 @@ import { CatalogLogo } from "./CatalogLogo";
 import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/Card";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
@@ -25,9 +24,10 @@ import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Minus, Server as ServerIcon } from "lucide-react";
+import { Minus, Server as ServerIcon } from "lucide-react";
 import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { Spinner } from "@/components/ui/Spinner";
 
 // Map of server specifiers to their website URLs
 const SERVER_WEBSITE_MAP: Record<string, string> = {
@@ -142,18 +142,7 @@ export default function CatalogDetail(): JSX.Element {
             }}
           />
         </Page.Header>
-        <Page.Body>
-          <div className="@container">
-            <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-3">
-              <div className="@3xl:col-span-2">
-                <Skeleton className="h-[400px]" />
-              </div>
-              <div>
-                <Skeleton className="h-[200px]" />
-              </div>
-            </div>
-          </div>
-        </Page.Body>
+        <Page.Body isLoading>{null}</Page.Body>
       </Page>
     );
   }
@@ -262,7 +251,7 @@ export default function CatalogDetail(): JSX.Element {
                           >
                             <Button.LeftIcon>
                               {removeServerMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <Spinner className="mr-0" />
                               ) : (
                                 <Minus className="h-4 w-4" />
                               )}

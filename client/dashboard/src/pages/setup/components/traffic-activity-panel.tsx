@@ -1,5 +1,5 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useConfettiBurst } from "@/components/icon-confetti";
 import { Badge } from "@/components/ui/Badge";
@@ -131,7 +131,7 @@ export function TrafficActivityPanel({
               className="flex flex-col items-center justify-center gap-3"
               style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
             >
-              <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+              <Spinner className="mr-0 text-muted-foreground h-5 w-5" />
               <p className="text-muted-foreground text-sm">
                 No events yet. We're checking every {pollIntervalMs / 1000}s.
               </p>
