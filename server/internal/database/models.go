@@ -5061,9 +5061,6 @@ type PrincipalGrant struct {
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	// @access: confidential
 	Scope string
-	// Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
-	// @access: confidential
-	Effect pgtype.Text
 	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
 	// @access: confidential
 	DropResource pgtype.Text
