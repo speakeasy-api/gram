@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
@@ -705,11 +706,7 @@ export function AttachRemoteIdentityProviderSheet({
   ) : null;
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
-    clientSectionBody = (
-      <Text muted small>
-        Loading clients…
-      </Text>
-    );
+    clientSectionBody = <Skeleton className="h-9 w-full" />;
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
       <Stack gap={4}>

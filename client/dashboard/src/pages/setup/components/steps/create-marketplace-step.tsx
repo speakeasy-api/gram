@@ -1,5 +1,6 @@
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useState } from "react";
-import { GitBranch, Loader2 } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -84,9 +85,7 @@ export function CreateMarketplaceStep({
     >
       <div className="space-y-4">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
-          </div>
+          <Skeleton className="h-28 w-full" />
         ) : isConnected && publishStatus ? (
           <MarketplaceCard
             publishStatus={publishStatus}

@@ -3,6 +3,7 @@ import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -96,7 +97,7 @@ export function SigningKeysTab({
   }
 
   if (setsPending || keysPending) {
-    return <Text muted>Loading…</Text>;
+    return <SkeletonTable />;
   }
 
   const dependents: Dependent[] = sets.flatMap((set, index) => {

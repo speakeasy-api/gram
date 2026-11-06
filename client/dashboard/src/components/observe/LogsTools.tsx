@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -1907,7 +1908,7 @@ function LogsToolsTableContent({
         <div className="text-muted-foreground flex h-12 items-center justify-center gap-2 border-t">
           {isFetchingNextPage && (
             <>
-              <Icon name="loader-circle" className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
               <span className="text-eyebrow">Loading more</span>
             </>
           )}

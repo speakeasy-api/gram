@@ -1,14 +1,15 @@
 import { RequireScope } from "@/components/require-scope";
 import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { ScopeBadge } from "@/lib/remote-identity";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
@@ -60,11 +61,7 @@ export function UserSessionIssuerField({
 
   let control: JSX.Element;
   if (isLoading) {
-    control = (
-      <Text muted small>
-        Loading…
-      </Text>
-    );
+    control = <Skeleton className="h-9 w-64" />;
   } else if (isError) {
     control = (
       <FieldError>
@@ -128,7 +125,7 @@ export function UserSessionIssuerField({
             >
               {update.isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>

@@ -1,4 +1,5 @@
 import { CopyButton } from "@/components/ui/CopyButton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useGcpSetupInfo } from "@gram/client/react-query/gcpSetupInfo";
 import { Stack } from "@/components/ui/Stack";
@@ -13,9 +14,10 @@ export function GcpGrantInstructions(): JSX.Element {
 
   if (isLoading) {
     return (
-      <Text small muted>
-        Loading setup details…
-      </Text>
+      <Skeleton>
+        <div className="h-4 w-full max-w-lg" />
+        <div className="h-9 w-full max-w-md" />
+      </Skeleton>
     );
   }
 

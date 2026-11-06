@@ -1,11 +1,8 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertCircle,
-  Check,
-  Loader2,
-  Server as ServerIcon,
-} from "lucide-react";
+import { AlertCircle, Check, Server as ServerIcon } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
@@ -450,8 +447,10 @@ export function DistributeServersStep({
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <Skeleton key={i} className="h-[118px] w-full" />
+                  ))}
                 </div>
               ) : catalogInitialLoadFailed ? (
                 <CatalogErrorBanner
@@ -620,7 +619,7 @@ export function DistributeServersStep({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 py-12">
-                    <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+                    <Spinner className="text-muted-foreground mr-0 h-8 w-8" />
                     <p className="text-muted-foreground text-sm">
                       Adding to your Default plugin…
                     </p>

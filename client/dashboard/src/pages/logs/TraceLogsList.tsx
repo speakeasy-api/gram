@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTraceLogGroup } from "@gram/client/models/components/toolusagetraceloggroup.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { Icon } from "@/components/ui/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Editorial severity scale: info is neutral ink (never blue), debug a lighter
 // neutral, warn orange (feedback-orange token), error the red accent. Badges
@@ -87,13 +87,11 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
+      <div className="border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
-        <div className="flex w-5 shrink-0 justify-center">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
-        </div>
-        <span className="text-xs">Loading spans...</span>
+        <div className="w-5 shrink-0" />
+        <Skeleton className="h-4 w-48" />
       </div>
     );
   }

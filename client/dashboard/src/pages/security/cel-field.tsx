@@ -1,4 +1,5 @@
-import { Check, CircleAlert, Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Check, CircleAlert } from "lucide-react";
 import { Suspense, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";
 import { useCelEngine } from "./use-cel-engine";
@@ -54,7 +55,7 @@ function CelStatusLine({ status }: { status: CelStatus }): JSX.Element | null {
     case "validating":
       return (
         <span className="text-muted-foreground flex items-center gap-1 text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" /> Checking…
+          <Spinner className="mr-0 h-3 w-3" /> Checking…
         </span>
       );
     case "ok":

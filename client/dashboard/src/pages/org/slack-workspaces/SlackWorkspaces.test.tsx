@@ -448,7 +448,9 @@ it("has no per-workspace Reconnect button", () => {
 it("waits for workspace loading before rendering members", () => {
   mocks.pending = true;
   show("?tab=slack-workspaces&slack_view=members");
-  expect(screen.getByText("Loading workspaces…")).toBeTruthy();
+  expect(
+    screen.getByRole("status", { name: "Loading workspaces" }),
+  ).toBeTruthy();
   expect(screen.queryByText("Directory table")).toBeNull();
 });
 it("lets the members view retry a failed workspace request", () => {

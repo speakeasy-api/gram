@@ -21,6 +21,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { buildAccessRows, scopeState } from "../mcp/access/accessRows";
 import { assignmentExclusions } from "./assignmentExclusions";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Platform MCP inspection already exposes server/member access. Exclusion
 // writes stay in this administrator dialog: the existing access-role mutation
@@ -153,9 +154,11 @@ export function RemoveAssignmentDialog({
             permissions that role grants across the organization.
           </Text>
           {audience.isLoading || roles.isLoading ? (
-            <Text small muted>
-              Loading roles with access…
-            </Text>
+            <Skeleton>
+              <div className="h-8 w-full" />
+              <div className="h-8 w-full" />
+              <div className="h-8 w-full" />
+            </Skeleton>
           ) : audience.isError || roles.isError ? (
             <div role="alert">
               <Text small>Couldn’t load the current access rules.</Text>

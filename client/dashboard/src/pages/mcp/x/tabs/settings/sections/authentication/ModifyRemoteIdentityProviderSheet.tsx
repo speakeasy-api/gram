@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -587,9 +588,10 @@ function ModifyRemoteIdentityProviderSheetBody({
         )}
 
         {isLoadingClient ? (
-          <Text muted small>
-            Loading client credentials…
-          </Text>
+          <Skeleton>
+            <div className="h-9 w-full" />
+            <div className="h-9 w-full" />
+          </Skeleton>
         ) : (
           <ClientCredentialsFields
             clientId={primaryClient?.clientId ?? ""}

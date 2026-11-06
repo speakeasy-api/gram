@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
@@ -548,7 +549,9 @@ export function KeySetSetupSteps({
                       <CopyButton size="xs" text={principal} />
                     </div>
                   </div>
-                ) : setupInfo.isLoading ? null : (
+                ) : setupInfo.isLoading ? (
+                  <Skeleton className="h-14 w-full" />
+                ) : (
                   <Text muted small>
                     This environment can&apos;t report Speakeasy&apos;s service
                     account, so the instructions show SPEAKEASY_PRINCIPAL.

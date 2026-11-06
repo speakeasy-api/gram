@@ -9,6 +9,7 @@ import {
   mismatchValueLabel,
   warningSentence,
 } from "./issuerMismatches";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Everything these render sits inside an Alert, which colors its whole subtree
 // to match its severity. So they style with plain elements and inherit that
@@ -164,9 +165,10 @@ export function MigrateImpact({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Checking impact…
-      </Text>
+      <Skeleton>
+        <div className="h-4 w-72" />
+        <div className="h-4 w-56" />
+      </Skeleton>
     );
   }
 

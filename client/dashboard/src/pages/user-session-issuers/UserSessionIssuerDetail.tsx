@@ -34,6 +34,7 @@ import {
 } from "./issuerDisplay";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 export default function UserSessionIssuerDetail(): JSX.Element {
   // Gate the reads too, not only what renders.
@@ -191,11 +192,7 @@ function McpServersSection({
 
   let body: JSX.Element;
   if (query.isPending) {
-    body = (
-      <Text small muted>
-        Loading MCP servers…
-      </Text>
-    );
+    body = <SkeletonTable />;
   } else if (query.isError && servers.length === 0) {
     body = (
       <InlineEmptyState

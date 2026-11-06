@@ -17,14 +17,9 @@ import { TextArea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Loader2,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
 import { toast } from "sonner";
@@ -164,11 +159,7 @@ function DetectionRulesContent({
   return (
     <>
       <div className="space-y-8">
-        {customRulesLoading && (
-          <div className="text-muted-foreground text-sm">
-            Loading custom rules...
-          </div>
-        )}
+        {customRulesLoading && <Skeleton className="h-16 w-full" />}
         {customRulesError && (
           <div className="text-destructive text-sm">
             Failed to load custom rules.
@@ -619,9 +610,7 @@ function CustomRuleDetail({
             }
             onClick={() => void handleSave()}
           >
-            {saveState === "saving" && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+            {saveState === "saving" && <Spinner />}
             {saveState === "saved" && <Check className="mr-2 h-4 w-4" />}
             {saveLabel}
           </Button>
@@ -730,9 +719,7 @@ function SamplePlayground({
           disabled={sample.trim().length === 0 || mutation.isPending}
           onClick={handleRun}
         >
-          {mutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
+          {mutation.isPending ? <Spinner /> : null}
           Run rule
         </Button>
       </div>
@@ -936,7 +923,7 @@ function ChatPlayground({
   if (chatsQuery.isLoading) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-xs">
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Spinner className="mr-0 h-3 w-3" />
         Loading chats…
       </div>
     );
@@ -990,7 +977,7 @@ function ChatPlayground({
           disabled={!selectedChat || running}
           onClick={() => void handleRun()}
         >
-          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {running ? <Spinner /> : null}
           Run on chat
         </Button>
         {overflowWarning && (
@@ -1081,9 +1068,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
           </span>
         </span>
         <span className="shrink-0">
-          {item.status === "pending" && (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          )}
+          {item.status === "pending" && <Spinner className="mr-0 h-3 w-3" />}
           {item.status === "error" && (
             <Badge variant="destructive">error</Badge>
           )}
@@ -1365,7 +1350,7 @@ function CreateCustomRuleSheet({
                 onClick={handleSuggest}
               >
                 {suggestMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Spinner />
                 ) : (
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}

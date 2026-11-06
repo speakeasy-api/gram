@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Copy,
   Globe,
-  Loader2,
   Trash2,
   X,
 } from "lucide-react";
@@ -49,6 +48,8 @@ import { RequireScope } from "@/components/require-scope";
 import type { RootMcpServerOption } from "@gram/client/models/components/rootmcpserveroption.js";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Stack } from "@/components/ui/Stack";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
@@ -365,11 +366,7 @@ function DefaultMcpServerControl({
 
   let content: React.ReactNode;
   if (serversQuery.isLoading) {
-    content = (
-      <Text variant="body" className="text-muted-foreground text-sm">
-        Loading MCP servers…
-      </Text>
-    );
+    content = <Skeleton className="h-9 w-full max-w-xl" />;
   } else if (servers.length === 0) {
     content = (
       <div className="border-border border border-dashed p-4">
@@ -882,7 +879,7 @@ function OrgDomainsInner() {
                   </Text>
                   {domain.isUpdating ? (
                     <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                      <Spinner className="mr-0 text-blue-500" />
                     </SimpleTooltip>
                   ) : showCustomDomainAutoDisabled(domain) ? (
                     <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
@@ -1138,9 +1135,7 @@ function OrgDomainsInner() {
               will delete the associated ingress and TLS certificate.
             </Text>
             {domainEndpointsQuery.isLoading ? (
-              <Text variant="small" muted>
-                Checking for MCP endpoints under this domain&hellip;
-              </Text>
+              <Skeleton className="h-5 w-64" />
             ) : impactedEndpoints.length > 0 ? (
               <div className="space-y-2">
                 <Text variant="body" className="font-semibold">

@@ -7,6 +7,7 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import {
   breadthLabel,
   suggestRolesForScope,
@@ -78,9 +79,10 @@ export function RequireScope(
   const resolveChildren = (disabled: boolean): React.ReactNode =>
     typeof children === "function" ? children({ disabled }) : children;
 
-  // While grants are loading, render nothing to avoid flash of unauthorized
+  // While grants are loading, show the page loader (page level) or nothing,
+  // so the unauthorized state never flashes
   if (isLoading) {
-    if (level === "page") return null;
+    if (level === "page") return <SplashScreen />;
     if (level === "section") return null;
     // For component-level, show disabled state while loading
     return (

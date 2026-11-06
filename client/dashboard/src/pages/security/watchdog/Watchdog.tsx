@@ -28,7 +28,7 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { type DateRangePreset } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
@@ -747,7 +747,7 @@ function CreateExclusionsDialog({
           <Button variant="primary" disabled={creating} onClick={onConfirm}>
             {creating && (
               <Button.LeftIcon>
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>Create exclusions</Button.Text>

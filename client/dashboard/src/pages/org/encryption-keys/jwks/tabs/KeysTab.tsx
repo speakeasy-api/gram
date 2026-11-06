@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/Label";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -124,11 +125,7 @@ function KeyTable({
   }
 
   if (isPending) {
-    return (
-      <Text muted className="py-8 text-center">
-        Loading…
-      </Text>
-    );
+    return <SkeletonTable />;
   }
 
   if (keys.length === 0) {

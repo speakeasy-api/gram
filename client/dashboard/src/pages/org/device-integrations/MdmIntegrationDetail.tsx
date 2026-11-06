@@ -4,6 +4,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { buildDeviceIntegrationCoverageQuery } from "@gram/client/react-query/deviceIntegrationCoverage.js";
@@ -54,7 +55,7 @@ export default function MdmIntegrationDetail(): JSX.Element | null {
   );
 
   const provider = data?.providers.find((p) => p.id === providerID);
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   // Hidden providers 404 to the list even by direct URL, so a not-yet-supported
   // integration can't be reached out of band.
   if (!provider || !isProviderVisible(provider)) {

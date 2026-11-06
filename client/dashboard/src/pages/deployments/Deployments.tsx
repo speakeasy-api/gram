@@ -28,6 +28,7 @@ import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 export default function DeploymentsPage(): JSX.Element {
   return (
@@ -37,7 +38,7 @@ export default function DeploymentsPage(): JSX.Element {
       description="Each push deploys every source in the project together, so a deployment is the version its sources and tools arrive in."
       belowHeader={<McpTabs active="deployments" />}
     >
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense fallback={<SkeletonTable />}>
         <DeploymentsTable />
       </Suspense>
     </ResourceListPage>

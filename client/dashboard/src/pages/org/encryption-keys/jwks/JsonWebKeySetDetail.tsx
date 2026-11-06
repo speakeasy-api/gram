@@ -8,6 +8,7 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";
@@ -137,13 +138,19 @@ export default function JsonWebKeySetDetail(): JSX.Element {
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0">
               {set && <OverviewTab key={set.id} set={set} />}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton>
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
             <TabsContent value="keys" className="mt-0">
               {/* Keyed so the revoked toggle and any open dialog reset when
                   navigating from one set straight to another. */}
               {set && <KeysTab key={set.id} set={set} />}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && <SkeletonTable />}
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               {set && (
@@ -159,7 +166,13 @@ export default function JsonWebKeySetDetail(): JSX.Element {
                   <SettingsTab key={set.id} set={set} />
                 </RequireScope>
               )}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton>
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
           </div>
         </Tabs>

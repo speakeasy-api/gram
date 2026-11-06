@@ -5,7 +5,7 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/Field";
-import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -318,9 +318,7 @@ function IdentityProviderSetupField({
 function AuthenticationLoadingField() {
   return (
     <AuthRow label="Authentication">
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton className="h-5 w-48" />
     </AuthRow>
   );
 }

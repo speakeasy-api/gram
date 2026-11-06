@@ -28,6 +28,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // The Select can't represent "no environment" with an empty value, so the
 // project-default choice gets a sentinel that is stripped before saving.
@@ -464,9 +465,11 @@ function DialogOptionsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Loading servers…
-      </Text>
+      <Skeleton>
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+      </Skeleton>
     );
   }
   if (isError) {

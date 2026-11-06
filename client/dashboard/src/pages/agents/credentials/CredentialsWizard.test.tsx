@@ -1042,7 +1042,9 @@ describe("Federating a platform's own tokens", () => {
 
     expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
     expect(screen.queryByText(/could not be loaded/)).toBeNull();
-    expect(screen.queryByText(/Loading platforms/)).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Loading platforms" }),
+    ).toBeNull();
     const apiKey = screen.getByRole("radio", { name: /API key/ });
     expect(apiKey.getAttribute("data-disabled")).toBeNull();
     expect(
@@ -1074,7 +1076,9 @@ describe("Federating a platform's own tokens", () => {
     mocks.platformsStatus = "pending";
     await reachCredentialStep();
 
-    expect(screen.getByText("Loading platforms…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading platforms" }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Coming soon/)).toBeNull();
   });
 

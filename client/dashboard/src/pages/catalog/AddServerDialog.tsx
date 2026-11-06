@@ -39,7 +39,6 @@ import {
   ArrowRight,
   Check,
   Circle,
-  Loader2,
   Plug,
   Plus,
   Server as ServerIcon,
@@ -63,6 +62,8 @@ import {
   getRemoteDisplayInfo,
   isFigmaCatalogServer,
 } from "./remotes";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 export interface AddServerDialogProps {
   servers: CatalogServer[];
@@ -490,9 +491,12 @@ export function AddServerDialog({
             <Dialog.Title>Loading...</Dialog.Title>
             <Dialog.Description>Fetching server details...</Dialog.Description>
           </Dialog.Header>
-          <div className="flex items-center justify-center gap-2 py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-            <Text muted>Loading server configuration...</Text>
+          <div className="py-4">
+            <Skeleton>
+              <div className="h-5 w-48" />
+              <div className="h-9 w-full" />
+              <div className="h-9 w-full" />
+            </Skeleton>
           </div>
         </Dialog.Content>
       </Dialog>
@@ -902,7 +906,7 @@ function ConfigurePhaseContent({
   ) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Spinner className="mr-0" />
         <Text small muted>
           Starting install...
         </Text>
@@ -1678,9 +1682,7 @@ function InstallStatusIcon({
     case "pending":
       return <Circle className="text-muted-foreground h-4 w-4 shrink-0" />;
     case "creating":
-      return (
-        <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
-      );
+      return <Spinner className="text-muted-foreground mr-0 shrink-0" />;
     case "completed":
       return <Check className="h-4 w-4 shrink-0 text-emerald-500" />;
     case "failed":

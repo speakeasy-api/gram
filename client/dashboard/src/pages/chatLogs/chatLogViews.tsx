@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/Icon";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { cn } from "@/lib/utils";
 import { formatLogTimestamp } from "./chatLogFilters";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export function ToolCallsView({
   toolLogs,
@@ -16,8 +17,12 @@ export function ToolCallsView({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <div className="text-muted-foreground p-6 text-center">
-        Loading tool call logs...
+      <div className="p-6">
+        <Skeleton>
+          <div className="h-10 w-full" />
+          <div className="h-10 w-full" />
+          <div className="h-10 w-full" />
+        </Skeleton>
       </div>
     );
   }

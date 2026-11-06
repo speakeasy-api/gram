@@ -2,7 +2,7 @@ import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { computeChangedFields } from "@/lib/compute-changed-fields";
 import { useMemo, useState, Suspense } from "react";
 import React from "react";
-import { Icon } from "@/components/ui/Icon";
+import { SkeletonCode } from "@/components/ui/Skeleton";
 import { HighlightProvider } from "@/components/diffs/provider";
 
 const StaticDiff = React.lazy(() =>
@@ -66,14 +66,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
           View structured diff
         </button>
         <HighlightProvider>
-          <Suspense
-            fallback={
-              <div className="text-muted-foreground flex items-center gap-2">
-                <Icon name="loader-circle" className="size-4 animate-spin" />
-                <span>Loading diff...</span>
-              </div>
-            }
-          >
+          <Suspense fallback={<SkeletonCode lines={8} />}>
             <StaticDiff log={log} />
           </Suspense>
         </HighlightProvider>

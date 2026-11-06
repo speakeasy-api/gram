@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Bot, Loader2, Wrench } from "lucide-react";
+import { Bot, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolUIGroup, ToolUISection } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
@@ -44,6 +44,8 @@ import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnu
 import { userInitials } from "./chatTranscriptUtils";
 import { parseOpenClawContext } from "@/lib/openclawContext";
 import { useSummarizeToolCallMutation } from "@gram/client/react-query/summarizeToolCall.js";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const summaryQueue: Array<{ key: string; start: () => void }> = [];
 const scheduledSummaries = new Set<string>();
@@ -342,9 +344,9 @@ function EffectsToolRow({
           />
         )}
         {canSummarize && summarize.isPending && (
-          <Loader2
-            className="text-muted-foreground size-3 animate-spin"
-            aria-label="Generating summary"
+          <Spinner
+            className="text-muted-foreground mr-0 size-3"
+            label="Generating summary"
           />
         )}
         {summarize.data && (
@@ -538,8 +540,12 @@ export function EffectsView({
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-        Loading…
+      <div className="p-4">
+        <Skeleton>
+          <div className="h-12 w-full" />
+          <div className="h-12 w-full" />
+          <div className="h-12 w-full" />
+        </Skeleton>
       </div>
     );
   }

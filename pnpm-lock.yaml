@@ -314,6 +314,12 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
+      '@rive-app/canvas':
+        specifier: 2.45.1
+        version: 2.45.1
+      '@rive-app/react-canvas':
+        specifier: 4.37.1
+        version: 4.37.1(react@19.3.1)
       '@stripe/react-stripe-js':
         specifier: 7.0.0
         version: 7.0.0(@stripe/stripe-js@10.1.0)(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
@@ -3172,6 +3178,14 @@ packages:
 
   '@remix-run/route-pattern@0.22.1':
     resolution: {integrity: sha512-czdGJWh09Lapvcqt7Vb09KlrU2PhRJ8xQaI+AItTuD9aDJ5MAgxnS38lnys6Ll+6RJEqPiaUqTwIQhVLwFvv+w==}
+
+  '@rive-app/canvas@2.45.1':
+    resolution: {integrity: sha512-VWOO1hHCMB3YKp3L2R1FqfobtreoAnMzpen9ngxTn6mNZj4KJEOW6lF7RhuVQkspN4t7BUCsGzBnEpZOFUHvyw==}
+
+  '@rive-app/react-canvas@4.37.1':
+    resolution: {integrity: sha512-gA50ajL3igvr192QOtafRkRP9gcBDTN7hp3s90SA7q1t0T3pjXA3T9j7RDKaKM3wt7O0Vt30rPwiuH6EqfGv+A==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0
 
   '@rolldown/binding-android-arm-eabi@1.2.15':
     resolution: {integrity: sha512-aLcgK9gIJ3YRvrrtfSBbRa27F5WrpiTaPulnFpsHPxpUHgFlSgnU4854MHwoRGEBhfRJDWCS2WQ7lIjskE9Olw==}
@@ -10075,6 +10089,13 @@ snapshots:
       react-redux: 9.3.0(@types/react@19.3.0)(react@19.3.1)(redux@5.0.1)
 
   '@remix-run/route-pattern@0.22.1': {}
+
+  '@rive-app/canvas@2.45.1': {}
+
+  '@rive-app/react-canvas@4.37.1(react@19.3.1)':
+    dependencies:
+      '@rive-app/canvas': 2.45.1
+      react: 19.3.1
 
   '@rolldown/binding-android-arm-eabi@1.2.15':
     optional: true
