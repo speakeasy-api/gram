@@ -242,10 +242,12 @@ suite("reaching the stack from the sandbox", () => {
       resolve("client/dashboard/vite.config.ts"),
       "utf8",
     );
-    assert.match(
-      vite,
-      /host: true/,
-      "the dashboard must listen on every interface",
+    // Either every interface outright, or GRAM_BIND_IP (0.0.0.0 here).
+    assert.ok(
+      /host: true/.test(vite) ||
+        (/host: getHost\(\)/.test(vite) &&
+          /process\.env\["GRAM_BIND_IP"\]/.test(vite)),
+      "the dashboard must listen on every interface or on GRAM_BIND_IP",
     );
   });
 
