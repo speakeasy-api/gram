@@ -27,11 +27,12 @@ endpoints. Its OAuth metadata contains instance placeholders and an empty
 registration endpoint despite advertising dynamic registration. Setup uses
 manual credentials and concrete instance endpoints instead of assuming DCR.
 
-On 2026-11-05 the isolated application's catalog returned an empty Salesforce
-search and its 28 seeded native records contained no Salesforce entry. The
-GitHub repository record is a separate source; its presence does not establish
-publication in the live catalog. This change recognizes installed hosted
-connections and native custom-remote URLs without publishing catalog entries.
+The native record `com.salesforce/hosted-mcp` version `1.0.0` was published to
+the isolated local catalog through Admin MCP on 2026-11-06, with all 14 supplied
+endpoints, manual authentication, and the Salesforce guide link. The application
+catalog API and browser list both return it. The earlier empty local search
+preceded this publication. This local operation does not establish production
+catalog availability and is not a seed or source-code change.
 
 ## Saving and verification
 
@@ -96,3 +97,31 @@ the real callback, support gating, and a 400px viewport without horizontal overf
 - [Salesforce server URLs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/server-urls.html)
 - [External Client App](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/create-external-client-app.html)
 - [Native OAuth endpoints and PKCE](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/postman.html)
+
+## Catalog browser follow-up (2026-11-06)
+
+- Started in the published catalog entry, selected SObject Reads Sandbox and
+  User Identity, and installed through the normal dialog. The automatic Setup
+  handoff retained the sandbox endpoint.
+- Traversed app, callback, security, activation and credential steps. Empty
+  Consumer Key validation worked. Public-client placeholder saving returned
+  HTTP 200; reload retained configuration without restoring verification or
+  storing the key in browser progress.
+- The real first-party sign-in reached Salesforce's sandbox authorization
+  endpoint. Closing the placeholder-client popup kept testing and completion
+  disabled. No Salesforce account was authorized.
+- Switched the installed connection to hosted CRM, rejected an unsafe instance
+  URL, and checked existing-app instructions and hosted scopes. Actual instance
+  header creation, endpoint update and placeholder credential saving each
+  returned HTTP 200. Completion remained disabled.
+- Controlled probe responses separately covered sign-in-only gating, failed
+  test/retry, successful test gating and navigation to Overview. These responses
+  do not establish Salesforce OAuth or actual tool discovery; no tools ran.
+- Production/sandbox endpoint pairs had identical catalog labels. The
+  Salesforce-only correction adds explicit environment names, with regression
+  coverage. The focused catalog/setup suite passes 228 tests.
+
+Live authorization and authenticated discovery remain pending valid Salesforce
+app credentials and an authorized test account. The additional catalog endpoints
+for Data 360, Headless 360 and Tableau Next are published, but their setup choices
+remain unavailable pending their authentication/prerequisite contracts.
