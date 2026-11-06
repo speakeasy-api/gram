@@ -1978,6 +1978,7 @@ function SnowflakeInstallFields({
                     id={`snowflake-${index}-${field.key}`}
                     placeholder={field.placeholder}
                     value={value}
+                    error={!!error}
                     aria-invalid={!!error}
                     aria-describedby={error ? `${id}-error` : undefined}
                     onBlur={() =>
