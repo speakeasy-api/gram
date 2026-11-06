@@ -607,3 +607,16 @@ func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
 	require.Len(t, again, 1, "only the dropped member is offered again")
 	require.Equal(t, dropped.id, again[0].id)
 }
+
+func TestRecordConsentPage_FullRunnerStillRecordsMembers(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	for range cap(service.attemptEndings.slots) {
+		service.attemptEndings.slots <- struct{}{}
+	}
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
+	require.Len(t, rec.Rows(), 2)
+}

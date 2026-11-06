@@ -281,10 +281,13 @@ func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger,
 		record(ctx, statuses)
 		return
 	}
-	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+	taken := s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
 		dropped := record(ctx, s.changedMemberStatuses(ctx, logger, attempt, statuses))
 		s.forgetMemberStatuses(ctx, logger, attempt, dropped)
 	})
+	if !taken {
+		record(ctx, statuses)
+	}
 }
 
 // forgetMemberStatuses clears rows the recorder dropped, so the next render records them again.
@@ -501,15 +504,16 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 }
 
 // runAttemptEnding bounds all ending work, including readiness reads, off the response path.
-func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) {
+// It reports whether the work was taken.
+func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) bool {
 	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
-		return
+		return false
 	}
 	select {
 	case s.attemptEndings.slots <- struct{}{}:
 	default:
 		logger.WarnContext(ctx, "too many connection attempt endings waiting; leaving this one open")
-		return
+		return false
 	}
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
 	s.attemptEndings.wg.Go(func() {
@@ -517,6 +521,7 @@ func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, wor
 		defer func() { <-s.attemptEndings.slots }()
 		work(claimCtx)
 	})
+	return true
 }
 
 func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
