@@ -23,6 +23,8 @@ import {
   usePublishStatus,
 } from "@gram/client/react-query/publishStatus";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
+import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { ResourceAudienceEntryAppliesTo } from "@gram/client/models/components/resourceaudienceentry.js";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,6 +69,23 @@ function summarizePluginSelection(
     selectedIds[0];
   if (selectedIds.length === 1) return firstName ?? "1 plugin";
   return `${firstName} & ${selectedIds.length - 1} more`;
+}
+
+// Why the server sits in each plugin: Default takes every enabled server, and
+// a plugin assigned to a role takes the servers that role can use.
+function describeMembership(
+  plugin: Plugin,
+  roles: { name: string; allServers: boolean }[],
+): string | null {
+  if (plugin.isDefault) return "every enabled server is added to Default";
+  if (roles.length === 0) return null;
+  return roles
+    .map((role) =>
+      role.allServers
+        ? `via role ${role.name}, which can use all servers`
+        : `via role ${role.name}`,
+    )
+    .join("; ");
 }
 
 function describeSaveResult(addedCount: number, removedCount: number): string {
@@ -123,6 +142,13 @@ function WritablePluginStatusBanner({
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
+  // Role plugin matches are only disclosed to org admins.
+  const { data: audience } = useResourceAudience(
+    { resourceKind: "mcp", resourceId: server.id },
+    undefined,
+    { throwOnError: false, enabled: canAdmin },
+  );
+
   const addServerMutation = useAddPluginServerMutation();
   const removeServerMutation = useRemovePluginServerMutation();
   const publishMutation = usePublishPluginsMutation();
@@ -154,6 +180,22 @@ function WritablePluginStatusBanner({
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
+  const rolesByPlugin = new Map<
+    string,
+    { name: string; allServers: boolean }[]
+  >();
+  for (const match of audience?.rolePlugins ?? []) {
+    const entry = audience?.entries.find(
+      (e) => e.principalUrn === match.principalUrn,
+    );
+    const roles = rolesByPlugin.get(match.pluginId) ?? [];
+    roles.push({
+      name: entry?.displayName ?? match.principalUrn,
+      allServers:
+        entry?.appliesTo === ResourceAudienceEntryAppliesTo.AllResources,
+    });
+    rolesByPlugin.set(match.pluginId, roles);
+  }
   // A repo existing isn't enough — a marketplace with no active collaborator
   // isn't discoverable in Claude/Codex/etc, so it isn't truly set up yet.
   // Mirrors the connected/hasCollaborators gate on the Plugins page.
@@ -280,6 +322,29 @@ function WritablePluginStatusBanner({
               <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
             )}
           </div>
+          {isTrulyPublished && (
+            <ul className="flex flex-col gap-1">
+              {memberPlugins.map((plugin) => {
+                const reason = describeMembership(
+                  plugin,
+                  rolesByPlugin.get(plugin.id) ?? [],
+                );
+                return (
+                  <li key={plugin.id}>
+                    <Text variant="small">
+                      <span className="font-medium">{plugin.name}</span>
+                      {reason && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {reason}
+                        </span>
+                      )}
+                    </Text>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <Text variant="small" className="text-muted-foreground/90">
             Plugins are the preferred way to distribute MCP servers to your
             organization's users. Plugins are installed via marketplaces which
