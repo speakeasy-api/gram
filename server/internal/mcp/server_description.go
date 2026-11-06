@@ -72,11 +72,10 @@ func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryM
 	if meta.UserSessionIssuerID.Valid || len(members) > 0 {
 		hints = cacheHintsCallerVarying
 	}
-	custom := conv.FromPGText[string](meta.Instructions)
 	description := serverDescription{
 		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
-		instructions: metamcp.WithMemberSummary(metamcp.ResolveDiscoveryInstructions(custom, mode), custom, members),
+		instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](meta.Instructions), mode, members),
 		cacheHints:   hints,
 	}
 	if skillsEnabled {

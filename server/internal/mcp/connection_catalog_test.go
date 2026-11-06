@@ -815,7 +815,7 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 				// Initialize reads the record once to name only approved servers.
-				require.Equal(t, int32(1), counted.loads.Load(), "protocol setup reads the catalog at most once")
+				require.Equal(t, int32(1), counted.loads.Load(), "initialize reads the catalog once and ping not at all")
 				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
 			}
 			counted.loads.Store(0)

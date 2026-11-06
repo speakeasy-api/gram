@@ -10,7 +10,7 @@ import (
 // Instructions is the built-in server-instructions block answered by
 // initialize and server/discover when a gateway has no operator-authored
 // instructions of its own. It stays static so the dashboard can ship a copy;
-// the caller's servers are prepended separately by WithMemberSummary.
+// the caller's servers are prepended per request by ResolveDiscoveryInstructions.
 const Instructions = `This endpoint fronts a set of MCP servers as one, exposing a handful of tools instead of every member's full catalog.
 
 Work from the outside in:
@@ -35,19 +35,30 @@ func ResolveInstructions(custom *string) string {
 	return *custom
 }
 
+// HasCustomInstructions reports whether the owner replaced the built-in text.
+func HasCustomInstructions(custom *string) bool {
+	return custom != nil && strings.TrimSpace(*custom) != ""
+}
+
 // ResolveDiscoveryInstructions describes the active catalog unless the owner
-// supplies custom instructions.
-func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
-	if custom != nil && strings.TrimSpace(*custom) != "" {
+// supplies custom instructions. Built-in text starts with a one-line list of
+// members, so agents that see only the first line still learn what the
+// gateway reaches.
+func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode, members []MemberLabel) string {
+	if HasCustomInstructions(custom) {
 		return *custom
 	}
+	instructions := Instructions
 	if mode == DiscoveryModeDirect {
-		return "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
+		instructions = "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
 	}
 	if mode == DiscoveryModeCode {
-		return "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
+		instructions = "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
 	}
-	return Instructions
+	if len(members) == 0 {
+		return instructions
+	}
+	return MemberSummary(members) + "\n\n" + instructions
 }
 
 // memberSummaryLimit fits the summary in the one line Codex keeps for a
@@ -58,17 +69,6 @@ const memberSummaryLimit = 250
 type MemberLabel struct {
 	Slug string
 	Name string
-}
-
-// WithMemberSummary prepends a one-line list of the caller's servers to
-// built-in instructions, so agents that see only the first line still learn
-// what the gateway reaches. Custom instructions and an empty member set are
-// returned unchanged.
-func WithMemberSummary(instructions string, custom *string, members []MemberLabel) string {
-	if len(members) == 0 || (custom != nil && strings.TrimSpace(*custom) != "") {
-		return instructions
-	}
-	return MemberSummary(members) + "\n\n" + instructions
 }
 
 // MemberSummary lists server names in at most memberSummaryLimit characters,

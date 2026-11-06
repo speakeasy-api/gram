@@ -491,15 +491,12 @@ func (s *Service) handleMetaInitialize(
 	return bs, nil
 }
 
-// metaInstructionMembersTimeout bounds the lookup so a slow database delays
-// the handshake by at most this long; the summary is dropped instead.
-const metaInstructionMembersTimeout = 2 * time.Second
-
 // metaInstructionMembers names the servers this caller's tool listing would
 // offer. A failed snapshot only drops the summary: the handshake must not fail.
 func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
-	ctx, cancel := context.WithTimeout(ctx, metaInstructionMembersTimeout)
-	defer cancel()
+	if metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
+		return nil
+	}
 	if gate.memberChoices != nil {
 		gate.memberChoices.readOnly = true
 	}
@@ -518,17 +515,13 @@ func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logge
 		}
 		gate.catalog = catalog
 	}
-	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
+	_, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
 	if err != nil {
 		return nil
 	}
-	if gate.discoveryMode == metamcp.DiscoveryModeCode {
-		members = s.codeCallableMembers(ctx, gate, members, false)
-	} else {
-		members = catalogSelectedMembers(gate, members)
-	}
-	labels := make([]metamcp.MemberLabel, 0, len(members))
-	for _, member := range members {
+	selected := catalogSelectedMembers(gate, members)
+	labels := make([]metamcp.MemberLabel, 0, len(selected))
+	for _, member := range selected {
 		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name})
 	}
 	return labels

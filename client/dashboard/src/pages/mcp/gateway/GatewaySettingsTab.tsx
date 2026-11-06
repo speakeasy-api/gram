@@ -270,10 +270,11 @@ export function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
-          instructions reflect the active discovery mode; your text replaces
-          them. Save it blank to restore the built-in text. Anyone who can
-          connect to this gateway can read the text, and clients already
-          connected keep the old text until they reconnect.
+          instructions reflect the active discovery mode and start with a line
+          naming the servers each user can use; your text replaces both. Save it
+          blank to restore the built-in text. Anyone who can connect to this
+          gateway can read the text, and clients already connected keep the old
+          text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
