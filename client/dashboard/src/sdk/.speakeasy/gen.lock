@@ -1330,6 +1330,7 @@ trackedFiles:
   src/models/components/getorgmcpserveractivityresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
+  src/models/components/getprojectoverviewpayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
@@ -1619,7 +1620,6 @@ trackedFiles:
   src/models/components/litellminstancekeyresult.ts: {}
   src/models/components/litellmrequestdata.ts: {}
   src/models/components/litellmstructuredmessage.ts: {}
-  src/models/components/llmclientusage.ts: {}
   src/models/components/logfilter.ts: {}
   src/models/components/managedagent.ts: {}
   src/models/components/manageddevice.ts: {}
@@ -1750,7 +1750,10 @@ trackedFiles:
   src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
+  src/models/components/projectmcpenduser.ts: {}
   src/models/components/projectmcpserveractivity.ts: {}
+  src/models/components/projectmcptoolusage.ts: {}
+  src/models/components/projectmcpusage.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
   src/models/components/projectsummary.ts: {}
   src/models/components/promoterequestbody.ts: {}
@@ -2103,7 +2106,6 @@ trackedFiles:
   src/models/components/toolvariationgroup.ts: {}
   src/models/components/toolvariationgroupresult.ts: {}
   src/models/components/topserver.ts: {}
-  src/models/components/topuser.ts: {}
   src/models/components/triggeranalysisrequestbody.ts: {}
   src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
@@ -8392,10 +8394,10 @@ examples:
   getProjectOverview:
     speakeasy-default-get-project-overview:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"from": "2025-12-19T10:00:00Z", "include_usage": false, "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"comparison": {"active_servers_count": 305003, "active_users_count": 734678, "failed_chats": 325409, "failed_tool_calls": 468519, "llm_client_breakdown": [], "resolved_chats": 236113, "top_servers": [], "top_users": [], "total_chats": 137185, "total_tool_calls": 841623}, "metrics_mode": "tool_call", "summary": {"active_servers_count": 388744, "active_users_count": 188324, "failed_chats": 544990, "failed_tool_calls": 182365, "llm_client_breakdown": [], "resolved_chats": 303935, "top_servers": [{"server_name": "<value>", "tool_call_count": 935494}], "top_users": [], "total_chats": 611955, "total_tool_calls": 679341}}
+          application/json: {"summary": {"active_servers_count": 388744, "failed_tool_calls": 182365, "top_servers": [{"server_name": "<value>", "tool_call_count": 935494}], "total_chats": 611955, "total_tool_calls": 679341}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9893,6 +9895,7 @@ examples:
           offset: 0
           sort_by: "last_message_timestamp"
           sort_order: "desc"
+          pinned_first: false
       responses:
         "200":
           application/json: {"chats": [{"created_at": "2025-09-09T21:12:11.561Z", "id": "<id>", "last_message_timestamp": "2025-05-06T07:22:23.706Z", "num_messages": 53270, "title": "<value>", "updated_at": "2026-09-21T01:28:32.183Z"}], "total": 56834}

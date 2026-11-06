@@ -101,6 +101,7 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		values.Add("sort_by", p.SortBy)
 		values.Add("sort_order", p.SortOrder)
+		values.Add("pinned_first", fmt.Sprintf("%v", p.PinnedFirst))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsPinnedFirst string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -212,6 +212,15 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			}
 		}
 	}
+	var pinnedFirst bool
+	{
+		if chatListChatsPinnedFirst != "" {
+			pinnedFirst, err = strconv.ParseBool(chatListChatsPinnedFirst)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for pinnedFirst, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatListChatsSessionToken != "" {
@@ -249,6 +258,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.PinnedFirst = pinnedFirst
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

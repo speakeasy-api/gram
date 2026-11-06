@@ -27437,6 +27437,14 @@ paths:
                         - desc
                     type: string
                 - allowEmptyValue: true
+                  description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+                  in: query
+                  name: pinned_first
+                  schema:
+                    default: false
+                    description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+                    type: boolean
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -80987,7 +80995,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+                            $ref: '#/components/schemas/GetProjectOverviewPayload'
                 required: true
             responses:
                 "200":
@@ -110535,6 +110543,10 @@ components:
                     description: Start time in ISO 8601 format
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                include_usage:
+                    type: boolean
+                    description: Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response
+                    default: false
                 to:
                     type: string
                     description: End time in ISO 8601 format
@@ -110547,21 +110559,17 @@ components:
         GetProjectOverviewResult:
             type: object
             properties:
-                comparison:
-                    $ref: '#/components/schemas/ProjectOverviewSummary'
-                metrics_mode:
-                    type: string
-                    description: Indicates whether metrics are session-based or tool-call-based
-                    enum:
-                        - session
-                        - tool_call
+                mcp_usage:
+                    $ref: '#/components/schemas/ProjectMcpUsage'
                 summary:
                     $ref: '#/components/schemas/ProjectOverviewSummary'
+                usage_by_agent:
+                    $ref: '#/components/schemas/QueryResult'
+                usage_by_user:
+                    $ref: '#/components/schemas/QueryResult'
             description: Result of project overview query
             required:
                 - summary
-                - comparison
-                - metrics_mode
         GetProjectResult:
             type: object
             properties:
@@ -120593,6 +120601,20 @@ components:
                 - id
                 - name
                 - slug
+        ProjectMcpEndUser:
+            type: object
+            properties:
+                tool_calls:
+                    type: integer
+                    description: Number of tool calls
+                    format: int64
+                user_id:
+                    type: string
+                    description: External end user ID
+            description: Tool calls made by one external end user
+            required:
+                - user_id
+                - tool_calls
         ProjectMcpServerActivity:
             type: object
             properties:
@@ -120609,6 +120631,53 @@ components:
             required:
                 - project_id
                 - activity
+        ProjectMcpToolUsage:
+            type: object
+            properties:
+                calls:
+                    type: integer
+                    description: Number of calls
+                    format: int64
+                failures:
+                    type: integer
+                    description: Number of failed calls
+                    format: int64
+                urn:
+                    type: string
+                    description: Tool URN, or the tool name for agent hook events
+            description: Calls and failures for one tool made by external end users
+            required:
+                - urn
+                - calls
+                - failures
+        ProjectMcpUsage:
+            type: object
+            properties:
+                end_users_count:
+                    type: integer
+                    description: Number of distinct external end users with activity in the period
+                    format: int64
+                top_end_users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProjectMcpEndUser'
+                    description: Top 5 external end users by tool calls
+                top_failing_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProjectMcpToolUsage'
+                    description: Top 5 tools with at least one failure, ranked by failure rate, then by failures
+                top_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProjectMcpToolUsage'
+                    description: Top 5 tools by calls
+            description: External end user and MCP tool usage for a project in a time period
+            required:
+                - end_users_count
+                - top_end_users
+                - top_tools
+                - top_failing_tools
         ProjectOverviewSummary:
             type: object
             properties:
@@ -120616,37 +120685,15 @@ components:
                     type: integer
                     description: Number of MCP servers with at least one tool call in the time period
                     format: int64
-                active_users_count:
-                    type: integer
-                    description: Number of unique users with activity in the time period
-                    format: int64
-                failed_chats:
-                    type: integer
-                    description: Number of failed chat sessions
-                    format: int64
                 failed_tool_calls:
                     type: integer
                     description: Number of failed tool calls
-                    format: int64
-                llm_client_breakdown:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/LLMClientUsage'
-                    description: Breakdown of messages/activity by LLM client/agent
-                resolved_chats:
-                    type: integer
-                    description: Number of resolved chat sessions
                     format: int64
                 top_servers:
                     type: array
                     items:
                         $ref: '#/components/schemas/TopServer'
                     description: Top 10 MCP servers by tool call count
-                top_users:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/TopUser'
-                    description: Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
                 total_chats:
                     type: integer
                     description: Total number of chat sessions
@@ -120658,15 +120705,10 @@ components:
             description: Aggregated project-level summary metrics for a time period
             required:
                 - total_chats
-                - resolved_chats
-                - failed_chats
                 - total_tool_calls
                 - failed_tool_calls
                 - active_servers_count
-                - active_users_count
-                - top_users
                 - top_servers
-                - llm_client_breakdown
         ProjectSummary:
             type: object
             properties:

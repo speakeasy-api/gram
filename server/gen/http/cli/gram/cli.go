@@ -912,6 +912,7 @@ func ParseEndpoint(
 		chatListChatsOffsetFlag            = chatListChatsFlags.String("offset", "", "")
 		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "last_message_timestamp", "")
 		chatListChatsSortOrderFlag         = chatListChatsFlags.String("sort-order", "desc", "")
+		chatListChatsPinnedFirstFlag       = chatListChatsFlags.String("pinned-first", "", "")
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
 		chatListChatsChatSessionsTokenFlag = chatListChatsFlags.String("chat-sessions-token", "", "")
@@ -10690,7 +10691,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsAgentIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsAgentIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsPinnedFirstFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
 			case "get-assistant-session-summary":
 				endpoint = c.GetAssistantSessionSummary()
 				data, err = chatc.BuildGetAssistantSessionSummaryPayload(*chatGetAssistantSessionSummaryAssistantIDFlag, *chatGetAssistantSessionSummaryFromFlag, *chatGetAssistantSessionSummaryToFlag, *chatGetAssistantSessionSummarySessionTokenFlag, *chatGetAssistantSessionSummaryProjectSlugInputFlag)
@@ -16602,6 +16603,7 @@ func chatListChatsUsage() {
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -sort-by STRING")
 	fmt.Fprint(os.Stderr, " -sort-order STRING")
+	fmt.Fprint(os.Stderr, " -pinned-first BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
@@ -16630,13 +16632,14 @@ func chatListChatsUsage() {
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -sort-by STRING: `)
 	fmt.Fprintln(os.Stderr, `    -sort-order STRING: `)
+	fmt.Fprintln(os.Stderr, `    -pinned-first BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --pinned-first false --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatGetAssistantSessionSummaryUsage() {
@@ -30300,7 +30303,7 @@ func telemetryGetProjectOverviewUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_usage\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetUnproxiedMcpServerUsageUsage() {

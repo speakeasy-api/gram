@@ -57,6 +57,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			offset            int
 			sortBy            string
 			sortOrder         string
+			pinnedFirst       bool
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -207,6 +208,16 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if !(sortOrder == "asc" || sortOrder == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
 		}
+		{
+			pinnedFirstRaw := qp.Get("pinned_first")
+			if pinnedFirstRaw != "" {
+				v, err2 := strconv.ParseBool(pinnedFirstRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("pinned_first", pinnedFirstRaw, "boolean"))
+				}
+				pinnedFirst = v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -222,7 +233,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, userID, source, assistantID, agentID, sourceKind, excludeSourceKind, hasRisk, accountType, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, userID, source, assistantID, agentID, sourceKind, excludeSourceKind, hasRisk, accountType, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, pinnedFirst, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

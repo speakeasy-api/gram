@@ -603,6 +603,9 @@ type ListChatsPayload struct {
 	SortBy string
 	// Sort order
 	SortOrder string
+	// List pinned chats before unpinned ones, then apply sort_by and sort_order
+	// within each group
+	PinnedFirst bool
 }
 
 // ListChatsResult is the result type of the chat service listChats method.
