@@ -256,7 +256,7 @@ WHERE id = ANY(@ids::uuid[]);
 
 -- name: ListAuditActorsOnSubjects :many
 -- Who changed any of these subjects in an organization within a time range.
-SELECT subject_id, actor_type, actor_id, is_internal, created_at
+SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_id = ANY(@subject_ids::text[])

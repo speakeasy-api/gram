@@ -312,7 +312,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
-SELECT subject_id, actor_type, actor_id, is_internal, created_at
+SELECT subject_id, action, actor_type, actor_id, is_internal, created_at
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_id = ANY($2::text[])
@@ -329,6 +329,7 @@ type ListAuditActorsOnSubjectsParams struct {
 
 type ListAuditActorsOnSubjectsRow struct {
 	SubjectID  string
+	Action     string
 	ActorType  string
 	ActorID    string
 	IsInternal bool
@@ -352,6 +353,7 @@ func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditAc
 		var i ListAuditActorsOnSubjectsRow
 		if err := rows.Scan(
 			&i.SubjectID,
+			&i.Action,
 			&i.ActorType,
 			&i.ActorID,
 			&i.IsInternal,

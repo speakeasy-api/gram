@@ -255,3 +255,46 @@ func TestLabelsKeepEveryValueTheWriterProduces(t *testing.T) {
 	}
 	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn.String(), mcpconnectionattempts.ReasonLabel(mcpconnectionattempts.CodeNeedsSignIn.String()))
 }
+
+func TestNextSuccessIgnoresAnAttemptThatStartedBeforeTheFailure(t *testing.T) {
+	t.Parallel()
+	failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeFailed)
+	failure.FinalAt = outcomeStart.Add(20 * time.Minute)
+	overlapping := fixSummary(outcomeStart.Add(5*time.Minute), mcpconnectionattempts.OutcomeConnected)
+	_, ok := mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{overlapping}, outcomeStart.Add(48*time.Hour))
+	require.False(t, ok, "a success already under way when the failure happened did not fix it")
+
+	after := fixSummary(outcomeStart.Add(25*time.Minute), mcpconnectionattempts.OutcomeConnected)
+	fix, ok := mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{overlapping, after}, outcomeStart.Add(48*time.Hour))
+	require.True(t, ok)
+	require.Equal(t, after.AttemptID, fix.Success.AttemptID)
+}
+
+func TestNextSuccessPairsServerlessAttemptsOnlyOnTheSameConnection(t *testing.T) {
+	t.Parallel()
+	serverless := func(started time.Time, outcome mcpconnectionattempts.Outcome, project uuid.UUID, remoteClient string) mcpconnectionattempts.AttemptSummary {
+		s := fixSummary(started, outcome)
+		s.ServerID, s.ServerKind, s.AppKey, s.ProjectID, s.RemoteSessionClientID, s.Touched = "", "provider_session", "background", project, remoteClient, nil
+		return s
+	}
+	project := uuid.New()
+	failure := serverless(outcomeStart, mcpconnectionattempts.OutcomeFailed, project, "slack-client")
+	now := outcomeStart.Add(48 * time.Hour)
+
+	_, ok := mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{serverless(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected, project, "github-client")}, now)
+	require.False(t, ok, "another provider's refresh")
+	_, ok = mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{serverless(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected, uuid.New(), "slack-client")}, now)
+	require.False(t, ok, "the same provider in another project")
+	_, ok = mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{serverless(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected, project, "slack-client")}, now)
+	require.True(t, ok)
+}
+
+func TestIsConfigChange(t *testing.T) {
+	t.Parallel()
+	for _, action := range []string{"mcp-server:update", "mcp-server:update-tool-metadata", "auth-client:attach-mcp-server", "meta-mcp:add_member", "remote-session-client:revoke-sessions"} {
+		require.True(t, mcpconnectionattempts.IsConfigChange(action), action)
+	}
+	for _, action := range []string{"platform-mcp-diagnostics:user_status_read", "mcp-server:view", "update", ""} {
+		require.False(t, mcpconnectionattempts.IsConfigChange(action), action)
+	}
+}

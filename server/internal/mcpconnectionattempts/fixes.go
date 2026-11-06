@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -35,16 +36,25 @@ const (
 // fixedByValues are every FixedBy value.
 var fixedByValues = []FixedBy{FixedByNothing, FixedByAdminChange, FixedBySystemChange, FixedByReconnect, FixedByRetry}
 
-// fixKey is the person, app and server a success must share with the failure it fixes.
+// fixKey is the person, app and connection a success must share with the failure it
+// fixes. An attempt that reached no server is told apart by its project and provider
+// connection, so one provider's refresh never fixes another's.
 type fixKey struct {
 	organizationID string
 	subjectURN     string
 	appKey         string
+	serverKind     string
 	serverID       string
+	projectID      string
+	remoteClientID string
 }
 
 func fixKeyOf(a AttemptSummary) fixKey {
-	return fixKey{organizationID: a.OrganizationID, subjectURN: a.SubjectURN, appKey: a.AppKey, serverID: a.ServerID}
+	key := fixKey{organizationID: a.OrganizationID, subjectURN: a.SubjectURN, appKey: a.AppKey, serverKind: a.ServerKind, serverID: a.ServerID, projectID: "", remoteClientID: ""}
+	if a.ServerID == "" {
+		key.projectID, key.remoteClientID = a.ProjectID.String(), a.RemoteSessionClientID
+	}
+	return key
 }
 
 // Successes are connected attempts grouped by person, app and server, for pairing failures.
@@ -76,8 +86,9 @@ type Fix struct {
 	Success AttemptSummary
 }
 
-// Next pairs a failure with the earliest success by the same person, app and server
-// that started after it, within FixLookahead. A failure with no person has none.
+// Next pairs a failure with the earliest success by the same person, app and connection
+// that started after the failing row, within FixLookahead of the failure's start. A
+// failure with no person has none.
 func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
 	fix := Fix{Failure: failure, Failed: failure.End(s.now), Success: AttemptSummary{}} //nolint:exhaustruct // filled when found
 	if failure.SubjectURN == "" {
@@ -86,7 +97,7 @@ func (s Successes) Next(failure AttemptSummary) (Fix, bool) {
 	limit := failure.StartedAt.Add(FixLookahead)
 	found := false
 	for _, c := range s.byKey[fixKeyOf(failure)] {
-		if c.AttemptID == failure.AttemptID || !c.StartedAt.After(failure.StartedAt) || !c.StartedAt.Before(limit) {
+		if c.AttemptID == failure.AttemptID || !c.StartedAt.After(fix.Failed.At) || !c.StartedAt.Before(limit) {
 			continue
 		}
 		if !found || cmp.Or(c.StartedAt.Compare(fix.Success.StartedAt), slices.Compare(c.AttemptID[:], fix.Success.AttemptID[:])) < 0 {
@@ -148,6 +159,27 @@ type Change struct {
 	At time.Time
 }
 
+// configChangeVerbs are the action verbs that change configuration. An action counts
+// only when its verb, the part after the colon up to the first - or _, is listed, so a
+// new read-only action never counts as a fix.
+var configChangeVerbs = []string{
+	"create", "update", "delete", "upsert", "set", "add", "remove", "attach", "detach",
+	"enable", "disable", "revoke", "rotate", "restore", "replace", "rename", "reset",
+	"pause", "resume", "archive", "migrate", "duplicate",
+}
+
+// IsConfigChange reports whether an audit action changed configuration rather than read it.
+func IsConfigChange(action string) bool {
+	_, verb, ok := strings.Cut(action, ":")
+	if !ok {
+		return false
+	}
+	if end := strings.IndexAny(verb, "-_"); end >= 0 {
+		verb = verb[:end]
+	}
+	return slices.Contains(configChangeVerbs, verb)
+}
+
 // IsAdminActor reports whether an audit actor is the customer's admin: a person or an
 // API key, unless Speakeasy staff acted. user:system, system, agent and workload
 // actors are Speakeasy.
@@ -165,7 +197,7 @@ func IsAdminActor(actorType, actorID string, internal bool) bool {
 	}
 }
 
-// ListChanges reads one organization's audit entries on the given subjects between two times.
+// ListChanges reads one organization's configuration changes on the given subjects between two times.
 func ListChanges(ctx context.Context, db auditrepo.DBTX, organizationID string, subjects []string, after, before time.Time) ([]Change, error) {
 	if len(subjects) == 0 {
 		return nil, nil
@@ -181,6 +213,9 @@ func ListChanges(ctx context.Context, db auditrepo.DBTX, organizationID string, 
 	}
 	changes := make([]Change, 0, len(entries))
 	for _, entry := range entries {
+		if !IsConfigChange(entry.Action) {
+			continue
+		}
 		changes = append(changes, Change{
 			SubjectID: entry.SubjectID,
 			ByAdmin:   IsAdminActor(entry.ActorType, entry.ActorID, entry.IsInternal),

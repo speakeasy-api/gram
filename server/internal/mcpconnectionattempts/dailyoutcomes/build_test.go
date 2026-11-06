@@ -26,6 +26,7 @@ const (
 	daysAgoRerun       = 23
 	daysAgoFixedBy     = 20
 	daysAgoPlanOld     = 15
+	daysAgoExpiring    = 11
 	daysAgoEmpty       = 10
 	daysAgoMismatch    = 9
 	daysAgoCrossOrg    = 19
@@ -112,12 +113,12 @@ func (f *fixture) insertStored(table string, day time.Time, key string, attempts
 	require.NoError(f.t, batch.Send())
 }
 
-func (f *fixture) audit(org, subjectID, actorType, actorID string, internal bool, at time.Time) {
+func (f *fixture) audit(org, subjectID, action, actorType, actorID string, internal bool, at time.Time) {
 	f.t.Helper()
 	q := auditrepo.New(f.db)
 	inserted, err := q.InsertAuditLog(f.t.Context(), auditrepo.InsertAuditLogParams{
 		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: actorID, ActorType: actorType,
-		ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""), Action: "mcp-server:update",
+		ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""), Action: action,
 		SubjectID: subjectID, SubjectType: "mcp_server", SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""),
 		BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil, ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), IsInternal: internal,
 	})
@@ -204,32 +205,34 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 		return append(rows, f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, person))
 	}
 
-	retry, reconnect, admin, system, staff, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	retry, reconnect, admin, system, staff, looked, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	at := day.Add(time.Hour)
 	systemFailure := fail(system, at)
 	systemFailure.AuthClientID = "auth-client-" + uuid.NewString()
 
 	rows := []mcpconnectionattempts.Row{
-		fail(retry, at), fail(reconnect, at), fail(admin, at), systemFailure, fail(staff, at), fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
+		fail(retry, at), fail(reconnect, at), fail(admin, at), systemFailure, fail(staff, at), fail(looked, at), fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
 	}
 	rows = append(rows, succeed(retry, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(reconnect, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(admin, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(system, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(staff, at.Add(time.Hour), false)...)
+	rows = append(rows, succeed(looked, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(lookahead, at.Add(3*24*time.Hour), false)...)
 	rows = append(rows, succeed(tooLate, at.Add(mcpconnectionattempts.FixLookahead+time.Hour), false)...)
 	f.write(rows...)
 
-	f.audit(f.org, admin.String(), "api_key", "key_admin", false, at.Add(30*time.Minute))
-	f.audit(f.org, systemFailure.AuthClientID, "user", "system", false, at.Add(30*time.Minute))
-	f.audit(f.org, staff.String(), "user", "user_staff", true, at.Add(30*time.Minute))
-	f.audit(f.org, retry.String(), "user", "user_admin", false, at.Add(-time.Hour))
+	f.audit(f.org, admin.String(), "mcp-server:update", "api_key", "key_admin", false, at.Add(30*time.Minute))
+	f.audit(f.org, systemFailure.AuthClientID, "mcp-server:update", "user", "system", false, at.Add(30*time.Minute))
+	f.audit(f.org, staff.String(), "mcp-server:update", "user", "user_staff", true, at.Add(30*time.Minute))
+	f.audit(f.org, looked.String(), "platform-mcp-diagnostics:user_status_read", "user", "user_admin", false, at.Add(30*time.Minute))
+	f.audit(f.org, retry.String(), "mcp-server:update", "user", "user_admin", false, at.Add(-time.Hour))
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                             5,
-		"|dcr||mcp_request|failed|invalid_bearer_token|retry":         2,
+		"|dcr||inbound_token|connected||":                             6,
+		"|dcr||mcp_request|failed|invalid_bearer_token|retry":         3,
 		"|dcr||mcp_request|failed|invalid_bearer_token|reconnect":     1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 2,
@@ -381,8 +384,8 @@ func TestBuildDayPairsOnlyWithinTheOrganization(t *testing.T) {
 		inOrg(f.org, shared, at, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken),
 		inOrg(f.org, shared, at.Add(time.Hour), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued),
 	)
-	f.audit(otherOrg, shared.String(), "user", "user_other_admin", false, at.Add(30*time.Minute))
-	f.audit(otherOrg, alone.String(), "user", "user_other_admin", false, at.Add(30*time.Minute))
+	f.audit(otherOrg, shared.String(), "mcp-server:update", "user", "user_other_admin", false, at.Add(30*time.Minute))
+	f.audit(otherOrg, alone.String(), "mcp-server:update", "user", "user_other_admin", false, at.Add(30*time.Minute))
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
@@ -390,4 +393,16 @@ func TestBuildDayPairsOnlyWithinTheOrganization(t *testing.T) {
 		"|dcr||mcp_request|failed|invalid_bearer_token|":      1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|retry": 1,
 	}, f.stored(mainTable, day))
+}
+
+func TestBuildDayRefusesADayWhoseRawEventsMayBeExpiring(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoExpiring)
+	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
+	f.b.clock = func() time.Time { return day.AddDate(0, 0, rawSafeDays+1) }
+
+	_, err := f.b.BuildDay(t.Context(), day, f.now)
+	require.ErrorIs(t, err, ErrDayExpiring)
+	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
 }

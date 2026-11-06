@@ -69,6 +69,15 @@ type AttemptSummary struct {
 	// ServerID is the server or gateway, empty when the attempt reached none.
 	ServerID string `ch:"server"`
 
+	// ServerKind is the kind of server, or provider_session or identity_provider for none.
+	ServerKind string `ch:"kind"`
+
+	// ProjectID is the project, nil for none.
+	ProjectID uuid.UUID `ch:"project"`
+
+	// RemoteSessionClientID is the earliest provider connection named, empty when none.
+	RemoteSessionClientID string `ch:"remote_client"`
+
 	// ProviderHost is the earliest provider named.
 	ProviderHost string `ch:"provider"`
 
@@ -121,6 +130,7 @@ func Summarize(rows []Row) AttemptSummary {
 		return s
 	}
 	s.OrganizationID, s.AttemptID, s.AppKey, s.ServerID = rows[0].OrganizationID, rows[0].AttemptID, rows[0].AppKey, rows[0].ServerID
+	s.ServerKind, s.ProjectID = rows[0].ServerKind, rows[0].ProjectID
 	s.StartedAt = rows[0].AttemptStartedAt
 
 	var final, last *Row
@@ -152,6 +162,7 @@ func Summarize(rows []Row) AttemptSummary {
 	}
 	s.LastStep, s.LastReason, s.LastAt = last.Step, last.Reason, last.EventTime
 	s.SubjectURN = earliest(rows, func(r Row) bool { return r.SubjectURN != "" }, func(r Row) string { return r.SubjectURN })
+	s.RemoteSessionClientID = earliest(rows, func(r Row) bool { return r.RemoteSessionClientID != "" }, func(r Row) string { return r.RemoteSessionClientID })
 	s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
 	s.ClientFamily = earliest(rows, func(r Row) bool { return r.ClientFamily != "" && r.ClientFamily != FamilyBrowser }, func(r Row) string { return r.ClientFamily })
 	if s.ClientFamily == "" && browser {

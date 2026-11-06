@@ -55,6 +55,9 @@ func (m *MCPConnectionOutcomesDaily) Build(ctx context.Context, args BuildMCPCon
 	if errors.Is(err, dailyoutcomes.ErrDayOpen) {
 		return nil, temporal.NewNonRetryableApplicationError("connection outcome day is still open", "day_open", err)
 	}
+	if errors.Is(err, dailyoutcomes.ErrDayExpiring) {
+		return nil, temporal.NewNonRetryableApplicationError("connection outcome day is too old to rebuild", "day_expiring", err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("build connection outcome day: %w", err)
 	}

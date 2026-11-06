@@ -2,9 +2,13 @@ package mcpconnectionattempts
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -26,6 +30,9 @@ const attemptColumns = `
 	argMinIf(subject_urn, (event_time, subject_urn), subject_urn != '') AS subject,
 	any(app_key) AS app,
 	any(server_id) AS server,
+	any(server_kind) AS kind,
+	any(project_id) AS project,
+	argMinIf(remote_session_client_id, (event_time, remote_session_client_id), remote_session_client_id != '') AS remote_client,
 	argMinIf(provider_host, (event_time, provider_host), provider_host != '') AS provider,
 	toString(if(countIf(client_family NOT IN ('', 'browser')) > 0,
 		argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser')),
@@ -37,10 +44,76 @@ const attemptColumns = `
 		groupUniqArray(remote_session_issuer_id), groupUniqArray(user_session_issuer_id),
 		groupUniqArray(remote_session_client_id))))) AS touched`
 
-// ReadAttempts summarizes every attempt with a raw row matching where, calling each
-// once per attempt. where is a SQL condition on mcp_connection_events and args bind it.
-// Callers filter on organization_id or a time range so the read stays bounded.
-func ReadAttempts(ctx context.Context, ch driver.Conn, where string, each func(AttemptSummary), args ...any) error {
+// AttemptFilter selects whole attempts. Every field is the same on all of an
+// attempt's rows, so no filter can drop the row that decides how an attempt ended.
+type AttemptFilter struct {
+	// StartedFrom bounds attempt start, inclusive. Required.
+	StartedFrom time.Time
+
+	// StartedBefore bounds attempt start, exclusive. Required.
+	StartedBefore time.Time
+
+	// OrganizationID keeps one organization, or every one when empty.
+	OrganizationID string
+
+	// ExcludeOrganizationIDs drops these organizations.
+	ExcludeOrganizationIDs []string
+
+	// ProjectID keeps one project, or every one when nil.
+	ProjectID uuid.UUID
+
+	// ServerID keeps one server or gateway, or every one when empty.
+	ServerID string
+
+	// PeopleFailingFrom and PeopleFailingBefore, when set, keep only attempts by a
+	// person with an attempt that started in this range and has a row with a reason.
+	PeopleFailingFrom time.Time
+
+	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
+	PeopleFailingBefore time.Time
+}
+
+func (f AttemptFilter) where() (string, []any, error) {
+	if f.StartedFrom.IsZero() || f.StartedBefore.IsZero() {
+		return "", nil, errors.New("attempt filter needs a start range")
+	}
+	conds := []string{"attempt_started_at >= fromUnixTimestamp64Nano(?)", "attempt_started_at < fromUnixTimestamp64Nano(?)"}
+	args := []any{f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()}
+	if f.OrganizationID != "" {
+		conds, args = append(conds, "organization_id = ?"), append(args, f.OrganizationID)
+	}
+	if len(f.ExcludeOrganizationIDs) > 0 {
+		conds, args = append(conds, "NOT has(?, organization_id)"), append(args, f.ExcludeOrganizationIDs)
+	}
+	if f.ProjectID != uuid.Nil {
+		conds, args = append(conds, "project_id = ?"), append(args, f.ProjectID)
+	}
+	if f.ServerID != "" {
+		conds, args = append(conds, "server_id = ?"), append(args, f.ServerID)
+	}
+	if !f.PeopleFailingFrom.IsZero() {
+		conds = append(conds, `(organization_id, subject_urn) IN (
+		SELECT organization_id, subject_urn FROM `+eventsTable+`
+		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
+			AND subject_urn != ''
+			AND attempt_id IN (
+				SELECT attempt_id FROM `+eventsTable+`
+				WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?) AND reason != ''))`)
+		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
+		args = append(args, from, before, from, before)
+		// A row without the person still belongs to the attempt, so select whole attempts.
+		inner := strings.Join(conds, " AND ")
+		return `attempt_id IN (SELECT attempt_id FROM ` + eventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
+	}
+	return strings.Join(conds, " AND "), args, nil
+}
+
+// ReadAttempts summarizes every attempt the filter selects, calling each once per attempt.
+func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, each func(AttemptSummary)) error {
+	where, args, err := filter.where()
+	if err != nil {
+		return err
+	}
 	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+eventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`, args...)
 	if err != nil {
 		return fmt.Errorf("query attempts: %w", err)

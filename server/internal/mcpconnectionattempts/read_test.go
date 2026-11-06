@@ -84,7 +84,8 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 	}
 
 	var fromSQL []AttemptSummary
-	require.NoError(t, ReadAttempts(t.Context(), ch, "organization_id = ?", func(s AttemptSummary) { fromSQL = append(fromSQL, s) }, org))
+	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org}
+	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) { fromSQL = append(fromSQL, s) }))
 	require.Len(t, fromSQL, len(byAttempt))
 	for _, got := range fromSQL {
 		want := Summarize(byAttempt[got.AttemptID])
@@ -100,4 +101,25 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 		require.Equal(t, want, got, "attempt %s", got.AttemptID)
 		require.Equal(t, want.End(now), got.End(now))
 	}
+
+	// Selecting by a person keeps whole attempts, including rows that do not name them.
+	byPerson := filter
+	byPerson.PeopleFailingFrom, byPerson.PeopleFailingBefore = day, day.AddDate(0, 0, 1)
+	var personal []AttemptSummary
+	require.NoError(t, ReadAttempts(t.Context(), ch, byPerson, func(s AttemptSummary) { personal = append(personal, s) }))
+	require.NotEmpty(t, personal)
+	for _, got := range personal {
+		want := Summarize(byAttempt[got.AttemptID])
+		require.Equal(t, want.LastStep, got.LastStep, "attempt %s", got.AttemptID)
+		require.Equal(t, want.HasFinal, got.HasFinal, "attempt %s", got.AttemptID)
+		require.Equal(t, want.Touched, got.Touched, "attempt %s", got.AttemptID)
+	}
+}
+
+func TestReadAttemptsNeedsAStartRange(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	err = ReadAttempts(t.Context(), ch, AttemptFilter{OrganizationID: "org-any"}, func(AttemptSummary) {})
+	require.Error(t, err)
 }

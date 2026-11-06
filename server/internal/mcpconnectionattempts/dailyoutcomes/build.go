@@ -11,6 +11,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -55,6 +56,9 @@ var BackfillStart = time.Date(2026, time.November, 4, 0, 0, 0, 0, time.UTC)
 // ErrDayOpen means the day can still gain attempts, so building it now would be wrong.
 var ErrDayOpen = errors.New("day is not closed yet")
 
+// ErrDayExpiring means the day's raw events may already be partly gone, so it is not rebuilt.
+var ErrDayExpiring = errors.New("day is too old to rebuild from raw events")
+
 // ErrStagedMismatch means staging does not hold what was inserted, so the day was not swapped in.
 var ErrStagedMismatch = errors.New("staged rows do not match the built rows")
 
@@ -76,6 +80,9 @@ type Builder struct {
 
 	// backfillStart is the first day DaysToBuild considers.
 	backfillStart time.Time
+
+	// clock is the wall clock, which decides whether raw events are still whole.
+	clock func() time.Time
 }
 
 func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch driver.Conn) *Builder {
@@ -93,7 +100,7 @@ func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUnknownLabels), attr.SlogError(err))
 	}
-	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart}
+	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now}
 }
 
 const (
@@ -222,33 +229,54 @@ func (b *Builder) BuildDay(ctx context.Context, day, now time.Time) (Result, err
 		return Result{Rows: 0, Attempts: 0, Swapped: false}, fmt.Errorf("build %s: %w", day.Format(time.DateOnly), ErrDayOpen)
 	}
 
+	if err := b.checkRawWhole(day); err != nil {
+		return Result{Rows: 0, Attempts: 0, Swapped: false}, err
+	}
 	rows, err := b.outcomes(ctx, day, now)
 	if err != nil {
 		return Result{Rows: 0, Attempts: 0, Swapped: false}, err
 	}
+	// The read may have crossed midnight, so check again before replacing the stored day.
+	if err := b.checkRawWhole(day); err != nil {
+		return Result{Rows: 0, Attempts: 0, Swapped: false}, err
+	}
 	return b.publish(ctx, day, rows, totalsOf(rows))
+}
+
+// checkRawWhole refuses a day whose raw events may already be partly expired by the wall clock.
+func (b *Builder) checkRawWhole(day time.Time) error {
+	if day.Before(StartOfDay(b.clock()).AddDate(0, 0, -rawSafeDays)) {
+		return fmt.Errorf("build %s: %w", day.Format(time.DateOnly), ErrDayExpiring)
+	}
+	return nil
 }
 
 // outcomes works out the day's rows: how each attempt ended and what fixed it.
 func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, error) {
 	counts := newTally()
 	var failures []mcpconnectionattempts.AttemptSummary
-	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, attemptsWhere, func(a mcpconnectionattempts.AttemptSummary) {
+	dayFilter := mcpconnectionattempts.AttemptFilter{
+		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: excludedOrganizations(),
+		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{},
+	}
+	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)
 		if e.NeedsFix() && a.SubjectURN != "" {
 			failures = append(failures, a)
 			return
 		}
 		counts.add(a, e, mcpconnectionattempts.FixedByNothing)
-	}, day.UnixNano(), day.Add(day24h).UnixNano(), excludedOrganizations())
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read attempts: %w", err)
 	}
 
 	if len(failures) > 0 {
 		var candidates []mcpconnectionattempts.AttemptSummary
-		err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, successesWhere, func(a mcpconnectionattempts.AttemptSummary) { candidates = append(candidates, a) },
-			day.UnixNano(), day.Add(day24h).UnixNano(), day.Add(day24h+mcpconnectionattempts.FixLookahead).UnixNano(), excludedOrganizations())
+		successFilter := dayFilter
+		successFilter.StartedBefore = day.Add(day24h + mcpconnectionattempts.FixLookahead)
+		successFilter.PeopleFailingFrom, successFilter.PeopleFailingBefore = day, day.Add(day24h)
+		err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, successFilter, func(a mcpconnectionattempts.AttemptSummary) { candidates = append(candidates, a) })
 		if err != nil {
 			return nil, fmt.Errorf("read successes: %w", err)
 		}
@@ -296,30 +324,6 @@ func (b *Builder) addFixes(ctx context.Context, counts *tally, failures []mcpcon
 	}
 	return nil
 }
-
-// attemptsWhere selects every attempt that started on the day.
-const attemptsWhere = `attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($2)
-	AND NOT has($3, organization_id)`
-
-// successesWhere selects attempts from the day through the lookahead by people who
-// had a failure that day. Its arguments are the day's start and end, the lookahead's
-// end and the excluded organizations.
-const successesWhere = `attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($3)
-	AND NOT has($4, organization_id)
-	AND attempt_id IN (
-		SELECT attempt_id FROM mcp_connection_events
-		WHERE attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($3)
-			AND (organization_id, subject_urn) IN (
-				SELECT organization_id, subject_urn FROM mcp_connection_events
-				WHERE attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($2)
-					AND subject_urn != ''
-					AND attempt_id IN (
-						SELECT attempt_id FROM mcp_connection_events
-						WHERE attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($2)
-							AND reason != ''
-					)
-			)
-	)`
 
 // stagedTotals is what a table must hold for a day.
 type stagedTotals struct {
