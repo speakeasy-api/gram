@@ -51,7 +51,7 @@ const (
 	// defaultInsertTimeout bounds one insert on a live connection. Dialing during a stall takes the client's dial timeout.
 	defaultInsertTimeout = 3 * time.Second
 
-	// drainLogWait bounds the wait for Shutdown's one log line.
+	// drainLogWait bounds the wait for each shutdown log line.
 	drainLogWait = time.Second
 
 	// writerJoinMargin is the part of ShutdownAndWait's deadline kept for cancelling the
@@ -646,7 +646,7 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 	}
 	first, before, err := r.stopAndDrain(ctx)
 	if first {
-		r.logDrainLossesBounded(ctx, before)
+		logBounded(func() { r.logDrainLosses(context.WithoutCancel(ctx), before) })
 	}
 	return err
 }
@@ -673,10 +673,13 @@ func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	case <-r.done:
 	case <-time.After(grace):
 		err = errors.Join(err, errWriterStillRunning)
-		r.logger.ErrorContext(context.WithoutCancel(ctx), "connection events writer still running after shutdown", attr.SlogError(err))
+		stillRunning := err
+		logBounded(func() {
+			r.logger.ErrorContext(context.WithoutCancel(ctx), "connection events writer still running after shutdown", attr.SlogError(stillRunning))
+		})
 	}
 	if first {
-		r.logDrainLossesBounded(ctx, before)
+		logBounded(func() { r.logDrainLosses(context.WithoutCancel(ctx), before) })
 	}
 	return err
 }
@@ -701,13 +704,12 @@ func (r *Recorder) stopAndDrain(ctx context.Context) (first bool, before map[dro
 	return first, before, err
 }
 
-// logDrainLossesBounded logs the drain's losses without letting a stuck log handler
-// hold shutdown past drainLogWait.
-func (r *Recorder) logDrainLossesBounded(ctx context.Context, before map[dropReason]int64) {
+// logBounded runs a shutdown log without letting a stuck log handler hold shutdown past drainLogWait.
+func logBounded(log func()) {
 	logged := make(chan struct{})
 	go func() {
 		defer close(logged)
-		r.logDrainLosses(context.WithoutCancel(ctx), before)
+		log()
 	}()
 	select {
 	case <-logged:

@@ -1246,3 +1246,44 @@ func TestShutdownAndWait_JoinsTheWriterAfterItsDeadline(t *testing.T) {
 	}
 	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
 }
+
+// wedgedConn ignores cancellation until released.
+type wedgedConn struct {
+	driver.Conn
+
+	release  chan struct{}
+	prepares atomic.Int64
+}
+
+func (c *wedgedConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-c.release
+	return nil, errors.New("wedged")
+}
+
+// A writer that outlives its grace, and a log handler that never returns, still let ShutdownAndWait return.
+func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &wedgedConn{Conn: nil, release: release, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = 50 * time.Millisecond
+	handler := &blockingLogHandler{entered: make(chan struct{}, 1), release: release}
+	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	finished := make(chan error, 1)
+	go func() { finished <- recorder.ShutdownAndWait(ctx) }()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, errWriterStillRunning)
+	case <-time.After(10 * time.Second):
+		t.Fatal("ShutdownAndWait waited on a blocked log call")
+	}
+}
