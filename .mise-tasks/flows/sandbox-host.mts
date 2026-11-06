@@ -1,0 +1,118 @@
+#!/usr/bin/env node
+
+//MISE description="Serve this worktree's stack on another host name, for an agent sandboxed in a container on the same machine (flow-checks CI)"
+//MISE dir="{{ config_root }}"
+//USAGE arg "<host>" help="The name the sandbox reaches this machine by, e.g. host.docker.internal"
+//USAGE flag "--bind-ip <ip>" default="0.0.0.0" help="Address the server, dev-idp and admin listeners bind to"
+//USAGE flag "--dry-run" help="Print the settings instead of saving them"
+
+// The flow-checks heal agent runs in GitHub Agentic Workflows' AWF sandbox, a
+// container on the runner. Inside it, `localhost` is the container, so the
+// stack has to be served on the name the container reaches the runner by,
+// and listen on an address that accepts traffic from the container network.
+//
+// Run before `./zero`: it writes mise.local.toml, then zero boots the stack
+// with those settings and issues a TLS certificate that covers the host.
+// Uses only Node built-ins, since the workspace's packages are not installed
+// yet at that point.
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
+import { dependentEnvVars } from "../zero/env-deps.mts";
+
+const ROOTS = ["GRAM_HOST", "GRAM_BIND_IP"];
+
+// The [env] table of mise.toml: string values, and the `default` of an
+// inline `{ default = "..." }` table. Anything else that mentions a root is
+// an error rather than a silent miss.
+export function readEnv(toml: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  let inEnv = false;
+  for (const raw of toml.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("[")) {
+      inEnv = line === "[env]";
+      continue;
+    }
+    if (!inEnv || line === "" || line.startsWith("#")) continue;
+    const m =
+      /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|\{\s*default\s*=\s*"((?:[^"\\]|\\.)*)"\s*\})\s*(?:#.*)?$/.exec(
+        line,
+      );
+    if (m) {
+      env[m[1]!] = m[2] ?? m[3]!;
+    } else if (ROOTS.some((root) => line.includes(`env.${root}`))) {
+      throw new Error(`Cannot read this mise.toml line: ${line}`);
+    }
+  }
+  return env;
+}
+
+function commaList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+export function validHost(host: string): boolean {
+  return (
+    host.length <= 253 &&
+    /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(
+      host,
+    )
+  );
+}
+
+// The settings to save in mise.local.toml, in order: the roots first, then
+// every template that depends on them, then the lists that must include the
+// host (the TLS certificate's names and the dashboard's allowed hosts).
+export function sandboxSettings(
+  env: Record<string, string>,
+  host: string,
+  bindIp: string,
+): [string, string][] {
+  if (!validHost(host)) throw new Error(`Not a host name: ${host}`);
+  if (isIP(bindIp) === 0) throw new Error(`Not an IP address: ${bindIp}`);
+  const bind = isIP(bindIp) === 6 ? `[${bindIp}]` : bindIp;
+  const withHost = (key: string) =>
+    [...new Set([...commaList(env[key]), host])].join(",");
+  return [
+    ["GRAM_HOST", host],
+    ["GRAM_BIND_IP", bind],
+    ...dependentEnvVars(env, ROOTS),
+    ["GRAM_SSL_EXTRA_HOSTS", withHost("GRAM_SSL_EXTRA_HOSTS")],
+    ["VITE_DEV_HOSTNAMES", withHost("VITE_DEV_HOSTNAMES")],
+  ];
+}
+
+if (import.meta.main) {
+  try {
+    const host = process.env["usage_host"] ?? "";
+    const bindIp = process.env["usage_bind_ip"] ?? "0.0.0.0";
+    const settings = sandboxSettings(
+      readEnv(readFileSync("mise.toml", "utf8")),
+      host,
+      bindIp,
+    );
+    if (process.env["usage_dry_run"] === "true") {
+      for (const [k, v] of settings) console.log(`${k}=${v}`);
+    } else {
+      execFileSync(
+        "mise",
+        [
+          "set",
+          "--file",
+          "mise.local.toml",
+          ...settings.map(([k, v]) => `${k}=${v}`),
+        ],
+        { stdio: "inherit" },
+      );
+      console.log(`The stack will serve on ${host}, listening on ${bindIp}.`);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}

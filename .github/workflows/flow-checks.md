@@ -17,6 +17,7 @@ on:
       - e2e/flows.config.ts
       - .mise-tasks/test/flows.sh
       - .mise-tasks/flows/**
+      - .mise-tasks/zero/env-deps.mts
       - .github/prompts/heal-flow.md
       - .github/workflows/flow-checks.*
   workflow_dispatch:
@@ -80,6 +81,13 @@ steps:
       TOML
       git config user.email "flow-checks@example.com"
       git config user.name "Flow Checks"
+  # The agent runs in a container, where `localhost` is the container, so the
+  # stack serves on the name the container reaches the runner by. The runner
+  # resolves that name to itself, so the replay and the services agree.
+  - name: Serve the stack to the agent's sandbox
+    run: |
+      echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+      mise run flows:sandbox-host host.docker.internal
   # ATLAS_TOKEN exists in this step only.
   - name: Boot the stack
     env:
@@ -103,6 +111,9 @@ steps:
       # The agent replays flows with the same environment.
       mise exec -- bash -c 'printf "GRAM_SITE_URL=%s\nGRAM_SERVER_URL=%s\n" "$GRAM_SITE_URL" "$GRAM_SERVER_URL"' |
         tee -a "$GITHUB_ENV" > /tmp/gh-aw/agent/stack.env
+      # The stack's certificate is signed by a CA the runner trusts and the
+      # sandbox's browser does not. The firewall, not TLS, bounds where it goes.
+      echo "PLAYWRIGHT_MCP_IGNORE_HTTPS_ERRORS=true" >> "$GITHUB_ENV"
 
 safe-outputs:
   add-comment:

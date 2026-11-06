@@ -65,7 +65,11 @@ CI runs `.github/workflows/flow-checks.md`, a
 
 The agent runs in gh-aw's AWF sandbox: a container whose network is limited
 to the stack's dashboard, server and dev-idp ports on the runner, and whose
-Anthropic key is held by AWF's API proxy, not the agent. It writes nothing
+Anthropic key is held by AWF's API proxy, not the agent. Inside the container
+`localhost` is the container itself, so before booting the stack the workflow
+runs `mise run flows:sandbox-host host.docker.internal`: the stack serves on
+the name the container reaches the runner by, listens on all interfaces, and
+gets a certificate for that name; the runner maps the name to itself. It writes nothing
 back except through gh-aw's safe outputs (the comment and the artifact).
 `ATLAS_TOKEN` exists only in the step that boots the stack.
 

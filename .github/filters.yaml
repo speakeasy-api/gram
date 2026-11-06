@@ -105,6 +105,8 @@ agent-checks:
   - "mise.toml"
   - ".mise-tasks/flows/**"
   - ".mise-tasks/magellan/**"
+  - ".mise-tasks/zero/env-deps.mts"
+  - "client/dashboard/vite.config.ts"
   - ".mise-tasks/test/agent-checks.sh"
   - ".mise-tasks/test/flows.sh"
 

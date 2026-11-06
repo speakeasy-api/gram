@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe as suite, test } from "node:test";
+import { readEnv, sandboxSettings } from "./sandbox-host.mts";
 
 // Guards the flow-checks GitHub Agentic Workflow: the properties that keep
 // its agent sandboxed and its secrets out of reach, the replay step's parsing
@@ -150,6 +151,118 @@ suite("secrets", () => {
 
   test("the prompt body references no secret or expression", () => {
     assert.doesNotMatch(body!, /secrets\.|\$\{\{/);
+  });
+});
+
+suite("reaching the stack from the sandbox", () => {
+  const index = (name: string) => steps.findIndex((s) => s.name === name);
+  const sandboxStep = steps.find(
+    (s) => s.name === "Serve the stack to the agent's sandbox",
+  );
+  const env = readEnv(readFileSync(resolve("mise.toml"), "utf8"));
+  const saved = new Map(
+    sandboxSettings(env, "host.docker.internal", "0.0.0.0"),
+  );
+
+  test("serves the stack on host.docker.internal", () => {
+    assert.ok(sandboxStep, "missing step");
+    assert.match(
+      sandboxStep.run!,
+      /^mise run flows:sandbox-host host\.docker\.internal$/m,
+    );
+  });
+
+  test("before zero boots the stack and issues its certificate", () => {
+    assert.ok(
+      index("Serve the stack to the agent's sandbox") < index("Boot the stack"),
+    );
+    assert.ok(
+      index("Answer zero's questions before it asks them") <
+        index("Serve the stack to the agent's sandbox"),
+      "the questions step overwrites mise.local.toml",
+    );
+  });
+
+  test("the runner resolves the name to itself", () => {
+    assert.match(
+      sandboxStep!.run!,
+      /echo "127\.0\.0\.1 host\.docker\.internal" \| sudo tee -a \/etc\/hosts/,
+    );
+  });
+
+  test("the questions step writes mise.local.toml from scratch, before the host settings", () => {
+    const questions = steps.find(
+      (s) => s.name === "Answer zero's questions before it asks them",
+    )!;
+    assert.match(questions.run!, /cat > mise\.local\.toml/);
+  });
+
+  test("every URL the agent opens is on the sandbox host", () => {
+    for (const key of [
+      "GRAM_SITE_URL",
+      "GRAM_SERVER_URL",
+      "GRAM_DEVIDP_EXTERNAL_URL",
+    ]) {
+      assert.match(saved.get(key)!, /^https:\/\/\{\{env\.GRAM_HOST\}\}:/, key);
+    }
+  });
+
+  test("the agent may reach exactly the ports of those URLs", () => {
+    const port = (url: string) => {
+      const name = /:\{\{env\.([A-Z_]+)\}\}$/.exec(url)![1]!;
+      return Number(env[name]);
+    };
+    assert.deepEqual(
+      fm.sandbox.agent["allow-host-ports"],
+      ["GRAM_SITE_URL", "GRAM_SERVER_URL", "GRAM_DEVIDP_EXTERNAL_URL"].map(
+        (k) => port(saved.get(k)!),
+      ),
+    );
+  });
+
+  test("the listeners the agent reaches accept the container network", () => {
+    assert.equal(saved.get("GRAM_BIND_IP"), "0.0.0.0");
+    assert.match(saved.get("GRAM_SERVER_ADDRESS")!, /GRAM_BIND_IP/);
+    assert.match(saved.get("GRAM_DEVIDP_ADDRESS")!, /GRAM_BIND_IP/);
+    const vite = readFileSync(
+      resolve("client/dashboard/vite.config.ts"),
+      "utf8",
+    );
+    assert.match(
+      vite,
+      /host: true/,
+      "the dashboard must listen on every interface",
+    );
+  });
+
+  test("the dashboard accepts the sandbox host name", () => {
+    assert.match(
+      saved.get("VITE_DEV_HOSTNAMES")!,
+      /(^|,)host\.docker\.internal(,|$)/,
+    );
+    const vite = readFileSync(
+      resolve("client/dashboard/vite.config.ts"),
+      "utf8",
+    );
+    assert.match(vite, /VITE_DEV_HOSTNAMES/);
+  });
+
+  test("the certificate covers the sandbox host name", () => {
+    assert.match(
+      saved.get("GRAM_SSL_EXTRA_HOSTS")!,
+      /(^|,)host\.docker\.internal(,|$)/,
+    );
+    const tls = readFileSync(resolve(".mise-tasks/zero/tls.sh"), "utf8");
+    assert.match(tls, /env="GRAM_SSL_EXTRA_HOSTS"/);
+  });
+
+  test("the sandbox's browser does not need the runner's CA", () => {
+    assert.match(
+      replay,
+      /echo "PLAYWRIGHT_MCP_IGNORE_HTTPS_ERRORS=true" >> "\$GITHUB_ENV"/,
+    );
+    const config = readFileSync(resolve("e2e/flows.config.ts"), "utf8");
+    assert.match(config, /ignoreHTTPSErrors: true/);
   });
 });
 
