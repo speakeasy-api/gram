@@ -8,6 +8,7 @@ import (
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -302,5 +303,161 @@ func TestAHPOpenCodePromptProxyCorrelation(t *testing.T) {
 				require.Equal(t, "incoming prompt", rows[0].Content)
 			})
 		}
+	}
+}
+
+func TestAHPPromptAttachmentBoundaryCorrelation(t *testing.T) {
+	t.Parallel()
+	for _, order := range []string{"arrival-first", "admission-first", "concurrent"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			auth := hookAuthContext(t, ctx)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+			scanner := &recordingRiskScanner{}
+			ti.service.riskScanner = scanner
+			if order == "concurrent" {
+				ti.service.riskScanner = &stubResultScanner{}
+			}
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+			ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("attachment evidence"))
+			session := uuid.NewString()
+			item := map[string]any{"id": "message", "role": "user", "parts": []any{
+				ahpTestPart("incoming prompt"), ahpTestAttachmentPart("notes", "application/xml", ref),
+			}}
+			arrival := ahpTestInbound() // No turn exists at arrival.
+			arrival["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{item}}
+			admission := ahpTestTurnStart()
+			admission["items"] = []any{item}
+			events := []map[string]any{arrival, admission}
+			if order == "admission-first" {
+				events[0], events[1] = events[1], events[0]
+			}
+			for _, e := range events {
+				e["session"] = map[string]any{"id": session}
+			}
+			if order == "concurrent" {
+				responses := make(chan []byte, len(events))
+				for _, e := range events {
+					go func() {
+						w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+						responses <- w.Body.Bytes()
+					}()
+				}
+				for range events {
+					response := <-responses
+					require.True(t, ahp.ParseInterceptResponse(response).OK, string(response))
+				}
+			} else {
+				for _, e := range events {
+					w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+					require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+				}
+				require.Equal(t, 2, scanner.scans, "logical attachment deduplication must not suppress either boundary scan")
+			}
+			assertCounts := func(prompts, attachments int) {
+				t.Helper()
+				rows, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				require.Len(t, rows, prompts)
+				ids := make([]uuid.UUID, 0, len(rows))
+				for _, row := range rows {
+					ids = append(ids, row.ID)
+				}
+				parts, err := chatrepo.New(ti.conn).ListChatContentPartsByChatID(ctx, chatrepo.ListChatContentPartsByChatIDParams{
+					ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID, ParentChatMessageIds: ids,
+				})
+				require.NoError(t, err)
+				require.Len(t, parts, attachments)
+			}
+			assertCounts(1, 1)
+			for _, e := range events {
+				w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+				require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+			}
+			assertCounts(1, 1) // Exact event retries remain idempotent too.
+			// A distinct part in the same logical message must remain distinct,
+			// even when it references the same immutable uploaded bytes.
+			item["parts"] = []any{ahpTestPart("incoming prompt"),
+				ahpTestAttachmentPart("notes", "application/xml", ref),
+				ahpTestAttachmentPart("other-notes", "application/xml", ref)}
+			updated := ahpTestInbound()
+			updated["session"] = map[string]any{"id": session}
+			updated["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{item}}
+			w := ahpRequest(t, h, "hooks/intercept", updated, []string{"deny"}, ahpAuthHeaders)
+			require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+			assertCounts(1, 2)
+			// Reusing a part ID in a different message does not reuse the part.
+			other := ahpTestInbound()
+			other["session"] = map[string]any{"id": session}
+			other["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{
+				map[string]any{"id": "other-message", "role": "user", "parts": []any{
+					ahpTestPart("another prompt"), ahpTestAttachmentPart("notes", "application/xml", ref),
+				}},
+			}}
+			w = ahpRequest(t, h, "hooks/intercept", other, []string{"deny"}, ahpAuthHeaders)
+			require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+			assertCounts(2, 3)
+		})
+	}
+}
+
+func TestAHPAttachmentOnlyInitialBoundaryCorrelation(t *testing.T) {
+	t.Parallel()
+	for _, order := range []string{"arrival-first", "admission-first", "concurrent"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			auth := hookAuthContext(t, ctx)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+			ti.service.riskScanner = &stubResultScanner{}
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+			ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("attachment-only first prompt"))
+			session := uuid.NewString()
+			queries := chatrepo.New(ti.conn)
+			_, err = queries.GetChat(ctx, chatrepo.GetChatParams{ID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
+			require.ErrorIs(t, err, pgx.ErrNoRows, "no chat is precreated for this session")
+			item := map[string]any{"id": "message", "role": "user", "parts": []any{ahpTestAttachmentPart("notes", "application/xml", ref)}}
+			arrival := ahpTestInbound()
+			arrival["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{item}}
+			admission := ahpTestTurnStart()
+			admission["items"] = []any{item}
+			events := []map[string]any{arrival, admission}
+			if order == "admission-first" {
+				events[0], events[1] = events[1], events[0]
+			}
+			for _, e := range events {
+				e["session"] = map[string]any{"id": session}
+			}
+			if order == "concurrent" {
+				responses := make(chan []byte, len(events))
+				for _, e := range events {
+					go func() {
+						w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+						responses <- w.Body.Bytes()
+					}()
+				}
+				for range events {
+					response := <-responses
+					require.True(t, ahp.ParseInterceptResponse(response).OK, string(response))
+				}
+			} else {
+				for _, e := range events {
+					w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+					require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+				}
+			}
+			rows, err := queries.ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
+			require.NoError(t, err)
+			require.Empty(t, rows, "attachment-only prompts must not fabricate a text parent")
+			parts, err := queries.ListChatContentPartsByChatID(ctx, chatrepo.ListChatContentPartsByChatIDParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID, ParentChatMessageIds: []uuid.UUID{}})
+			require.NoError(t, err)
+			require.Len(t, parts, 1)
+			require.False(t, parts[0].ParentChatMessageID.Valid)
+		})
 	}
 }
