@@ -70,6 +70,12 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 
+	// A listing records nothing, and a request records each resource it
+	// names once (see WithOneChallengePerResource).
+	if !claimChallenge(ctx, l) {
+		return
+	}
+
 	// Detached and bounded: a client cancel must not drop a completed decision.
 	checkCtx, cancelCheck := context.WithTimeout(context.WithoutCancel(ctx), challengeLogStepTimeout)
 	defer cancelCheck()
