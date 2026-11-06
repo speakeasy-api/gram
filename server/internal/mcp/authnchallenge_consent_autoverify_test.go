@@ -443,4 +443,7 @@ func TestConsentAutoVerify_ExpandedResourcesProbeOnlyCommittedAudience(t *testin
 	stale := remotesessions.RemoteGrant{ParentChallengeID: fx.stateID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID, Subject: fx.subject, RemoteSessionID: committed.ID, RemoteSessionUpdatedAt: committed.UpdatedAt.Time.Add(-time.Second)}
 	fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, stale)
 	require.Empty(t, second.drain(), "stale callback references must not probe or rewrite a current grant")
+	currentB, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, b, currentB, "stale callback must preserve B’s row and verdict")
 }

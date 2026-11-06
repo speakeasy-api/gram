@@ -943,7 +943,9 @@ func TestServeConsentAction_MemberLifecycleAcrossResourceIndexShapes(t *testing.
 				require.Equal(t, http.StatusSeeOther, response.Code)
 				require.Equal(t, before, read(a), "B action and forged posted resource must never change A")
 				if expanded && action == "set_auto_refresh" {
-					require.False(t, read(b)[clientID].AutoRefresh)
+					states := read(b)
+					require.Contains(t, states, clientID)
+					require.False(t, states[clientID].AutoRefresh)
 				}
 			}
 			for _, action := range []string{"disconnect", "refresh"} {
