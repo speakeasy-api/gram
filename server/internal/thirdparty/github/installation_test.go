@@ -24,6 +24,7 @@ func TestAPIBase(t *testing.T) {
 		{"https://github.com:443", "https://api.github.com"},
 		{"https://git.example.com", "https://git.example.com/api/v3"},
 		{"https://git.example.com:8443/", "https://git.example.com:8443/api/v3"},
+		{"https://[fe80::1%25eth0]:8443/", "https://[fe80::1%25eth0]:8443/api/v3"},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			t.Parallel()

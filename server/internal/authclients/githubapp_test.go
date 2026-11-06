@@ -108,3 +108,45 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	require.Equal(t, "https://upstream.example.com", stored.UpstreamOrigin)
 
 }
+
+func TestGitHubAppAttachmentUpsertKeepsHistory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, "private")
+	queries := repo.New(ti.conn)
+	client, err := queries.CreateGitHubAppAuthClient(ctx, repo.CreateGitHubAppAuthClientParams{
+		OrganizationID: ti.organizationID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, Name: "Fixture bot",
+	})
+	require.NoError(t, err)
+	attachment := repo.AttachGitHubAppAuthClientParams{
+		McpServerID: server.id, AuthClientID: client.ID, OrganizationID: ti.organizationID, ProjectID: ti.projectID,
+	}
+	require.NoError(t, queries.AttachGitHubAppAuthClient(ctx, attachment))
+	require.NoError(t, queries.AttachGitHubAppAuthClient(ctx, attachment))
+	var live, retired int
+	counts := func() {
+		err := ti.conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE NOT deleted), count(*) FILTER (WHERE deleted)
+			FROM mcp_server_auth_clients WHERE mcp_server_id = $1 AND auth_client_id = $2`, server.id, client.ID).Scan(&live, &retired)
+		require.NoError(t, err)
+	}
+	counts()
+	require.Equal(t, 1, live, "repeated attachment updates the live row")
+	require.Zero(t, retired)
+	n, err := queries.DetachAuthClientFromServer(ctx, repo.DetachAuthClientFromServerParams{
+		McpServerID: server.id, AuthClientID: client.ID, OrganizationID: ti.organizationID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.NoError(t, queries.AttachGitHubAppAuthClient(ctx, attachment))
+	counts()
+	require.Equal(t, 1, live)
+	require.Equal(t, 1, retired, "reattachment creates a new row instead of reviving history")
+
+	locked, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{
+		McpServerID: server.id, OrganizationID: ti.organizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, server.id, locked.ID)
+	require.Equal(t, ti.projectID, locked.ProjectID)
+	require.Equal(t, "https://upstream.example.com/"+server.remoteID.String(), locked.Url)
+}

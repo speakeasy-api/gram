@@ -179,12 +179,19 @@ var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 	Required("principal_urn", "level")
 })
 
+// githubAppOrigin keeps request and response origin constraints in sync.
+func githubAppOrigin() {
+	Format(FormatURI)
+	Pattern(`^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$`)
+	MaxLength(2048)
+}
+
 var GitHubAppConfiguration = Type("GitHubAppConfiguration", func() {
 	Meta("struct:pkg:path", "types")
-	Attribute("instance_url", String, "GitHub instance origin.")
+	Attribute("instance_url", String, "GitHub instance origin.", githubAppOrigin)
 	Attribute("app_id", String, "GitHub App ID.")
 	Attribute("installation_id", String, "GitHub installation ID.")
-	Attribute("upstream_origin", String, "Only this MCP origin may receive installation tokens.")
+	Attribute("upstream_origin", String, "Only this MCP origin may receive installation tokens.", githubAppOrigin)
 	Required("instance_url", "app_id", "installation_id", "upstream_origin")
 })
 
@@ -202,11 +209,11 @@ var _ = Service("authClients", func() {
 			Attribute("id", String, "Existing GitHub App auth client to rotate. Omit to create.", func() { Format(FormatUUID) })
 			Attribute("mcp_server_id", String, "MCP server to offer this credential.", func() { Format(FormatUUID) })
 			Attribute("name", String, "Service account display name.", func() { MinLength(1); MaxLength(100) })
-			Attribute("instance_url", String, "GitHub instance origin, including HTTPS.", func() { Default("https://github.com"); MaxLength(2048) })
+			Attribute("instance_url", String, "GitHub instance origin, including HTTPS.", func() { Default("https://github.com"); githubAppOrigin() })
 			Attribute("app_id", String, "Positive numeric GitHub App ID.", func() { Pattern("^[1-9][0-9]{0,18}$") })
 			Attribute("installation_id", String, "Positive numeric installation ID.", func() { Pattern("^[1-9][0-9]{0,18}$") })
 			Attribute("private_key", String, "GitHub App RSA private key in PEM format. Write-only.", func() { MaxLength(32768); Meta("struct:tag:json", "private_key") })
-			Attribute("upstream_origin", String, "Explicit HTTPS MCP origin allowed to receive the token.", func() { MaxLength(2048) })
+			Attribute("upstream_origin", String, "Explicit HTTPS MCP origin allowed to receive the token.", githubAppOrigin)
 			Required("mcp_server_id", "name", "app_id", "installation_id", "private_key", "upstream_origin")
 			security.SessionPayload()
 			security.ByKeyPayload()

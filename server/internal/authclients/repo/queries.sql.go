@@ -51,7 +51,7 @@ INSERT INTO mcp_server_auth_clients (organization_id, project_id, mcp_server_id,
 SELECT ac.organization_id, $1::uuid, $2, ac.id, ac.attachment_scope, 'admin'
 FROM mcp_auth_clients ac
 WHERE ac.id = $3 AND ac.organization_id = $4 AND NOT ac.deleted
-ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET deleted_at = NULL, source = 'admin', updated_at = clock_timestamp()
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET source = 'admin', updated_at = clock_timestamp()
 `
 
 type AttachGitHubAppAuthClientParams struct {
@@ -1460,7 +1460,7 @@ func (q *Queries) LockAuthClientOfferingServers(ctx context.Context, arg LockAut
 }
 
 const lockGitHubAppServerURL = `-- name: LockGitHubAppServerURL :one
-SELECT r.url FROM mcp_servers m
+SELECT m.id, m.project_id, r.url FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id AND p.organization_id = $1 AND NOT p.deleted
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
 WHERE m.id = $2 AND NOT m.deleted
@@ -1472,11 +1472,17 @@ type LockGitHubAppServerURLParams struct {
 	McpServerID    uuid.UUID
 }
 
-func (q *Queries) LockGitHubAppServerURL(ctx context.Context, arg LockGitHubAppServerURLParams) (string, error) {
+type LockGitHubAppServerURLRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Url       string
+}
+
+func (q *Queries) LockGitHubAppServerURL(ctx context.Context, arg LockGitHubAppServerURLParams) (LockGitHubAppServerURLRow, error) {
 	row := q.db.QueryRow(ctx, lockGitHubAppServerURL, arg.OrganizationID, arg.McpServerID)
-	var url string
-	err := row.Scan(&url)
-	return url, err
+	var i LockGitHubAppServerURLRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Url)
+	return i, err
 }
 
 const lockIssuanceProfile = `-- name: LockIssuanceProfile :one
