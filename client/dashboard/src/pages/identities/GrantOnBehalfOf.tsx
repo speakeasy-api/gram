@@ -1,8 +1,7 @@
 import { IdentityLink } from "@/components/identity-link";
 import { PersonFace } from "@/components/ui/ActingPrincipal";
-import { useOwnerConnections } from "@/pages/agents/credentials/useOwnerConnections";
-import { useServerInventory } from "@/pages/agents/credentials/useServerInventory";
-import { onBehalfOfPeople } from "./onBehalfOf";
+import type { OnBehalfOfPerson } from "./onBehalfOf";
+import { useServerOnBehalfOf } from "./useServerOnBehalfOf";
 
 /**
  * "On behalf of" and each person, beside an `mcp:connect` grant whose server
@@ -21,20 +20,45 @@ export function GrantOnBehalfOf({
   /** The server id the grant's selector names. */
   resourceId: string;
 }): JSX.Element | null {
-  const inventory = useServerInventory({ lookupOnly: true });
-  const server = inventory.servers.find(
-    (candidate) =>
-      candidate.resourceId === resourceId || candidate.id === resourceId,
-  );
-  const connections = useOwnerConnections(
-    server ? [server] : [],
-    !!server,
-    agentId,
-  );
-  const people = onBehalfOfPeople(
-    server ? connections.assignedByServer?.get(server.id) : undefined,
-  );
-  if (people.length === 0) return null;
+  const actingFor = useServerOnBehalfOf(agentId, resourceId);
+  if (actingFor.kind !== "people") return null;
+  return <OnBehalfOfPeople people={actingFor.people} />;
+}
+
+/**
+ * The same answer as `GrantOnBehalfOf`, said for every server: a list of the
+ * agent's servers needs a line on each, so a shared credential and a missing
+ * connection are named rather than left blank.
+ */
+export function ServerOnBehalfOfLine({
+  agentId,
+  resourceId,
+}: {
+  agentId: string;
+  resourceId: string | undefined;
+}): JSX.Element {
+  const actingFor = useServerOnBehalfOf(agentId, resourceId);
+  switch (actingFor.kind) {
+    case "people":
+      return <OnBehalfOfPeople people={actingFor.people} />;
+    case "shared":
+      return <>Shared credential, acts for no one</>;
+    case "missing":
+      return <>Needs a person's connection, none assigned</>;
+    case "error":
+      return <>Could not check whose credential it uses</>;
+    case "unknown":
+      return <>Credential not known</>;
+    case "checking":
+      return <>Checking its credential…</>;
+  }
+}
+
+function OnBehalfOfPeople({
+  people,
+}: {
+  people: OnBehalfOfPerson[];
+}): JSX.Element {
   return (
     <span className="text-muted-foreground inline-flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
       On behalf of

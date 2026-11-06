@@ -3,15 +3,24 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ServerConnection } from "@/pages/agents/credentials/ownerConnections";
-import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
-import { onBehalfOfPeople } from "./onBehalfOf";
+import { GrantOnBehalfOf, ServerOnBehalfOfLine } from "./GrantOnBehalfOf";
+import { onBehalfOfPeople, serverOnBehalfOf } from "./onBehalfOf";
 
 const mocks = vi.hoisted(() => ({
   connection: undefined as ServerConnection | undefined,
+  issuerId: undefined as string | undefined,
 }));
 vi.mock("@/pages/agents/credentials/useServerInventory", () => ({
   useServerInventory: () => ({
-    servers: [{ id: "server-1", resourceId: "toolset-1", name: "Grain" }],
+    servers: [
+      {
+        id: "server-1",
+        resourceId: "toolset-1",
+        name: "Grain",
+        issuerId: mocks.issuerId,
+      },
+    ],
+    isLoading: false,
   }),
 }));
 vi.mock("@/pages/agents/credentials/useOwnerConnections", () => ({
@@ -31,7 +40,11 @@ vi.mock("@/components/identity-link", () => ({
     children: ReactNode;
   }) => <a href={`/identities/user:${identifier.userId}`}>{children}</a>,
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mocks.connection = undefined;
+  mocks.issuerId = undefined;
+});
 
 /** A sign-in whose access token ran out, and nothing renews it. */
 const LAPSED = { accessExpiresAt: new Date("2020-01-01T00:00:00Z") };
@@ -182,5 +195,114 @@ describe("GrantOnBehalfOf", () => {
       <GrantOnBehalfOf agentId="agent-1" resourceId="toolset-1" />,
     );
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("serverOnBehalfOf", () => {
+  const ADA = session({ subjectDisplayName: "Ada Lovelace" });
+
+  it.each([
+    {
+      case: "no server yet, inventory loading",
+      server: undefined,
+      connection: undefined,
+      loading: true,
+      kind: "checking",
+    },
+    {
+      case: "no such server",
+      server: undefined,
+      connection: undefined,
+      loading: false,
+      kind: "unknown",
+    },
+    {
+      case: "a server no one signs in to",
+      server: {},
+      connection: undefined,
+      loading: false,
+      kind: "shared",
+    },
+    {
+      case: "a personal server still being read",
+      server: { issuerId: "i" },
+      connection: undefined,
+      loading: false,
+      kind: "checking",
+    },
+    {
+      case: "a shared credential",
+      server: { issuerId: "i" },
+      connection: { status: "not-required" as const },
+      loading: false,
+      kind: "shared",
+    },
+    {
+      case: "no connection assigned",
+      server: { issuerId: "i" },
+      connection: { status: "missing" as const },
+      loading: false,
+      kind: "missing",
+    },
+    {
+      case: "a failed read",
+      server: { issuerId: "i" },
+      connection: { status: "error" as const },
+      loading: false,
+      kind: "error",
+    },
+  ])("says $kind for $case", ({ server, connection, loading, kind }) => {
+    expect(serverOnBehalfOf(server, connection, loading).kind).toBe(kind);
+  });
+
+  it("names the people whose connections are assigned", () => {
+    expect(
+      serverOnBehalfOf(
+        { issuerId: "i" },
+        { status: "ready", sessions: [ADA] },
+        false,
+      ),
+    ).toEqual({
+      kind: "people",
+      people: [{ userId: "user-ada", name: "Ada Lovelace", expired: false }],
+    });
+  });
+});
+
+describe("ServerOnBehalfOfLine", () => {
+  it("names the person, as the Permissions tab does", () => {
+    mocks.issuerId = "issuer-1";
+    mocks.connection = {
+      status: "ready",
+      sessions: [session({ subjectDisplayName: "Ada Lovelace" })],
+    };
+    render(<ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />);
+    expect(screen.getByText(/On behalf of/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeTruthy();
+  });
+
+  it("says a server no person signs in to uses a shared credential", () => {
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />,
+    );
+    expect(container.textContent).toBe("Shared credential, acts for no one");
+  });
+
+  it("says when a personal server has no connection assigned", () => {
+    mocks.issuerId = "issuer-1";
+    mocks.connection = { status: "missing" };
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />,
+    );
+    expect(container.textContent).toBe(
+      "Needs a person's connection, none assigned",
+    );
+  });
+
+  it("says when the server is not known", () => {
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId={undefined} />,
+    );
+    expect(container.textContent).toBe("Credential not known");
   });
 });
