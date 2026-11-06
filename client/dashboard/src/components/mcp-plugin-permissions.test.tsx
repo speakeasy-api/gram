@@ -53,12 +53,8 @@ const state = vi.hoisted(() => ({
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: "disabled" }),
 }));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    isPending: false,
-    isError: false,
-    data: { skillsOverMcpEnabled: state.skillsOverMcp },
-  }),
+vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
+  useSkillsOverMcpEnabled: () => state.skillsOverMcp,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
