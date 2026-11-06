@@ -45,8 +45,9 @@ Do this:
      the server's URL), not only with text on screen. Keep every such check
      the current script has unless the story dropped it.
    - Name created data with `runId()` so reruns never collide.
-   - Change only `e2e/flows/{{FLOW}}/` and `e2e/.flows/`. Do not change
-     application code.
+   - Change only `e2e/flows/{{FLOW}}/flow.spec.ts` and files under
+     `e2e/.flows/`. Never edit `story.md`; propose story edits in your
+     summary. Do not change application code.
    - The script must pass `{{TYPECHECK}}`.
 
 Finish with exactly one line of JSON and nothing after it:

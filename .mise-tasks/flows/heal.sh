@@ -32,7 +32,7 @@ node e2e/agent-jail/render.mjs e2e/flows/HEAL.md \
     "SITE_URL=${GRAM_SITE_URL:?}" |
     claude -p \
         --tools "Bash,Read,Write,Edit,Glob,Grep" \
-        --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/${flow}/**),Write(./e2e/flows/${flow}/**),Write(./e2e/.flows/**),Bash(mise run playwright:*),Bash(mise run test:flows:*),Bash(git diff:*),Bash(aube run -F @gram/e2e type-check)" \
+        --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/.flows/**),Bash(mise run playwright:*),Bash(mise run test:flows:*),Bash(git diff:*),Bash(aube run -F @gram/e2e type-check)" \
         --max-turns 80 |
     tee "e2e/.flows/${flow}-transcript.txt" |
     tail -n 1 >"$verdict_file"

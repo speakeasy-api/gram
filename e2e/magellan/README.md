@@ -95,11 +95,15 @@ by hand.
 - **Its browser commands are an allowlist** (`browser.mjs`): no `eval`,
   cookies, storage, headers, uploads or route mocks, and no navigation off
   the site.
-- **Its network is the site and the Anthropic API**, enforced by the jail,
-  not by the prompt.
+- **Its network is the site, any hosts listed in `MAGELLAN_EXTRA_HOSTS`, and
+  the Anthropic API**, enforced by the jail, not by the prompt. The browser
+  also refuses every other origin itself.
 - **Its output is untrusted.** `magellan:file` validates each finding, puts
-  agent text into Linear only inside code blocks, and in CI logs nothing the
-  agent wrote.
+  agent text into the Linear description only inside code blocks, uses the
+  agent's title only as a one-line plain-text issue title, and in CI logs
+  nothing the agent wrote.
+- **Local runs are not jailed.** They run the agent as you, on your machine:
+  see `../agent-jail/README.md`.
 
 ## Not yet
 

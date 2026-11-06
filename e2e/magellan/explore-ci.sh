@@ -33,10 +33,12 @@ work="$state/work-magellan"
 secret="$state/magellan-secret"
 
 # Root owns the workspace; the agent can write out/ and its home only.
+run_user="$("$jail/jail.sh" user magellan)"
 rm -rf "$work" "$secret"
-install -d -m 0755 "$work" "$work/bin"
+install -d -m 0750 -o root -g "$run_user" "$work"
+install -d -m 0755 "$work/bin"
 cp -r "$ws/prompt.md" "$ws/context" "$work/"
-install -d -m 0755 -o agentjail -g agentjail "$work/out" "$work/out/.pw"
+install -d -m 0755 -o "$run_user" -g "$run_user" "$work/out" "$work/out/.pw"
 install -m 0644 e2e/magellan/browser.mjs "$jail/magellan-browser.mjs"
 "$jail/bin/node" -e '
   const [file, site, session, out] = process.argv.slice(1);
@@ -57,21 +59,22 @@ cat >"$work/cli.config.json" <<JSON
     "launchOptions": { "headless": true, "proxy": { "server": "http://127.0.0.1:${JAIL_PROXY_PORT:-3128}" } },
     "contextOptions": { "viewport": { "width": 1440, "height": 900 }, "locale": "en-US", "timezoneId": "UTC" }
   },
+  "network": { "allowedOrigins": ["${site_url}"] },
   "outputDir": "$work/out/.pw"
 }
 JSON
-chmod -R a+rX "$work"
+chmod -R a+rX "$work/bin" "$work/context" "$work/prompt.md" "$work/cli.config.json"
 
 # The session, as browser state only the jail user can read. Read from the
 # environment, so it never appears in a process's arguments.
-install -d -m 0700 -o agentjail -g agentjail "$secret"
+install -d -m 0700 -o "$run_user" -g "$run_user" "$secret"
 MAGELLAN_STATE_FILE="$secret/state.json" MAGELLAN_SITE_URL="$site_url" "$jail/bin/node" -e '
   const { MAGELLAN_SITE_URL: site, MAGELLAN_SESSION: token, MAGELLAN_STATE_FILE: file } = process.env;
   const cookie = { name: "gram_session", value: token, domain: new URL(site).hostname, path: "/",
     expires: Math.floor(Date.now() / 1000) + 86400, httpOnly: true, secure: true, sameSite: "Lax" };
   require("node:fs").writeFileSync(file, JSON.stringify({ cookies: [cookie], origins: [] }), { mode: 0o600 });
 '
-chown agentjail:agentjail "$secret/state.json"
+chown "$run_user:$run_user" "$secret/state.json"
 unset MAGELLAN_SESSION
 
 env_file="$state/env-magellan"
@@ -115,6 +118,12 @@ status=0
 "$jail/jail.sh" run magellan "$env_file" "" bash -c "$inner" || status=$?
 rm -rf "$secret"
 echo "magellan: jail exited with ${status}"
+# Only the shape of the result: anything more could describe production.
+home="$state/home-magellan"
+if [ -f "$home/claude.json" ] && [ ! -L "$home/claude.json" ]; then
+    head -c 4000000 "$home/claude.json" |
+        jq -c '{type, subtype, is_error, num_turns, duration_ms}' 2>/dev/null || echo "no result JSON"
+fi
 
 # The jail has exited, so no agent process can swap a file under us.
 dest="$ws/out"
@@ -130,7 +139,8 @@ copy() {
 copy "$work/out/findings.jsonl" 1048576
 copy "$work/out/notes.md" 262144
 for png in "$work"/out/*.png; do
-    [ -e "$png" ] || continue
+    # Type first: reading a FIFO or device named *.png would hang or worse.
+    if [ ! -f "$png" ] || [ -L "$png" ]; then continue; fi
     [[ "$(basename "$png")" =~ ^[A-Za-z0-9._-]{1,80}\.png$ ]] || continue
     [ "$(head -c 8 "$png" | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a ] || continue
     copy "$png" 10485760

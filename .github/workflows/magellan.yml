@@ -110,7 +110,11 @@ jobs:
           EXTRA_HOSTS: ${{ vars.MAGELLAN_EXTRA_HOSTS }}
         run: |
           hosts="${MAGELLAN_SITE_URL#https://}"
-          for h in ${EXTRA_HOSTS//,/ }; do
+          # Split on commas into an array: no word splitting or globbing.
+          IFS=, read -ra extra <<< "$EXTRA_HOSTS"
+          for h in "${extra[@]}"; do
+            h="${h// /}"
+            [ -n "$h" ] || continue
             [[ "$h" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || {
               echo "::error::MAGELLAN_EXTRA_HOSTS has a bad host name"; exit 1; }
             hosts="$hosts,$h"

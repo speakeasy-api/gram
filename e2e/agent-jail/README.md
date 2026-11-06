@@ -12,9 +12,13 @@ what keeps the job safe. The jail is.
 
 ## What the agent can do
 
-- Run as `agentjail`, a user with no sudo, no Docker group and no
-  capabilities, under `no_new_privs`, so no setuid binary or file capability
-  can raise it.
+- Run as its own user (`aj-<hash of the run name>`): one per run, so
+  parallel runs cannot read or change each other's files. The user has no
+  sudo, no Docker group and no capabilities, and runs under `no_new_privs`,
+  so no setuid binary or file capability can raise it. Its only group is
+  `agentjail`, which is what lets it open the bridges.
+- Hold no file descriptor from its caller: the jail closes everything above
+  stderr before the agent starts.
 - See its own processes only (a new PID namespace).
 - See the host's files minus everything that holds the runner's work:
   `/home` (the checkout, the runner's tools, `_temp`, the runner's own
@@ -24,6 +28,7 @@ what keeps the job safe. The jail is.
   loopback interface. A few TCP ports on that loopback are bridged, through
   Unix sockets only `agentjail` can open, to the same ports on the host:
   - the proxy, always;
+  - for Magellan, nothing else;
   - for the healer, the local stack's dashboard, server and dev-idp ports.
 - Write to its home directory and to the workspace a script prepared for it
   from copies, never to the checkout.
@@ -40,8 +45,12 @@ only ever holds a placeholder.
   (web search, web fetch, code execution) or MCP servers is refused: those
   would let the model reach the internet from Anthropic's side.
 - `CONNECT <host>:443` is allowed only for hosts in `JAIL_ALLOWED_HOSTS`
-  (Magellan: the site under test), and only if every address the host
-  resolves to is public.
+  (Magellan: the site under test, plus any `MAGELLAN_EXTRA_HOSTS`), and only
+  if every address the host resolves to is globally routable: private,
+  loopback, link-local, shared, reserved and documentation ranges are
+  refused, IPv4 and IPv6 alike.
+- The key is sent over HTTPS only; the proxy will not start with a plain-HTTP
+  upstream other than loopback (which the tests use).
 - Nothing else. It logs decisions to a file only `agentproxy` can read, never
   to the CI log, because a refused host name is chosen by the agent.
 
@@ -70,11 +79,18 @@ sudo /opt/agent-jail/jail.sh run <name> <env-file> <port,port,...> <command ...>
 sudo e2e/agent-jail/jail.sh stop
 ```
 
-It needs Linux, root, `unshare`, `setpriv` and `ip`, so it runs in CI. Local
-runs (`mise run flows:heal`, `mise run magellan:explore`) run unjailed on
-your machine, against your local stack, with no shared secrets in reach.
+It needs Linux, root, `unshare`, `setpriv` and `ip`, so it runs in CI.
 
-Tests that need no root: `node --test e2e/agent-jail/proxy.test.mjs`.
+**Local runs are not a security boundary.** `mise run flows:heal` and
+`mise run magellan:explore` run the agent unjailed, as you, on your machine.
+Their tool permissions and Magellan's browser allowlist narrow what it does,
+but a prompt-injected agent may still reach whatever your user can: local
+files, credentials, other services. The guarantees on this page hold for
+jailed CI runs only. Locally, point the agent at your own stack and nothing
+you would not hand to a stranger.
+
+Tests that need no root, run by the flow-checks workflow:
+`node --test e2e/agent-jail/proxy.test.mjs e2e/magellan/browser.test.mjs`.
 
 ## What it does not stop
 

@@ -64,7 +64,11 @@ diff_hint='DIFF=The file `branch.diff`'
     "TEST=flow-test" \
     "TYPECHECK=flow-typecheck" \
     "SITE_URL=${GRAM_SITE_URL}" >"$work/prompt.md"
-chown -R agentjail:agentjail "$work"
+# This run's own user: no other run, including a parallel heal, can read or
+# change this workspace.
+run_user="$("$jail/jail.sh" user "heal-${flow}")"
+chown -R "$run_user:$run_user" "$work"
+chmod 0700 "$work"
 
 env_file="$state/env-${flow}"
 {
@@ -87,11 +91,20 @@ chmod 0644 "$env_file"
 # shellcheck disable=SC2016 # expanded inside the jail
 agent='cd "$JAIL_WORK" && claude -p --output-format json \
     --tools "Bash,Read,Write,Edit,Glob,Grep" \
-    --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/$FLOW/**),Write(./e2e/flows/$FLOW/**),Edit(./e2e/.flows/**),Write(./e2e/.flows/**),Bash(flow-browser:*),Bash(flow-test),Bash(flow-typecheck)" \
+    --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/$FLOW/flow.spec.ts),Write(./e2e/flows/$FLOW/flow.spec.ts),Edit(./e2e/.flows/**),Write(./e2e/.flows/**),Bash(flow-browser:*),Bash(flow-test),Bash(flow-typecheck)" \
     --max-turns 80 <prompt.md >out/claude.json 2>out/claude.err'
 status=0
 timeout 25m "$jail/jail.sh" run "heal-${flow}" "$env_file" "$JAIL_PORTS" bash -c "$agent" || status=$?
 echo "heal ${flow}: agent exited with ${status}"
+# Enough to see why a run failed. The jail holds no secret and the healer sees
+# only the throwaway local stack, so its errors are safe in a public log.
+if [ -f "$work/out/claude.json" ] && [ ! -L "$work/out/claude.json" ]; then
+    head -c 4000000 "$work/out/claude.json" |
+        jq -c '{type, subtype, is_error, num_turns, duration_ms}' 2>/dev/null || echo "no result JSON"
+fi
+if [ -f "$work/out/claude.err" ] && [ ! -L "$work/out/claude.err" ]; then
+    head -n 20 "$work/out/claude.err" | cut -c1-300
+fi
 
 # Everything below reads files the agent wrote. The jail has exited, so no
 # agent process can swap a file between the check and the copy.

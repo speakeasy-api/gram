@@ -1,6 +1,9 @@
 // Run with: node --test e2e/agent-jail/
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import net from "node:net";
 import { after, before, test } from "node:test";
 
@@ -8,6 +11,10 @@ let upstream;
 let seen;
 let proxyPort;
 let mod;
+const logFile = path.join(
+  fs.mkdtempSync(path.join(os.tmpdir(), "jail-proxy-")),
+  "proxy.log",
+);
 
 before(async () => {
   upstream = http.createServer((req, res) => {
@@ -26,7 +33,9 @@ before(async () => {
   process.env["ANTHROPIC_API_KEY"] = "real-key";
   process.env["JAIL_ANTHROPIC_UPSTREAM"] =
     `http://127.0.0.1:${upstream.address().port}`;
-  process.env["JAIL_ALLOWED_HOSTS"] = "allowed.example";
+  // localhost is allowlisted so the test reaches the private-address check.
+  process.env["JAIL_ALLOWED_HOSTS"] = "allowed.example,localhost";
+  process.env["JAIL_PROXY_LOG"] = logFile;
   mod = await import("./proxy.mjs");
   await new Promise((r) => mod.server.listen(0, "127.0.0.1", r));
   proxyPort = mod.server.address().port;
@@ -83,6 +92,17 @@ test("allows custom tools", async () => {
 });
 
 test("refuses other paths, methods, bad JSON and absolute URLs", async () => {
+  // A request target that is not a valid URL path is refused, not a crash.
+  const bad = await new Promise((resolve) => {
+    const s = net.connect(proxyPort, "127.0.0.1", () =>
+      s.write("GET //[ HTTP/1.1\r\nHost: x\r\n\r\n"),
+    );
+    s.once("data", (d) => {
+      resolve(d.toString().split("\r\n")[0]);
+      s.destroy();
+    });
+  });
+  assert.match(bad, /400|404/);
   assert.equal((await post("/v1/files", {})).status, 404);
   const get = await fetch(`http://127.0.0.1:${proxyPort}/v1/messages`);
   assert.equal(get.status, 404);
@@ -116,8 +136,10 @@ function connect(target) {
 test("refuses CONNECT to hosts off the list, other ports, private addresses", async () => {
   assert.match(await connect("evil.example:443"), /403/);
   assert.match(await connect("allowed.example:80"), /403/);
-  // localhost is not on the list; and if it were, it resolves privately.
+  // Allowlisted, but it resolves to a loopback address.
   assert.match(await connect("localhost:443"), /403/);
+  const log = fs.readFileSync(logFile, "utf8");
+  assert.match(log, /host resolves to a private address: localhost/);
 });
 
 test("classifies addresses", () => {
@@ -132,10 +154,20 @@ test("classifies addresses", () => {
     "fe80::1",
     "fd00::1",
     "::ffff:127.0.0.1",
+    "fe90::1",
+    "febf::1",
+    "fec0::1",
+    "::10.0.0.1",
+    "64:ff9b::a00:1",
+    "2001:db8::1",
+    "192.0.2.1",
+    "198.18.0.1",
+    "240.0.0.1",
+    "255.255.255.255",
   ]) {
     assert.equal(mod.isPublicAddress(a), false, a);
   }
-  for (const a of ["1.1.1.1", "2606:4700::1111"]) {
+  for (const a of ["1.1.1.1", "8.8.8.8", "2606:4700::1111", "::ffff:1.1.1.1"]) {
     assert.equal(mod.isPublicAddress(a), true, a);
   }
 });

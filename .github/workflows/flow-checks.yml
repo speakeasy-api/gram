@@ -16,6 +16,7 @@ on:
       - client/dashboard/**
       - e2e/flows/**
       - e2e/agent-jail/**
+      - e2e/magellan/**
       - e2e/flows.config.ts
       - .mise-tasks/test/flows.sh
       - .mise-tasks/flows/**
@@ -62,6 +63,11 @@ jobs:
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
+
+      # The jail's proxy and Magellan's browser allowlist guard real secrets;
+      # their tests need no stack, so they run first.
+      - name: Test the agent jail and browser allowlist
+        run: node --test e2e/agent-jail/proxy.test.mjs e2e/magellan/browser.test.mjs
 
       - name: Restore Go module cache
         uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
@@ -141,9 +147,13 @@ jobs:
           done
           wait
 
+      # Counts only: the log itself holds host names the agent chose.
       - name: Stop the agent jail
         if: always() && steps.failing.outputs.flows != ''
-        run: sudo e2e/agent-jail/jail.sh stop
+        run: |
+          echo "proxy decisions:"
+          sudo awk '{print $2}' /var/log/agent-jail/proxy.log 2>/dev/null | sort | uniq -c || true
+          sudo e2e/agent-jail/jail.sh stop
 
       # Only the verdicts, for the report job: small, and validated there too.
       - name: Upload verdicts
@@ -156,6 +166,8 @@ jobs:
             e2e/.flows/*-verdict.json
           retention-days: 7
           if-no-files-found: ignore
+          # e2e/.flows is a dot directory, which upload-artifact skips by default.
+          include-hidden-files: true
 
       # Traces, screenshots, transcripts and healed scripts. The stack is a
       # throwaway local one, so there is nothing secret in them.
@@ -167,6 +179,8 @@ jobs:
           path: e2e/.flows
           retention-days: 7
           if-no-files-found: ignore
+          # e2e/.flows is a dot directory, which upload-artifact skips by default.
+          include-hidden-files: true
 
   # Runs no repository code and holds the only token that can write to the PR.
   report:
@@ -206,6 +220,9 @@ jobs:
               echo "| Flow | Verdict | Step | Summary |"
               echo "| --- | --- | --- | --- |"
               failing=$(grep -E '^[a-z0-9-]+$' verdicts/failing.txt 2>/dev/null || true)
+              if [ -z "$failing" ]; then
+                echo "| - | **unknown** | - | the replay failed before any flow reported a result; see the run |"
+              fi
               for flow in $failing; do
                 f="verdicts/${flow}-verdict.json"
                 jq -r --arg flow "$flow" "
@@ -222,6 +239,7 @@ jobs:
               echo "**Check or heal a flow on your machine:**"
               echo
               echo '```bash'
+              [ -n "$failing" ] || echo "mise run test:flows   # replay every flow"
               for flow in $failing; do
                 echo "mise run test:flows flows/$flow/   # replay it"
                 echo "mise run flows:heal $flow          # heal it, or find out why it broke"

@@ -40,8 +40,19 @@ const allowedHosts = new Set(
     .filter(Boolean),
 );
 const logFile = env["JAIL_PROXY_LOG"] ?? "/dev/null";
-// Tests point the upstream at a local server; never in CI.
-const allowPrivateUpstream = env["JAIL_ALLOW_PRIVATE_UPSTREAM"] === "1";
+// The key only ever travels over HTTPS. Plain HTTP is allowed for a loopback
+// upstream alone, which is what the tests use.
+if (
+  upstream.protocol !== "https:" &&
+  !(
+    upstream.protocol === "http:" &&
+    ["127.0.0.1", "[::1]", "localhost"].includes(upstream.hostname)
+  )
+) {
+  throw new Error(
+    "JAIL_ANTHROPIC_UPSTREAM must be https:// (or http:// on loopback)",
+  );
+}
 
 const MESSAGE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens"]);
 const MAX_BODY = 32 * 1024 * 1024;
@@ -83,31 +94,59 @@ export function refusalReason(body) {
   return null;
 }
 
+// Everything that is not a globally routable unicast address: private,
+// loopback, link-local, shared, documentation, benchmarking, multicast and
+// reserved ranges, and IPv6 forms that embed an IPv4 address.
+// Separate lists: one BlockList also matches IPv4 against ::ffff:0:0/96 rules.
+const NON_PUBLIC_V4 = new net.BlockList();
+const NON_PUBLIC_V6 = new net.BlockList();
+for (const [range, bits] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+]) {
+  NON_PUBLIC_V4.addSubnet(range, bits, "ipv4");
+}
+for (const [range, bits] of [
+  ["::", 96], // unspecified, loopback and IPv4-compatible
+  ["::ffff:0:0", 96], // IPv4-mapped: checked as IPv4 below
+  ["64:ff9b::", 96], // NAT64
+  ["64:ff9b:1::", 48],
+  ["100::", 64], // discard
+  ["2001::", 23], // IETF protocol assignments, incl. Teredo
+  ["2001:db8::", 32], // documentation
+  ["2002::", 16], // 6to4
+  ["fc00::", 7], // unique local
+  ["fe80::", 10], // link-local
+  ["fec0::", 10], // site-local
+  ["ff00::", 8], // multicast
+]) {
+  NON_PUBLIC_V6.addSubnet(range, bits, "ipv6");
+}
+const GLOBAL_UNICAST_V6 = new net.BlockList();
+GLOBAL_UNICAST_V6.addSubnet("2000::", 3, "ipv6");
+
 export function isPublicAddress(address) {
   const family = net.isIP(address);
-  if (family === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return !(
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    );
-  }
+  if (family === 4) return !NON_PUBLIC_V4.check(address, "ipv4");
   if (family === 6) {
-    const v = address.toLowerCase();
-    if (v.startsWith("::ffff:")) return isPublicAddress(v.slice(7));
-    return !(
-      v === "::" ||
-      v === "::1" ||
-      v.startsWith("fc") ||
-      v.startsWith("fd") ||
-      v.startsWith("fe80") ||
-      v.startsWith("ff")
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+    if (mapped) return isPublicAddress(mapped[1]);
+    return (
+      GLOBAL_UNICAST_V6.check(address, "ipv6") &&
+      !NON_PUBLIC_V6.check(address, "ipv6")
     );
   }
   return false;
@@ -115,6 +154,11 @@ export function isPublicAddress(address) {
 
 function deny(res, status, reason) {
   record("deny", { status, reason });
+  // An upstream that fails after the response started can only be cut off.
+  if (res.headersSent || res.destroyed) {
+    res.destroy();
+    return;
+  }
   res.writeHead(status, { "content-type": "application/json" });
   res.end(
     JSON.stringify({
@@ -159,6 +203,7 @@ async function forwardMessages(req, res, path, search) {
     },
     (upstreamRes) => {
       record("messages", { path, status: upstreamRes.statusCode });
+      upstreamRes.on("error", () => res.destroy());
       const passed = { ...upstreamRes.headers };
       delete passed["set-cookie"];
       res.writeHead(upstreamRes.statusCode ?? 502, passed);
@@ -174,7 +219,12 @@ const server = http.createServer((req, res) => {
   if (!req.url || !req.url.startsWith("/")) {
     return deny(res, 403, "only the Anthropic API is reachable");
   }
-  const url = new URL(req.url, "http://jail");
+  let url;
+  try {
+    url = new URL(req.url, "http://jail");
+  } catch {
+    return deny(res, 400, "bad request target");
+  }
   if (req.method === "POST" && MESSAGE_PATHS.has(url.pathname)) {
     forwardMessages(req, res, url.pathname, url.search).catch(() =>
       deny(res, 500, "proxy error"),
@@ -198,9 +248,7 @@ server.on("connect", (req, socket, head) => {
   dns
     .lookup(host, { all: true })
     .then((addresses) => {
-      const usable = addresses.filter(
-        (a) => allowPrivateUpstream || isPublicAddress(a.address),
-      );
+      const usable = addresses.filter((a) => isPublicAddress(a.address));
       // Every address must be public: a host that also resolves to a private
       // address could be pointed at it on the next lookup.
       if (usable.length === 0 || usable.length !== addresses.length) {
@@ -219,8 +267,15 @@ server.on("connect", (req, socket, head) => {
     .catch(() => refuse(`lookup failed: ${host}`));
 });
 
+// The proxy is the jail's only way out: one bad connection must not take it
+// down for every other.
+server.on("clientError", (_err, socket) => socket.destroy());
+
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
+  process.on("uncaughtException", (err) =>
+    record("error", { message: String(err).slice(0, 200) }),
+  );
   if (!apiKey) {
     console.error("no Anthropic key: set JAIL_KEY_FILE or ANTHROPIC_API_KEY");
     process.exit(1);

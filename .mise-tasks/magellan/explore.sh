@@ -116,7 +116,19 @@ JSON
 exec node "$(pwd)/e2e/magellan/browser.mjs" "${abs_ws}/bin/browser.json" "\$@"
 SH
     chmod +x "$ws/bin/magellan-browser"
-    mise run playwright -s="$session" open "$site_url" >/dev/null
+    # Locally there is no jail, so the browser itself refuses every origin but
+    # the dashboard and the dev-idp it logs in through: a click on an outside
+    # link goes nowhere.
+    node -e '
+      const [base, out, ...origins] = process.argv.slice(1);
+      const fs = require("node:fs");
+      const config = JSON.parse(fs.readFileSync(base, "utf8"));
+      config.network = { allowedOrigins: origins };
+      fs.writeFileSync(out, JSON.stringify(config, null, 2));
+    ' .playwright/cli.config.json "$ws/bin/cli.config.json" \
+        "$(node -p 'new URL(process.argv[1]).origin' "$site_url")" \
+        "$(node -p 'new URL(process.argv[1]).origin' "${GRAM_DEVIDP_EXTERNAL_URL:?}")"
+    mise run playwright -s="$session" open --config="$abs_ws/bin/cli.config.json" "$site_url" >/dev/null
     trap 'mise run playwright -s="$session" close >/dev/null 2>&1 || true' EXIT
     (
         cd "$ws"

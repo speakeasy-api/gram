@@ -12,8 +12,11 @@
 #       from ANTHROPIC_API_KEY, keeps it in a file only its own user can read)
 #       and one Unix-socket bridge per local port the agent may reach. The
 #       proxy's port is always bridged.
+#   jail.sh user <name>
+#       Create (once) and print the user that runs <name>. Every run has its
+#       own user, so one run cannot read or change another's files.
 #   jail.sh run <name> <env-file> <port,port,...> <command> [args ...]
-#       Run <command> as the jail user, in fresh network, PID, mount, IPC and
+#       Run <command> as <name>'s user, in fresh network, PID, mount, IPC and
 #       UTS namespaces, with /home, /root, /tmp and other places that hold the
 #       runner's files hidden, no capabilities and no way to gain any. Its only
 #       sockets out are the bridges for the listed ports. <env-file> holds the
@@ -27,7 +30,8 @@ JAIL_ROOT=/opt/agent-jail
 JAIL_STATE=/var/lib/agent-jail
 JAIL_RUN=/run/agent-jail
 JAIL_LOG=/var/log/agent-jail
-AGENT_USER=agentjail
+# Only the members of this group (the run users) may open the bridges.
+SOCK_GROUP=agentjail
 PROXY_USER=agentproxy
 PROXY_PORT="${JAIL_PROXY_PORT:-3128}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,6 +47,23 @@ ensure_user() {
     id -u "$1" >/dev/null 2>&1 ||
         useradd --system --no-create-home --home-dir /nonexistent \
             --shell /usr/sbin/nologin --user-group "$1"
+}
+
+# A run's user: aj-<hash of the run name>, a member of $SOCK_GROUP only.
+run_user() {
+    local name="$1" user
+    [[ "$name" =~ ^[a-z0-9-]+$ ]] || die "bad name: $name"
+    user="aj-$(printf '%s' "$name" | sha256sum | cut -c1-12)"
+    getent group "$SOCK_GROUP" >/dev/null || groupadd --system "$SOCK_GROUP"
+    if ! id -u "$user" >/dev/null 2>&1; then
+        useradd --system --no-create-home --home-dir /nonexistent \
+            --shell /usr/sbin/nologin --user-group --groups "$SOCK_GROUP" "$user"
+    fi
+    printf '%s\n' "$user"
+}
+
+cmd_user() {
+    run_user "${1:?name}"
 }
 
 cmd_install() {
@@ -101,14 +122,18 @@ cmd_browsers() {
 
 cmd_start() {
     : "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}"
-    ensure_user "$AGENT_USER"
+    # Starting twice would orphan the first proxy behind a stale PID file.
+    if [ -f "$JAIL_RUN/proxy.pid" ] || [ -f "$JAIL_RUN/bridges.pid" ]; then cmd_stop; fi
     ensure_user "$PROXY_USER"
-    local agent_uid
-    agent_uid="$(id -u "$AGENT_USER")"
+    getent group "$SOCK_GROUP" >/dev/null || groupadd --system "$SOCK_GROUP"
+    local sock_gid
+    sock_gid="$(getent group "$SOCK_GROUP" | cut -d: -f3)"
 
-    install -d -m 0755 "$JAIL_STATE" "$JAIL_RUN"
+    # Listable by nobody: run users can enter their own directories only.
+    install -d -m 0711 "$JAIL_STATE"
+    install -d -m 0755 "$JAIL_RUN"
     install -d -m 0700 -o "$PROXY_USER" -g "$PROXY_USER" "$JAIL_RUN/proxy" "$JAIL_LOG"
-    install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$JAIL_RUN/sock"
+    install -d -m 0750 -o root -g "$SOCK_GROUP" "$JAIL_RUN/sock"
 
     # The key goes to a file only the proxy's user can read. printf is a
     # builtin, so the key never appears in any process's arguments.
@@ -130,9 +155,10 @@ cmd_start() {
 
     local port
     for port in "$PROXY_PORT" "$@"; do
-        [[ "$port" =~ ^[0-9]+$ ]] || die "bad port: $port"
+        [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] ||
+            die "bad port: $port"
         setsid "$JAIL_ROOT/bin/node" "$JAIL_ROOT/bridge.mjs" unix-to-tcp \
-            "$JAIL_RUN/sock/$port.sock" "$port" "$agent_uid" \
+            "$JAIL_RUN/sock/$port.sock" "$port" "$sock_gid" \
             >>"$JAIL_LOG/bridges.out" 2>&1 </dev/null &
         echo $! >>"$JAIL_RUN/bridges.pid"
     done
@@ -143,7 +169,10 @@ cmd_start() {
         for port in "$PROXY_PORT" "$@"; do
             [ -S "$JAIL_RUN/sock/$port.sock" ] || ready=0
         done
-        if [ "$ready" = 1 ] && (exec 3<>"/dev/tcp/127.0.0.1/$PROXY_PORT") 2>/dev/null; then
+        # The proxy we started must be the one answering, not something else
+        # that already held the port.
+        if [ "$ready" = 1 ] && kill -0 "$(cat "$JAIL_RUN/proxy.pid")" 2>/dev/null &&
+            (exec 3<>"/dev/tcp/127.0.0.1/$PROXY_PORT") 2>/dev/null; then
             echo "agent-jail: proxy and bridges are up"
             return 0
         fi
@@ -181,10 +210,21 @@ cmd_enter() {
     done
     ip link set lo up
 
-    local uid gid
-    uid="$(id -u "$AGENT_USER")"
-    gid="$(id -g "$AGENT_USER")"
-    exec setpriv --reuid="$uid" --regid="$gid" --clear-groups \
+    # Close every descriptor the caller left open, so none of them can reach
+    # a host socket or file from inside. 255 is bash's own handle on this
+    # script, and bash closes it on exec.
+    local fd
+    for fd in "/proc/$$/fd"/*; do
+        fd="${fd##*/}"
+        if [ "$fd" -gt 2 ] && [ "$fd" != 255 ]; then eval "exec ${fd}>&-" 2>/dev/null || true; fi
+    done
+
+    local user uid gid sock_gid
+    user="$(run_user "$name")"
+    uid="$(id -u "$user")"
+    gid="$(id -g "$user")"
+    sock_gid="$(getent group "$SOCK_GROUP" | cut -d: -f3)"
+    exec setpriv --reuid="$uid" --regid="$gid" --groups="$sock_gid" \
         --no-new-privs --inh-caps=-all --bounding-set=-all -- \
         env -i PATH="$JAIL_ROOT/bin:/usr/bin:/bin" HOME="$JAIL_STATE/home-$name" \
         SHELL=/bin/bash TMPDIR=/tmp LANG=C.UTF-8 \
@@ -199,7 +239,12 @@ cmd_run() {
     # It must still be visible once /home and /tmp are hidden.
     case "$env_file" in "$JAIL_STATE"/*) ;; *) die "env file must be under $JAIL_STATE" ;; esac
     [ -f "$env_file" ] || die "no env file: $env_file"
-    install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$JAIL_STATE/home-$name"
+    local user
+    user="$(run_user "$name")"
+    # Only this run's user can read its environment or use its home.
+    chown "root:$user" "$env_file"
+    chmod 0640 "$env_file"
+    install -d -m 0700 -o "$user" -g "$user" "$JAIL_STATE/home-$name"
     command -v ip >/dev/null || die "ip (iproute2) is required"
     exec unshare --net --pid --mount --ipc --uts --fork --mount-proc --kill-child -- \
         bash "$JAIL_ROOT/jail.sh" enter "$name" "$env_file" "$PROXY_PORT,$ports" "$@"
@@ -209,10 +254,11 @@ sub="${1:-}"
 shift || true
 case "$sub" in
     install) cmd_install "$@" ;;
+    user) cmd_user "$@" ;;
     browsers) cmd_browsers ;;
     start) cmd_start "$@" ;;
     run) cmd_run "$@" ;;
     enter) cmd_enter "$@" ;;
     stop) cmd_stop ;;
-    *) die "usage: jail.sh install|start|run|stop (see the header)" ;;
+    *) die "usage: jail.sh install|browsers|start|user|run|stop (see the header)" ;;
 esac

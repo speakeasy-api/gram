@@ -20,10 +20,20 @@ for port in "${list[@]}"; do
 done
 for port in "${list[@]}"; do
     [ -n "$port" ] || continue
+    ready=0
     for _ in $(seq 1 50); do
-        (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break
+        if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+            ready=1
+            break
+        fi
         sleep 0.1
     done
+    # A missing bridge is a setup error, not something to report as a flow
+    # failure.
+    if [ "$ready" != 1 ]; then
+        echo "agent-jail: the bridge for port $port did not start" >&2
+        exit 1
+    fi
 done
 
 exec "$@"

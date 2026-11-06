@@ -100,9 +100,18 @@ export function parseFinding(raw: unknown): Finding {
   ) {
     throw new Error("bad screenshot");
   }
-  const story = r["story"];
-  if (story !== undefined && story !== "" && typeof story !== "string")
+  // The draft story is optional: missing, empty or blank all mean none.
+  const rawStory = r["story"];
+  if (
+    rawStory !== undefined &&
+    rawStory !== null &&
+    typeof rawStory !== "string"
+  )
     throw new Error("bad story");
+  const story =
+    typeof rawStory === "string" && rawStory.trim() !== ""
+      ? rawStory
+      : undefined;
   return {
     kind: kind as Finding["kind"],
     severity: severity as Finding["severity"],
