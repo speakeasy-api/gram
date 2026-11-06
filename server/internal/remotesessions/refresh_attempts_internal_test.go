@@ -239,18 +239,9 @@ func TestRefreshFailureRecorded_UnmarkedErrors(t *testing.T) {
 	require.False(t, RefreshFailureRecorded(fmt.Errorf("unrelated: %w", ErrRemoteSessionUnavailable)))
 }
 
-// The service has no pool, so running the binding lookup would panic.
-func TestInvalidClientHappened_LogsOffSkipsTheBindingLookup(t *testing.T) {
-	t.Parallel()
-	s := &RefreshService{connections: mcpconnectionattemptstest.NewLogsOff(t).Recorder}
-	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
-
-	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, s.invalidClientHappened(t.Context(), RefreshIn(scope), remotesessions_repo.RemoteSession{}))
-}
-
-// A database that accepts and never answers holds the refresh only for the lookup's bound.
-func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T) {
-	t.Parallel()
+// stalledPool is a pool whose database accepts connections and never answers.
+func stalledPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	var mu sync.Mutex
@@ -277,12 +268,43 @@ func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T)
 	pool, err := pgxpool.New(t.Context(), "postgres://stalled:stalled@"+listener.Addr().String()+"/stalled?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	s := &RefreshService{db: pool, connections: mcpconnectionattemptstest.New(t).Recorder}
+	return pool
+}
+
+func boundSession() remotesessions_repo.RemoteSession {
+	return remotesessions_repo.RemoteSession{RemoteSessionClientID: uuid.New(), UserSessionIssuerID: uuid.New()}
+}
+
+// The service has no pool, so running the binding lookup would panic.
+func TestInvalidClientHappened_LogsOffSkipsTheBindingLookup(t *testing.T) {
+	t.Parallel()
+	s := &RefreshService{connections: mcpconnectionattemptstest.NewLogsOff(t).Recorder}
+	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
+
+	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession()), "the steps metric keeps the code refreshHappened chose")
+}
+
+// A database that accepts and never answers holds the refresh only for the lookup's bound.
+func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T) {
+	t.Parallel()
+	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattemptstest.New(t).Recorder}
 	scope := mcpconnectionattempts.ProviderSessionScope("org-stalled", uuid.New(), mcpconnectionattempts.AppDCR)
 
 	started := time.Now()
-	what := s.invalidClientHappened(t.Context(), RefreshIn(scope), remotesessions_repo.RemoteSession{RemoteSessionClientID: uuid.New(), UserSessionIssuerID: uuid.New()})
+	what := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
 
 	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "an unknown binding never recommends re-registration")
 	require.Less(t, time.Since(started), 2*emaBindingLookupTimeout)
+}
+
+// A cancelled request must not read as logs off: the cached feature check answers false then.
+func TestInvalidClientHappened_ACancelledRequestStillChecksLogs(t *testing.T) {
+	t.Parallel()
+	logsOnUnlessCancelled := func(ctx context.Context, _ string) (bool, error) { return ctx.Err() == nil, nil }
+	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattempts.NewCapturing(func(mcpconnectionattempts.Row) {}, logsOnUnlessCancelled)}
+	scope := mcpconnectionattempts.ProviderSessionScope("org-cancelled", uuid.New(), mcpconnectionattempts.AppDCR)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, s.invalidClientHappened(ctx, RefreshIn(scope), boundSession()), "logs read as on, so the lookup ran and timed out")
 }
