@@ -546,9 +546,17 @@ func (h *memberListHints) InterceptRemoteMessage(_ context.Context, msg *proxy.R
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.seen = true
-	h.ttl = time.Duration(max(hints.TTLMs, 0)) * time.Millisecond
-	h.private = hints.CacheScope == "private"
+	h.ttl, h.private = memberListCacheHints(hints.TTLMs, hints.CacheScope)
 	return nil
+}
+
+// memberListCacheHints reads a listing's cache hints. ttlMs is clamped before
+// it becomes a duration, so a huge value cannot overflow; absent or negative
+// reads as zero. The spec names no default for an absent cacheScope, so only
+// an explicit "public" is shared across callers.
+func memberListCacheHints(ttlMs int, cacheScope string) (time.Duration, bool) {
+	ttl := time.Duration(min(max(ttlMs, 0), int(maxMemberToolSchemasTTL/time.Millisecond))) * time.Millisecond
+	return ttl, cacheScope != "public"
 }
 
 // take returns and clears the latest capture; ok is false when none arrived,

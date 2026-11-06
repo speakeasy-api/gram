@@ -802,8 +802,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 		// the proxy relabelled for this session.
 		pageTTL, pagePrivate, captured := hints.take()
 		if !captured {
-			pageTTL = time.Duration(max(pageResult.TTLMs, 0)) * time.Millisecond
-			pagePrivate = pageResult.CacheScope == "private"
+			pageTTL, pagePrivate = memberListCacheHints(pageResult.TTLMs, pageResult.CacheScope)
 		}
 		if cacheTTL < 0 || pageTTL < cacheTTL {
 			cacheTTL = pageTTL

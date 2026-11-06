@@ -10,11 +10,13 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -252,4 +254,29 @@ func TestRememberMemberToolSchemasRedisLifecycle(t *testing.T) {
 	pruned, err := s.memberToolSchemaCache.Get(t.Context(), key)
 	require.NoError(t, err)
 	require.NotContains(t, pruned.Tools, "annotated", "an expired tool is dropped from the next write")
+}
+
+// A huge ttlMs clamps to the cap instead of overflowing; only an explicit
+// "public" cacheScope is shared.
+func TestMemberListHintsClampAndScope(t *testing.T) {
+	t.Parallel()
+
+	capture := func(result string) (time.Duration, bool) {
+		hints := &memberListHints{}
+		require.NoError(t, hints.InterceptRemoteMessage(t.Context(), &proxy.RemoteMessage{Message: &jsonrpc.Response{Result: json.RawMessage(result)}}))
+		ttl, private, ok := hints.take()
+		require.True(t, ok)
+		return ttl, private
+	}
+
+	ttl, private := capture(`{"tools":[],"ttlMs":9223372036854775,"cacheScope":"public"}`)
+	require.Equal(t, maxMemberToolSchemasTTL, ttl)
+	require.False(t, private)
+
+	ttl, private = capture(`{"tools":[],"ttlMs":-5}`)
+	require.Zero(t, ttl)
+	require.True(t, private, "an absent cacheScope is not shared")
+
+	_, private = capture(`{"tools":[],"ttlMs":1000,"cacheScope":"private"}`)
+	require.True(t, private)
 }

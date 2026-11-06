@@ -376,7 +376,18 @@ func TestParameterHeadersPlacementWalkBudgets(t *testing.T) {
 	_, err := ParameterHeaders(json.RawMessage(deep), nil)
 	require.ErrorContains(t, err, "depth limit")
 
-	wide := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"examples":[` + strings.TrimSuffix(strings.Repeat(`{},`, maxParameterHeaderNodes), ",") + `]}`
+	wide := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"$defs":[` + strings.TrimSuffix(strings.Repeat(`{},`, maxParameterHeaderNodes), ",") + `]}`
 	_, err = ParameterHeaders(json.RawMessage(wide), nil)
 	require.ErrorContains(t, err, "node limit")
+}
+
+func TestParameterHeadersDataSubtreesSkipPlacementBudgets(t *testing.T) {
+	t.Parallel()
+
+	wide := `[` + strings.TrimSuffix(strings.Repeat(`{"a":1},`, 2*maxParameterHeaderNodes), ",") + `]`
+	deep := strings.Repeat(`{"a":`, 2*maxParameterHeaderJSONDepth) + `1` + strings.Repeat(`}`, 2*maxParameterHeaderJSONDepth)
+	schema := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner","enum":` + wide + `,"examples":[` + deep + `],"default":` + deep + `}}}`
+	headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
 }

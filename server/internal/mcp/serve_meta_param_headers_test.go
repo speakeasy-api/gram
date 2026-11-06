@@ -434,7 +434,15 @@ func credentialedMemberCalls(t *testing.T, opts ...recordingUpstreamOption) *rec
 		gateway := parameterHeaderGateway{ti: ti, slug: slug, metaID: meta.ID, bearer: mintMetaIssuerBearer(t, ti, slug, issuerID, subject), recorder: nil}
 		gateway.execute(t)
 	}
-	require.Equal(t, 2, rpcMethodCounts(upstream)["tools/call"])
+	var authorizations []string
+	for _, req := range upstream.journal() {
+		if req.rpcMethod == "tools/call" {
+			require.NotEmpty(t, req.authorization)
+			authorizations = append(authorizations, req.authorization)
+		}
+	}
+	require.Len(t, authorizations, 2)
+	require.NotEqual(t, authorizations[0], authorizations[1], "each caller sends its own credential")
 	return upstream
 }
 

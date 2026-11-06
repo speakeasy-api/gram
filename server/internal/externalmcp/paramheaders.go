@@ -256,13 +256,16 @@ func (w *annotationWalk) value(depth int, inProperties, data bool) error {
 	if !ok {
 		return nil
 	}
-	if depth > maxParameterHeaderJSONDepth {
-		return errors.New("MCP tool input schema exceeds depth limit")
+	// Instance values hold no annotations; the byte limit already bounds them.
+	if !data {
+		if depth > maxParameterHeaderJSONDepth {
+			return errors.New("MCP tool input schema exceeds depth limit")
+		}
+		if w.remainingNodes <= 0 {
+			return errors.New("MCP tool input schema exceeds node limit")
+		}
+		w.remainingNodes--
 	}
-	if w.remainingNodes <= 0 {
-		return errors.New("MCP tool input schema exceeds node limit")
-	}
-	w.remainingNodes--
 	for w.decoder.More() {
 		if delim == '[' {
 			if err := w.value(depth+1, false, data); err != nil {
