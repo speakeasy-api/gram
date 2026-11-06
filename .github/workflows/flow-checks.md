@@ -132,7 +132,7 @@ Commands in this run:
 - Type-check: `aube run -F @gram/e2e type-check`.
 - Branch diff: `git diff origin/main...HEAD -- client/ e2e/flows/`.
 
-{{#runtime-import prompts/heal-flow.md}}
+{{#runtime-import .github/prompts/heal-flow.md}}
 
 ## Report
 
