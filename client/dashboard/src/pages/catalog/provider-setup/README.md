@@ -61,7 +61,7 @@ Use a public `snowflakecomputing.com` account hostname. Government regions, Chin
 
 Account-scoped OAuth uses `/oauth/authorize`, `/oauth/token-request`, PKCE, required Client ID and primary Client Secret, `client_secret_post`, and `session:role:all`. SQL uses the actual API-provided callback, `OAUTH_USE_SECONDARY_ROLES = NONE`, a non-privileged allowed role, and user defaults. OAuth secret extraction uses uppercase JSON keys. SQL is displayed for the owner to execute; incomplete statements are withheld. Setup never executes provisioning SQL or calls a Cortex Agent during verification.
 
-Preserve identifier quoting/case, SQL literal escaping, specification delimiter guards, and source-bound secret-free progress. Account/server edits invalidate credentials and verification. The shared source safeguards described above also protect Snowflake endpoint writes; Snowflake adds no instance header or backend capability.
+Preserve identifier quoting/case, SQL literal escaping, specification delimiter guards, and source-bound secret-free progress. Reject MCP object names consisting only of `.` or `..`, which URL path parsing would normalize away. Account/server edits invalidate credentials and verification. The shared source safeguards described above also protect Snowflake endpoint writes; Snowflake adds no instance header or backend capability.
 
 Authoritative references:
 

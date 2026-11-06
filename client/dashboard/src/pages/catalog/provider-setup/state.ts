@@ -3,6 +3,7 @@ import {
   snowflakeConnection,
   publicSnowflakeHost,
   idValid,
+  mcpNameValid,
   agentValid,
   roleAllowed,
   users,
@@ -195,9 +196,9 @@ export function validate(s: State): State["errors"] {
         "Enter the public HTTPS Snowflake account hostname, without a path or PrivateLink hostname.";
     if (s.step === "server") {
       for (const field of ["database", "schema", "serverName"] as const)
-        if (!idValid(v[field]))
+        if (!mcpNameValid(v[field]))
           errors[field] =
-            "Enter a valid name. Use double quotes for case-sensitive names.";
+            "Enter a valid MCP object name; dot-only names are unsupported. Use double quotes for case-sensitive names.";
       if (!agentValid(v.agent))
         errors.agent =
           "Enter the existing Cortex Agent as DATABASE.SCHEMA.AGENT_NAME.";

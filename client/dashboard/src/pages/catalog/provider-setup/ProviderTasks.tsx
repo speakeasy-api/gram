@@ -11,6 +11,7 @@ import { Eye, Link, Settings2 } from "lucide-react";
 import {
   AppChoice,
   CallbackUrlStatus,
+  Correction,
   Choices,
   CopyValue,
   CopyAction,
@@ -140,6 +141,13 @@ function Credentials() {
             s.values.appChoice === "existing",
           )}
         />
+      )}
+      {s.provider === "snowflake" && s.errors.host && (
+        <Alert variant="error">
+          {s.errors.host} <Correction step="account">Review account</Correction>
+          {" · "}
+          <Correction step="server">Review server details</Correction>
+        </Alert>
       )}
       <SetupField
         field="clientId"
