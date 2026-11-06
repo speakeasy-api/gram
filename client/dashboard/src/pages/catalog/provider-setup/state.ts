@@ -1,8 +1,18 @@
+import { salesforceConnection } from "./salesforce";
 /** Provider setup state only. Network actions live in the page integration. */
-export type Provider = "slack" | "github";
-export const names = { slack: "Slack", github: "GitHub" };
+export type Provider = "slack" | "github" | "salesforce";
+export const names = {
+  slack: "Slack",
+  github: "GitHub",
+  salesforce: "Salesforce",
+};
 const defaultValues = {
   org: "",
+  integration: "native",
+  environment: "production",
+  salesforceServer: "sobject-reads",
+  instanceUrl: "",
+  path: "own",
   appChoice: "new",
   clientId: "",
   clientSecret: "",
@@ -43,6 +53,26 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
+  if (s.provider === "salesforce")
+    return [
+      { id: "begin", title: "Setup plan" },
+      { id: "choices", title: "Choose your connection" },
+      ...(s.values.path === "support"
+        ? [
+            { id: "install", title: "Install Speakeasy’s app" },
+            { id: "support", title: "Finish with support" },
+          ]
+        : [
+            { id: "app", title: "App basics" },
+            { id: "oauth", title: "OAuth settings" },
+            { id: "security", title: "Security settings" },
+            ...(s.values.integration === "native"
+              ? [{ id: "activation", title: "Enable Salesforce MCP" }]
+              : []),
+            { id: "credentials", title: "Enter app credentials" },
+          ]),
+      { id: "test", title: "Connect and test" },
+    ];
   if (s.provider === "github")
     return [
       { id: "begin", title: "Setup plan" },
@@ -72,15 +102,39 @@ export function orgValid(s: State): boolean {
   );
 }
 export function ready(s: State): boolean {
-  return s.saved && (s.provider !== "github" || orgValid(s));
+  return (
+    s.saved &&
+    (s.provider !== "salesforce" ||
+      (s.values.path === "own" &&
+        !s.configChanged &&
+        !!salesforceConnection(s.values))) &&
+    (s.provider !== "github" || orgValid(s))
+  );
 }
 export function validate(s: State): State["errors"] {
   const errors: State["errors"] = {};
   if (s.step === "organization" && !orgValid(s))
     errors.org = "Enter the GitHub organization name, without a URL.";
+  if (
+    s.provider === "salesforce" &&
+    ["choices", "credentials"].includes(s.step)
+  ) {
+    if (!salesforceConnection(s.values)) {
+      if (s.values.integration === "hosted")
+        errors.instanceUrl =
+          "Enter an HTTPS Salesforce instance URL without a path.";
+      else
+        errors.salesforceServer =
+          "Choose a supported Salesforce server and environment.";
+    }
+  }
   if (s.step === "credentials") {
-    if (!s.values.clientId.trim()) errors.clientId = "Enter Client ID.";
-    if (!s.values.clientSecret.trim())
+    if (!s.values.clientId.trim())
+      errors.clientId =
+        s.provider === "salesforce"
+          ? "Enter Consumer Key."
+          : "Enter Client ID.";
+    if (s.provider !== "salesforce" && !s.values.clientSecret.trim())
       errors.clientSecret = "Enter Client Secret.";
   }
   return errors;
@@ -124,11 +178,23 @@ export function reduce(s: State, a: Action): State {
           (id) => steps(s).findIndex((t) => t.id === id) < boundary,
         ),
       };
-      if (a.field === "appChoice") {
+      if (
+        a.field === "appChoice" ||
+        (s.provider === "salesforce" &&
+          [
+            "integration",
+            "environment",
+            "salesforceServer",
+            "instanceUrl",
+            "path",
+          ].includes(a.field))
+      ) {
         next.values.clientId = "";
         next.values.clientSecret = "";
         next.showSecret = false;
       }
+      if (s.provider === "salesforce" && a.source !== "configuration")
+        next.configChanged = true;
       if (a.field === "access" && a.source !== "configuration") {
         next.configChanged = true;
         next.accessChosen = true;
@@ -147,6 +213,12 @@ export function reduce(s: State, a: Action): State {
           }
         : s;
     case "next": {
+      if (
+        s.provider === "salesforce" &&
+        s.values.path === "support" &&
+        ["install", "support"].includes(s.step)
+      )
+        return s;
       const errors = validate(s);
       if (Object.keys(errors).length) return { ...s, errors };
       const list = steps(s),

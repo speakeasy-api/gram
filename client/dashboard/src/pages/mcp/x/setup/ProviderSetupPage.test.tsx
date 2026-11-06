@@ -41,8 +41,17 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
       url:
         mocks.provider === "github"
           ? "https://api.githubcopilot.com/mcp"
-          : "https://mcp.slack.com/mcp",
+          : mocks.provider === "salesforce"
+            ? "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads"
+            : "https://mcp.slack.com/mcp",
     },
+  }),
+}));
+vi.mock("@gram/client/react-query/remoteMcpServerHeaders", () => ({
+  useRemoteMcpServerHeaders: () => ({
+    data: { headers: [] },
+    isPending: false,
+    isError: false,
   }),
 }));
 vi.mock("./provider-setup", async (importOriginal) => {
@@ -52,7 +61,11 @@ vi.mock("./provider-setup", async (importOriginal) => {
     ...actual,
     loadProviderProgress: () => {
       const state = initialState(
-        mocks.provider === "github" ? "github" : "slack",
+        mocks.provider === "github"
+          ? "github"
+          : mocks.provider === "salesforce"
+            ? "salesforce"
+            : "slack",
       );
       return {
         ...state,
@@ -149,7 +162,7 @@ afterEach(() => {
 });
 
 describe("provider setup completion celebration", () => {
-  it.each(["github", "slack"])(
+  it.each(["github", "slack", "salesforce"])(
     "celebrates %s after success renders, without delaying completion",
     async (provider) => {
       mocks.provider = provider;
@@ -173,7 +186,7 @@ describe("provider setup completion celebration", () => {
       expect(canvas.className).toContain("pointer-events-none");
       expect(canvas.getAttribute("aria-hidden")).toBe("true");
       expect(canvas.closest("section")?.getAttribute("aria-label")).toBe(
-        `Current ${provider === "github" ? "GitHub" : "Slack"} setup task`,
+        `Current ${provider === "github" ? "GitHub" : provider === "salesforce" ? "Salesforce" : "Slack"} setup task`,
       );
       view.rerender(<Setup />);
       expect(mocks.fire).toHaveBeenCalledTimes(1);

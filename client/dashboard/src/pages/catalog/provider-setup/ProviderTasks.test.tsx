@@ -192,3 +192,55 @@ it.each(["all", "read"])(
     );
   },
 );
+
+function SalesforceFixture({
+  step,
+  integration = "native",
+  path = "own",
+}: {
+  step: string;
+  integration?: string;
+  path?: string;
+}) {
+  const [s, dispatch] = useReducer(reduce, {
+    ...initialState("salesforce"),
+    step,
+    values: { ...initialState("salesforce").values, integration, path },
+  });
+  return (
+    <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+      <ProviderTask serverName="Salesforce" />
+    </SetupContext>
+  );
+}
+it("shows both Salesforce connection choices and the hosted instance field", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Speakeasy-hosted Salesforce CRM"));
+  expect(screen.getByLabelText("Salesforce instance URL")).toBeDefined();
+  expect(screen.queryByLabelText("Salesforce server")).toBeNull();
+});
+it("uses the real Salesforce callback and native scopes", () => {
+  render(<SalesforceFixture step="oauth" />);
+  expect(screen.getByLabelText("Callback URL")).toHaveProperty(
+    "value",
+    "https://current.example/callback",
+  );
+  expect(screen.getByText("mcp_api")).toBeDefined();
+  expect(screen.getByText("refresh_token")).toBeDefined();
+});
+it("shows Consumer Key-only native credentials and the optional hosted secret", () => {
+  const native = render(<SalesforceFixture step="credentials" />);
+  expect(screen.getByLabelText("Consumer Key")).toBeDefined();
+  expect(screen.queryByLabelText("Client Secret (optional)")).toBeNull();
+  native.unmount();
+  render(<SalesforceFixture step="credentials" integration="hosted" />);
+  expect(screen.getByLabelText("Client Secret (optional)")).toBeDefined();
+});
+it("retains the unresolved support branch with a real correction action and no simulated success", () => {
+  render(<SalesforceFixture step="support" path="support" />);
+  expect(
+    screen.getByRole("button", { name: "Choose another setup method" }),
+  ).toBeDefined();
+  expect(screen.queryByText(/Simulate/)).toBeNull();
+});

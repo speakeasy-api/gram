@@ -1,6 +1,6 @@
-# Slack and GitHub setup integration
+# Slack, GitHub and Salesforce setup integration
 
-The shared setup flow supports Slack and GitHub in the MCP server details shell. GitHub setup includes organization, OAuth-app and credential steps. Endpoint matching and catalog handoff recognize only the official Slack and GitHub MCP endpoints. The Identity modal remains; only User Identity enters setup. Service Account and Manual retain their paths. Other providers remain outside this integration.
+The shared setup flow supports Slack, GitHub and Salesforce in the MCP server details shell. GitHub setup includes organization, OAuth-app and credential steps. Endpoint matching and catalog handoff recognize the official Slack/GitHub endpoints and the exact supported Salesforce-native and Speakeasy-hosted CRM endpoints. The Identity modal remains; only User Identity enters setup. Service Account and Manual retain their paths. Other providers remain outside this integration. Salesforce connection contracts and remaining support/live-verification gaps are recorded in [salesforce-contract.md](./salesforce-contract.md).
 
 ## Rollout visibility
 

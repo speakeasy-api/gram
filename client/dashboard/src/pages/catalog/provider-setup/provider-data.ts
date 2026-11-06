@@ -1,4 +1,4 @@
-import type { State } from "./state";
+import { steps, type State } from "./state";
 const slackScopes = [
   "search:read.public",
   "search:read.private",
@@ -37,6 +37,10 @@ export const scopesFor = (s: { values: { access: string } }): string[] =>
     : slackScopes;
 
 export function taskTitle(s: State): string {
+  if (s.provider === "salesforce")
+    return (
+      steps(s).find((step) => step.id === s.step)?.title ?? "Salesforce setup"
+    );
   if (s.step === "begin") return "Setup plan";
   if (s.step === "test") return "Connect and test";
   if (s.step === "credentials") return "Enter app credentials";
