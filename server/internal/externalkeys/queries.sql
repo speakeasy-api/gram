@@ -1,3 +1,8 @@
+-- Every read and write below is scoped to purpose 'sign'. Encryption keys
+-- (purpose 'encrypt') protect organization data and are managed through the
+-- organization encryption service, which refuses to drop a key that still
+-- wraps data; this API never sees them.
+
 -- Loads the backing credential's provider, scoped to the organization, so the
 -- caller can validate that a key references a same-org, org-scoped credential
 -- (project_id IS NULL, matching the org-scoping the key itself requires) of the
@@ -57,6 +62,7 @@ JOIN aws_kms_keys AS aws ON aws.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'aws_kms'
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE;
 
 -- name: GetGcpKmsKey :one
@@ -66,6 +72,7 @@ JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
@@ -111,6 +118,7 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
@@ -120,6 +128,7 @@ WHERE ek.id = @id
 SELECT *
 FROM external_keys AS ek
 WHERE ek.organization_id = @organization_id
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND (sqlc.narg('provider')::text IS NULL OR ek.provider = sqlc.narg('provider')::text)
@@ -147,6 +156,7 @@ SET external_credential_id = @external_credential_id,
     updated_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;
@@ -165,6 +175,7 @@ FROM external_keys
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 FOR UPDATE OF external_keys;
@@ -215,6 +226,7 @@ SET deleted_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;

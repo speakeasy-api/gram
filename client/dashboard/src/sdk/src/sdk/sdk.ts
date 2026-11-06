@@ -63,6 +63,7 @@ import { OrganizationRemoteSessionIssuers } from "./organizationremotesessioniss
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
+import { OrgEncryption } from "./orgencryption.js";
 import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
@@ -383,6 +384,11 @@ export class Gram extends ClientSDK {
     return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
+  }
+
+  private _orgEncryption?: OrgEncryption;
+  get orgEncryption(): OrgEncryption {
+    return (this._orgEncryption ??= new OrgEncryption(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

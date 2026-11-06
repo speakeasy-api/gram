@@ -50456,6 +50456,854 @@ paths:
             x-speakeasy-name-override: restore
             x-speakeasy-react-hook:
                 name: RestoreOktaServerSuggestion
+    /rpc/orgEncryption.completeSwitch:
+        post:
+            description: 'Complete an in-flight key switch now instead of waiting for the grace period: drop the previous key''s wraps. Requires org:admin. After this the previous key is no longer needed to read the organization''s data.'
+            operationId: completeOrgEncryptionKeySwitch
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: completeSwitch orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: completeSwitch
+            x-speakeasy-react-hook:
+                name: CompleteOrgEncryptionKeySwitch
+    /rpc/orgEncryption.createGcpKey:
+        post:
+            description: Register a customer-managed GCP KMS symmetric key the organization can switch to. Requires org:admin. The key is not used until the organization switches to it.
+            operationId: createOrgEncryptionGcpKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOrgEncryptionGcpKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: createGcpKey
+            x-speakeasy-react-hook:
+                name: CreateOrgEncryptionGcpKey
+    /rpc/orgEncryption.deleteKey:
+        delete:
+            description: Delete a customer-managed encryption key. Requires org:admin. Refused with a conflict while the key is the organization's key, is being switched to or away from, or still wraps any data encryption key, because the data it protects would become unreadable. Speakeasy-managed keys cannot be deleted.
+            operationId: deleteOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: deleteKey
+            x-speakeasy-react-hook:
+                name: DeleteOrgEncryptionKey
+    /rpc/orgEncryption.getConfig:
+        get:
+            description: Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.
+            operationId: getOrgEncryptionConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getConfig orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: getConfig
+            x-speakeasy-react-hook:
+                name: OrgEncryptionConfig
+    /rpc/orgEncryption.listKeys:
+        get:
+            description: List the organization's encryption keys, Speakeasy-managed and customer-managed. Requires org:read.
+            operationId: listOrgEncryptionKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrgEncryptionKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listKeys orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: listKeys
+            x-speakeasy-react-hook:
+                name: OrgEncryptionKeys
+    /rpc/orgEncryption.resume:
+        post:
+            description: Resume a suspended organization after its key was fixed. Requires org:admin. Speakeasy first proves the key unwraps every data encryption key; the hourly health probe also resumes on its own once the key works again.
+            operationId: resumeOrgEncryption
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: resume orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: resume
+            x-speakeasy-react-hook:
+                name: ResumeOrgEncryption
+    /rpc/orgEncryption.rollbackSwitch:
+        post:
+            description: 'Roll back an in-flight key switch: return to the previous key and drop the wraps made under the new one. Requires org:admin.'
+            operationId: rollbackOrgEncryptionKeySwitch
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: rollbackSwitch orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: rollbackSwitch
+            x-speakeasy-react-hook:
+                name: RollbackOrgEncryptionKeySwitch
+    /rpc/orgEncryption.rotateDataKey:
+        post:
+            description: Replace a use case's data encryption key with a new one. Requires org:admin. Values encrypted before the rotation stay readable and are re-encrypted under the new key when next written.
+            operationId: rotateOrgEncryptionDataKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateOrgEncryptionDataKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: rotateDataKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: rotateDataKey
+            x-speakeasy-react-hook:
+                name: RotateOrgEncryptionDataKey
+    /rpc/orgEncryption.switchKey:
+        post:
+            description: Start switching the organization to a customer-managed key. Requires org:admin. Speakeasy verifies the key, then wraps every data encryption key under it; the previous key keeps everything readable until the switch completes, either through completeSwitch or automatically after the grace period, or rolls back.
+            operationId: switchOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SwitchOrgEncryptionKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: switchKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: switchKey
+            x-speakeasy-react-hook:
+                name: SwitchOrgEncryptionKey
+    /rpc/orgEncryption.verifyKey:
+        post:
+            description: 'Probe that Speakeasy can reach an encryption key and use it: encrypt a probe payload and decrypt it again. Performs real KMS operations, billed to the key''s owner and recorded in their audit log. Nothing is persisted. Rate limited per organization. Requires org:admin.'
+            operationId: verifyOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyOrgEncryptionKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: verifyKey
+            x-speakeasy-react-hook:
+                name: VerifyOrgEncryptionKey
     /rpc/organizationAssets.uploadImage:
         post:
             description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -105310,6 +106158,26 @@ components:
             required:
                 - slug
                 - name
+        CreateOrgEncryptionGcpKeyForm:
+            type: object
+            properties:
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Speakeasy service-account email the customer granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The organization's gcp_iam external credential Speakeasy reaches the key with.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: 'The GCP KMS crypto key resource name, without a version: projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have purpose ENCRYPT_DECRYPT.'
+            required:
+                - external_credential_id
+                - name
+                - resource_name
         CreateOrganizationRemoteSessionClientForm:
             type: object
             properties:
@@ -115712,6 +116580,16 @@ components:
                 - suggestions
                 - open_count
                 - total_count
+        ListOrgEncryptionKeysResult:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgEncryptionKey'
+                    description: The organization's encryption keys, newest first.
+            required:
+                - keys
         ListOrganizationMcpServersResult:
             type: object
             properties:
@@ -119730,6 +120608,102 @@ components:
                 - type
                 - summary
                 - env_variables
+        OrgEncryptionConfig:
+            type: object
+            properties:
+                config_state:
+                    type: string
+                    description: 'active: one key protects all data. switching: data is readable under both the current and previous key. suspended: the key is unusable and every encrypt and decrypt fails.'
+                    enum:
+                        - active
+                        - switching
+                        - suspended
+                id:
+                    type: string
+                    description: The ID of the configuration.
+                    format: uuid
+                key_id:
+                    type: string
+                    description: The ID of the current key encryption key.
+                    format: uuid
+                key_mode:
+                    type: string
+                    description: Who controls the current key.
+                    enum:
+                        - speakeasy_managed
+                        - customer_managed
+                last_check_at:
+                    type: string
+                    description: When the hourly health probe last checked the keys.
+                    format: date-time
+                last_check_error:
+                    type: string
+                    description: The error from the last health probe, when it failed.
+                previous_key_id:
+                    type: string
+                    description: The ID of the key being switched away from, while a switch is in flight.
+                    format: uuid
+                suspended_at:
+                    type: string
+                    description: When the configuration was suspended.
+                    format: date-time
+                suspended_reason:
+                    type: string
+                    description: The provider error that caused the suspension.
+                switch_completed_at:
+                    type: string
+                    description: When the last switch completed.
+                    format: date-time
+                switch_started_at:
+                    type: string
+                    description: When the in-flight or last switch started.
+                    format: date-time
+            description: Which key encryption key protects the organization's data, and whether it is usable.
+            required:
+                - id
+                - key_mode
+                - config_state
+                - key_id
+        OrgEncryptionKey:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the key was registered.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Speakeasy identity the customer granted on the key. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Speakeasy reaches the key with. Omitted for Speakeasy-managed keys.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key.
+                    format: uuid
+                managed:
+                    type: boolean
+                    description: Whether Speakeasy minted and controls the key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - gcp_kms
+                resource_name:
+                    type: string
+                    description: The GCP KMS crypto key resource name (projects/.../cryptoKeys/...).
+            description: A symmetric KMS key that can protect the organization's data.
+            required:
+                - id
+                - name
+                - provider
+                - resource_name
+                - managed
+                - created_at
         Organization:
             type: object
             properties:
@@ -126201,6 +127175,14 @@ components:
                 - previous_keys
                 - previous_keys_retired
                 - marketplace_republished
+        RotateOrgEncryptionDataKeyRequestBody:
+            type: object
+            properties:
+                use_case:
+                    type: string
+                    description: The use case whose data encryption key to rotate.
+            required:
+                - use_case
         RotateRequestBody:
             type: object
             properties:
@@ -131667,6 +132649,15 @@ components:
                 - vendor
                 - family
                 - surface
+        SwitchOrgEncryptionKeyRequestBody:
+            type: object
+            properties:
+                external_key_id:
+                    type: string
+                    description: The ID of the registered encryption key to switch to.
+                    format: uuid
+            required:
+                - external_key_id
         SyncDirectoryGroupsResult:
             type: object
             properties:
@@ -138045,6 +139036,32 @@ components:
                 - events
                 - latest_unix_nano
                 - total_count
+        VerifyOrgEncryptionKeyResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+                key_probe_outcome:
+                    type: string
+                    description: The machine-readable outcome of the probe.
+                    enum:
+                        - verified
+                        - credential_unusable
+                        - invalid_resource_name
+                        - key_not_found
+                        - permission_denied
+                        - key_unusable
+                        - round_trip_failed
+                        - unavailable
+                        - unexpected
+                verified:
+                    type: boolean
+                    description: Whether the key encrypted the probe payload and decrypted it again.
+            description: Result of a live probe that Speakeasy can encrypt and decrypt with a key.
+            required:
+                - verified
+                - key_probe_outcome
         VerifyPlatformCredentialResult:
             type: object
             properties:
@@ -138887,6 +139904,8 @@ tags:
       description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
     - name: organizations
       description: Organization membership, invitations, and directory.
+    - name: orgEncryption
+      description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
     - name: otel
       description: Receives OpenTelemetry signals from LLM providers and harnesses.
     - name: packages

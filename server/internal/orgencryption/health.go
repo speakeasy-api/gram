@@ -321,3 +321,29 @@ func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.Encry
 
 	return true, nil
 }
+
+// ProbeOutcomeCredentialUnusable reports a key Speakeasy cannot reach because
+// its record or credential is unusable: deleted, wrong purpose, or screened
+// out. No KMS call was made.
+const ProbeOutcomeCredentialUnusable gcpkms.VerifyReason = "credential_unusable" //nolint:gosec // a probe outcome name, not a credential
+
+// VerifyKey proves Speakeasy can encrypt and decrypt with one of the
+// organization's keys. Nothing is persisted.
+func (p *Provisioner) VerifyKey(ctx context.Context, organizationID string, keyID uuid.UUID) gcpkms.VerifyResult {
+	logger := p.logger.With(attr.SlogOrganizationID(organizationID))
+
+	key, err := p.keys.open(ctx, logger, repo.New(p.db), organizationID, keyID)
+	if err != nil {
+		reason := ProbeOutcomeCredentialUnusable
+		switch {
+		case errors.Is(err, gcpkms.ErrInvalidResourceName):
+			reason = gcpkms.ReasonInvalidResourceName
+		case !errors.Is(err, ErrInvalidKey) && !errors.Is(err, ErrPlatformCredentialUnusable):
+			reason = gcpkms.ReasonForError(err)
+		}
+		return gcpkms.VerifyResult{Verified: false, Reason: reason, Algorithm: "", Detail: err.Error()}
+	}
+	defer o11y.LogDefer(ctx, logger, "close kms encryption client", key.Close)
+
+	return gcpkms.VerifyEncryptionKey(ctx, key.client, key.resourceName)
+}

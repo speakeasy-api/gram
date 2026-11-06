@@ -48,6 +48,48 @@ func (q *Queries) CompleteEncryptionConfigSwitch(ctx context.Context, organizati
 	return i, err
 }
 
+const createCustomerEncryptionExternalKey = `-- name: CreateCustomerEncryptionExternalKey :one
+INSERT INTO external_keys (organization_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference)
+VALUES ($1, $2, 'gcp_kms', 'encrypt', $3, $4, $5)
+RETURNING id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateCustomerEncryptionExternalKeyParams struct {
+	OrganizationID         pgtype.Text
+	ExternalCredentialID   uuid.UUID
+	Algorithm              string
+	Name                   string
+	CustomerGrantReference pgtype.Text
+}
+
+func (q *Queries) CreateCustomerEncryptionExternalKey(ctx context.Context, arg CreateCustomerEncryptionExternalKeyParams) (ExternalKey, error) {
+	row := q.db.QueryRow(ctx, createCustomerEncryptionExternalKey,
+		arg.OrganizationID,
+		arg.ExternalCredentialID,
+		arg.Algorithm,
+		arg.Name,
+		arg.CustomerGrantReference,
+	)
+	var i ExternalKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalCredentialID,
+		&i.Provider,
+		&i.Purpose,
+		&i.Algorithm,
+		&i.Name,
+		&i.CustomerGrantReference,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createDataEncryptionKey = `-- name: CreateDataEncryptionKey :one
 INSERT INTO data_encryption_keys (id, organization_id, encryption_config_id, use_case, state, activated_at)
 VALUES ($1, $2, $3, $4, 'active', clock_timestamp())
@@ -351,6 +393,57 @@ func (q *Queries) GetDataEncryptionKeyWrap(ctx context.Context, arg GetDataEncry
 	return i, err
 }
 
+const getEncryptionExternalKey = `-- name: GetEncryptionExternalKey :one
+SELECT
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  gcp.resource_name,
+  (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = $1
+  AND ek.organization_id = $2::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+`
+
+type GetEncryptionExternalKeyParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetEncryptionExternalKeyRow struct {
+	ExternalKey  ExternalKey
+	ResourceName string
+	Managed      bool
+}
+
+func (q *Queries) GetEncryptionExternalKey(ctx context.Context, arg GetEncryptionExternalKeyParams) (GetEncryptionExternalKeyRow, error) {
+	row := q.db.QueryRow(ctx, getEncryptionExternalKey, arg.ID, arg.OrganizationID)
+	var i GetEncryptionExternalKeyRow
+	err := row.Scan(
+		&i.ExternalKey.ID,
+		&i.ExternalKey.OrganizationID,
+		&i.ExternalKey.ProjectID,
+		&i.ExternalKey.ExternalCredentialID,
+		&i.ExternalKey.Provider,
+		&i.ExternalKey.Purpose,
+		&i.ExternalKey.Algorithm,
+		&i.ExternalKey.Name,
+		&i.ExternalKey.CustomerGrantReference,
+		&i.ExternalKey.IdentityProviderConnectionID,
+		&i.ExternalKey.CreatedAt,
+		&i.ExternalKey.UpdatedAt,
+		&i.ExternalKey.DeletedAt,
+		&i.ExternalKey.Deleted,
+		&i.ResourceName,
+		&i.Managed,
+	)
+	return i, err
+}
+
 const getEncryptionKeyForUse = `-- name: GetEncryptionKeyForUse :one
 SELECT
   ek.id,
@@ -463,6 +556,38 @@ func (q *Queries) GetOrganizationEncryptionConfig(ctx context.Context, organizat
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getOrganizationGcpIamCredentialForKey = `-- name: GetOrganizationGcpIamCredentialForKey :one
+SELECT ec.id, gic.skip_project_verification
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = $1
+  AND ec.organization_id = $2
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam'
+  AND ec.deleted IS FALSE
+FOR SHARE OF ec
+`
+
+type GetOrganizationGcpIamCredentialForKeyParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetOrganizationGcpIamCredentialForKeyRow struct {
+	ID                      uuid.UUID
+	SkipProjectVerification bool
+}
+
+// The organization credential a customer key is registered against. FOR SHARE
+// holds it so a concurrent soft delete cannot commit between this check and
+// the key insert.
+func (q *Queries) GetOrganizationGcpIamCredentialForKey(ctx context.Context, arg GetOrganizationGcpIamCredentialForKeyParams) (GetOrganizationGcpIamCredentialForKeyRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationGcpIamCredentialForKey, arg.ID, arg.OrganizationID)
+	var i GetOrganizationGcpIamCredentialForKeyRow
+	err := row.Scan(&i.ID, &i.SkipProjectVerification)
 	return i, err
 }
 
@@ -653,6 +778,67 @@ func (q *Queries) ListEncryptionConfigsDueForCheck(ctx context.Context, arg List
 	return items, nil
 }
 
+const listEncryptionExternalKeys = `-- name: ListEncryptionExternalKeys :many
+SELECT
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  gcp.resource_name,
+  (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.organization_id = $1::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+ORDER BY ek.id DESC
+`
+
+type ListEncryptionExternalKeysRow struct {
+	ExternalKey  ExternalKey
+	ResourceName string
+	Managed      bool
+}
+
+// The organization's encryption keys with their GCP resource and whether
+// Speakeasy minted them, newest first.
+func (q *Queries) ListEncryptionExternalKeys(ctx context.Context, organizationID string) ([]ListEncryptionExternalKeysRow, error) {
+	rows, err := q.db.Query(ctx, listEncryptionExternalKeys, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEncryptionExternalKeysRow
+	for rows.Next() {
+		var i ListEncryptionExternalKeysRow
+		if err := rows.Scan(
+			&i.ExternalKey.ID,
+			&i.ExternalKey.OrganizationID,
+			&i.ExternalKey.ProjectID,
+			&i.ExternalKey.ExternalCredentialID,
+			&i.ExternalKey.Provider,
+			&i.ExternalKey.Purpose,
+			&i.ExternalKey.Algorithm,
+			&i.ExternalKey.Name,
+			&i.ExternalKey.CustomerGrantReference,
+			&i.ExternalKey.IdentityProviderConnectionID,
+			&i.ExternalKey.CreatedAt,
+			&i.ExternalKey.UpdatedAt,
+			&i.ExternalKey.DeletedAt,
+			&i.ExternalKey.Deleted,
+			&i.ResourceName,
+			&i.Managed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listManagedEncryptionKeysPendingDisable = `-- name: ListManagedEncryptionKeysPendingDisable :many
 SELECT mek.external_key_id, mek.organization_id, gcp.resource_name
 FROM managed_encryption_keys AS mek
@@ -751,6 +937,39 @@ func (q *Queries) ListReadableDataEncryptionKeys(ctx context.Context, organizati
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockEncryptionExternalKeyForDelete = `-- name: LockEncryptionExternalKeyForDelete :one
+SELECT ek.id, (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = $1
+  AND ek.organization_id = $2::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+FOR UPDATE OF ek
+`
+
+type LockEncryptionExternalKeyForDeleteParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockEncryptionExternalKeyForDeleteRow struct {
+	ID      uuid.UUID
+	Managed bool
+}
+
+// Locks a customer encryption key for delete. FOR UPDATE conflicts with the
+// FOR KEY SHARE a wrap or configuration insert takes on the key, so the
+// protection check below cannot be raced.
+func (q *Queries) LockEncryptionExternalKeyForDelete(ctx context.Context, arg LockEncryptionExternalKeyForDeleteParams) (LockEncryptionExternalKeyForDeleteRow, error) {
+	row := q.db.QueryRow(ctx, lockEncryptionExternalKeyForDelete, arg.ID, arg.OrganizationID)
+	var i LockEncryptionExternalKeyForDeleteRow
+	err := row.Scan(&i.ID, &i.Managed)
+	return i, err
 }
 
 const lockEncryptionKeyForSwitch = `-- name: LockEncryptionKeyForSwitch :one
@@ -1080,6 +1299,43 @@ func (q *Queries) SoftDeleteDataEncryptionKeyWrapsForKey(ctx context.Context, ar
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteEncryptionExternalKey = `-- name: SoftDeleteEncryptionExternalKey :one
+UPDATE external_keys
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2::text
+  AND purpose = 'encrypt'
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteEncryptionExternalKeyParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteEncryptionExternalKey(ctx context.Context, arg SoftDeleteEncryptionExternalKeyParams) (ExternalKey, error) {
+	row := q.db.QueryRow(ctx, softDeleteEncryptionExternalKey, arg.ID, arg.OrganizationID)
+	var i ExternalKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalCredentialID,
+		&i.Provider,
+		&i.Purpose,
+		&i.Algorithm,
+		&i.Name,
+		&i.CustomerGrantReference,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const startEncryptionConfigSwitch = `-- name: StartEncryptionConfigSwitch :one
