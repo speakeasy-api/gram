@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -17,6 +18,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
+import { focusChatComposer } from "@/elements/lib/composerFocus";
 import {
   ChevronLeft,
   Home,
@@ -53,7 +55,7 @@ import {
   useInsightsState,
 } from "@/components/insights-context";
 import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
-import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
+import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -191,6 +193,37 @@ export function ChatLanding({
   const assistantReady = useFreshAssistantConversation();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const fallbackInputRef = useRef<HTMLInputElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  const composerHostRef = useRef<HTMLDivElement>(null);
+  // Keep the fallback editable until the destination accepts its latest draft.
+  // Mounting the composer earlier lets new typing race with the queued seed.
+  const showComposer = assistantReady && !value.trim();
+  const setFallbackInput = useCallback((input: HTMLInputElement | null) => {
+    if (!input) {
+      restoreFocusRef.current =
+        document.activeElement === fallbackInputRef.current;
+    }
+    fallbackInputRef.current = input;
+  }, []);
+
+  useEffect(() => {
+    if (!showComposer || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    let frame = 0;
+    let attempts = 0;
+    const focus = () => {
+      // The shadow-root input mounts after the host. Never reclaim focus if
+      // the user moved elsewhere while it was mounting.
+      if (document.activeElement !== document.body) return;
+      focusChatComposer(composerHostRef.current);
+      if (document.activeElement === document.body && ++attempts < 10) {
+        frame = requestAnimationFrame(focus);
+      }
+    };
+    focus();
+    return () => cancelAnimationFrame(frame);
+  }, [showComposer]);
   const [activeCommand, setActiveCommand] = useState(0);
   const { text: placeholder, visible: placeholderVisible } =
     useCyclingPlaceholder();
@@ -283,11 +316,17 @@ export function ChatLanding({
             <ReleaseStageBadge stage="beta" className="ml-3 align-middle" />
           </span>
         </h1>
+        {assistantReady && !assistantNeedsAdmin && value.trim() !== "" && (
+          <ComposerDraftHandover
+            value={value}
+            onAccepted={() => setValue("")}
+          />
+        )}
         {assistantNeedsAdmin ? (
           <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
-        ) : assistantReady ? (
+        ) : showComposer ? (
           // The real AUI composer, bound to the shared runtime: sending happens
           // in the runtime itself, so this entry point has dictation,
           // attachments, tool mentions and skill context like every other one.
@@ -297,6 +336,7 @@ export function ChatLanding({
           // via :host-context, so it must sit on an ancestor of the host — not
           // on anything ChatComposer renders inside it.
           <div
+            ref={composerHostRef}
             className="gram-chat-landing border-border bg-card border"
             // Cycling example prompts ride in as custom properties: they
             // inherit into the Elements shadow root, so the placeholder can
@@ -312,7 +352,6 @@ export function ChatLanding({
             }
           >
             <ChatComposer />
-            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
             <NavigateOnFirstMessage />
           </div>
         ) : (
@@ -324,6 +363,7 @@ export function ChatLanding({
             className="border-border bg-card focus-within:border-foreground relative border px-4 py-3 transition-colors"
           >
             <input
+              ref={setFallbackInput}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -393,18 +433,6 @@ export function ChatLanding({
       )}
     </div>
   );
-}
-
-/** Transfer the fallback draft after the landing conversation is reset. */
-function SeedComposerDraft({
-  value,
-  onSeeded,
-}: {
-  value: string;
-  onSeeded: () => void;
-}): null {
-  useComposerDraftHandover(value, onSeeded);
-  return null;
 }
 
 /**

@@ -1,6 +1,10 @@
 import { useAui } from "@assistant-ui/react";
 import { useEffect, useRef } from "react";
 
+function isEmptyThreadError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("empty thread");
+}
+
 /** Retain fallback text until the destination composer accepts it. */
 export function useComposerDraftHandover(
   value: string,
@@ -8,9 +12,14 @@ export function useComposerDraftHandover(
 ): void {
   const aui = useAui();
   const accepted = useRef(false);
+  const onAcceptedRef = useRef(onAccepted);
 
   useEffect(() => {
-    if (accepted.current) return;
+    onAcceptedRef.current = onAccepted;
+  }, [onAccepted]);
+
+  useEffect(() => {
+    if (accepted.current || !value.trim()) return;
     let active = true;
     let writing = false;
     const attempt = () => {
@@ -18,14 +27,20 @@ export function useComposerDraftHandover(
       if (aui.threads().getState().isLoading) return;
       writing = true;
       try {
-        if (!value.trim()) return;
-        const composer = aui.composer();
-        composer.setText(value);
-        // The placeholder silently drops setText. List readiness alone does
-        // not prove that the real thread/composer has bound yet.
-        if (composer.getState().text !== value) return;
+        try {
+          const composer = aui.composer();
+          composer.setText(value);
+          // A placeholder can also silently drop setText. List readiness
+          // alone does not prove that the real composer has bound yet.
+          if (composer.getState().text !== value) return;
+        } catch (err) {
+          // EMPTY_THREAD_CORE throws until the real thread binds. Keep the
+          // draft queued and retry on runtime events, but surface real errors.
+          if (isEmptyThreadError(err)) return;
+          throw err;
+        }
         accepted.current = true;
-        onAccepted();
+        onAcceptedRef.current();
       } finally {
         writing = false;
       }
@@ -39,5 +54,17 @@ export function useComposerDraftHandover(
       active = false;
       unsubscribe();
     };
-  }, [aui, value, onAccepted]);
+  }, [aui, value]);
+}
+
+/** Transfer a fallback draft without adding a visible control. */
+export function ComposerDraftHandover({
+  value,
+  onAccepted,
+}: {
+  value: string;
+  onAccepted: () => void;
+}): null {
+  useComposerDraftHandover(value, onAccepted);
+  return null;
 }

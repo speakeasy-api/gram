@@ -1,4 +1,4 @@
-import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
+import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
@@ -435,11 +435,34 @@ function InsightsDock({
   // without re-opening the dock. Collapses commit through a grace timer that
   // a route change can cancel (or, for slow clicks, undo).
   const [expanded, setExpanded] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  const setFallbackInput = useCallback((input: HTMLInputElement | null) => {
+    if (!input) {
+      restoreFocusRef.current = document.activeElement === inputRef.current;
+    }
+    inputRef.current = input;
+  }, []);
   /** Wraps the shared composer; also the focus target for Cmd+/. */
   const composerHostRef = useRef<HTMLDivElement>(null);
   /** Whether the shared composer holds a draft (see ComposerDraftReporter). */
   const [sharedDraft, setSharedDraft] = useState(false);
+  const showComposer = runtimeReady && !value.trim();
+  useEffect(() => {
+    if (!showComposer || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    let frame = 0;
+    let attempts = 0;
+    const focus = () => {
+      if (document.activeElement !== document.body) return;
+      focusChatComposer(composerHostRef.current);
+      if (document.activeElement === document.body && ++attempts < 10) {
+        frame = requestAnimationFrame(focus);
+      }
+    };
+    focus();
+    return () => cancelAnimationFrame(frame);
+  }, [showComposer]);
   const cardRef = useRef<HTMLDivElement>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stamped only by grace-timer collapses (blur/outside click), never by
@@ -477,12 +500,12 @@ function InsightsDock({
   // with a plain ref.
   useEffect(() => {
     if (focusKey === 0) return;
-    if (runtimeReady) {
+    if (showComposer) {
       focusChatComposer(composerHostRef.current);
       return;
     }
     inputRef.current?.focus();
-  }, [focusKey, runtimeReady]);
+  }, [focusKey, showComposer]);
 
   // Navigation keeps the dock expanded: cancel any pending collapse, and undo
   // one that just fired (slow click — the grace timer can win the race
@@ -536,54 +559,45 @@ function InsightsDock({
 
   // Within the continue window the resting pill is a "Continue chat" button
   // that reopens the recent conversation instead of an "Ask anything" input.
-  const composerField = continueMode ? (
-    <button
-      type="button"
-      onClick={onContinue}
-      tabIndex={open ? -1 : 0}
-      className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
-    >
-      Continue chat
-    </button>
-  ) : runtimeReady ? (
-    // The shared composer, sending straight through the runtime — no prompt
-    // hand-off, so the dock gets dictation and every other composer feature.
-    <div
-      ref={composerHostRef}
-      className="gram-chat-dock min-w-0 flex-1"
-      tabIndex={open ? -1 : undefined}
-    >
-      <ComposerDraftReporter onChange={setSharedDraft} />
-      <ChatComposer />
-      <FallbackDraftHandover
+  const composerField =
+    continueMode && !value.trim() && !sharedDraft ? (
+      <button
+        type="button"
+        onClick={onContinue}
+        tabIndex={open ? -1 : 0}
+        className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
+      >
+        Continue chat
+      </button>
+    ) : showComposer ? (
+      // The shared composer, sending straight through the runtime — no prompt
+      // hand-off, so the dock gets dictation and every other composer feature.
+      <div
+        ref={composerHostRef}
+        className="gram-chat-dock min-w-0 flex-1"
+        tabIndex={open ? -1 : undefined}
+      >
+        <ComposerDraftReporter onChange={setSharedDraft} />
+        <ChatComposer />
+      </div>
+    ) : (
+      <input
+        ref={setFallbackInput}
         value={value}
-        onHandedOver={() => {
-          setValue("");
-          // The input that held focus is gone, so typing carries on here.
-          if (document.activeElement === document.body) {
-            focusChatComposer(composerHostRef.current);
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            collapseNow();
+            inputRef.current?.blur();
           }
         }}
+        tabIndex={open ? -1 : 0}
+        placeholder="Ask anything"
+        aria-label="Ask the Project Assistant"
+        aria-keyshortcuts={shortcutAria}
+        className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
       />
-    </div>
-  ) : (
-    <input
-      ref={inputRef}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          collapseNow();
-          inputRef.current?.blur();
-        }
-      }}
-      tabIndex={open ? -1 : 0}
-      placeholder="Ask anything"
-      aria-label="Ask the Project Assistant"
-      aria-keyshortcuts={shortcutAria}
-      className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
-    />
-  );
+    );
 
   return (
     <div
@@ -591,6 +605,15 @@ function InsightsDock({
         "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-12",
       )}
     >
+      {runtimeReady && value.trim() !== "" && (
+        <ComposerDraftHandover
+          value={value}
+          onAccepted={() => {
+            setSharedDraft(true);
+            setValue("");
+          }}
+        />
+      )}
       {/* Frosted veil under the dock: blurs the page content directly behind
           the card, radiating out as a soft ellipse centred on the dock so
           there is no rectangular edge. Pointer-events stay off so the page
@@ -1643,7 +1666,7 @@ export function InsightsProvider({
           so the runtime appearing or restarting never resets page state. The
           wrapper only takes the Elements scope once there is a runtime; until
           then it generates no box. */}
-      <ElementsContextTarget bridge={runtimeBridge}>
+      <ElementsContextTarget bridge={runtimeBridge} active={runtimeMounted}>
         <div
           className={runtimeMounted ? cn(ROOT_SELECTOR, "h-full") : "contents"}
         >
@@ -1754,21 +1777,6 @@ function ComposerDraftReporter({
     },
     [onChange],
   );
-  return null;
-}
-
-/**
- * Moves text typed into the dock's fallback input to the shared composer when
- * the runtime arrives, so the draft follows the swap between the two controls.
- */
-function FallbackDraftHandover({
-  value,
-  onHandedOver,
-}: {
-  value: string;
-  onHandedOver: () => void;
-}): null {
-  useComposerDraftHandover(value, onHandedOver);
   return null;
 }
 

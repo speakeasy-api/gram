@@ -150,13 +150,16 @@ export function ElementsContextSource({
  */
 export function ElementsContextTarget({
   bridge,
+  active = true,
   children,
 }: {
   bridge: ElementsContextBridge;
+  active?: boolean;
   children: ReactNode;
 }): ReactElement {
   const published = useSyncExternalStore(bridge.subscribe, bridge.get);
-  const values = published?.values ?? NO_VALUES;
+  // Stop inheriting the old runtime during render, before source cleanup runs.
+  const values = active ? (published?.values ?? NO_VALUES) : NO_VALUES;
 
   return (
     <AuiProvider extends={values.aui} config={NO_SCOPES}>

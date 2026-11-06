@@ -39,9 +39,6 @@ const runtime = vi.hoisted(() => {
 
 vi.mock("@assistant-ui/react", () => ({
   useAui: () => runtime.aui,
-  useAuiState: (
-    selector: (state: { threads: { isLoading: boolean } }) => unknown,
-  ) => selector({ threads: { isLoading: runtime.state.loading } }),
 }));
 
 beforeEach(() => {
@@ -82,6 +79,81 @@ describe("shared composer draft", () => {
     expect(runtime.setText).toHaveBeenCalledTimes(writes);
     unmount();
     expect(runtime.listeners.size).toBe(0);
+  });
+
+  it("retries a throwing placeholder on runtime events without rerendering", () => {
+    const emptyThreadError = new Error(
+      "Cannot call setText on an empty thread",
+    );
+    runtime.setText.mockImplementationOnce(() => {
+      throw emptyThreadError;
+    });
+    const accepted = vi.fn<() => void>();
+    const { unmount } = renderHook(() =>
+      useComposerDraftHandover("pending draft", accepted),
+    );
+    expect(accepted).not.toHaveBeenCalled();
+    expect(runtime.listeners.size).toBe(1);
+
+    act(() => {
+      runtime.state.bound = true;
+      runtime.emit();
+    });
+    expect(runtime.state.text).toBe("pending draft");
+    expect(accepted).toHaveBeenCalledTimes(1);
+    expect(runtime.setText).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(runtime.listeners.size).toBe(0);
+  });
+
+  it("propagates non-placeholder errors from runtime events", () => {
+    runtime.state.loading = true;
+    const accepted = vi.fn<() => void>();
+    renderHook(() => useComposerDraftHandover("pending draft", accepted));
+    const failure = new Error("Composer failed");
+    runtime.setText.mockImplementationOnce(() => {
+      throw failure;
+    });
+    expect(() => {
+      act(() => {
+        runtime.state.loading = false;
+        runtime.emit();
+      });
+    }).toThrow(failure);
+    expect(accepted).not.toHaveBeenCalled();
+  });
+
+  it.each(["", " \n\t"])(
+    "does not subscribe for an empty draft %j",
+    (value) => {
+      const accepted = vi.fn<() => void>();
+      renderHook(() => useComposerDraftHandover(value, accepted));
+      expect(runtime.listeners.size).toBe(0);
+      act(() => runtime.emit());
+      expect(runtime.setText).not.toHaveBeenCalled();
+      expect(accepted).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the subscription stable and accepts using the latest callback", () => {
+    const firstAccepted = vi.fn<() => void>();
+    const latestAccepted = vi.fn<() => void>();
+    const { rerender } = renderHook(
+      ({ onAccepted }) => useComposerDraftHandover("pending draft", onAccepted),
+      { initialProps: { onAccepted: firstAccepted } },
+    );
+    const listener = [...runtime.listeners][0];
+    const writes = runtime.setText.mock.calls.length;
+    rerender({ onAccepted: latestAccepted });
+    expect([...runtime.listeners]).toEqual([listener]);
+    expect(runtime.setText).toHaveBeenCalledTimes(writes);
+
+    act(() => {
+      runtime.state.bound = true;
+      runtime.emit();
+    });
+    expect(firstAccepted).not.toHaveBeenCalled();
+    expect(latestAccepted).toHaveBeenCalledTimes(1);
   });
 
   it("waits for loading, then retains the draft until composer binding", async () => {

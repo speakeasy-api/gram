@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHideInsightsDock, useInsightsState } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
 import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
-import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
+import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
@@ -48,6 +48,10 @@ const mocks = vi.hoisted(() => ({
   runtimeMount: vi.fn(),
   switchToNewThread: vi.fn(),
   threadsLoading: false,
+  listeners: new Set<() => void>(),
+  recentChats: undefined as
+    | { chats: { id: string; lastMessageTimestamp: Date }[] }
+    | undefined,
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
     | undefined,
@@ -103,8 +107,8 @@ vi.mock("@/elements", async () => {
   };
 });
 
-vi.mock("@assistant-ui/react", () => ({
-  useAui: () => ({
+vi.mock("@assistant-ui/react", () => {
+  const aui = {
     composer: () => ({
       stopDictation: vi.fn(),
       setText: (text: string) => {
@@ -118,23 +122,29 @@ vi.mock("@assistant-ui/react", () => ({
       getState: () => ({ isLoading: mocks.threadsLoading }),
       switchToNewThread: mocks.switchToNewThread,
     }),
-    subscribe: () => () => {},
-  }),
-  useAuiState: (
-    selector: (state: {
-      threads: { isLoading: boolean };
-      thread: { isRunning: boolean; isLoading: boolean; isDisabled: boolean };
-      composer: { text: string; dictation: null };
-    }) => unknown,
-  ) =>
-    selector({
-      threads: { isLoading: mocks.threadsLoading },
-      thread: { isRunning: false, isLoading: false, isDisabled: false },
-      composer: { text: "", dictation: null },
-    }),
-  AuiConfig: () => ({}),
-  AuiProvider: ({ children }: { children: ReactNode }) => children,
-}));
+    subscribe: (listener: () => void) => {
+      mocks.listeners.add(listener);
+      return () => mocks.listeners.delete(listener);
+    },
+  };
+  return {
+    useAui: () => aui,
+    useAuiState: (
+      selector: (state: {
+        threads: { isLoading: boolean };
+        thread: { isRunning: boolean; isLoading: boolean; isDisabled: boolean };
+        composer: { text: string; dictation: null };
+      }) => unknown,
+    ) =>
+      selector({
+        threads: { isLoading: mocks.threadsLoading },
+        thread: { isRunning: false, isLoading: false, isDisabled: false },
+        composer: { text: "", dictation: null },
+      }),
+    AuiConfig: () => ({}),
+    AuiProvider: ({ children }: { children: ReactNode }) => children,
+  };
+});
 
 vi.mock("@/hooks/useObservabilityMcpConfig", () => ({
   useNoToolsetsConfigured: () => false,
@@ -160,7 +170,7 @@ vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/listChats.js", () => ({
-  useListChats: () => ({ data: undefined }),
+  useListChats: () => ({ data: mocks.recentChats }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: mocks.members,
@@ -222,6 +232,8 @@ vi.mock("react-router", async (importOriginal) => ({
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.recentChats = undefined;
+  mocks.listeners.clear();
   mocks.elementsConfig.mockClear();
   mocks.skills.mockReturnValue({
     data: undefined,
@@ -597,17 +609,6 @@ describe("InsightsProvider", () => {
       expect(seen.at(-1)).toBe(true);
     });
 
-    function LandingSeed({
-      value,
-      onAccepted,
-    }: {
-      value: string;
-      onAccepted: () => void;
-    }): null {
-      useComposerDraftHandover(value, onAccepted);
-      return null;
-    }
-
     function FreshLanding({
       initialValue = "",
     }: {
@@ -623,7 +624,10 @@ describe("InsightsProvider", () => {
             onChange={(event) => setValue(event.target.value)}
           />
           {ready && (
-            <LandingSeed value={value} onAccepted={() => setValue("")} />
+            <ComposerDraftHandover
+              value={value}
+              onAccepted={() => setValue("")}
+            />
           )}
         </>
       );
@@ -694,6 +698,7 @@ describe("InsightsProvider", () => {
         "pending draft",
       );
       mocks.composerBound = true;
+      act(() => mocks.listeners.forEach((listener) => listener()));
       rerender(landing());
       expect(mocks.composerText).toBe("pending draft");
       expect(screen.getByLabelText("Landing draft")).toHaveProperty(
@@ -719,6 +724,7 @@ describe("InsightsProvider", () => {
         "pending draft",
       );
       mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
       rerender(landing());
       expect(mocks.composerText).toBe("pending draft");
       expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
@@ -739,6 +745,30 @@ describe("InsightsProvider", () => {
       expect(screen.queryByLabelText("Ask the Project Assistant")).toBeNull();
     });
 
+    it("keeps a pending draft editable instead of hiding it behind Continue chat", () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(page());
+      const input = screen.getByLabelText("Ask the Project Assistant");
+      fireEvent.change(input, { target: { value: "pending draft" } });
+      mocks.recentChats = {
+        chats: [{ id: "recent-chat", lastMessageTimestamp: new Date() }],
+      };
+      mocks.assistantReady = true;
+      rerender(page());
+      expect(screen.getByLabelText("Ask the Project Assistant")).toBe(input);
+      expect(
+        screen.queryByRole("button", { name: "Continue chat" }),
+      ).toBeNull();
+      fireEvent.change(input, { target: { value: "pending draft and more" } });
+      mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
+      expect(mocks.composerSetText).toHaveBeenLastCalledWith(
+        "pending draft and more",
+      );
+      mocks.recentChats = undefined;
+    });
+
     it("holds a fallback draft until the thread list has loaded", () => {
       mocks.assistantReady = false;
       mocks.threadsLoading = true;
@@ -752,6 +782,7 @@ describe("InsightsProvider", () => {
       expect(mocks.composerSetText).not.toHaveBeenCalled();
 
       mocks.threadsLoading = false;
+      act(() => mocks.listeners.forEach((listener) => listener()));
       rerender(page());
       expect(mocks.composerSetText).toHaveBeenCalledWith("why is usage up");
     });
