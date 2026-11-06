@@ -3875,7 +3875,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	}
 	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, gatewayIDs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, s.logger)
 	}
 	if includeUsers {
 		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)

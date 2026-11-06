@@ -10,14 +10,30 @@
  * same expensive query four times, adding to the load that made it fail. So
  * an HTTP failure is shown at once, with the panel's own Retry, and only a
  * request that never got an answer (a dropped connection) is tried again,
- * once.
+ * once. Any other error fails the same way again and is shown at once too.
  */
 export function telemetryReadRetry(
   failureCount: number,
   error: Error,
 ): boolean {
   if (httpStatus(error) !== undefined) return false;
+  if (!isDroppedConnection(error)) return false;
   return failureCount < 1;
+}
+
+/**
+ * A request that never got an answer: the SDK's ConnectionError, or the
+ * browser's own fetch failure. Validation, abort and other client errors
+ * fail the same way on every attempt, so they are not retried.
+ */
+function isDroppedConnection(error: Error): boolean {
+  if (error.name === "ConnectionError") return true;
+  return (
+    error instanceof TypeError &&
+    /^(failed to fetch|fetch failed|load failed|networkerror when attempting to fetch resource\.)$/i.test(
+      error.message,
+    )
+  );
 }
 
 function httpStatus(error: unknown): number | undefined {

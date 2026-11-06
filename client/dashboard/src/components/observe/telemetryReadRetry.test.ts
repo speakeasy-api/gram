@@ -17,4 +17,27 @@ describe("telemetryReadRetry", () => {
     expect(telemetryReadRetry(0, dropped)).toBe(true);
     expect(telemetryReadRetry(1, dropped)).toBe(false);
   });
+
+  it("retries the SDK's connection error once", () => {
+    const dropped = Object.assign(new Error("Unable to make request"), {
+      name: "ConnectionError",
+    });
+    expect(telemetryReadRetry(0, dropped)).toBe(true);
+    expect(telemetryReadRetry(1, dropped)).toBe(false);
+  });
+
+  it("never retries an error that would fail the same way again", () => {
+    const validation = Object.assign(new Error("Response validation failed"), {
+      name: "ResponseValidationError",
+    });
+    const aborted = new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+    expect(telemetryReadRetry(0, validation)).toBe(false);
+    expect(telemetryReadRetry(0, aborted)).toBe(false);
+    expect(telemetryReadRetry(0, new TypeError("x is not a function"))).toBe(
+      false,
+    );
+  });
 });

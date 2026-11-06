@@ -815,7 +815,11 @@ export function LogsTools({
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
-  const { data: totalsData, refetch: refetchTotals } = useQuery({
+  const {
+    data: totalsData,
+    isError: totalsFailed,
+    refetch: refetchTotals,
+  } = useQuery({
     queryKey: ["tool-usage-totals", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -1059,6 +1063,8 @@ export function LogsTools({
             error={displayError}
             traces={traces}
             totals={totalsData?.totals}
+            totalsFailed={totalsFailed}
+            onRetryTotals={() => void refetchTotals()}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
             timeSeriesFailed={timeSeriesFailed}
@@ -1310,6 +1316,8 @@ function LogsToolsContent({
   from,
   to,
   totals,
+  totalsFailed,
+  onRetryTotals,
   timeSeries,
   timeSeriesPending,
   timeSeriesFailed,
@@ -1370,6 +1378,10 @@ function LogsToolsContent({
   from: Date;
   to: Date;
   totals: ToolUsageTotals | undefined;
+  /** The totals read failed: the summary says so rather than showing dashes
+   * or the last window's numbers as if they were current. */
+  totalsFailed: boolean;
+  onRetryTotals: () => void;
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   timeSeriesPending: boolean;
   /** The series read failed: the strip says so instead of drawing no calls. */
@@ -1499,6 +1511,21 @@ function LogsToolsContent({
             </button>
             {summaryOpen && (
               <>
+                {totalsFailed && (
+                  <div
+                    role="alert"
+                    className="border-border text-muted-foreground flex items-center gap-3 border-t px-4 py-2 text-sm"
+                  >
+                    Could not load the totals for this window.
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      onClick={onRetryTotals}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                )}
                 <div className="border-border flex flex-col border-t 2xl:flex-row">
                   <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
                     <SummaryStat
