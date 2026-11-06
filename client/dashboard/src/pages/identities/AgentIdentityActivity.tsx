@@ -166,7 +166,7 @@ function ChecksHeading({ children }: { children: ReactNode }): JSX.Element {
   return (
     <div
       role="heading"
-      aria-level={3}
+      aria-level={4}
       className="border-border bg-muted/40 text-muted-foreground border-b px-4 py-1.5 text-xs font-medium"
     >
       {children}
