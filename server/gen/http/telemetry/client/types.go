@@ -1082,7 +1082,9 @@ type GetProjectOverviewResponseBody struct {
 	// usage.
 	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
 	// External end user and tool usage summary. Only set when include_usage is
-	// true and the project has no agent usage.
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
 	McpUsage *ProjectMcpUsageResponseBody `form:"mcp_usage,omitempty" json:"mcp_usage,omitempty" xml:"mcp_usage,omitempty"`
 }
 

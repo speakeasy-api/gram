@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"math/bits"
 	"slices"
 	"strings"
 	"sync"
@@ -111,10 +112,11 @@ func buildProjectMcpUsage(usage repo.ProjectMcpUsage) *telem_gen.ProjectMcpUsage
 
 	failing := slices.DeleteFunc(slices.Clone(tools), func(t repo.ProjectMcpToolRow) bool { return t.Failures == 0 })
 	slices.SortFunc(failing, func(a, b repo.ProjectMcpToolRow) int {
-		// Compare failures/calls by cross-multiplying, which stays exact.
-		// Every failure is also a call, so calls is never zero here.
+		// Compare failures/calls by cross-multiplying in 128 bits, which stays
+		// exact without overflow. Every failure is also a call, so calls is
+		// never zero here.
 		return cmp.Or(
-			cmp.Compare(b.Failures*a.Calls, a.Failures*b.Calls),
+			compareMul128(b.Failures, a.Calls, a.Failures, b.Calls),
 			cmp.Compare(b.Failures, a.Failures),
 			strings.Compare(a.ToolURN, b.ToolURN),
 		)
@@ -169,4 +171,11 @@ func hasAgentUsage(res *telem_gen.QueryResult) bool {
 		}
 	}
 	return false
+}
+
+// compareMul128 compares a*b with c*d using full 128-bit products.
+func compareMul128(a, b, c, d uint64) int {
+	hi1, lo1 := bits.Mul64(a, b)
+	hi2, lo2 := bits.Mul64(c, d)
+	return cmp.Or(cmp.Compare(hi1, hi2), cmp.Compare(lo1, lo2))
 }
