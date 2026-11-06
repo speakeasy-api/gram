@@ -352,50 +352,52 @@ function SignalDetailContent({
     signal !== null && hasOnlyRationaleSources(signal.detectionSources);
 
   const controls = (
-    <span className="flex items-center gap-2">
-      <TimeRangePicker
-        preset={customRange ? null : dateRange}
-        customRange={customRange}
-        customRangeLabel={customRangeLabel}
-        availablePresets={WATCHDOG_PRESETS}
-        onPresetChange={(preset) => setDateRangeParam(preset)}
-        onCustomRangeChange={(rangeFrom, rangeTo, label) =>
-          setCustomRangeParam(rangeFrom, rangeTo, label)
-        }
-        onClearCustomRange={clearCustomRange}
-      />
-      {signal &&
-        (judgeSignal ? (
-          <Button
-            variant="primary"
-            disabled={collecting}
-            onClick={() => void openSignalDismiss()}
-          >
-            {collecting && (
-              <Button.LeftIcon>
-                <Spinner className="mr-0" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>Suppress all</Button.Text>
-          </Button>
-        ) : (
-          <SuppressMenu
-            variant="primary"
-            busy={collecting}
-            onSuppressOnce={() => void openSignalDismiss()}
-            onCreateRule={() =>
-              // Evidence that has arrived rides along for the custom branch;
-              // the rule preset works before it lands.
-              setExclusionState({
-                mode: "create",
-                results: evidence,
-                presetRuleId: ruleId,
-              })
-            }
-          />
-        ))}
-    </span>
+    <TimeRangePicker
+      preset={customRange ? null : dateRange}
+      customRange={customRange}
+      customRangeLabel={customRangeLabel}
+      availablePresets={WATCHDOG_PRESETS}
+      onPresetChange={(preset) => setDateRangeParam(preset)}
+      onCustomRangeChange={(rangeFrom, rangeTo, label) =>
+        setCustomRangeParam(rangeFrom, rangeTo, label)
+      }
+      onClearCustomRange={clearCustomRange}
+    />
   );
+
+  // The signal-level action sits under the description it acts on, apart
+  // from the time picker, which only changes what the page shows.
+  const suppressAction =
+    signal &&
+    (judgeSignal ? (
+      <Button
+        variant="primary"
+        disabled={collecting}
+        onClick={() => void openSignalDismiss()}
+      >
+        {collecting && (
+          <Button.LeftIcon>
+            <Spinner className="mr-0" />
+          </Button.LeftIcon>
+        )}
+        <Button.Text>Suppress all</Button.Text>
+      </Button>
+    ) : (
+      <SuppressMenu
+        variant="primary"
+        busy={collecting}
+        onSuppressOnce={() => void openSignalDismiss()}
+        onCreateRule={() =>
+          // Evidence that has arrived rides along for the custom branch;
+          // the rule preset works before it lands.
+          setExclusionState({
+            mode: "create",
+            results: evidence,
+            presetRuleId: ruleId,
+          })
+        }
+      />
+    ));
 
   const rating = signal ? scoreToRating(signal.riskScore) : null;
 
@@ -408,6 +410,7 @@ function SignalDetailContent({
       <Page.Section.CTA>{controls}</Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-10">
+          {suppressAction && <div className="-mt-4">{suppressAction}</div>}
           {signalsQuery.error ? (
             <InlineEmptyState
               icon="circle-alert"
