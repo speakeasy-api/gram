@@ -16315,6 +16315,93 @@ paths:
             x-speakeasy-name-override: deleteAiScanTarget
             x-speakeasy-react-hook:
                 name: DeleteAiScanTarget
+    /rpc/agent.getClaudeObservabilityPlugin:
+        get:
+            description: 'Download the organization''s Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude''s cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user''s previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.'
+            operationId: getAgentClaudeObservabilityPlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/zip:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
+                        Content-Type:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: getClaudeObservabilityPlugin agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getClaudeObservabilityPlugin
     /rpc/agent.getConfiguration:
         get:
             description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.

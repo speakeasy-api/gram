@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
+		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
@@ -305,6 +305,9 @@ func ParseEndpoint(
 		agentGetMyConnectionsFlags           = flag.NewFlagSet("get-my-connections", flag.ExitOnError)
 		agentGetMyConnectionsApikeyTokenFlag = agentGetMyConnectionsFlags.String("apikey-token", "", "")
 		agentGetMyConnectionsEmailFlag       = agentGetMyConnectionsFlags.String("email", "", "")
+
+		agentGetClaudeObservabilityPluginFlags           = flag.NewFlagSet("get-claude-observability-plugin", flag.ExitOnError)
+		agentGetClaudeObservabilityPluginApikeyTokenFlag = agentGetClaudeObservabilityPluginFlags.String("apikey-token", "", "")
 
 		agentHideMcpServerFlags           = flag.NewFlagSet("hide-mcp-server", flag.ExitOnError)
 		agentHideMcpServerBodyFlag        = agentHideMcpServerFlags.String("body", "REQUIRED", "")
@@ -5547,6 +5550,7 @@ func ParseEndpoint(
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
 	agentGetMyConnectionsFlags.Usage = agentGetMyConnectionsUsage
+	agentGetClaudeObservabilityPluginFlags.Usage = agentGetClaudeObservabilityPluginUsage
 	agentHideMcpServerFlags.Usage = agentHideMcpServerUsage
 	agentUnhideMcpServerFlags.Usage = agentUnhideMcpServerUsage
 	agentListSyncedUsersFlags.Usage = agentListSyncedUsersUsage
@@ -6971,6 +6975,9 @@ func ParseEndpoint(
 
 			case "get-my-connections":
 				epf = agentGetMyConnectionsFlags
+
+			case "get-claude-observability-plugin":
+				epf = agentGetClaudeObservabilityPluginFlags
 
 			case "hide-mcp-server":
 				epf = agentHideMcpServerFlags
@@ -10297,6 +10304,9 @@ func ParseEndpoint(
 			case "get-my-connections":
 				endpoint = c.GetMyConnections()
 				data, err = agentc.BuildGetMyConnectionsPayload(*agentGetMyConnectionsApikeyTokenFlag, *agentGetMyConnectionsEmailFlag)
+			case "get-claude-observability-plugin":
+				endpoint = c.GetClaudeObservabilityPlugin()
+				data, err = agentc.BuildGetClaudeObservabilityPluginPayload(*agentGetClaudeObservabilityPluginApikeyTokenFlag)
 			case "hide-mcp-server":
 				endpoint = c.HideMcpServer()
 				data, err = agentc.BuildHideMcpServerPayload(*agentHideMcpServerBodyFlag, *agentHideMcpServerApikeyTokenFlag, *agentHideMcpServerEmailFlag)
@@ -13849,6 +13859,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 	fmt.Fprintln(os.Stderr, `    get-my-connections: Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.`)
+	fmt.Fprintln(os.Stderr, `    get-claude-observability-plugin: Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.`)
 	fmt.Fprintln(os.Stderr, `    hide-mcp-server: Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.`)
 	fmt.Fprintln(os.Stderr, `    unhide-mcp-server: Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.`)
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
@@ -13915,6 +13926,24 @@ func agentGetMyConnectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-my-connections --apikey-token \"abc123\" --email \"dev@acme.corp\"")
+}
+
+func agentGetClaudeObservabilityPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-claude-observability-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-claude-observability-plugin --apikey-token \"abc123\"")
 }
 
 func agentHideMcpServerUsage() {
