@@ -1,3 +1,4 @@
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -487,16 +488,14 @@ export function DistributeServersStep({
                             : "border-border bg-card hover:border-foreground/30",
                         )}
                       >
-                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
-                          {server.iconUrl ? (
-                            <img
-                              src={server.iconUrl}
-                              alt=""
-                              className="h-6 w-6"
-                            />
-                          ) : (
-                            <ServerIcon className="h-5 w-5 text-neutral-600" />
-                          )}
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-card">
+                          <CatalogLogo
+                            server={server}
+                            className="h-6 w-6"
+                            fallback={
+                              <ServerIcon className="h-5 w-5 text-neutral-600" />
+                            }
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <span className="text-foreground block truncate text-sm font-medium">

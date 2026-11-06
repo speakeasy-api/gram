@@ -25,8 +25,10 @@ export const AUDIT_ACTIONS = [
   "access_grant:create_temporary",
   "access_grant:renew_temporary",
   "access_grant:revoke_temporary",
+  "agent:connection_attach",
   "agent:connection_block_create",
   "agent:connection_block_delete",
+  "agent:connection_detach",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -417,6 +419,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_grant:revoke_temporary":
       return "revoked temporary access for";
 
+    case "agent:connection_attach":
+      return "granted their connection to agent";
+    case "agent:connection_detach":
+      return "removed their connection from agent";
     case "agent:connection_block_create":
       return "blocked connection access for agent";
     case "agent:connection_block_delete":

@@ -1,3 +1,6 @@
+import { useInstalledCatalogServer } from "@/pages/catalog/useInstalledCatalogServer";
+import { resolveCatalogLogo } from "@/pages/catalog/logo";
+import { useIsDarkTheme } from "@/lib/theme";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { getServerURL, cn } from "@/lib/utils";
 import type { AccessibleMCPServer } from "@gram/client/models/components/accessiblemcpserver.js";
@@ -13,7 +16,7 @@ export function AssignmentServerIcon({
   server: AccessibleMCPServer;
   className?: string;
 }): JSX.Element {
-  const { data } = useGetMcpMetadata(
+  const { data, isFetched } = useGetMcpMetadata(
     { mcpServerId: server.id, gramProject: server.projectSlug },
     undefined,
     {
@@ -24,13 +27,24 @@ export function AssignmentServerIcon({
     },
   );
   const assetId = data?.metadata?.logoAssetId;
+  const catalog = useInstalledCatalogServer(
+    server.id,
+    isFetched && !assetId,
+    server.projectSlug,
+  );
+  const theme = useIsDarkTheme() ? "dark" : "light";
+  const logo =
+    isFetched && catalog ? resolveCatalogLogo(catalog, theme) : undefined;
+  const src = assetId
+    ? `${getServerURL()}/rpc/assets.serveImage?id=${encodeURIComponent(assetId)}`
+    : logo?.src;
   return (
     <Avatar className={cn("bg-background size-8 shrink-0 border", className)}>
-      {assetId && (
+      {src && (
         <AvatarImage
-          src={`${getServerURL()}/rpc/assets.serveImage?id=${encodeURIComponent(assetId)}`}
+          src={src}
           alt=""
-          className="object-contain p-1"
+          className={cn("object-contain p-1", !assetId && logo?.className)}
         />
       )}
       <AvatarFallback className="text-xs">

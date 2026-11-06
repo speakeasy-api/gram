@@ -13,7 +13,9 @@ import { isAuditAction } from "@/lib/audit-actions";
 import { formatAuditActionLabel } from "@/lib/audit-log-format";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
+import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import { useIdentityWindow } from "./useIdentityQueries";
+import { agentChangeSummary } from "./agent-change-summary";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -74,6 +76,21 @@ export function AgentIdentityAudit({
   // from the row itself. Resolving in both modes paid for the agent and
   // member inventories to fill a column that mode does not render.
   const identities = useAuditPrincipals(subject ? rows : NO_LOGS);
+  // Server and project names say what a grant or connection block touched;
+  // the lists load only when one is listed.
+  const maps = useResourceLinkMaps(
+    subject &&
+      rows.some(
+        (log) =>
+          log.action.startsWith("agent:policy_grant") ||
+          log.action.startsWith("agent:connection_block"),
+      ),
+  );
+  const names = {
+    server: (id: string) =>
+      maps.toolsetMap.get(id)?.name ?? maps.mcpServerMap.get(id)?.name,
+    project: (id: string) => maps.projectMap.get(id)?.name,
+  };
   return (
     <IdentityPanel
       title={
@@ -96,24 +113,30 @@ export function AgentIdentityAudit({
           No recorded events in this period.
         </IdentityPanelEmpty>
       ) : (
-        rows.map((log) => (
-          <IdentityPanelRow
-            key={log.id}
-            title={<ChangeLabel action={log.action} />}
-            detail={
-              subject ? (
-                <AuditPrincipalLink
-                  principal={auditActorPrincipal(log)}
-                  identities={identities}
-                  fallback={log.actorDisplayName || log.actorId}
-                />
-              ) : (
-                log.subjectDisplayName || log.subjectType
-              )
-            }
-            trailing={<HumanizeDateTime date={log.createdAt} />}
-          />
-        ))
+        rows.map((log) => {
+          const summary = agentChangeSummary(log, names);
+          return (
+            <IdentityPanelRow
+              key={log.id}
+              title={<ChangeLabel action={log.action} />}
+              detail={
+                subject ? (
+                  <>
+                    <AuditPrincipalLink
+                      principal={auditActorPrincipal(log)}
+                      identities={identities}
+                      fallback={log.actorDisplayName || log.actorId}
+                    />
+                    {summary && <> · {summary}</>}
+                  </>
+                ) : (
+                  log.subjectDisplayName || log.subjectType
+                )
+              }
+              trailing={<HumanizeDateTime date={log.createdAt} />}
+            />
+          );
+        })
       )}
     </IdentityPanel>
   );

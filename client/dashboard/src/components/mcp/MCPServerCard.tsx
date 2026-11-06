@@ -9,7 +9,6 @@ import { AlertTriangleIcon, ArrowRight, Package } from "lucide-react";
 import { Link } from "react-router";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
-import { ExternalMcpIcon } from "./MCPToolsetIcon";
 import {
   hostedToolCountLabel,
   MCP_SERVER_KIND_LABEL,
@@ -70,18 +69,10 @@ export function MCPServerCard({
           </>
         }
         icon={
-          hosted ? (
-            <ExternalMcpIcon
-              externalMcpSlug={toolset?.externalMcpSlugs[0]}
-              alt={name}
-              className="h-8 w-8"
-            />
-          ) : (
-            <SourceMcpIcon
-              mcpServerId={server.id}
-              className="h-8 w-8 object-contain"
-            />
-          )
+          <SourceMcpIcon
+            mcpServerId={server.id}
+            className="h-8 w-8 object-contain"
+          />
         }
       >
         <div className="mb-2 flex items-start justify-between gap-2">
