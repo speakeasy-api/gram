@@ -1145,9 +1145,14 @@ type RemoteSessionState struct {
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
 // the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
 func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
+	return m.ConnectionOutageForResource(ctx, subject, clientID, "")
+}
+
+// ConnectionOutageForResource reads only the selected upstream grant's outage.
+func (m *ChallengeManager) ConnectionOutageForResource(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, resource string) (RefreshOutageKind, uuid.NullUUID, bool) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	queries := remotesessions_repo.New(m.db)
-	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: resource})
 	if err != nil {
 		return RefreshOutageNone, none, false
 	}
@@ -1177,6 +1182,11 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false)
 }
 
+// RemoteSessionStatusesForResource reports only the selected upstream audience.
+func (m *ChallengeManager) RemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, resource string) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false, resource)
+}
+
 // OrganizationRemoteSessionStatuses is RemoteSessionStatuses over the clients
 // ListOrganizationClients returns.
 func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
@@ -1188,6 +1198,12 @@ func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
 	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true)
 }
 
+// OrganizationRemoteSessionStatusesForResource reports one audience across the
+// organization-tier clients bound to this sign-in.
+func (m *ChallengeManager) OrganizationRemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, organizationID string, userSessionIssuerID uuid.UUID, resource string) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true, resource)
+}
+
 func (m *ChallengeManager) remoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
@@ -1195,6 +1211,7 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	organizationWide bool,
+	resources ...string,
 ) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
@@ -1209,11 +1226,12 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return remoteSessionStates(rows), nil
+	return remoteSessionStates(rows, resources...), nil
 }
 
 // remoteSessionStates keys each status row by its client.
-func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resources ...string) map[uuid.UUID]RemoteSessionState {
+	rows = selectRemoteSessionStatusRows(rows, firstResource(resources))
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1284,6 +1302,12 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
 ) (RefreshResult, error) {
+	return m.RefreshRemoteSessionForResource(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
+}
+
+// RefreshRemoteSessionForResource refreshes one audience without replacing any
+// sibling grant. A registration-only request is refused when ambiguous.
+func (m *ChallengeManager) RefreshRemoteSessionForResource(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
 	var zero RefreshResult
 
 	bound, err := remotesessions_repo.New(m.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
@@ -1300,6 +1324,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	}
 
 	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		Resource:              resource,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
@@ -1313,7 +1338,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, attribution)
+	return m.refresher.RefreshNow(ctx, session, resource, remotesessionmetrics.RefreshTriggerManual, attribution)
 }
 
 // DrainRefreshes waits for request-path refreshes that outlived their callers.
@@ -1631,7 +1656,7 @@ func (m *ChallengeManager) mintAuthorization(
 // organization's grant.
 var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
 
-// storeRemoteSessionGrant records a consent for (subject, client). A live
+// storeRemoteSessionGrant records a consent for (subject, client, resource). A live
 // grant consented through another organization's sign-in is tombstoned first,
 // so the new row records the organization the consent was made in; otherwise
 // the grant is updated in place. q must be the caller's transaction, holding
@@ -1648,6 +1673,9 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
 	}
 	sess, err := q.UpsertRemoteSession(ctx, params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sess, oops.E(oops.CodeFailedPrecondition, err, "this registration cannot retain another resource connection until the OAuth session migration is enabled; the existing connection was not replaced")
+	}
 	if err != nil {
 		return sess, fmt.Errorf("upsert remote session: %w", err)
 	}
@@ -2735,3 +2763,36 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
+
+// selectRemoteSessionStatusRows never collapses distinct resource grants into
+// an arbitrary registration-wide status. Exact grants outrank legacy NULLs.
+func selectRemoteSessionStatusRows(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resource string) []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow {
+	selected := make(map[uuid.UUID]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, len(rows))
+	ambiguous := make(map[uuid.UUID]bool)
+	for _, row := range rows {
+		if resource != "" && row.Resource.Valid && strings.TrimRight(row.Resource.String, "/") != strings.TrimRight(resource, "/") {
+			continue
+		}
+		previous, exists := selected[row.RemoteSessionClientID]
+		if exists {
+			if resource == "" {
+				ambiguous[row.RemoteSessionClientID] = true
+				continue
+			}
+			if previous.Resource.Valid {
+				if row.Resource.Valid {
+					ambiguous[row.RemoteSessionClientID] = true
+				}
+				continue
+			}
+		}
+		selected[row.RemoteSessionClientID] = row
+	}
+	result := make([]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, 0, len(selected))
+	for id, row := range selected {
+		if !ambiguous[id] {
+			result = append(result, row)
+		}
+	}
+	return result
+}

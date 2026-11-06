@@ -1510,15 +1510,12 @@ WHERE s.subject_urn = @subject_urn
   AND c.id = s.remote_session_client_id
   AND (client_project.organization_id = @organization_id::text OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
 
--- name: UpsertRemoteSession :one
--- Used by /mcp/remote_login_callback to materialise a fresh authorization for the
--- remote_session for a (subject, client) pair. Conflict target matches the
--- partial unique index on (subject_urn, remote_session_client_id) WHERE
--- deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
--- Attachments keep this source row and read its current credentials. Token refresh uses
--- UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
--- soft-deleted row falls outside the partial index, so a re-auth after
--- revocation inserts a fresh active row alongside the tombstone.
+-- name: UpsertRemoteSessionGrant :one
+-- Consent writes hold the client lock. A targetless conflict check supports
+-- both index generations: an old-schema cross-resource collision returns no
+-- row instead of overwriting the existing audience. Same-resource reconsent
+-- advances its generation; ordinary refresh does not. Revocation stays a tombstone.
+WITH inserted AS (
 INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
@@ -1555,33 +1552,42 @@ VALUES (
     @identity_source,
     @enrichment
 )
-ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
-DO UPDATE SET
+ON CONFLICT DO NOTHING
+RETURNING *
+), updated AS (
+UPDATE remote_sessions SET
     grant_generation = remote_sessions.grant_generation + 1,
-    access_token_encrypted = EXCLUDED.access_token_encrypted,
-    access_expires_at = EXCLUDED.access_expires_at,
-    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-    authorization_expires_at = EXCLUDED.authorization_expires_at,
-    refresh_expires_at = EXCLUDED.refresh_expires_at,
-    scopes = EXCLUDED.scopes,
-    resource = EXCLUDED.resource,
+    access_token_encrypted = @access_token_encrypted,
+    access_expires_at = @access_expires_at,
+    refresh_token_encrypted = @refresh_token_encrypted,
+    authorization_expires_at = @authorization_expires_at,
+    refresh_expires_at = @refresh_expires_at,
+    scopes = @scopes,
+    resource = @resource,
     -- A new grant replaces the identity wholesale and resets observed validity.
-    upstream_subject = EXCLUDED.upstream_subject,
-    upstream_email = EXCLUDED.upstream_email,
-    upstream_display_name = EXCLUDED.upstream_display_name,
-    identity_source = EXCLUDED.identity_source,
-    enrichment = EXCLUDED.enrichment,
+    upstream_subject = @upstream_subject,
+    upstream_email = @upstream_email,
+    upstream_display_name = @upstream_display_name,
+    identity_source = @identity_source,
+    enrichment = @enrichment,
     last_validated_at = NULL,
     validation_status = NULL,
     validation_reason = NULL,
     updated_at = clock_timestamp()
-RETURNING *;
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND resource IS NOT DISTINCT FROM @resource
+  AND deleted IS FALSE
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+RETURNING *
+)
+SELECT * FROM inserted UNION ALL SELECT * FROM updated;
 
 -- name: UpdateRemoteSessionTokensIfUnchanged :one
 -- Compare-and-swap write for the refresh path. Update-only on purpose: an
 -- INSERT here would undo a revocation that landed mid-refresh. No rows means
 -- another writer won or the session was revoked; both end in a re-auth challenge.
--- Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
+-- Keyed by id + (subject, client) + CAS only: the session's user_session_issuer_id
 -- is provenance, never part of the credential's identity.
 -- backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
 -- COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
@@ -1616,7 +1622,8 @@ SET
         THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
         ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
     updated_at = clock_timestamp()
-WHERE subject_urn = @subject_urn
+WHERE id = @id
+  AND subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE
   AND updated_at = @expected_updated_at
@@ -1695,15 +1702,36 @@ WHERE id = @id
   AND updated_at = @expected_updated_at
 RETURNING *;
 
+-- name: GetActiveRemoteSessionByID :one
+SELECT * FROM remote_sessions
+WHERE id = @id AND subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+
 -- name: GetActiveRemoteSession :one
--- Look up the active remote_session for a (subject, client) binding.
--- Single-row exact lookup; uniqueness enforced by the partial unique
--- index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
-SELECT *
-FROM remote_sessions
-WHERE subject_urn = @subject_urn
-  AND remote_session_client_id = @remote_session_client_id
-  AND deleted IS FALSE;
+-- Exact resource first, then a legacy unbound grant. Registration-only callers
+-- may use a singleton, but never choose arbitrarily among resources.
+SELECT s.*
+FROM remote_sessions s
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.deleted IS FALSE
+ AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/') OR s.resource IS NULL)
+ AND (@resource::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim(@resource::text, '/')
+ ) <= 1)
+ AND (@resource::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1;
 
 -- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
 -- A definitive upstream invalid_grant invalidates the refresh grant, not
@@ -1760,18 +1788,16 @@ WHERE s.id = @id
 -- remote_session the subject holds on a client bound to the requesting
 -- user_session_issuer, tagged with whether it is still usable. The session's
 -- own user_session_issuer_id is provenance only — a credential is one shared
--- upstream grant per (subject, client), so a session created through a
+-- upstream grant per (subject, client, resource), so a session created through a
 -- sibling issuer bound to the same client reports the same status here.
 -- Tenancy comes from the requesting issuer's binding (link row) plus its
 -- project, and from the client itself (the requesting project's own clients
 -- plus org-level clients of its org, mirroring
 -- CheckRemoteSessionClientBindingForUserSessionIssuer) so the tenant boundary
 -- holds even if a binding row were ever attached across tenants. Folds the N
--- per-card lookups into one round-trip. The partial
--- unique index on (subject_urn, remote_session_client_id) WHERE deleted IS
--- FALSE plus the binding PK mean at most one row per (subject, client), so
--- the result doubles as a per-client map without DISTINCT. A soft-deleted row
--- is absent here entirely (truly disconnected).
+-- per-card lookups into one round-trip. A client can return several resource
+-- grants; callers must select the target resource rather than overwriting a
+-- per-client map entry. A soft-deleted row is absent (truly disconnected).
 --
 -- Scope is the requesting issuer's bound clients; the joins below are what
 -- bound the result, so no caller-supplied client id list is needed. The
@@ -2295,9 +2321,8 @@ RETURNING s.*;
 -- project/org tenancy, mirroring
 -- CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
 -- cross tenant boundaries. The session's own user_session_issuer_id is
--- provenance only: the credential is one shared grant per (subject, client),
--- so the preference set from any bound surface is the preference every bound
--- surface reads.
+-- provenance only: this registration-wide preference applies to every resource
+-- grant for the subject and client, regardless of which bound surface sets it.
 UPDATE remote_sessions AS s
 SET auto_refresh = @auto_refresh
 FROM remote_session_client_user_session_issuers AS link
@@ -5776,7 +5801,24 @@ JOIN organization_user_relationships membership ON membership.organization_id = 
 WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/') OR s.resource IS NULL)
+ AND (@resource::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim(@resource::text, '/')
+ ) <= 1)
+ AND (@resource::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1;
 
 -- name: GetActiveRemoteSessionInTenant :one
 -- GetActiveRemoteSession for the auth client resolver, which takes no user
@@ -5794,7 +5836,24 @@ JOIN projects p ON p.id = @project_id AND p.organization_id = @organization_id A
 WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/') OR s.resource IS NULL)
+ AND (@resource::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim(@resource::text, '/')
+ ) <= 1)
+ AND (@resource::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1;
 
 -- name: ListRemoteSessionStatusesInTenant :many
 -- ListRemoteSessionStatusesForSubject for the auth client resolver, over the
@@ -5861,7 +5920,24 @@ WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_sess
  AND s.user_session_issuer_id = @user_session_issuer_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/') OR s.resource IS NULL)
+ AND (@resource::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim(@resource::text, '/')
+ ) <= 1)
+ AND (@resource::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1;
 
 -- name: ListOrganizationMCPServersForUserSessionIssuer :many
 -- Live MCP servers on one user session issuer in every project of the

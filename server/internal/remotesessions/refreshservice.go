@@ -391,7 +391,8 @@ func refreshPostDeadline(lockAcquiredAt, now time.Time) time.Time {
 	return leaseEnd
 }
 
-// RefreshLockKey single-flights refreshes of one subject's grant on a client.
+// RefreshLockKey serializes a subject's resource grants on one registration.
+// Keep the shared key during rollout; row-specific reloads never adopt a sibling grant.
 func RefreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
 }
@@ -549,7 +550,8 @@ func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesess
 }
 
 // RefreshNow refreshes the upstream access token for sess, single-flighted per
-// (subject, client) binding so concurrent callers do not all present the same
+// (subject, client) binding, across its resource grants, so concurrent callers
+// do not all present the same
 // refresh token to a provider that rotates them. Losers wait for the winner's
 // write instead. The re-reads either side of the refresh cover what the lock
 // cannot: Redis down, the lease expiring, a holder that never writes, or one
@@ -872,7 +874,8 @@ func (s *RefreshService) refresh(
 	// the winner's fresh pair included, which nothing below can detect.
 	snapshotAt := sess.UpdatedAt.Time
 
-	current, currentErr := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+	current, currentErr := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
@@ -1031,7 +1034,8 @@ func (s *RefreshService) refresh(
 		// winner. Re-read it below and adopt that token instead of clearing it.
 	}
 
-	latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+	latest, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
@@ -1137,7 +1141,8 @@ func (s *RefreshService) awaitRefreshedSession(
 		case <-ticker.C:
 		}
 
-		latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		latest, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+			ID:                    sess.ID,
 			SubjectUrn:            sess.SubjectUrn,
 			RemoteSessionClientID: sess.RemoteSessionClientID,
 		})

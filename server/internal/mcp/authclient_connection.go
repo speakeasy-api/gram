@@ -130,7 +130,7 @@ func handbackSubject(subject urn.SessionSubject, authorizerOwner string) urn.Ses
 // upstreamTokenSource resolves a caller's upstream tokens for serving.
 type upstreamTokenSource interface {
 	ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error)
-	ResolveClientAccessTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error)
+	ResolveClientAccessTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool, resources ...string) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 }
 
 func (s *Service) upstreamTokenSource() upstreamTokenSource {
@@ -154,7 +154,7 @@ func (s *Service) attachedConnectionLookup() attachedConnectionLookup {
 // agent's permit was decided for. A binding that moved to another connection
 // after the check serves nothing; without skipUnusable that, or no token at
 // all, is a missing token, never an anonymous call.
-func pinAttachedSession(tokens map[uuid.UUID]remotesessions.UpstreamToken, session uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func pinAttachedSession(tokens map[uuid.UUID]remotesessions.UpstreamToken, session uuid.UUID, skipUnusable bool, resources ...string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if session == uuid.Nil {
 		return tokens, nil
 	}

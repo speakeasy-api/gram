@@ -1,4 +1,4 @@
-// A remote_session is one grant per (subject, client), shared by every
+// A remote_session is one grant per (subject, client, resource), shared by every
 // endpoint bound to that client, so the consent page sees live sessions the
 // endpoint's runtime routing will never forward. Those must render as needing
 // a reconnect, never as "Connected".
@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -39,6 +40,7 @@ func grant(t *testing.T, ctx context.Context, fx consentActionFixture, clientID 
 	t.Helper()
 	encrypted, err := fx.ti.enc.Encrypt([]byte("token-" + clientID.String()))
 	require.NoError(t, err)
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionResourceFixture(ctx, testrepo.SetRemoteSessionResourceFixtureParams{SubjectUrn: fx.subject, RemoteSessionClientID: clientID, Resource: conv.ToPGTextEmpty(resource)}))
 	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.shared,
