@@ -149,6 +149,22 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		}
 	}
 
+	// A first-party browser proves its cookie before the callback can spend the
+	// state, so a copied callback URL cannot end the owner's sign-in.
+	if browser := challengeState.Browser; challengeState.FirstParty && challengeState.Federation == nil && browser != nil {
+		if browserBindingExpired(challengeState, time.Now()) {
+			s.endAttemptOnce(ctx, logger, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeExpired, mcpconnectionattempts.FromRequest(r))
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, errChallengeBrowserExpired, "sign-in took too long").LogWarn(ctx, logger), oauthui.ReasonExpired))
+		}
+		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
+			return s.continueFirstPartyBrowserHandoff(w, r, endpoint, challengeState)
+		}
+		if (browser.Handoff != "" && browser.Handoff != browserHandoffLogin) || !browserCookieMatches(r, browser.CookieID, browser.CallbackHash) {
+			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "sign-in browser binding is invalid").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
+		}
+	}
+
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
@@ -607,9 +623,26 @@ func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, l
 	cancel()
 	challengeState.ID = uuid.NewString()
 	challengeState.FreshLoginForced = true
+	// The person's browser is here: its binding starts over, so the restart
+	// does not inherit the time already spent.
+	handoff := ""
+	if challengeState.FirstParty && challengeState.Federation == nil && challengeState.Browser != nil {
+		var err error
+		if handoff, err = s.rebindFirstPartyBrowser(w, endpoint, &challengeState, time.Now()); err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnexpected, err, "rebind sign-in browser").LogError(ctx, logger)
+		}
+	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
+	}
+	if handoff != "" {
+		logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		http.Redirect(w, r, handoff, http.StatusFound)
+		return nil
 	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
