@@ -331,17 +331,20 @@ func TestRemoteSessionResourceGrants_LegacyReferenceRemainsIndependentlyRevocabl
 	stale := ref
 	stale.UpdatedAt = stale.UpdatedAt.Add(time.Hour)
 	n, err := f.mgr.DisconnectRemoteSessionByRef(ctx, stale, f.signInA)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Zero(t, n)
+	n, err = f.mgr.SetRemoteSessionAutoRefreshByRef(ctx, stale, f.signInA, true)
+	require.Error(t, err)
 	require.Zero(t, n)
 	wrongOwner := ref
 	wrongOwner.Subject = urn.NewUserSubject("another-reference-user")
 	n, err = f.mgr.DisconnectRemoteSessionByRef(ctx, wrongOwner, f.signInA)
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.Zero(t, n)
 	foreign := ref
 	foreign.ProjectID = uuid.New()
 	n, err = f.mgr.SetRemoteSessionAutoRefreshByRef(ctx, foreign, f.signInA, true)
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.Zero(t, n)
 	n, err = f.mgr.SetRemoteSessionAutoRefreshByRef(ctx, ref, f.signInA, true)
 	require.NoError(t, err)
