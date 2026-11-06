@@ -187,4 +187,43 @@ describe("computePanelState", () => {
       });
     });
   });
+
+  describe("a named resource that carries its project", () => {
+    // An agent's server grants name the server and its project together.
+    it("is the resource's, shown on the servers panel", () => {
+      const state = computePanelState(
+        [
+          { ...server("srv-1"), projectId: "proj-1" },
+          { ...server("srv-2"), projectId: "proj-1" },
+        ],
+        "mcp",
+      );
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["srv-1", "srv-2"],
+      });
+    });
+
+    it("leaves a project-wide selector on the projects panel", () => {
+      const state = computePanelState(
+        [{ resourceKind: "mcp", resourceId: "*", projectId: "proj-1" }],
+        "mcp",
+      );
+      expect(state).toMatchObject({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1"],
+      });
+    });
+
+    it("counts a named assistant as an assistant", () => {
+      const state = computePanelState(
+        [{ resourceKind: "assistant", resourceId: "a-1", projectId: "proj-1" }],
+        "assistant",
+      );
+      expect(state).toMatchObject({
+        activePanel: "servers",
+        selectedServerIds: ["a-1"],
+      });
+    });
+  });
 });

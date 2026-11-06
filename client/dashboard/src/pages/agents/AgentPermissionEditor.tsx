@@ -16,7 +16,15 @@ import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/ag
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import { categoryCopy } from "@/pages/access/roleMatrixModel";
+import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
 import {
+  useResourceLinkMaps,
+  type ResourceLinkMaps,
+} from "@/pages/access/useResourceLinkMaps";
+import { ANY_RESOURCE } from "./agent-api-key-grants";
+import {
+  agentPolicyChangedScopes,
   agentPolicyViewFromGrants,
   agentPolicyGrantsFromDraft,
   agentPolicyFingerprint,
@@ -25,6 +33,8 @@ import {
   invalidateAgentPolicy,
   isAgentPolicyEditorScope,
   isAgentPolicyNarrowable,
+  isAgentPolicySelectorUnrestricted,
+  type AgentPolicyDiff,
 } from "./agent-policy-grants";
 import { useAgentPolicyScopes } from "./useAgentPolicyScopes";
 
@@ -47,8 +57,13 @@ export function AgentPermissionEditor({
   const [needsReload, setNeedsReload] = useState(false);
   const rbac = useRBAC();
   const [draft, setDraft] = useState(view.draft);
-  const [changedScopes, setChangedScopes] = useState<Set<string>>(new Set());
   const [editingScope, setEditingScope] = useState<string | null>(null);
+  // The open picker works on its own copy: Done keeps it, and closing the
+  // picker any other way leaves the permission as it was.
+  const [pickerSelectors, setPickerSelectors] = useState<Selector[] | null>(
+    null,
+  );
+  const changedScopes = agentPolicyChangedScopes(view.draft, draft);
   // The permissions an agent may hold come from the server, so their names
   // and descriptions are the role editor's; nothing here is a copy.
   const {
@@ -116,6 +131,8 @@ export function AgentPermissionEditor({
       if (needsReload)
         throw new Error("Reload saved permissions before trying again.");
       if (authorizationError) throw new Error(authorizationError);
+      // Nothing changed, so nothing is written.
+      if (changes.create.length === 0 && changes.remove.length === 0) return;
       const current = await sdk.agents.listPolicyGrants({ agentId: agent.id });
       if (agentPolicyFingerprint(current) !== agentPolicyFingerprint(base)) {
         setNeedsReload(true);
@@ -171,7 +188,6 @@ export function AgentPermissionEditor({
       setBase(current);
       setView(next);
       setDraft(next.draft);
-      setChangedScopes(new Set());
       setEditingScope(null);
       setNeedsReload(false);
       save.reset();
@@ -205,7 +221,7 @@ export function AgentPermissionEditor({
         </Dialog.Header>
         {view.preservedScopes.length > 0 && (
           <Text small muted>
-            Permissions with additional constraints are preserved:{" "}
+            Kept as they are, because this dialog cannot show them exactly:{" "}
             {view.preservedScopes.join(", ")}.
           </Text>
         )}
@@ -241,7 +257,6 @@ export function AgentPermissionEditor({
                 !agent.permissions.write
               )
                 return;
-              setChangedScopes((previous) => new Set(previous).add(slug));
               setDraft((previous) => {
                 const next = { ...previous };
                 if (slug in next) delete next[slug];
@@ -278,7 +293,10 @@ export function AgentPermissionEditor({
                     needsReload ||
                     !agent.permissions.write
                   }
-                  onClick={() => setEditingScope(definition.slug)}
+                  onClick={() => {
+                    setPickerSelectors(draft[definition.slug] ?? null);
+                    setEditingScope(definition.slug);
+                  }}
                   aria-label={`Choose resources for ${definition.slug}`}
                 >
                   {computeRuleLabel(
@@ -316,6 +334,7 @@ export function AgentPermissionEditor({
             </Button>
           </div>
         )}
+        <AgentPolicyChanges changes={changes} />
         {save.error && (
           <Text role="alert" destructive>
             {save.error.message}
@@ -360,30 +379,104 @@ export function AgentPermissionEditor({
               <GrantRuleDrawerContent
                 resourceType={scope.resourceType}
                 scope={scope.slug}
-                selectors={draft[scope.slug] ?? null}
+                selectors={pickerSelectors}
                 allowedPanels={
                   scope.resourceType === "inference" &&
                   view.draft[scope.slug] !== null
                     ? ["projects"]
                     : undefined
                 }
-                onChangeSelectors={(selectors) => {
-                  setChangedScopes((previous) =>
-                    new Set(previous).add(scope.slug),
-                  );
-                  setDraft((previous) => ({
-                    ...previous,
-                    [scope.slug]: selectors,
-                  }));
-                }}
+                onChangeSelectors={setPickerSelectors}
               />
               <Dialog.Footer>
-                <Button onClick={() => setEditingScope(null)}>Done</Button>
+                <Button
+                  onClick={() => {
+                    setDraft((previous) => ({
+                      ...previous,
+                      [scope.slug]: pickerSelectors,
+                    }));
+                    setEditingScope(null);
+                  }}
+                >
+                  Done
+                </Button>
               </Dialog.Footer>
             </Dialog.Content>
           </Dialog>
         )}
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+/** What a grant reaches, in words, for the list of changes a save makes. */
+function agentPolicyGrantTarget(
+  selector: AgentPolicySelector,
+  maps: ResourceLinkMaps,
+): string {
+  const projectName = (id: string) => maps.projectMap.get(id)?.name ?? id;
+  if (isAgentPolicySelectorUnrestricted(selector))
+    return agentPolicyUnrestrictedLabel(selector.resourceKind);
+  const inProject =
+    selector.projectId && selector.projectId !== ANY_RESOURCE
+      ? ` in ${projectName(selector.projectId)}`
+      : "";
+  if (selector.resourceId === ANY_RESOURCE) return `All resources${inProject}`;
+  if (selector.resourceKind === "project" || selector.resourceKind === "skill")
+    return projectName(selector.resourceId);
+  if (selector.resourceKind === "mcp") {
+    const server =
+      maps.toolsetMap.get(selector.resourceId)?.name ??
+      maps.mcpServerMap.get(selector.resourceId)?.name ??
+      selector.resourceId;
+    return `${server}${inProject}`;
+  }
+  return `${selector.resourceKind} ${selector.resourceId}${inProject}`;
+}
+
+/**
+ * Every grant a save adds or removes, shown before it is made. Nothing is
+ * removed from an agent without the reader having seen it listed here.
+ */
+function AgentPolicyChanges({
+  changes,
+}: {
+  changes: AgentPolicyDiff;
+}): JSX.Element | null {
+  const all = [...changes.create, ...changes.remove];
+  const maps = useResourceLinkMaps(
+    all.some(
+      ({ selector }) =>
+        selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
+    ),
+  );
+  if (all.length === 0) return null;
+  const rows = [
+    ...changes.remove.map((grant) => ({ grant, removed: true })),
+    ...changes.create.map((grant) => ({ grant, removed: false })),
+  ];
+  return (
+    <div
+      role="region"
+      aria-label="Changes to save"
+      className="border-border space-y-1 border px-3 py-2"
+    >
+      <Text small className="font-medium">
+        Saving makes these changes
+      </Text>
+      <ul className="space-y-0.5">
+        {rows.map(({ grant, removed }, index) => (
+          <li key={index} className="flex flex-wrap gap-x-2 text-sm">
+            <span className={removed ? "text-destructive" : undefined}>
+              {removed ? "Removes" : "Adds"}
+            </span>
+            <span className="font-mono">{grant.scope}</span>
+            <span className="text-muted-foreground">
+              {agentPolicyGrantTarget(grant.selector, maps)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
