@@ -113,8 +113,8 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 				fx.server = memberSlug
 				code, html, _ := render(t, fx)
 				require.Equal(t, http.StatusOK, code)
-				require.True(t, strings.Contains(html, "Typed member resource"), "the member's card uses its typed registration's resource name")
-				require.True(t, strings.Contains(html, `href="https://typed-member.example.com/policy"`), "the member's card uses its typed registration's resource policy link")
+				require.Contains(t, html, "Typed member resource", "the member's card uses its typed registration's resource name")
+				require.Contains(t, html, `href="https://typed-member.example.com/policy"`, "the member's card uses its typed registration's resource policy link")
 			}
 			if tc.orgClient {
 				// No grant exists: validation must find the typed offer's project,
