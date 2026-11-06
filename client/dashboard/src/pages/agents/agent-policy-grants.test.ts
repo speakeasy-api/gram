@@ -806,7 +806,17 @@ describe("round trip through the editor", () => {
         agentPolicyGrantsFromDraft(view.draft),
       ),
     ).toEqual({ create: [], remove: [] });
-    expect(agentPolicyChangedScopes(view.draft, view.draft)).toEqual(new Set());
+    // Rebuilt from what a save would write, the draft names no changed scope.
+    expect(
+      agentPolicyChangedScopes(
+        view.draft,
+        agentPolicyDraftFromGrants(
+          agentPolicyGrantsFromDraft(view.draft).map((grant, index) =>
+            storedGrant(`saved_${index}`, grant.scope, grant.selector),
+          ),
+        ),
+      ),
+    ).toEqual(new Set());
   });
 
   it("locks a scope the picker cannot show in one view", () => {

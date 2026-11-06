@@ -8,6 +8,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { GrantRuleDrawerContent } from "@/pages/access/GrantRuleDrawerContent";
 import { computeRuleLabel } from "@/pages/access/roleDialogState";
+import { useOrgAssistants } from "@/pages/access/useOrgAssistants";
 import {
   RolePermissionsSection,
   type ScopeGroup,
@@ -413,6 +414,7 @@ export function AgentPermissionEditor({
 function agentPolicyGrantTarget(
   selector: AgentPolicySelector,
   maps: ResourceLinkMaps,
+  assistantNames: Map<string, { name: string; projectName: string }>,
 ): string {
   const projectName = (id: string) => maps.projectMap.get(id)?.name ?? id;
   if (isAgentPolicySelectorUnrestricted(selector))
@@ -425,11 +427,28 @@ function agentPolicyGrantTarget(
   if (selector.resourceKind === "project" || selector.resourceKind === "skill")
     return projectName(selector.resourceId);
   if (selector.resourceKind === "mcp") {
+    // A name only counts when its server is in the project the grant names;
+    // otherwise the id stands, rather than another project's server.
+    const inGrantProject = (projectId: string) =>
+      !selector.projectId ||
+      selector.projectId === ANY_RESOURCE ||
+      selector.projectId === projectId;
+    const toolset = maps.toolsetMap.get(selector.resourceId);
+    const mcpServer = maps.mcpServerMap.get(selector.resourceId);
     const server =
-      maps.toolsetMap.get(selector.resourceId)?.name ??
-      maps.mcpServerMap.get(selector.resourceId)?.name ??
+      (toolset && inGrantProject(toolset.projectId)
+        ? toolset.name
+        : undefined) ??
+      (mcpServer && inGrantProject(mcpServer.projectId)
+        ? mcpServer.name
+        : undefined) ??
       selector.resourceId;
     return `${server}${inProject}`;
+  }
+  if (selector.resourceKind === "assistant") {
+    const assistant = assistantNames.get(selector.resourceId);
+    if (!assistant) return `assistant ${selector.resourceId}${inProject}`;
+    return `${assistant.name}${inProject || ` in ${assistant.projectName}`}`;
   }
   return `${selector.resourceKind} ${selector.resourceId}${inProject}`;
 }
@@ -448,6 +467,24 @@ function AgentPolicyChanges({
     all.some(
       ({ selector }) =>
         selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
+    ),
+  );
+  // Assistants are named as the picker names them, with their project.
+  const assistants = useOrgAssistants(
+    all.some(
+      ({ selector }) =>
+        selector.resourceKind === "assistant" &&
+        selector.resourceId !== ANY_RESOURCE,
+    ),
+  );
+  const assistantNames = new Map(
+    assistants.groups.flatMap((group) =>
+      group.assistants.map(
+        (assistant): [string, { name: string; projectName: string }] => [
+          assistant.id,
+          { name: assistant.name, projectName: group.projectName },
+        ],
+      ),
     ),
   );
   if (all.length === 0) return null;
@@ -472,7 +509,7 @@ function AgentPolicyChanges({
             </span>
             <span className="font-mono">{grant.scope}</span>
             <span className="text-muted-foreground">
-              {agentPolicyGrantTarget(grant.selector, maps)}
+              {agentPolicyGrantTarget(grant.selector, maps, assistantNames)}
             </span>
           </li>
         ))}

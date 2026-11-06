@@ -51,11 +51,13 @@ interface ToolsAnnotationPanel {
 
 /**
  * Whether a selector reaches a whole project: it names the project and no
- * single resource, tool or disposition inside it.
+ * single resource, tool or disposition inside it. A "*" tool constrains
+ * nothing.
  */
 export function isProjectWideSelector(selector: Selector): boolean {
   if (!selector.projectId) return false;
-  if (selector.tool || selector.disposition) return false;
+  if (selector.tool && selector.tool !== "*") return false;
+  if (selector.disposition) return false;
   return !selector.resourceId || selector.resourceId === "*";
 }
 

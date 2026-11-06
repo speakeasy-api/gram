@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { computePanelState } from "./computePanelState";
+import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 // --- Helpers ---
@@ -225,5 +225,26 @@ describe("computePanelState", () => {
         selectedServerIds: ["a-1"],
       });
     });
+  });
+});
+
+describe("isProjectWideSelector", () => {
+  it('treats a "*" tool as no constraint', () => {
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "*",
+      }),
+    ).toBe(true);
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        tool: "search",
+      }),
+    ).toBe(false);
   });
 });

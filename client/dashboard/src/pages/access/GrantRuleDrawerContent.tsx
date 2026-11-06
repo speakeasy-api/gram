@@ -30,7 +30,7 @@ import {
   isUnrestrictedResourceType,
   unrestrictedResourceLabel,
 } from "./types";
-import { computePanelState } from "./computePanelState";
+import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { useOrgAssistants } from "./useOrgAssistants";
@@ -236,8 +236,10 @@ export function GrantRuleDrawerContent({
   const selectedProjectIds = useMemo(
     () =>
       new Set(
+        // The same rule the panel state uses, so a project-wide selector
+        // stored without a resource id is ticked as well as counted.
         (selectors ?? []).flatMap((s) =>
-          s.projectId && s.resourceId === "*" ? [s.projectId] : [],
+          s.projectId && isProjectWideSelector(s) ? [s.projectId] : [],
         ),
       ),
     [selectors],
