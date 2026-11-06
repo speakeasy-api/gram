@@ -12,7 +12,13 @@ import { ChatLanding } from "./Chat";
 
 const runtime = vi.hoisted(() => {
   const listeners = new Set<() => void>();
-  const state = { ready: false, loading: true, bound: false, text: "" };
+  const state = {
+    ready: false,
+    loading: true,
+    bound: false,
+    text: "",
+    mainThreadId: "old",
+  };
   const emit = () => {
     for (const listener of listeners) listener();
   };
@@ -22,15 +28,34 @@ const runtime = vi.hoisted(() => {
     emit();
   });
   const newConversation = vi.fn();
+  const switchToNewThread = vi.fn(async () => {
+    state.mainThreadId = "new";
+  });
   const aui = {
     composer: () => ({ setText, getState: () => ({ text: state.text }) }),
-    threads: () => ({ getState: () => ({ isLoading: state.loading }) }),
+    threads: () => ({
+      getState: () => ({
+        isLoading: state.loading,
+        mainThreadId: state.mainThreadId,
+        newThreadId: "new",
+      }),
+      switchToNewThread,
+    }),
+    thread: () => ({ getState: () => ({ isLoading: false }) }),
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
   };
-  return { state, listeners, emit, setText, newConversation, aui };
+  return {
+    state,
+    listeners,
+    emit,
+    setText,
+    newConversation,
+    switchToNewThread,
+    aui,
+  };
 });
 
 vi.mock("@assistant-ui/react", () => ({
@@ -101,6 +126,8 @@ beforeEach(() => {
   runtime.state.text = "";
   runtime.setText.mockClear();
   runtime.newConversation.mockClear();
+  runtime.switchToNewThread.mockClear();
+  runtime.state.mainThreadId = "old";
 });
 afterEach(cleanup);
 
@@ -123,16 +150,21 @@ async function finishMount() {
 }
 
 describe("ChatLanding fallback handover", () => {
-  it("focuses the newly mounted composer even while the thread list is loading", async () => {
+  it("waits for the thread list before mounting and focusing the new composer", async () => {
     const view = render(<ChatLanding autoFocusInput />);
     expect(document.activeElement).toBe(screen.getByRole("combobox"));
-    expect(runtime.newConversation).toHaveBeenCalledTimes(1);
+    expect(runtime.newConversation).not.toHaveBeenCalled();
+    expect(runtime.switchToNewThread).not.toHaveBeenCalled();
     runtime.state.ready = true;
     view.rerender(<ChatLanding autoFocusInput />);
+    await act(async () => {
+      runtime.state.loading = false;
+      runtime.emit();
+    });
     await finishMount();
     const input = composerInput();
     expect(input.getRootNode()).toHaveProperty("activeElement", input);
-    expect(runtime.state.loading).toBe(true);
+    expect(runtime.switchToNewThread).toHaveBeenCalledTimes(1);
   });
 
   it("retains an editable fallback until binding accepts the latest draft", async () => {
@@ -164,6 +196,7 @@ describe("ChatLanding fallback handover", () => {
   });
 
   it("does not reclaim focus moved elsewhere while the shadow input mounts", async () => {
+    runtime.state.loading = false;
     const view = render(
       <>
         <button>Elsewhere</button>

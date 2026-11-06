@@ -1,7 +1,13 @@
 import { useAui } from "@assistant-ui/react";
 import { useEffect, useRef } from "react";
 
-function isEmptyThreadError(err: unknown): boolean {
+/**
+ * assistant-ui's EMPTY_THREAD_CORE placeholder throws a single shared sentinel
+ * Error on append (and other actions) until the real thread core binds. It's
+ * not exported, so we match its message to tell "thread not ready yet, retry"
+ * apart from a genuine send failure.
+ */
+export function isEmptyThreadError(err: unknown): boolean {
   return err instanceof Error && err.message.includes("empty thread");
 }
 

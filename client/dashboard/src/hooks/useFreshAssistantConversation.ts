@@ -1,19 +1,46 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useAui } from "@assistant-ui/react";
+import { useEffect, useRef, useState } from "react";
 import { useInsightsState } from "@/components/insights-context";
 
-/** Landing widgets start a fresh keyed runtime without switching a live one. */
+/** Start a landing thread without replacing the shared, potentially streaming runtime. */
 export function useFreshAssistantConversation(): boolean {
-  const { newConversation, assistantReady } = useInsightsState();
-  const requestedRef = useRef(false);
-  const [requested, setRequested] = useState(false);
-  useLayoutEffect(() => {
-    if (requestedRef.current) return;
-    requestedRef.current = true;
-    newConversation();
-    setRequested(true);
-  }, [newConversation]);
-  // Never mount the draft handover against the previous runtime, including
-  // the initial render before the layout effect requests the keyed reset.
-  // InsightsProvider publishes assistantReady only for the current key.
-  return requested && assistantReady;
+  const aui = useAui();
+  const { assistantReady } = useInsightsState();
+  const requested = useRef(false);
+  const [settled, setSettled] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<unknown>();
+
+  useEffect(() => {
+    if (!assistantReady) return;
+    const attempt = () => {
+      const threads = aui.threads();
+      const state = threads.getState();
+      if (state.isLoading) return;
+      const boundNewThread =
+        state.newThreadId != null &&
+        state.mainThreadId === state.newThreadId &&
+        !aui.thread().getState().isLoading;
+      if (!requested.current) {
+        requested.current = true;
+        if (boundNewThread) {
+          setSettled(true);
+        } else {
+          // Runtime-backed clients return the actual promise despite the void
+          // declaration. Also observe binding for clients returning void.
+          void Promise.resolve(threads.switchToNewThread()).then(
+            () => setSettled(true),
+            (err: unknown) => setError(err),
+          );
+        }
+      }
+      if (settled && boundNewThread) setReady(true);
+    };
+    const unsubscribe = aui.subscribe(attempt);
+    attempt();
+    return unsubscribe;
+  }, [aui, assistantReady, settled]);
+
+  if (error) throw error;
+  return assistantReady && ready;
 }

@@ -1,4 +1,7 @@
-import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
+import {
+  ComposerDraftHandover,
+  isEmptyThreadError,
+} from "@/hooks/useComposerDraftHandover";
 import { Spinner } from "@/components/ui/Spinner";
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
@@ -447,22 +450,25 @@ function InsightsDock({
   const composerHostRef = useRef<HTMLDivElement>(null);
   /** Whether the shared composer holds a draft (see ComposerDraftReporter). */
   const [sharedDraft, setSharedDraft] = useState(false);
-  const showComposer = runtimeReady && !value.trim();
+  const continueButtonRef = useRef<HTMLButtonElement>(null);
+  const showContinue = continueMode && !value.trim() && !sharedDraft;
+  const showComposer = runtimeReady && !value.trim() && !showContinue;
   useEffect(() => {
-    if (!showComposer || !restoreFocusRef.current) return;
+    if ((!showComposer && !showContinue) || !restoreFocusRef.current) return;
     restoreFocusRef.current = false;
     let frame = 0;
     let attempts = 0;
     const focus = () => {
       if (document.activeElement !== document.body) return;
-      focusChatComposer(composerHostRef.current);
+      if (showContinue) continueButtonRef.current?.focus();
+      else focusChatComposer(composerHostRef.current);
       if (document.activeElement === document.body && ++attempts < 10) {
         frame = requestAnimationFrame(focus);
       }
     };
     focus();
     return () => cancelAnimationFrame(frame);
-  }, [showComposer]);
+  }, [showComposer, showContinue]);
   const cardRef = useRef<HTMLDivElement>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stamped only by grace-timer collapses (blur/outside click), never by
@@ -498,14 +504,20 @@ function InsightsDock({
   // Keyboard shortcut path: the provider bumps focusKey when Cmd+/ fires.
   // The AUI composer's input lives in a shadow root, so it can't be reached
   // with a plain ref.
+  const handledFocusKey = useRef(0);
   useEffect(() => {
-    if (focusKey === 0) return;
+    if (focusKey === handledFocusKey.current) return;
+    handledFocusKey.current = focusKey;
+    if (showContinue) {
+      continueButtonRef.current?.focus();
+      return;
+    }
     if (showComposer) {
       focusChatComposer(composerHostRef.current);
       return;
     }
     inputRef.current?.focus();
-  }, [focusKey, showComposer]);
+  }, [focusKey, showComposer, showContinue]);
 
   // Navigation keeps the dock expanded: cancel any pending collapse, and undo
   // one that just fired (slow click — the grace timer can win the race
@@ -559,45 +571,45 @@ function InsightsDock({
 
   // Within the continue window the resting pill is a "Continue chat" button
   // that reopens the recent conversation instead of an "Ask anything" input.
-  const composerField =
-    continueMode && !value.trim() && !sharedDraft ? (
-      <button
-        type="button"
-        onClick={onContinue}
-        tabIndex={open ? -1 : 0}
-        className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
-      >
-        Continue chat
-      </button>
-    ) : showComposer ? (
-      // The shared composer, sending straight through the runtime — no prompt
-      // hand-off, so the dock gets dictation and every other composer feature.
-      <div
-        ref={composerHostRef}
-        className="gram-chat-dock min-w-0 flex-1"
-        tabIndex={open ? -1 : undefined}
-      >
-        <ComposerDraftReporter onChange={setSharedDraft} />
-        <ChatComposer />
-      </div>
-    ) : (
-      <input
-        ref={setFallbackInput}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            collapseNow();
-            inputRef.current?.blur();
-          }
-        }}
-        tabIndex={open ? -1 : 0}
-        placeholder="Ask anything"
-        aria-label="Ask the Project Assistant"
-        aria-keyshortcuts={shortcutAria}
-        className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
-      />
-    );
+  const composerField = showContinue ? (
+    <button
+      type="button"
+      onClick={onContinue}
+      ref={continueButtonRef}
+      tabIndex={open ? -1 : 0}
+      className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
+    >
+      Continue chat
+    </button>
+  ) : showComposer ? (
+    // The shared composer, sending straight through the runtime — no prompt
+    // hand-off, so the dock gets dictation and every other composer feature.
+    <div
+      ref={composerHostRef}
+      className="gram-chat-dock min-w-0 flex-1"
+      tabIndex={open ? -1 : undefined}
+    >
+      <ComposerDraftReporter onChange={setSharedDraft} />
+      <ChatComposer />
+    </div>
+  ) : (
+    <input
+      ref={setFallbackInput}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          collapseNow();
+          inputRef.current?.blur();
+        }
+      }}
+      tabIndex={open ? -1 : 0}
+      placeholder="Ask anything"
+      aria-label="Ask the Project Assistant"
+      aria-keyshortcuts={shortcutAria}
+      className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
+    />
+  );
 
   return (
     <div
@@ -1801,16 +1813,6 @@ function StopDictationOnNavigate(): null {
     // Cleanup runs on every pathname change, which is exactly the signal.
   }, [pathname, aui]);
   return null;
-}
-
-/**
- * assistant-ui's EMPTY_THREAD_CORE placeholder throws a single shared sentinel
- * Error on append (and other actions) until the real thread core binds. It's
- * not exported, so we match its message to tell "thread not ready yet, retry"
- * apart from a genuine send failure.
- */
-function isEmptyThreadError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes("empty thread");
 }
 
 /**
