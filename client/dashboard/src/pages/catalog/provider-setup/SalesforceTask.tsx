@@ -56,7 +56,7 @@ export function SalesforceTask(): JSX.Element {
                 value: "native",
                 title: "Salesforce native MCP",
                 description:
-                  "Choose a Salesforce-hosted server with the record access you need.",
+                  "Choose a Salesforce-hosted server with the capabilities you need.",
                 icon: Server,
               },
               {
@@ -133,17 +133,17 @@ export function SalesforceTask(): JSX.Element {
                     {x.title}
                   </option>
                 ))}
-                <option disabled>
-                  Data 360 — connection requirements pending
-                </option>
-                <option disabled>
-                  Headless 360 — connection requirements pending
-                </option>
-                <option disabled>
-                  Tableau Next — connection requirements pending
-                </option>
               </select>
               <p className="mt-3">{server?.description}</p>
+              {!!server?.prerequisites.length && (
+                <Section title="Before you connect">
+                  <ul className="list-disc pl-5">
+                    {server.prerequisites.map((requirement) => (
+                      <li key={requirement}>{requirement}</li>
+                    ))}
+                  </ul>
+                </Section>
+              )}
             </>
           )}
           <p className="mt-4">
@@ -310,6 +310,9 @@ export function SalesforceTask(): JSX.Element {
     case "activation":
       return (
         <>
+          {!!server?.prerequisites.length && (
+            <Note>{server.prerequisites.join(" ")}</Note>
+          )}
           <InProvider
             actions={[
               <>
