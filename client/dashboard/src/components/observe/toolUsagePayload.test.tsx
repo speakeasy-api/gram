@@ -129,5 +129,8 @@ describe("useScopedToolUsagePayload", () => {
     expect(overview.summaryPayload.from.toISOString()).toBe(
       "2026-11-01T10:00:30.000Z",
     );
+    expect(overview.summaryPayload.to.toISOString()).toBe(
+      "2026-11-02T10:00:30.000Z",
+    );
   });
 });
