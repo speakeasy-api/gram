@@ -315,3 +315,46 @@ func TestRemoteSessionResourceGrants_CallbackRefusalIsActionableAndPreservesA(t 
 	require.NoError(t, err)
 	require.Equal(t, original, retained)
 }
+
+func TestRemoteSessionResourceGrants_LegacyReferenceRemainsIndependentlyRevocable(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "legacy-resource-reference")
+	expandResourceGrantIndexes(t, ctx, f.ti.conn)
+	subject := urn.NewUserSubject("legacy-reference-user")
+	legacy := f.consent(t, subject, f.signInA, f.clientID, "legacy-reference-token")
+	encrypted, err := f.enc.Encrypt([]byte("bound-b-token"))
+	require.NoError(t, err)
+	q := repo.New(f.ti.conn)
+	b, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, Resource: conv.ToPGText("https://legacy-ref-b.example/mcp"), AccessTokenEncrypted: encrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	require.NoError(t, err)
+	ref := remotesessions.RemoteSessionRef{ID: legacy.ID, Subject: subject, ClientID: f.clientID, ProjectID: f.projectID, OrganizationID: f.organizationID, UpdatedAt: legacy.UpdatedAt.Time}
+	stale := ref
+	stale.UpdatedAt = stale.UpdatedAt.Add(time.Hour)
+	n, err := f.mgr.DisconnectRemoteSessionByRef(ctx, stale, f.signInA)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	wrongOwner := ref
+	wrongOwner.Subject = urn.NewUserSubject("another-reference-user")
+	n, err = f.mgr.DisconnectRemoteSessionByRef(ctx, wrongOwner, f.signInA)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	foreign := ref
+	foreign.ProjectID = uuid.New()
+	n, err = f.mgr.SetRemoteSessionAutoRefreshByRef(ctx, foreign, f.signInA, true)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	n, err = f.mgr.SetRemoteSessionAutoRefreshByRef(ctx, ref, f.signInA, true)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	retainedB, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, b, retainedB)
+	n, err = f.mgr.DisconnectRemoteSessionByRef(ctx, ref, f.signInA)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	_, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: legacy.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	retainedB, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, b, retainedB)
+}

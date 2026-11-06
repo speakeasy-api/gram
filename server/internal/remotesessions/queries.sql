@@ -6620,3 +6620,54 @@ SELECT EXISTS (
     AND b.user_session_issuer_id = @user_session_issuer_id
     AND b.state IS DISTINCT FROM 'unlinked'
 )::boolean;
+
+-- name: SetRemoteSessionAutoRefreshByRef :execrows
+-- Explicit source-reference operation, including legacy NULL-resource grants.
+-- Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+UPDATE remote_sessions AS s
+SET auto_refresh = @auto_refresh
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = @user_session_issuer_id
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = @id
+  AND s.updated_at = @expected_updated_at
+  AND s.deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionByRef :many
+-- Explicit source-reference operation, including legacy NULL-resource grants.
+-- Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = @user_session_issuer_id
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = @id
+  AND s.updated_at = @expected_updated_at
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;

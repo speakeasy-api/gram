@@ -1306,7 +1306,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 }
 
 // RefreshRemoteSessionForResource refreshes one audience without replacing any
-// sibling grant. A registration-only request is refused when ambiguous.
+// sibling grant. A nonempty matching bound resource is always required.
 func (m *ChallengeManager) RefreshRemoteSessionForResource(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
 	if resource == "" {
 		return RefreshResult{}, focusedResourceRequired()
@@ -1387,7 +1387,8 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 
 // DisconnectRemoteSessionForResource disconnects only the matching bound audience.
 // It does not guess that a legacy unbound grant belongs to a focused resource.
-// Registration-only requests are refused when multiple grants exist.
+// A nonempty matching bound resource is always required; use the separate
+// legacy wrapper only for an unqualified singleton operation.
 func (m *ChallengeManager) DisconnectRemoteSessionForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
 	if resource == "" {
 		return 0, focusedResourceRequired()
@@ -1456,6 +1457,37 @@ func (m *ChallengeManager) setRemoteSessionAutoRefresh(ctx context.Context, subj
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
 	}
 	return n, nil
+}
+
+// DisconnectRemoteSessionByRef permits an explicit legacy/unbound source to be
+// revoked independently. The reference must be selected and authorized by the
+// caller, not inferred from a focused server; subject, tenant, binding and CAS
+// checks prevent another user's or a stale grant from being changed.
+func (m *ChallengeManager) DisconnectRemoteSessionByRef(ctx context.Context, ref RemoteSessionRef, userSessionIssuerID uuid.UUID) (int64, error) {
+	rows, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionByRef(ctx, remotesessions_repo.SoftDeleteRemoteSessionByRefParams{
+		ID: ref.ID, ExpectedUpdatedAt: conv.ToPGTimestamptz(ref.UpdatedAt), SubjectUrn: ref.Subject,
+		RemoteSessionClientID: ref.ClientID, ProjectID: ref.ProjectID, OrganizationID: ref.OrganizationID, UserSessionIssuerID: userSessionIssuerID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("disconnect explicit remote session: %w", err)
+	}
+	for _, row := range rows {
+		m.revoker.RevokeDetached(ctx, RevokedCredentials{RemoteSessionClientID: row.RemoteSessionClientID, AccessTokenEncrypted: row.AccessTokenEncrypted, RefreshTokenEncrypted: row.RefreshTokenEncrypted})
+	}
+	return int64(len(rows)), nil
+}
+
+// SetRemoteSessionAutoRefreshByRef changes an explicitly selected source,
+// including a legacy NULL-resource grant, without changing its siblings or CAS.
+func (m *ChallengeManager) SetRemoteSessionAutoRefreshByRef(ctx context.Context, ref RemoteSessionRef, userSessionIssuerID uuid.UUID, enabled bool) (int64, error) {
+	rows, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefreshByRef(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshByRefParams{
+		ID: ref.ID, ExpectedUpdatedAt: conv.ToPGTimestamptz(ref.UpdatedAt), SubjectUrn: ref.Subject,
+		RemoteSessionClientID: ref.ClientID, ProjectID: ref.ProjectID, OrganizationID: ref.OrganizationID, UserSessionIssuerID: userSessionIssuerID, AutoRefresh: enabled,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set explicit remote session auto refresh: %w", err)
+	}
+	return rows, nil
 }
 
 func focusedResourceRequired() error {

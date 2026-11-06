@@ -11,7 +11,7 @@ resource's current tokens and consent generation.
 
 - Consent writes hold the existing registration lock. Same-resource reconsent
   advances only that grant's generation and replaces its tokens and identity.
-  Within the existing consent tenant, consent for another resource inserts
+  After index cutover, within the existing consent tenant, another resource inserts
   another session without changing the first. Cross-organization consent retains
   the existing retirement rule: all of that subject/registration's grants from
   another organization are tombstoned before the new tenant's grant is written.
@@ -36,9 +36,16 @@ resource's current tokens and consent generation.
   Focused mutations reject an empty resource instead of selecting a singleton
   from another audience. Focused refresh and verification also require a bound
   matching resource; they never mutate a legacy unbound source by inference.
-  Verification uses the qualified status's row ID and CAS timestamp with the
-  `EnrichRemoteSessionForResource` and `RecordRemoteSessionValidationForResource`
-  methods. Unqualified legacy singleton operations retain their existing contract.
+  To verify a focused connection, callers must pass the qualified status's row
+  ID and CAS timestamp to `EnrichRemoteSessionForResource` and
+  `RecordRemoteSessionValidationForResource`. Adapting consent/action callers is
+  required wave-0 compatibility work, not an implicit effect of these APIs.
+  Unqualified legacy singleton operations retain their existing contract.
+- Legacy unbound grants remain individually revocable and configurable through
+  `DisconnectRemoteSessionByRef` and `SetRemoteSessionAutoRefreshByRef`. These
+  require an explicitly selected source reference, with subject, client, tenant,
+  issuer-binding and timestamp checks. They are not a fallback for guessing a
+  focused server's legacy source.
 
 ## Required deployment order
 
@@ -53,20 +60,23 @@ the index migration while old writers still use
    refresh and revocation continue to work.
 2. Verify the deployed compatibility revision and confirm every old application
    and worker writer is gone. This is an explicit operational gate, not
-   something migration tooling can infer. Keep dependent resource-specific
-   presentation/features out of this compatibility release.
-3. Promote the separately reviewed migration-only release, excluding dependent
-   features. Apply its index migrations in order: first create the
+   something migration tooling can infer. Wave 0 must also deploy all existing
+   target-aware consent, readiness/action and Platform MCP status consumers
+   before index replacement. AIM-927 owns that consumer wiring; prove it works
+   safely on both old and new schemas. Existing-column/API wiring is not
+   automatically a schema-dependent feature.
+3. Promote the separately reviewed migration-only release, excluding truly
+   schema-dependent features. Apply its index migrations in order: first create the
    resource-qualified `NULLS NOT DISTINCT` indexes over the routing identity
    (`rtrim(resource, '/')`), with `WHERE deleted IS FALSE`, while retaining the old
    indexes, then remove the old indexes only after the new indexes are valid.
    This avoids an interval with no grant uniqueness enforcement. NULL legacy
    resources remain unique. Both resources can then retain independent grants.
 4. Verify actual production migration completion and a healthy compatibility
-   application before promoting dependent resource-specific consent/status
-   features in a separate release. Those consumers must use the qualified
-   interfaces, including existing Platform MCP status readers. Do not bundle
-   the compatibility, migration, and dependent feature waves into one release.
+   application before promoting any truly schema-dependent features in a
+   separate wave-2 release. Split those features from old/new-schema-safe
+   existing consumer wiring, which is required in wave 0. Do not bundle the
+   compatibility, migration, and schema-dependent feature waves into one release.
 5. Validate authorization, original/fresh/refreshed callers, resource-bound refresh,
    and revocation against both resources. Never weaken audience checks or replace
    this final simultaneous-resource contract with permanent early refusal.
