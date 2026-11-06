@@ -402,7 +402,25 @@ WITH selected AS (
                      AND c.client_type IN ('static_credential', 'pass_through'))))
       )
   ) AS candidates
-  WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  WHERE $1::boolean AND NOT $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  UNION ALL
+  -- Discovery evaluates every offered client in one metadata-only read, using
+  -- the same authoritative header-source checks as a single proposed choice.
+  SELECT FALSE, link.auth_client_id, NULL::uuid, m.id, m.project_id,
+         p.organization_id, FALSE
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = $5::text AND p.deleted IS FALSE
+  JOIN mcp_server_auth_clients AS link ON link.mcp_server_id = m.id
+   AND link.project_id = m.project_id AND link.organization_id = p.organization_id
+   AND link.deleted IS FALSE
+  JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+   AND c.organization_id = p.organization_id
+   AND (c.project_id IS NULL OR c.project_id = m.project_id)
+   AND c.deleted IS FALSE
+  WHERE $1::boolean AND $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,
@@ -644,6 +662,7 @@ type GetAuthClientSelectionParams struct {
 	ProposedRegistrationID uuid.NullUUID
 	ProposedAuthClientID   uuid.NullUUID
 	ProposedNoAuth         bool
+	ProposeAllClients      bool
 }
 
 type GetAuthClientSelectionRow struct {
@@ -694,6 +713,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		arg.ProposedRegistrationID,
 		arg.ProposedAuthClientID,
 		arg.ProposedNoAuth,
+		arg.ProposeAllClients,
 	)
 	if err != nil {
 		return nil, err
