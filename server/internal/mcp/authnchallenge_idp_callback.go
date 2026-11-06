@@ -561,6 +561,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if federation := challengeState.Federation; federation != nil {
 		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
 	}
+	if err := bindFirstPartyCallbackBrowser(w, &challengeState, time.Now()); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnexpected, err, "bind sign-in callback browser").LogError(ctx, logger)
+	}
 	challengeState.Federation = nil // Drop nonce and PKCE; Browser must survive consent and remote linking.
 	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

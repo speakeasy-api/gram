@@ -175,9 +175,9 @@ func TestWorkloadReconnectBrowserFailureIsSessionChanged(t *testing.T) {
 	require.Contains(t, response.Body.String(), "current browser or sign-in session")
 }
 
-// firstPartyReviewState is a signed-in first-party catalogue review bound to the
-// browser that receives response's cookie.
-func firstPartyReviewState(t *testing.T, response http.ResponseWriter) AuthnChallengeState {
+// firstPartyReviewState is a signed-in first-party catalogue review whose
+// browser binding the returned origin and callback cookies prove.
+func firstPartyReviewState(t *testing.T, s *Service, consentOrigin string) (AuthnChallengeState, *http.Cookie, *http.Cookie) {
 	t.Helper()
 	state := browserTestState()
 	state.Browser = nil
@@ -186,13 +186,45 @@ func firstPartyReviewState(t *testing.T, response http.ResponseWriter) AuthnChal
 	state.FocusServer = "tracker"
 	state.AuthorizerUserID = state.Subject.ID
 	state.AuthorizerImpersonated = new(false)
+	state.Endpoint.BaseURL = consentOrigin
 	state.CodeReconnect = &CodeReconnectBinding{UserID: state.Subject.ID, Server: "tracker", ServerID: uuid.New(), ExpiresAt: time.Now().Add(time.Minute), CatalogID: uuid.New(), ReviewReady: true}
-	if response != nil {
-		cookie, err := bindConsentBrowser(&state)
-		require.NoError(t, err)
-		http.SetCookie(response, cookie)
+	origin, err := s.bindFirstPartyBrowser(&ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "test"}, &state)
+	require.NoError(t, err)
+	callback := origin
+	if state.Browser.CallbackHash == "" {
+		response := httptest.NewRecorder()
+		require.NoError(t, bindFirstPartyCallbackBrowser(response, &state, time.Now()))
+		cookies := response.Result().Cookies()
+		require.Len(t, cookies, 1)
+		callback = cookies[0]
 	}
-	return state
+	return state, origin, callback
+}
+
+func TestFirstPartyBrowserBinding(t *testing.T) {
+	t.Parallel()
+	s := browserTestService(t)
+	state, origin, callback := firstPartyReviewState(t, s, "https://gram.example")
+	require.Same(t, origin, callback, "one host shares one cookie")
+	require.Equal(t, federationCookieName(state.ID), origin.Name)
+	require.Equal(t, "/", origin.Path)
+	require.Empty(t, origin.Domain)
+	require.True(t, origin.HttpOnly)
+	require.True(t, origin.Secure)
+	require.Equal(t, http.SameSiteLaxMode, origin.SameSite)
+	require.Equal(t, int(state.TTL().Seconds()), origin.MaxAge)
+	require.Equal(t, sha256Hex(origin.Value), state.Browser.OriginHash)
+	require.Equal(t, state.Browser.OriginHash, state.Browser.CallbackHash)
+	require.Equal(t, "https://gram.example", state.Browser.CallbackOrigin)
+
+	custom, customOrigin, customCallback := firstPartyReviewState(t, s, "https://custom.example")
+	require.NotEqual(t, customOrigin.Value, customCallback.Value, "each host holds its own cookie")
+	require.Equal(t, customOrigin.Name, customCallback.Name)
+	require.Equal(t, sha256Hex(customCallback.Value), custom.Browser.CallbackHash)
+	require.Equal(t, "https://gram.example", custom.Browser.CallbackOrigin, "the IdP callback host holds the callback cookie")
+	second := httptest.NewRecorder()
+	require.NoError(t, bindFirstPartyCallbackBrowser(second, &custom, time.Now()))
+	require.Empty(t, second.Result().Cookies(), "a bound callback host is never rebound")
 }
 
 func TestFirstPartyConsentRejectsAnotherBrowser(t *testing.T) {
@@ -202,11 +234,8 @@ func TestFirstPartyConsentRejectsAnotherBrowser(t *testing.T) {
 			t.Run(action+"/"+cookie, func(t *testing.T) {
 				t.Parallel()
 				s := browserTestService(t)
-				owner := httptest.NewRecorder()
-				state := firstPartyReviewState(t, owner)
+				state, owner, _ := firstPartyReviewState(t, s, "https://gram.example")
 				require.NoError(t, s.authnChallengeCache.Store(t.Context(), state))
-				ownerCookies := owner.Result().Cookies()
-				require.Len(t, ownerCookies, 1)
 				form := url.Values{"state": {state.ID}, "csrf_token": {state.CSRFToken}, "action": {action}}
 				req := httptest.NewRequest(http.MethodPost, "https://gram.example/mcp/test/connect", strings.NewReader(form.Encode()))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -214,7 +243,7 @@ func TestFirstPartyConsentRejectsAnotherBrowser(t *testing.T) {
 					req = httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/test/connect?state="+state.ID, nil)
 				}
 				if cookie == "wrong" {
-					req.AddCookie(&http.Cookie{Name: ownerCookies[0].Name, Value: "another-browser"})
+					req.AddCookie(&http.Cookie{Name: owner.Name, Value: "another-browser"})
 				}
 				var err error
 				if action == "get" || action == "approve" || action == "deny" {
@@ -227,7 +256,7 @@ func TestFirstPartyConsentRejectsAnotherBrowser(t *testing.T) {
 				require.NoError(t, err, "a refused browser must not consume the owner's challenge")
 
 				owned := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/test/connect?state="+state.ID, nil)
-				owned.AddCookie(ownerCookies[0])
+				owned.AddCookie(owner)
 				require.NoError(t, validateChallengeBrowser(owned, state, false))
 			})
 		}
@@ -237,7 +266,7 @@ func TestFirstPartyConsentRejectsAnotherBrowser(t *testing.T) {
 func TestFirstPartyConsentBrowserFailureShowsStartAgain(t *testing.T) {
 	t.Parallel()
 	s := browserTestService(t)
-	state := firstPartyReviewState(t, httptest.NewRecorder())
+	state, _, _ := firstPartyReviewState(t, s, "https://gram.example")
 	require.NoError(t, s.authnChallengeCache.Store(t.Context(), state))
 	req := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/test/connect?state="+state.ID, nil)
 	response := httptest.NewRecorder()
@@ -248,35 +277,80 @@ func TestFirstPartyConsentBrowserFailureShowsStartAgain(t *testing.T) {
 	require.Contains(t, response.Body.String(), "current browser or sign-in session")
 }
 
-func TestFirstPartyBrowserCookie(t *testing.T) {
-	t.Parallel()
-	owner := httptest.NewRecorder()
-	state := firstPartyReviewState(t, owner)
-	cookies := owner.Result().Cookies()
-	require.Len(t, cookies, 1)
-	cookie := cookies[0]
-	require.Equal(t, "__Host-speakeasy_consent_"+state.FlowID, cookie.Name)
-	require.Equal(t, "/", cookie.Path)
-	require.Empty(t, cookie.Domain)
-	require.True(t, cookie.HttpOnly)
-	require.True(t, cookie.Secure)
-	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
-	require.Equal(t, int(state.TTL().Seconds()), cookie.MaxAge)
-	require.Equal(t, sha256Hex(cookie.Value), state.ConsentBrowserHash)
-}
-
 // A first-party challenge an earlier release stored has no binding and stays
 // usable until it expires. Only the stored state can mark it so.
 func TestFirstPartyChallengeWithoutRecordedBinding(t *testing.T) {
 	t.Parallel()
-	state := firstPartyReviewState(t, nil)
-	require.Empty(t, state.ConsentBrowserHash)
+	s := browserTestService(t)
+	state, _, _ := firstPartyReviewState(t, s, "https://gram.example")
+	state.Browser = nil
 	req := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/test/connect?state="+state.ID, nil)
 	require.NoError(t, validateChallengeBrowser(req, state, false))
+	require.NoError(t, validateChallengeBrowser(req, state, true))
 
-	bound := firstPartyReviewState(t, httptest.NewRecorder())
+	bound, _, _ := firstPartyReviewState(t, s, "https://gram.example")
 	require.Error(t, validateChallengeBrowser(req, bound, false), "a bound challenge never falls back to the unbound check")
-	require.NoError(t, validateChallengeBrowser(req, bound, true), "callback hosts never held the consent cookie")
+	require.Error(t, validateChallengeBrowser(req, bound, true))
+}
+
+// An upstream login started from a first-party consent page completes only in
+// the browser that started the challenge, on either host layout.
+func TestFirstPartyRemoteCallbackRejectsAnotherBrowser(t *testing.T) {
+	t.Parallel()
+	for _, consentOrigin := range []string{"https://gram.example", "https://custom.example"} {
+		t.Run(consentOrigin, func(t *testing.T) {
+			t.Parallel()
+			s := browserTestService(t)
+			parent, _, callbackCookie := firstPartyReviewState(t, s, consentOrigin)
+			parent.CodeReconnect = nil // No DB: a code connection would resolve its members.
+			require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+			remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+			require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
+			callback := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/remote_login_callback?state="+remote.ID+"&code=code", nil)
+			// The manager is nil: refusal must precede any token exchange or credential storage.
+			require.ErrorContains(t, s.HandleRemoteLoginCallback(httptest.NewRecorder(), callback), "invalid remote login browser binding")
+			wrong := httptest.NewRequest(http.MethodGet, callback.URL.String(), nil)
+			wrong.AddCookie(&http.Cookie{Name: callbackCookie.Name, Value: "another-browser"})
+			require.ErrorContains(t, s.HandleRemoteLoginCallback(httptest.NewRecorder(), wrong), "invalid remote login browser binding")
+			callback.AddCookie(callbackCookie)
+			require.NoError(t, s.validateRemoteLoginBrowser(callback))
+		})
+	}
+}
+
+// A remote client whose callback is on another host goes through the bind and
+// confirm hop, and the confirm stop requires the first-party callback cookie.
+func TestFirstPartyRemoteLoginHopConfirmsBrowser(t *testing.T) {
+	t.Parallel()
+	s := browserTestService(t)
+	parent, _, callbackCookie := firstPartyReviewState(t, s, "https://custom.example")
+	require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+	remoteOrigin, err := url.Parse("https://callbacks.example")
+	require.NoError(t, err)
+	target, hop, err := s.startRemoteLogin(t.Context(), parent, remoteOrigin, remotesessions.ParentChallenge{ID: parent.ID}, func(remotesessions.ParentChallenge) (string, error) {
+		return "https://upstream.example/authorize", nil
+	})
+	require.NoError(t, err)
+	require.True(t, hop)
+	require.True(t, strings.HasPrefix(target, "https://callbacks.example"+remoteLoginBindPath))
+	bound := httptest.NewRecorder()
+	require.NoError(t, s.HandleRemoteLoginBind(bound, httptest.NewRequest(http.MethodGet, target, nil)))
+	confirmURL := bound.Header().Get("Location")
+	require.True(t, strings.HasPrefix(confirmURL, "https://gram.example"+remoteLoginBindPath), confirmURL)
+	require.ErrorContains(t, s.HandleRemoteLoginBind(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, confirmURL, nil)), "invalid remote login browser")
+
+	// The refused confirm spent its stop; a fresh hop confirms with the cookie.
+	target, _, err = s.startRemoteLogin(t.Context(), parent, remoteOrigin, remotesessions.ParentChallenge{ID: parent.ID}, func(remotesessions.ParentChallenge) (string, error) {
+		return "https://upstream.example/authorize", nil
+	})
+	require.NoError(t, err)
+	bound = httptest.NewRecorder()
+	require.NoError(t, s.HandleRemoteLoginBind(bound, httptest.NewRequest(http.MethodGet, target, nil)))
+	confirm := httptest.NewRequest(http.MethodGet, bound.Header().Get("Location"), nil)
+	confirm.AddCookie(callbackCookie)
+	confirmed := httptest.NewRecorder()
+	require.NoError(t, s.HandleRemoteLoginBind(confirmed, confirm))
+	require.Equal(t, "https://upstream.example/authorize", confirmed.Header().Get("Location"))
 }
 
 func TestFirstPartyConsentMCPRejectsAnotherBrowser(t *testing.T) {
@@ -285,11 +359,8 @@ func TestFirstPartyConsentMCPRejectsAnotherBrowser(t *testing.T) {
 		t.Run(cookie, func(t *testing.T) {
 			t.Parallel()
 			s := browserTestService(t)
-			owner := httptest.NewRecorder()
-			state := firstPartyReviewState(t, owner)
+			state, owner, _ := firstPartyReviewState(t, s, "https://gram.example")
 			require.NoError(t, s.authnChallengeCache.Store(t.Context(), state))
-			ownerCookies := owner.Result().Cookies()
-			require.Len(t, ownerCookies, 1)
 			// The private ingress origin skips the custom-domain lockdown lookup.
 			ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePrivateNetwork, BaseURL: "https://private.example.ts.net"})
 			endpoint := &ResolvedMcpEndpoint{Slug: "test", RouteBase: mcproute.MCP, McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
@@ -305,11 +376,10 @@ func TestFirstPartyConsentMCPRejectsAnotherBrowser(t *testing.T) {
 			}
 			var other *http.Cookie
 			if cookie == "wrong" {
-				other = &http.Cookie{Name: ownerCookies[0].Name, Value: "another-browser"}
+				other = &http.Cookie{Name: owner.Name, Value: "another-browser"}
 			}
 			require.ErrorContains(t, s.ServeConsentMCP(httptest.NewRecorder(), request(other), endpoint), "invalid consent browser binding")
-			require.NoError(t, validateChallengeBrowser(request(ownerCookies[0]), state, false))
-			err := s.ServeConsentMCP(httptest.NewRecorder(), request(ownerCookies[0]), endpoint)
+			err := s.ServeConsentMCP(httptest.NewRecorder(), request(owner), endpoint)
 			require.Error(t, err, "this fixture has no endpoint to serve")
 			require.NotContains(t, err.Error(), "invalid consent browser binding", "the owner passes the browser check")
 		})

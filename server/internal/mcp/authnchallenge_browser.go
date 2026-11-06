@@ -18,8 +18,8 @@ import (
 
 // ChallengeBrowserBinding survives ID rotation and identity verification. The
 // two hosts have independent, host-only cookies; no browser proof travels in a URL.
-// Non-federated challenges have no binding here; first-party ones are bound
-// through ConsentBrowserHash instead.
+// Federated and first-party challenges are bound; MCP client challenges without
+// federation, and first-party ones minted before their binding, are not.
 type ChallengeBrowserBinding struct {
 	CookieID     string `json:"cookie_id"`
 	OriginHash   string `json:"origin_hash"`
@@ -43,11 +43,6 @@ func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callba
 		if state.Federation != nil {
 			return errors.New("missing federated browser binding")
 		}
-		// First-party challenges minted before this binding carry no hash and
-		// expire within the challenge TTL. The stored state decides, never the request.
-		if !callback && state.FirstParty && state.ConsentBrowserHash != "" && !consentBrowserMatches(r, state, time.Now()) {
-			return errors.New("first-party browser binding failed")
-		}
 		return nil
 	}
 	hash := state.Browser.OriginHash
@@ -58,6 +53,46 @@ func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callba
 	if err != nil || hash == "" || state.Browser.CookieID == "" || state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL() || state.CreatedAt.After(time.Now().Add(time.Minute)) || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(hash)) != 1 {
 		return errors.New("challenge browser binding failed")
 	}
+	return nil
+}
+
+// bindFirstPartyBrowser binds a first-party challenge to the browser starting
+// it on its consent host. When the IdP callback is on that host it shares the
+// cookie; otherwise the callback binds its own with bindFirstPartyCallbackBrowser.
+func (s *Service) bindFirstPartyBrowser(endpoint *ResolvedMcpEndpoint, state *AuthnChallengeState) (*http.Cookie, error) {
+	origin, err := url.Parse(s.challengeAuthorizationServerBaseURL(endpoint, *state))
+	if err != nil {
+		return nil, fmt.Errorf("parse consent origin: %w", err)
+	}
+	browser, err := generateOpaqueToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate first-party browser secret: %w", err)
+	}
+	callback := s.outboundOrigin()
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: callback.Scheme + "://" + callback.Host}
+	if sameOrigin(origin, callback) {
+		state.Browser.CallbackHash = state.Browser.OriginHash
+	}
+	return federatedBrowserCookie(state.Browser.CookieID, browser, int(state.TTL().Seconds())), nil
+}
+
+// bindFirstPartyCallbackBrowser gives a first-party challenge's IdP callback
+// host, when it is not the consent host, the cookie that upstream logins
+// started from the consent page are checked against.
+func bindFirstPartyCallbackBrowser(w http.ResponseWriter, state *AuthnChallengeState, now time.Time) error {
+	if !state.FirstParty || state.Federation != nil || state.Browser == nil || state.Browser.CallbackHash != "" {
+		return nil
+	}
+	remaining := state.CreatedAt.Add(state.TTL()).Sub(now)
+	if remaining <= 0 {
+		return nil
+	}
+	browser, err := generateOpaqueToken()
+	if err != nil {
+		return fmt.Errorf("generate first-party callback browser secret: %w", err)
+	}
+	state.Browser.CallbackHash = sha256Hex(browser)
+	http.SetCookie(w, federatedBrowserCookie(state.Browser.CookieID, browser, int(remaining.Seconds())))
 	return nil
 }
 

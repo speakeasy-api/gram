@@ -37,19 +37,19 @@ func consentEvidenceHash(value any) string {
 	return "v1:" + sha256Hex(string(data))
 }
 
-// bindConsentBrowser records the browser proof on state and returns the cookie that carries it.
-func bindConsentBrowser(state *AuthnChallengeState) (*http.Cookie, error) {
+func bindConsentBrowser(w http.ResponseWriter, state *AuthnChallengeState) error {
 	secret, err := generateOpaqueToken()
 	if err != nil {
-		return nil, fmt.Errorf("generate consent browser secret: %w", err)
+		return fmt.Errorf("generate consent browser secret: %w", err)
 	}
 	state.ConsentBrowserHash = sha256Hex(secret)
-	return &http.Cookie{
+	http.SetCookie(w, &http.Cookie{
 		Name: "__Host-speakeasy_consent_" + state.FlowID, Value: secret, Path: "/",
 		Quoted: false, Domain: "", Expires: time.Time{}, RawExpires: "", Partitioned: false, Raw: "", Unparsed: nil,
 		MaxAge: int(state.TTL().Seconds()), HttpOnly: true,
 		Secure: true, SameSite: http.SameSiteLaxMode,
-	}, nil
+	})
+	return nil
 }
 
 func consentBrowserMatches(r *http.Request, state AuthnChallengeState, now time.Time) bool {

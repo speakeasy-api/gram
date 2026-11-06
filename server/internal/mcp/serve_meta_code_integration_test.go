@@ -464,6 +464,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
 	identified := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+	callbackBrowser := firstPartyCallbackCookie(t, browser[0], identified)
 	landing, err := url.Parse(identified.Header().Get("Location"))
 	require.NoError(t, err)
 	stateID := landing.Query().Get("state")
@@ -482,6 +483,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
 	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+	remoteCallback.AddCookie(callbackBrowser)
 	completed := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
 	require.Equal(t, http.StatusSeeOther, completed.Code)
@@ -643,6 +645,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
 			identified := httptest.NewRecorder()
 			require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+			callbackBrowser := firstPartyCallbackCookie(t, browser[0], identified)
 			landing, err := url.Parse(identified.Header().Get("Location"))
 			require.NoError(t, err)
 			stateID := landing.Query().Get("state")
@@ -663,7 +666,20 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			authorization, err := url.Parse(sent.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
-			remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+			remoteCallbackURL := "/mcp/remote_login_callback?state=" + url.QueryEscape(authorization.Query().Get("state")) + "&code=synthetic-approved-code"
+			if tc.otherBrowser {
+				// Another browser completing the upstream sign-in stores nothing.
+				for _, cookie := range []*http.Cookie{nil, {Name: callbackBrowser.Name, Value: "another-browser"}} {
+					stray := httptest.NewRequest(http.MethodGet, remoteCallbackURL, nil).WithContext(ctx)
+					if cookie != nil {
+						stray.AddCookie(cookie)
+					}
+					require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), stray), "invalid remote login browser binding")
+				}
+				require.Nil(t, exchanged.Load(), "a refused callback never exchanges the upstream code")
+			}
+			remoteCallback := httptest.NewRequest(http.MethodGet, remoteCallbackURL, nil).WithContext(ctx)
+			remoteCallback.AddCookie(callbackBrowser)
 			catalogKey := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
 			var originalCatalog []byte
 			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &originalCatalog))
@@ -923,4 +939,18 @@ func (c *reconnectCompletionFailureCache) CompareAndSwap(ctx context.Context, ke
 		return false, fmt.Errorf("injected completion failure")
 	}
 	return c.OwnershipStore.CompareAndSwap(ctx, key, expected, replacement, ttl)
+}
+
+// firstPartyCallbackCookie is the cookie the IdP callback host holds for a
+// first-party challenge: one the callback set, or the consent host's when the
+// two hosts are the same.
+func firstPartyCallbackCookie(t *testing.T, consent *http.Cookie, identified *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	cookies := identified.Result().Cookies()
+	if len(cookies) == 0 {
+		return consent
+	}
+	require.Len(t, cookies, 1)
+	require.Equal(t, consent.Name, cookies[0].Name)
+	return cookies[0]
 }

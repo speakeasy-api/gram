@@ -147,9 +147,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)
-	// Only this browser may use the consent page. A federated login binds it
-	// through Browser instead, so the cookie is sent only when that is absent.
-	consentCookie, err := bindConsentBrowser(&challengeState)
+	// A federated login replaces this binding with its own before any cookie is sent.
+	browserCookie, err := s.bindFirstPartyBrowser(endpoint, &challengeState)
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
@@ -179,7 +178,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	idpURL := federatedURL
 	if idpURL == nil {
-		http.SetCookie(w, consentCookie)
+		http.SetCookie(w, browserCookie)
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
