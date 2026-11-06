@@ -588,9 +588,9 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 	app := mcpconnectionattempts.AppUnverified
 	switch what {
 	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied:
-		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDUnchecked)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDNotAdmitted)
 	case mcpconnectionattempts.CodeAIToolBlocked:
-		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
 }
@@ -623,9 +623,9 @@ func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMc
 	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
-	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDVerified
+	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDAdmitted
 	if reason == mcpmetrics.IDJAGRejectionClientMetadataUnavailable {
-		what, check = mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.ClientIDUnchecked
+		what, check = mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.ClientIDNotAdmitted
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID, check)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
 }
@@ -682,7 +682,7 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateContext, unavailable []unavailableMember) {
 	app := mcpconnectionattempts.AppUnverified
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	scope := mcpconnectionattempts.GatewayScope(gate.organizationID, gate.projectID, gate.metaServerID, app)
 	if gate.projectID == uuid.Nil {

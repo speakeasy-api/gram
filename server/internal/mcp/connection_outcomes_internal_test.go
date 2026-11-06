@@ -56,7 +56,7 @@ func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
-			require.Equal(t, mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
 		})
 	}

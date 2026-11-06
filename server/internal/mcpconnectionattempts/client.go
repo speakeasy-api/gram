@@ -183,7 +183,7 @@ type requestClient struct {
 	userAgent    string
 	forwardedFor string
 
-	// appFamily is what the row's verified catalog client_id proves.
+	// appFamily is the family the row's admitted catalog client_id names.
 	appFamily string
 
 	// reported reads what the MCP session said about itself. It runs on the writer.
@@ -235,7 +235,7 @@ func (r *Recorder) stampClient(row *Row) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}
-	// A verified catalog client_id beats a runtime User-Agent, whose version isn't the app's. An unnamed session's reported version is.
+	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's. An unnamed session's reported version is.
 	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
 		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
 		row.ClientFamily, row.ClientVersion = client.appFamily, ""

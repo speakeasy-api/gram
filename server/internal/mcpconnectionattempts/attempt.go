@@ -38,6 +38,7 @@ const maxProviderHostBytes = 261
 // App identifies the app behind an attempt. app_key is a rollup sort key that a
 // caller can reach before sign-in, so it holds a known app's host or a kind and nothing else.
 // family is the client family a catalog client_id names, for rows whose User-Agent names no client.
+// For a localhost-redirect app any local program can present that client_id, so it is telemetry, not proof.
 type App struct{ key, family string }
 
 var (
@@ -69,18 +70,18 @@ var (
 type ClientIDCheck bool
 
 const (
-	// ClientIDVerified is a client_id Speakeasy resolved and admitted.
-	ClientIDVerified ClientIDCheck = true
+	// ClientIDAdmitted is a client_id Speakeasy resolved and admitted.
+	ClientIDAdmitted ClientIDCheck = true
 
-	// ClientIDUnchecked is a client_id that a refused or failed request only presented.
-	ClientIDUnchecked ClientIDCheck = false
+	// ClientIDNotAdmitted is a client_id that a refused or failed request only presented.
+	ClientIDNotAdmitted ClientIDCheck = false
 )
 
 // AppOf returns the App of a client_id: the host of a catalog app's client
 // metadata URL (or AppUnverified if that host matches a reserved app kind),
 // AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
 // the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept,
-// and only a verified catalog client_id names a family: anyone can present one.
+// and only an admitted catalog client_id names a family: anyone can present one.
 func AppOf(clientID string, check ClientIDCheck) App {
 	if clientID == "" {
 		return AppFirstParty
@@ -98,7 +99,7 @@ func AppOf(clientID string, check ClientIDCheck) App {
 		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
-	if check != ClientIDVerified {
+	if check != ClientIDAdmitted {
 		return App{host, ""}
 	}
 	return App{host, documentFamilies[preset.URL]}
