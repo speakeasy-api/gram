@@ -23,9 +23,9 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListAuditLogFacetsQueryParamCategory,
-  ListAuditLogFacetsQueryParamOrigin,
   ListAuditLogFacetsRequest,
   ListAuditLogFacetsSecurity,
+  QueryParamOrigin,
 } from "../models/operations/listauditlogfacets.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -112,7 +112,7 @@ export function setAuditLogFacetsData(
     parameters: {
       projectSlug?: string | undefined;
       category?: ListAuditLogFacetsQueryParamCategory | undefined;
-      origin?: ListAuditLogFacetsQueryParamOrigin | undefined;
+      origin?: QueryParamOrigin | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -130,7 +130,7 @@ export function invalidateAuditLogFacets(
     [parameters: {
       projectSlug?: string | undefined;
       category?: ListAuditLogFacetsQueryParamCategory | undefined;
-      origin?: ListAuditLogFacetsQueryParamOrigin | undefined;
+      origin?: QueryParamOrigin | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

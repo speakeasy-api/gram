@@ -14,9 +14,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { ListAuditLogFacetsResult } from "../models/components/listauditlogfacetsresult.js";
 import {
   ListAuditLogFacetsQueryParamCategory,
-  ListAuditLogFacetsQueryParamOrigin,
   ListAuditLogFacetsRequest,
   ListAuditLogFacetsSecurity,
+  QueryParamOrigin,
 } from "../models/operations/listauditlogfacets.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AuditLogFacetsQueryData = ListAuditLogFacetsResult;
@@ -83,7 +83,7 @@ export function queryKeyAuditLogFacets(
   parameters: {
     projectSlug?: string | undefined;
     category?: ListAuditLogFacetsQueryParamCategory | undefined;
-    origin?: ListAuditLogFacetsQueryParamOrigin | undefined;
+    origin?: QueryParamOrigin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

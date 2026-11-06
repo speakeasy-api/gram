@@ -28,16 +28,14 @@ export type ListAuditLogFacetsQueryParamCategory = ClosedEnum<
 /**
  * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
  */
-export const ListAuditLogFacetsQueryParamOrigin = {
+export const QueryParamOrigin = {
   User: "user",
   System: "system",
 } as const;
 /**
  * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
  */
-export type ListAuditLogFacetsQueryParamOrigin = ClosedEnum<
-  typeof ListAuditLogFacetsQueryParamOrigin
->;
+export type QueryParamOrigin = ClosedEnum<typeof QueryParamOrigin>;
 
 export type ListAuditLogFacetsRequest = {
   /**
@@ -51,7 +49,7 @@ export type ListAuditLogFacetsRequest = {
   /**
    * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
    */
-  origin?: ListAuditLogFacetsQueryParamOrigin | undefined;
+  origin?: QueryParamOrigin | undefined;
   /**
    * API Key header
    */
@@ -99,9 +97,9 @@ export const ListAuditLogFacetsQueryParamCategory$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListAuditLogFacetsQueryParamCategory);
 
 /** @internal */
-export const ListAuditLogFacetsQueryParamOrigin$outboundSchema: z.ZodMiniEnum<
-  typeof ListAuditLogFacetsQueryParamOrigin
-> = z.enum(ListAuditLogFacetsQueryParamOrigin);
+export const QueryParamOrigin$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamOrigin
+> = z.enum(QueryParamOrigin);
 
 /** @internal */
 export type ListAuditLogFacetsRequest$Outbound = {
@@ -123,7 +121,7 @@ export const ListAuditLogFacetsRequest$outboundSchema: z.ZodMiniType<
       ListAuditLogFacetsQueryParamCategory$outboundSchema,
       "configuration",
     ),
-    origin: z.optional(ListAuditLogFacetsQueryParamOrigin$outboundSchema),
+    origin: z.optional(QueryParamOrigin$outboundSchema),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

@@ -33,14 +33,14 @@ export type QueryParamCategory = ClosedEnum<typeof QueryParamCategory>;
 /**
  * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
  */
-export const QueryParamOrigin = {
+export const Origin = {
   User: "user",
   System: "system",
 } as const;
 /**
  * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
  */
-export type QueryParamOrigin = ClosedEnum<typeof QueryParamOrigin>;
+export type Origin = ClosedEnum<typeof Origin>;
 
 export type ListAuditLogsRequest = {
   /**
@@ -90,7 +90,7 @@ export type ListAuditLogsRequest = {
   /**
    * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
    */
-  origin?: QueryParamOrigin | undefined;
+  origin?: Origin | undefined;
   /**
    * API Key header
    */
@@ -142,9 +142,9 @@ export const QueryParamCategory$outboundSchema: z.ZodMiniEnum<
 > = z.enum(QueryParamCategory);
 
 /** @internal */
-export const QueryParamOrigin$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamOrigin
-> = z.enum(QueryParamOrigin);
+export const Origin$outboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
+  Origin,
+);
 
 /** @internal */
 export type ListAuditLogsRequest$Outbound = {
@@ -181,7 +181,7 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     category: z._default(QueryParamCategory$outboundSchema, "configuration"),
-    origin: z.optional(QueryParamOrigin$outboundSchema),
+    origin: z.optional(Origin$outboundSchema),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
