@@ -2495,6 +2495,35 @@ func (q *Queries) GetMCPServerRequiresUpstreamAuthFixture(ctx context.Context, i
 	return requires_upstream_auth, err
 }
 
+const getMCPServerSoleUpstreamIssuerFixture = `-- name: GetMCPServerSoleUpstreamIssuerFixture :one
+SELECT sole.id AS remote_session_issuer_id
+FROM mcp_servers AS s
+LEFT JOIN remote_session_issuers AS sole
+  ON sole.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+    WHERE a.mcp_server_id = s.id
+      AND a.deleted IS FALSE
+  )
+WHERE s.id = $1
+`
+
+// Test-only fixture: the one-provider subquery that reader queries copy, kept
+// here so the parity test pins it against upstreamclients.ServerUpstreamIssuers.
+func (q *Queries) GetMCPServerSoleUpstreamIssuerFixture(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, getMCPServerSoleUpstreamIssuerFixture, id)
+	var remote_session_issuer_id uuid.NullUUID
+	err := row.Scan(&remote_session_issuer_id)
+	return remote_session_issuer_id, err
+}
+
 const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
 FROM openrouter_api_keys
@@ -8260,6 +8289,48 @@ type SoftDeleteWorkloadIssuerFixtureParams struct {
 
 func (q *Queries) SoftDeleteWorkloadIssuerFixture(ctx context.Context, arg SoftDeleteWorkloadIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteWorkloadIssuerFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const stampMCPServerUpstreamClientFixture = `-- name: StampMCPServerUpstreamClientFixture :execrows
+WITH client AS (
+    SELECT c.id, c.attachment_scope, c.remote_session_issuer_id
+    FROM remote_session_clients AS c
+    WHERE c.id = $3
+), association AS (
+    INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+    SELECT $2, $4, $1, client.id, client.attachment_scope
+    FROM client
+)
+UPDATE mcp_servers
+SET remote_session_issuer_id = client.remote_session_issuer_id
+FROM client
+WHERE mcp_servers.id = $1
+  AND mcp_servers.project_id = $2
+`
+
+type StampMCPServerUpstreamClientFixtureParams struct {
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Test-only fixture: gives an MCP server an upstream client both ways, setting
+// mcp_servers.remote_session_issuer_id to the client's provider and adding the
+// association, so a test survives readers moving from one to the other.
+//
+// Returns the row count so the caller can insist the stamp landed.
+func (q *Queries) StampMCPServerUpstreamClientFixture(ctx context.Context, arg StampMCPServerUpstreamClientFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampMCPServerUpstreamClientFixture,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
