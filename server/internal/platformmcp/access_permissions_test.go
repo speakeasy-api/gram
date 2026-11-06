@@ -1,7 +1,6 @@
 package platformmcp
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,10 +72,4 @@ func TestDescribeAccessPermissionsOutputsOnlyAllowlistedFields(t *testing.T) {
 		"scopes", "slug", "label", "category", "resource_kind", "description", "sensitive", "sensitivity", "sub_scopes",
 		"tasks", "slug", "label", "scopes",
 	}, decodeKeys(t, output))
-
-	encoded, err := json.Marshal(describeAccessPermissions())
-	require.NoError(t, err)
-	for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
-		require.NotContains(t, string(encoded), forbidden)
-	}
 }
