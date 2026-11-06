@@ -328,9 +328,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
 	githubRequired := false
 	if err == nil {
-		var providerMode feature.AuthClientResolverMode
-		providerMode, err = s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, feature.AuthClientResolverOff)
-		githubRequired = providerMode == feature.AuthClientResolverEnforced
+		githubRequired, err = s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID)
 		if githubRequired {
 			mode = feature.AuthClientResolverEnforced
 		}

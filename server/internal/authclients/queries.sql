@@ -583,6 +583,11 @@ SELECT EXISTS (
  SELECT 1 FROM mcp_server_auth_clients a
  JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
  WHERE a.mcp_server_id = @mcp_server_id AND a.organization_id = @organization_id
+   AND (NOT a.deleted OR NOT EXISTS (
+     SELECT 1 FROM mcp_server_auth_clients replacement
+     WHERE replacement.mcp_server_id = a.mcp_server_id
+       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+   ))
 ) AS present;
 
 -- name: GetGitHubAppServerURL :one
@@ -607,7 +612,12 @@ FROM projects p WHERE m.id = @mcp_server_id AND m.project_id = p.id
 -- name: ListGitHubAppServers :many
 SELECT DISTINCT a.mcp_server_id FROM mcp_server_auth_clients a
 JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
-WHERE a.organization_id = @organization_id AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[]);
+WHERE a.organization_id = @organization_id AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND (NOT a.deleted OR NOT EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients replacement
+    WHERE replacement.mcp_server_id = a.mcp_server_id
+      AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+  ));
 
 -- name: ListGitHubAppConfigurations :many
 SELECT auth_client_id, instance_url, app_id, installation_id, upstream_origin

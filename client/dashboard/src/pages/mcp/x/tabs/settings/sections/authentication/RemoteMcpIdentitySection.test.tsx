@@ -3804,6 +3804,107 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(false);
   });
 
+  function boundGitHubApp() {
+    mocks.githubClients.mockReturnValue([
+      {
+        id: "github-client",
+        githubApp: {
+          instanceUrl: "https://github.com",
+          appId: 123,
+          installationId: 456,
+          upstreamOrigin: "https://mcp.example.com",
+        },
+      },
+    ]);
+  }
+
+  it("lets an mcp:write collaborator save custom headers without changing the bound GitHub App", async () => {
+    boundGitHubApp();
+    mocks.hasScope.mockImplementation(
+      (scope: string, resourceId?: string) =>
+        scope === "org:read" ||
+        ((scope === "mcp:write" || scope === "mcp:read") &&
+          resourceId === "mcp-server-1"),
+    );
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    renderIdentity();
+    addCustomHeader("X-Team", "platform");
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    confirmSave();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("still requires admin access to save an actual GitHub App draft", () => {
+    boundGitHubApp();
+    mocks.hasScope.mockReturnValue(true);
+    const { rerenderIdentity } = renderIdentity();
+    fireEvent.change(screen.getByLabelText("Private key (PEM)"), {
+      target: { value: "-----BEGIN PRIVATE KEY-----\nreplacement-key" },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    mocks.hasScope.mockImplementation((scope: string) => scope !== "org:admin");
+    rerenderIdentity();
+    addCustomHeader("X-Team", "platform");
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    confirmSave();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
+  });
+
+  it("describes replacing the GitHub App with a Bearer credential", () => {
+    boundGitHubApp();
+    renderIdentity();
+    fireEvent.click(staticFormat("Bearer"));
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "replacement-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      screen.getByRole("heading", { name: "Replace the GitHub App?" }),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Requests will use the replacement identity instead/),
+    ).toBeDefined();
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
+  });
+
+  it("describes removing the GitHub App without a replacement identity", () => {
+    boundGitHubApp();
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      screen.getByRole("heading", { name: "Remove the GitHub App?" }),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/no replacement identity will be configured/),
+    ).toBeDefined();
+  });
+
   it("keeps a bound GitHub App when an unfinished OAuth choice only saves headers", async () => {
     mocks.githubClients.mockReturnValue([
       {

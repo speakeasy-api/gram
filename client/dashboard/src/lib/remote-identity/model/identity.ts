@@ -11,16 +11,19 @@ export type IdentityMode = "user" | "agent" | "none";
 /**
  * Derived, never stored. A server reads as User because a remote session
  * client is bound to its user session issuer, and as Agent because a static
- * Authorization header exists.
+ * Authorization header or a GitHub App binding exists.
  *
- * User wins when both are present: AIM-230 treats that as a legacy
- * configuration to be shown for cleanup, not an error, which is why switching
+ * A GitHub App binding takes precedence. Otherwise User wins when both are
+ * present: AIM-230 treats that as a legacy configuration to be shown for
+ * cleanup, not an error, which is why switching
  * from Agent to User is a legal move.
  */
 export function deriveIdentityMode(
   linkedClientCount: number,
   headers: readonly RemoteMcpServerHeader[],
+  hasGitHubApp = false,
 ): IdentityMode {
+  if (hasGitHubApp) return "agent";
   if (linkedClientCount > 0) return "user";
   if (findStaticAuthorizationHeader(headers)) return "agent";
   return "none";

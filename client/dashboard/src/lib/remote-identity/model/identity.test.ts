@@ -25,6 +25,11 @@ function header(
 }
 
 describe("deriveIdentityMode", () => {
+  it("recognizes a bound GitHub App as a service account without headers", () => {
+    expect(deriveIdentityMode(0, [], true)).toBe("agent");
+    expect(deriveIdentityMode(1, [], true)).toBe("agent");
+  });
+
   it("gives User Identity precedence over a legacy Authorization header", () => {
     expect(
       deriveIdentityMode(1, [header({ name: "Authorization", value: "***" })]),

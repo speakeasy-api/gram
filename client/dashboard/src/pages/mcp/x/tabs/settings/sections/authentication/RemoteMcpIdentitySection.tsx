@@ -546,11 +546,11 @@ export function RemoteMcpIdentitySectionBody({
     let replacedGitHub = false;
     try {
       if (githubSelected) {
-        if (!canManageGitHub) return;
-        if (githubDraft.canSave && !(await githubDraft.save())) return;
-        if (!githubDraft.bound && !githubDraft.canSave) return;
-        await deleteStaticCredential();
-        setFormatPick(null);
+        if (githubDraft.canSave) {
+          if (!canManageGitHub || !(await githubDraft.save())) return;
+          await deleteStaticCredential();
+          setFormatPick(null);
+        } else if (!githubDraft.bound) return;
       } else {
         // Binding a service account client replaces the user clients in the
         // same commit, so they are only detached here when nothing is bound.
@@ -679,7 +679,7 @@ export function RemoteMcpIdentitySectionBody({
   const headersReason = headersBlocked && headerDrafts.reportErrors;
   const canSave =
     (!githubSelected ||
-      (canManageGitHub && (!!githubDraft.bound || githubDraft.canSave))) &&
+      (githubDraft.canSave ? canManageGitHub : !!githubDraft.bound)) &&
     !headersBlocked &&
     !userSwitchBlocked &&
     !userEditIncomplete &&
@@ -1033,6 +1033,8 @@ export function RemoteMcpIdentitySectionBody({
           <Dialog.Header>
             <Dialog.Title>
               {confirmTitle({
+                leavingGitHub,
+                removingGitHub: selectedMode === "none",
                 removingSelf,
                 replacingSelf,
                 leavingUser,
@@ -1045,6 +1047,8 @@ export function RemoteMcpIdentitySectionBody({
             {destructive ? (
               <Dialog.Description>
                 {removalConsequences({
+                  leavingGitHub,
+                  removingGitHub: selectedMode === "none",
                   removingSelf,
                   replacingSelf,
                   leavingUser,
@@ -1122,6 +1126,8 @@ const REPLACE_CREDENTIAL_CONSEQUENCE =
  * dialog has to name both.
  */
 function removalConsequences({
+  leavingGitHub,
+  removingGitHub,
   removingSelf,
   replacingSelf,
   leavingUser,
@@ -1129,6 +1135,8 @@ function removalConsequences({
   replacingClient,
   replacingCredential,
 }: {
+  leavingGitHub: boolean;
+  removingGitHub: boolean;
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
@@ -1136,6 +1144,11 @@ function removalConsequences({
   replacingClient: boolean;
   replacingCredential: boolean;
 }): string {
+  if (leavingGitHub) {
+    return removingGitHub
+      ? "The GitHub App will be unbound from this server. Requests will no longer use its installation token, and no replacement identity will be configured."
+      : "The GitHub App will be unbound from this server. Requests will use the replacement identity instead of its installation token.";
+  }
   const credentialConsequence = replacingCredential
     ? REPLACE_CREDENTIAL_CONSEQUENCE
     : REMOVE_CREDENTIAL_CONSEQUENCE;
@@ -1158,6 +1171,8 @@ function removalConsequences({
 }
 
 function confirmTitle({
+  leavingGitHub,
+  removingGitHub,
   removingSelf,
   replacingSelf,
   leavingUser,
@@ -1166,6 +1181,8 @@ function confirmTitle({
   destructive,
   upstreamName,
 }: {
+  leavingGitHub: boolean;
+  removingGitHub: boolean;
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
@@ -1175,6 +1192,10 @@ function confirmTitle({
   upstreamName: string;
 }): string {
   if (!destructive) return "Change the upstream of other servers?";
+  if (leavingGitHub)
+    return removingGitHub
+      ? "Remove the GitHub App?"
+      : "Replace the GitHub App?";
   if (removingSelf) return "Remove the service account client?";
   if (replacingSelf) return "Replace the service account client?";
   if (replacingClient) return "Replace the connected client?";

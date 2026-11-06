@@ -71,6 +71,28 @@ func TestInstallationExchange(t *testing.T) {
 			require.Equal(t, 2, calls, "cached installation token is reused")
 		})
 	}
+	t.Run("refreshes before expiry", func(t *testing.T) {
+		t.Parallel()
+		calls := 0
+		client, err := NewInstanceClient(123, private, "https://github.com", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			expires := time.Now().Add(time.Hour)
+			if calls == 1 {
+				expires = time.Now().Add(4 * time.Minute)
+			}
+			return jsonResponse(t, http.StatusCreated, map[string]any{"token": "TEST_INSTALLATION_TOKEN", "expires_at": expires}), nil
+		})})
+		require.NoError(t, err)
+		_, err = client.InstallationToken(t.Context(), 456)
+		require.NoError(t, err)
+		require.Equal(t, 1, calls)
+		_, err = client.InstallationToken(t.Context(), 456)
+		require.NoError(t, err)
+		require.Equal(t, 2, calls, "refresh a still-valid token inside the five-minute buffer")
+		_, err = client.InstallationToken(t.Context(), 456)
+		require.NoError(t, err)
+		require.Equal(t, 2, calls, "reuse the refreshed token outside the expiry buffer")
+	})
 	for _, tc := range []struct {
 		name   string
 		status int

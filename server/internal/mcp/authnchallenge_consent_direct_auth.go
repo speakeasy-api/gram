@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
@@ -18,8 +17,7 @@ func (s *Service) consentDirectAuthChoicesEnforced(ctx context.Context, endpoint
 	if err != nil || enforced || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return enforced, err
 	}
-	mode, err := s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, feature.AuthClientResolverOff)
-	return mode == feature.AuthClientResolverEnforced, err
+	return s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID)
 }
 
 // consentDirectPreviewAuth uses the same offered choices and authorization as

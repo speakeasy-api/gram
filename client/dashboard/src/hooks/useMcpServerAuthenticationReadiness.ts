@@ -1,3 +1,5 @@
+import { useRBAC } from "@/hooks/useRBAC";
+import { useBoundGitHubApp } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import {
   deriveIdentityMode,
   findPassThroughAuthorizationHeader,
@@ -41,6 +43,8 @@ export interface McpServerAuthenticationReadiness {
 export function useMcpServerAuthenticationReadiness(
   mcpServer: McpServer | undefined,
 ): McpServerAuthenticationReadiness {
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const upstreamAuth = useUpstreamAuthEnforcement();
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -62,17 +66,24 @@ export function useMcpServerAuthenticationReadiness(
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
+  const githubApp = useBoundGitHubApp(
+    mcpServer?.id ?? "",
+    remoteMcpServerId !== "" &&
+      upstreamAuth === "legacy" &&
+      !rbacLoading &&
+      hasScope("org:read"),
+  );
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
+    !!githubApp.bound,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError;
+    isRemoteSessionClientsError || isRemoteHeadersError || githubApp.error;
   // Enforcing organizations configure upstream identity through credentials,
   // so the summary reads their status instead of the legacy identity mode.
-  const upstreamAuth = useUpstreamAuthEnforcement();
   const enforcedIdentity =
     remoteMcpServerId !== "" && upstreamAuth === "enforced";
   const upstreamAuthQuery = useMcpServerAuthentication(
@@ -87,11 +98,13 @@ export function useMcpServerAuthenticationReadiness(
     enforcedIdentity
       ? upstreamAuthQuery.data?.status === "no_auth_required"
       : upstreamAuth === "legacy" &&
+          !rbacLoading &&
           !identityUnavailable &&
           remoteIdentityMode === "none" &&
           !passThroughAuthorization &&
           !isLoadingRemoteSessionClients &&
-          !isLoadingRemoteHeaders,
+          !isLoadingRemoteHeaders &&
+          !githubApp.loading,
   );
 
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
@@ -150,7 +163,10 @@ export function useMcpServerAuthenticationReadiness(
     (isTunneledBacked && !!userSessionIssuerId);
 
   const isLoadingRemoteIdentity =
-    isLoadingRemoteSessionClients || isLoadingRemoteHeaders;
+    isLoadingRemoteSessionClients ||
+    isLoadingRemoteHeaders ||
+    rbacLoading ||
+    githubApp.loading;
   // Whether the answer can still change once the queries settle, so a caller
   // never reports a step as open, or done, before the data is in.
   const loading =

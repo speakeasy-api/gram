@@ -550,12 +550,15 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 	// A mapped client keeps its permit even when serving falls back to the
 	// registration or current server headers.
 	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
-		permitter, err := s.authClientPermitFor(ctx, permit.OrganizationID)
+		var permitter authClientPermitter
+		var err error
 		if res.githubApp {
 			if s.authz == nil {
 				return res, errors.New("GitHub App credentials require the authorization engine")
 			}
-			permitter, err = mandatoryPermitter{engine: s.authz}, nil
+			permitter = mandatoryPermitter{engine: s.authz}
+		} else {
+			permitter, err = s.authClientPermitFor(ctx, permit.OrganizationID)
 		}
 		if err != nil {
 			return res, err
