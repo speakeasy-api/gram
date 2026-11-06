@@ -239,6 +239,30 @@ describe("ChatLogsTable", () => {
     expect(screen.getByTitle("Duration").textContent).toBe("3m");
   });
 
+  it("shows a session of a day or more in days and hours", () => {
+    const createdAt = new Date("2026-11-02T16:00:00Z");
+    // 5570m 34s after it started.
+    const lastMessageTimestamp = new Date(
+      createdAt.getTime() + (5570 * 60 + 34) * 1000,
+    );
+
+    renderTable(
+      <ChatLogsTable
+        chats={[{ ...makeChat("chat-long"), createdAt, lastMessageTimestamp }]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByTitle("Duration").textContent).toBe("3d 20h");
+  });
+
   it.each([true, false])(
     "shows last message time, falling back to creation when absent (has messages: %s)",
     (hasMessages) => {

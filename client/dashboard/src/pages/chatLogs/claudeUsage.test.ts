@@ -122,6 +122,15 @@ describe("formatDurationFromNanos", () => {
   it("carries seconds into minutes", () => {
     expect(formatDurationFromNanos("0", "59999000000")).toBe("1m 0s");
   });
+
+  it("keeps minutes and seconds under a day", () => {
+    expect(formatDurationFromNanos("0", "86399000000000")).toBe("1439m 59s");
+  });
+
+  it("reads a day or more in days and hours", () => {
+    // 5570m 34s
+    expect(formatDurationFromNanos("0", "334234000000000")).toBe("3d 20h");
+  });
 });
 
 describe("isCostUnknown", () => {

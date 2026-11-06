@@ -14,6 +14,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
+import { formatDaysHours } from "@/lib/format-duration";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { isCostUnknown } from "@/pages/chatLogs/claudeUsage";
@@ -601,6 +602,8 @@ function formatDuration(chat: ChatOverview): string {
     (endTime.getTime() - chat.createdAt.getTime()) / 1000,
   );
   if (seconds < 60) return `${seconds}s`;
+  const daysHours = formatDaysHours(seconds);
+  if (daysHours) return daysHours;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return remainingSeconds > 0
