@@ -110,6 +110,7 @@ import {
 import { format } from "date-fns";
 import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
+import { groupByLocalDay, pinnedDayAt } from "./toolLogDayGroups";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -851,18 +852,17 @@ export function LogsTools({
   const [stickyDayTs, setStickyDayTs] = useState<number | null>(null);
 
   const syncStickyDay = useCallback((container: HTMLElement) => {
-    const groups = container.querySelectorAll<HTMLElement>("[data-day-ts]");
-    let current: number | null = null;
-    for (const group of groups) {
+    const groups = [
+      ...container.querySelectorAll<HTMLElement>("[data-day-ts]"),
+    ].flatMap((group) => {
       const ts = Number(group.dataset.dayTs);
-      if (!Number.isFinite(ts)) continue;
-      if (current === null || group.offsetTop <= container.scrollTop + 1) {
-        current = ts;
-      } else {
-        break;
-      }
-    }
-    setStickyDayTs(current);
+      if (!Number.isFinite(ts)) return [];
+      // A day's own header sits above its rows. The pinned date waits for
+      // it to scroll out, so the two never show the same date at once.
+      const header = group.querySelector<HTMLElement>("[data-day-header]");
+      return [{ ts, rowsTop: group.offsetTop + (header?.offsetHeight ?? 0) }];
+    });
+    setStickyDayTs(pinnedDayAt(groups, container.scrollTop));
   }, []);
 
   // The list changes height without a scroll event — a first page arrives, a
@@ -1649,11 +1649,13 @@ function LogsToolsContent({
                     <div className="w-32 shrink-0">Client</div>
                   </div>
 
-                  {/* One header for the whole list instead of a sticky header
-                      per day group. Sticky groups hand off by pushing each
-                      other out of the viewport, which reads as a jump when
-                      scrolling fast. This one never moves: only its date
-                      changes, as the day under the top of the list changes. */}
+                  {/* One pinned header for the whole list instead of a sticky
+                      header per day group. Sticky groups hand off by pushing
+                      each other out of the viewport, which reads as a jump
+                      when scrolling fast. This one never moves: only its date
+                      changes, as the day under the top of the list changes.
+                      Every later day also opens with its own header in the
+                      list, so a day change on screen is always marked. */}
                   {stickyDayDate && traces.length > 0 && (
                     <div className="shrink-0 border-b">
                       <DateGroupHeader date={stickyDayDate} mode="local" />
@@ -1853,34 +1855,31 @@ function LogsToolsTableContent({
     );
   }
 
-  // The date is the same for long runs of rows, so it is stated once per day
-  // rather than on every line. Each group carries the timestamp of its first
-  // row so the pinned header above the list can read the current day straight
-  // off the DOM while scrolling.
-  const dayGroups: Array<{ key: string; date: Date; traces: typeof traces }> =
-    [];
-  for (const trace of traces) {
-    const timestamp = new Date(
-      Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
-    );
-    const key = format(timestamp, "yyyy-MM-dd");
-    const current = dayGroups[dayGroups.length - 1];
-    if (current?.key === key) {
-      current.traces.push(trace);
-    } else {
-      dayGroups.push({ key, date: timestamp, traces: [trace] });
-    }
-  }
+  // The date is the same for long runs of rows, so it is stated once per
+  // local day rather than on every line. The pinned header above the list
+  // names the first day; every later day opens with its own header, so rows
+  // from another day never sit under the wrong date. Each group carries the
+  // timestamp of its first row so the pinned header can read the current day
+  // straight off the DOM while scrolling.
+  const dayGroups = groupByLocalDay(
+    traces,
+    (trace) => new Date(Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)),
+  );
 
   return (
     <>
-      {dayGroups.map((group) => (
+      {dayGroups.map((group, index) => (
         <div
-          key={group.key}
+          key={`${group.key}-${index}`}
           data-day-ts={group.date.getTime()}
           className="border-border/60 border-t first:border-t-0"
         >
-          {group.traces.map((trace) => (
+          {index > 0 && (
+            <div data-day-header className="bg-background border-b">
+              <DateGroupHeader date={group.date} mode="local" />
+            </div>
+          )}
+          {group.items.map((trace) => (
             <LogsToolsTraceRow
               key={trace.id}
               trace={trace}
