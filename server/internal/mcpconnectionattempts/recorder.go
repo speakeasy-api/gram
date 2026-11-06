@@ -58,6 +58,10 @@ const (
 	// writer and joining it. Cancelled I/O returns at once; the rest is headroom.
 	writerJoinMargin = 2 * time.Second
 
+	// writerJoinGrace is added to the insert timeout for the wait on a cancelled writer. A
+	// cancelled insert returns at once; this bounds a driver that ignores cancellation.
+	writerJoinGrace = time.Second
+
 	// defaultRepeatsInterval is how long a burst that stopped waits before its count is written.
 	defaultRepeatsInterval = time.Minute
 
@@ -214,6 +218,8 @@ type Row struct {
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
+
+var errWriterStillRunning = errors.New("connection events writer still running")
 
 // RowAt builds a row without recording it, for seed data. Flows use Step, End
 // and Once. Outcome is only ever set on a final row.
@@ -646,9 +652,9 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 }
 
 // ShutdownAndWait drains until shortly before ctx ends, then cancels in-flight I/O,
-// counts the backlog as dropped for shutdown, and joins the writer, so it returns
-// before ctx ends and its datastore can close. The logs callback and datastore driver
-// must honor their operation contexts.
+// counts the backlog as dropped for shutdown, and joins the writer so its datastore can
+// close. The join outlasts ctx, bounded by the insert timeout plus writerJoinGrace. The
+// logs callback and datastore driver must honor their operation contexts.
 func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil
@@ -661,10 +667,13 @@ func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	}
 	first, before, err := r.stopAndDrain(drainCtx)
 	r.cancelWriter()
+	// The caller closes ClickHouse next, so wait for the writer even past ctx.
+	grace := r.cfg.insertTimeout + writerJoinGrace
 	select {
 	case <-r.done:
-	case <-ctx.Done():
-		err = errors.Join(err, fmt.Errorf("join connection events writer: %w", ctx.Err()))
+	case <-time.After(grace):
+		err = errors.Join(err, errWriterStillRunning)
+		r.logger.ErrorContext(context.WithoutCancel(ctx), "connection events writer still running after shutdown", attr.SlogError(err))
 	}
 	if first {
 		r.logDrainLossesBounded(ctx, before)

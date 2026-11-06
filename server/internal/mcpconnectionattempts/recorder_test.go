@@ -1209,3 +1209,40 @@ func TestShutdownAndWait_CleanDrainWritesEverything(t *testing.T) {
 	require.Equal(t, int64(5), conn.rows.Load())
 	require.Zero(t, recorder.droppedTotal(t))
 }
+
+// slowAbortConn honours cancellation, but takes a moment to return once cancelled.
+type slowAbortConn struct {
+	driver.Conn
+
+	prepares atomic.Int64
+}
+
+func (c *slowAbortConn) PrepareBatch(ctx context.Context, _ string, _ ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-ctx.Done()
+	<-time.After(200 * time.Millisecond)
+	return nil, fmt.Errorf("prepare batch: %w", ctx.Err())
+}
+
+// With ctx already over, ShutdownAndWait still returns only once the writer has exited.
+func TestShutdownAndWait_JoinsTheWriterAfterItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	conn := &slowAbortConn{Conn: nil, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	recorder := newTestRecorder(t, conn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.Canceled)
+
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("ShutdownAndWait returned before the writer exited")
+	}
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
+}

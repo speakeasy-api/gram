@@ -58,7 +58,8 @@ func (s *RefreshService) recordRefresh(
 
 // invalidClientHappened names a refresh_invalid_client row, recommending re-registration only
 // when the tenant's binding is known. A row that won't be stored skips the lookup and keeps
-// the code refreshHappened chose, so the steps metric is unchanged.
+// the code refreshHappened chose, so its steps metric stays refresh_invalid_client even when
+// the binding is managed.
 func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) mcpconnectionattempts.Code {
 	scope := attribution.scope
 	if !attribution.attempt.IsZero() {
