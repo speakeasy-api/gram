@@ -112,7 +112,7 @@ func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Rec
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client), attemptEndings: newAttemptEndings()}
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
 	return service, rec, mr
 }
 
@@ -132,10 +132,8 @@ func TestRecordConsentPage_UnchangedReRenderWritesNoMemberRows(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 3)
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 3)
 }
 
@@ -148,7 +146,6 @@ func TestRecordConsentPage_ChangedMemberWritesOneRow(t *testing.T) {
 	render := func(status gatewayServerStatus) {
 		view := memberView(map[uuid.UUID]gatewayServerStatus{signedIn: status, unset: gatewayServerNotSetUp})
 		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-		service.attemptEndings.wg.Wait()
 	}
 
 	render(gatewayServerNotConnected)
@@ -173,9 +170,7 @@ func TestRecordConsentPage_NewAttemptRecordsMembersAgain(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 4)
 }
 
@@ -188,9 +183,7 @@ func TestRecordConsentPage_MemberStatusCacheFailureRecordsRows(t *testing.T) {
 	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-	service.attemptEndings.wg.Wait()
 	require.Len(t, rec.Rows(), 4)
 }
 
@@ -577,7 +570,6 @@ func TestRecordConsentPage_AuthClientChangeWritesRow(t *testing.T) {
 		view := memberView(map[uuid.UUID]gatewayServerStatus{member: gatewayServerConnected})
 		view.members = []metaMember{{serverID: member, authClient: &authClientResolution{clientID: clientID}}}
 		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-		service.attemptEndings.wg.Wait()
 	}
 
 	first, second := uuid.New(), uuid.New()
@@ -608,15 +600,44 @@ func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
 	require.Equal(t, dropped.id, again[0].id)
 }
 
-func TestRecordConsentPage_FullRunnerStillRecordsMembers(t *testing.T) {
+func TestRecordConsentPage_ConcurrentRendersRecordEachMemberOnce(t *testing.T) {
 	t.Parallel()
 
 	service, rec, _ := memberStatusService(t)
-	for range cap(service.attemptEndings.slots) {
-		service.attemptEndings.slots <- struct{}{}
-	}
-	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
+	endpoint, state := gatewayEndpoint(), openState()
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotConnected, uuid.New(): gatewayServerNotSetUp})
+	logger := testenv.NewLogger(t)
 
-	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
-	require.Len(t, rec.Rows(), 2)
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			service.recordConsentPage(t.Context(), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+		})
+	}
+	wg.Wait()
+
+	seen := map[string]int{}
+	for _, row := range rec.Rows() {
+		seen[row.MemberID]++
+	}
+	require.Len(t, seen, 3)
+	for member, n := range seen {
+		require.Equal(t, 1, n, "member %s", member)
+	}
+}
+
+func TestRecordConsentPage_RejectedMemberRowIsRecordedNextRender(t *testing.T) {
+	t.Parallel()
+
+	service, rec, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	view := memberView(map[uuid.UUID]gatewayServerStatus{uuid.New(): gatewayServerConnected, uuid.New(): gatewayServerNotSetUp})
+	logger := testenv.NewLogger(t)
+
+	service.connections = mcpconnectionattemptstest.NewLogsOff(t).Recorder
+	service.recordConsentPage(t.Context(), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+
+	service.connections = rec.Recorder
+	service.recordConsentPage(t.Context(), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	require.Len(t, rec.Rows(), 2, "rows the recorder rejected are offered again")
 }
