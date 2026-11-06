@@ -116,8 +116,10 @@ function mount(
     defaultOptions: { queries: { retry: false } },
   });
   clients.push(client);
+  type HookProps = { mcpServer: McpServer; currentSource?: typeof source };
+  const initialProps: HookProps = { mcpServer: server };
   return renderHook(
-    ({ mcpServer }: { mcpServer: McpServer }) => {
+    ({ mcpServer, currentSource = source }: HookProps) => {
       const [state, dispatch] = useReducer(reduce, {
         ...initialState(provider),
         ...override,
@@ -126,12 +128,12 @@ function mount(
         state,
         dispatch,
         mcpServer,
-        provider === "salesforce" ? source : undefined,
+        provider === "salesforce" ? currentSource : undefined,
       );
       return { state, ...connection };
     },
     {
-      initialProps: { mcpServer: server },
+      initialProps,
       wrapper: ({ children }: PropsWithChildren) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
@@ -1636,9 +1638,13 @@ describe("Salesforce target changes", () => {
     await waitFor(() => expect(mounted.result.current.loading).toBe(false));
     act(() => mounted.result.current.next());
     await waitFor(() => expect(mounted.result.current.error).toBeTruthy());
-    source.url =
-      "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all";
-    mounted.rerender({ mcpServer: server });
+    mounted.rerender({
+      mcpServer: server,
+      currentSource: {
+        ...source,
+        url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+      },
+    });
     await waitFor(() => expect(mounted.result.current.loading).toBe(false));
     expect(mounted.result.current.state.saved).toBe(false);
     expect(mounted.result.current.state.configChanged).toBe(true);
@@ -1707,6 +1713,56 @@ describe("Salesforce source safeguards", () => {
         .clientConfiguration.tokenEndpointAuthMethod,
     ).toBe("none");
   });
+  it("retains a pending draft and retries after its own header write refreshes before a failed URL write", async () => {
+    const source = {
+      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+      instanceUrl: "",
+    };
+    const instanceUrl = "https://example.my.salesforce.com";
+    mocks.updateRemote.mockRejectedValueOnce(new Error("source save failed"));
+    const s = initialState("salesforce");
+    const mounted = mount(
+      "salesforce",
+      {
+        step: "credentials",
+        values: {
+          ...s.values,
+          integration: "hosted",
+          instanceUrl,
+          clientId: "key",
+        },
+      },
+      source,
+    );
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    act(() => mounted.result.current.next());
+    await waitFor(() => expect(mounted.result.current.error).toBeTruthy());
+    expect(mounted.result.current.state.sourceFingerprint).toBe(
+      JSON.stringify(["upstream", source.url, instanceUrl]),
+    );
+    mocks.headers.mockResolvedValue({
+      headers: [
+        {
+          id: "instance",
+          name: "MCP-Instance-URL",
+          value: instanceUrl,
+          isSecret: false,
+        },
+      ],
+    });
+    mounted.rerender({
+      mcpServer: server,
+      currentSource: { ...source, instanceUrl },
+    });
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    expect(mounted.result.current.state.values.integration).toBe("hosted");
+    expect(mounted.result.current.state.values.clientId).toBe("key");
+    expect(mounted.result.current.state.configChanged).toBe(true);
+    act(() => mounted.result.current.next());
+    await waitFor(() => expect(mounted.result.current.state.saved).toBe(true));
+    expect(mocks.createHeader).toHaveBeenCalledTimes(1);
+    expect(mocks.updateRemote).toHaveBeenCalledTimes(2);
+  });
   it("rejects a late successful test after the upstream source changes externally", async () => {
     mocks.associations.mockResolvedValue({
       associations: [
@@ -1732,9 +1788,13 @@ describe("Salesforce source safeguards", () => {
     await waitFor(() => expect(mounted.result.current.state.saved).toBe(true));
     act(() => mounted.result.current.testConnection());
     await waitFor(() => expect(mocks.probe).toHaveBeenCalled());
-    source.url =
-      "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all";
-    mounted.rerender({ mcpServer: server });
+    mounted.rerender({
+      mcpServer: server,
+      currentSource: {
+        ...source,
+        url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+      },
+    });
     await act(async () =>
       finish({
         ok: true,
@@ -1743,5 +1803,48 @@ describe("Salesforce source safeguards", () => {
     );
     expect(mounted.result.current.state.tested).toBe(false);
     expect(mounted.result.current.toolCount).toBeNull();
+    expect(mounted.result.current.state.values.salesforceServer).toBe(
+      "sobject-all",
+    );
+  });
+  it("requires review of an immutable refreshed source before retrying a conflicted save", async () => {
+    const source = {
+      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+      instanceUrl: "",
+    };
+    const updated = {
+      ...source,
+      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+    };
+    mocks.remote.mockResolvedValue({ id: "upstream", ...updated });
+    const s = initialState("salesforce");
+    const mounted = mount(
+      "salesforce",
+      { step: "credentials", values: { ...s.values, clientId: "key" } },
+      source,
+    );
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    act(() => mounted.result.current.next());
+    await waitFor(() => expect(mounted.result.current.error).toBeTruthy());
+    expect(mocks.commit).not.toHaveBeenCalled();
+    mounted.rerender({ mcpServer: server, currentSource: updated });
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    expect(mounted.result.current.state.step).toBe("choices");
+    expect(mounted.result.current.state.values.salesforceServer).toBe(
+      "sobject-all",
+    );
+    expect(mounted.result.current.state.values.clientId).toBe("");
+    act(() =>
+      mounted.result.current.changeField({
+        field: "clientId",
+        value: "reviewed-key",
+      }),
+    );
+    act(() =>
+      mounted.result.current.dispatch({ type: "goto", step: "credentials" }),
+    );
+    act(() => mounted.result.current.next());
+    await waitFor(() => expect(mounted.result.current.state.saved).toBe(true));
+    expect(mocks.updateRemote).not.toHaveBeenCalled();
   });
 });

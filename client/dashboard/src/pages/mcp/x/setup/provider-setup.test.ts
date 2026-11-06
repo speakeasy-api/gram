@@ -6,7 +6,102 @@ import {
   saveProviderProgress,
   loadProviderProgress,
   providerProgressKey,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
+
+describe("Salesforce source-bound progress", () => {
+  const source = {
+    url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+    instanceUrl: "",
+  };
+  const baseline = salesforceSourceFingerprint("upstream", source);
+  it("retains an intentional pending draft against the same source", () => {
+    const state = initialState("salesforce");
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    state.step = "credentials";
+    saveProviderProgress("sf-draft", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-draft",
+      initialState("salesforce").values,
+      baseline,
+    );
+    expect(restored.values.salesforceServer).toBe("sobject-all");
+    expect(restored.configChanged).toBe(true);
+    expect(restored.step).toBe("credentials");
+  });
+  it.each([false, true])(
+    "uses the current source when its baseline changes (pending=%s)",
+    (pending) => {
+      const state = initialState("salesforce");
+      state.configChanged = pending;
+      state.sourceFingerprint = baseline;
+      state.values.salesforceServer = "sobject-all";
+      state.done = ["choices", "app"];
+      state.step = "credentials";
+      saveProviderProgress("sf-stale", state);
+      const defaults = {
+        ...state.values,
+        salesforceServer: "sobject-mutations",
+      };
+      const restored = loadProviderProgress(
+        "salesforce",
+        "sf-stale",
+        defaults,
+        salesforceSourceFingerprint("replacement", source),
+      );
+      expect(restored.values.salesforceServer).toBe("sobject-mutations");
+      expect(restored.step).toBe("choices");
+      expect(restored.done).toEqual([]);
+      expect(restored.configChanged).toBe(pending);
+      expect(restored.saved).toBe(false);
+    },
+  );
+  it("uses server values for a completed draft, even against the same baseline", () => {
+    const state = initialState("salesforce");
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    saveProviderProgress("sf-completed", state);
+    expect(
+      loadProviderProgress(
+        "salesforce",
+        "sf-completed",
+        initialState("salesforce").values,
+        baseline,
+      ).values.salesforceServer,
+    ).toBe("sobject-reads");
+  });
+  it("keeps the intended connection after a partial source write and failed credential replacement", () => {
+    const state = initialState("salesforce");
+    const partial = {
+      ...source,
+      instanceUrl: "https://example.my.salesforce.com",
+    };
+    const partialBaseline = salesforceSourceFingerprint("upstream", partial);
+    Object.assign(state.values, {
+      integration: "hosted",
+      instanceUrl: partial.instanceUrl,
+    });
+    state.configChanged = true;
+    state.sourceFingerprint = partialBaseline;
+    saveProviderProgress("sf-partial", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-partial",
+      {
+        ...initialState("salesforce").values,
+        instanceUrl: partial.instanceUrl,
+      },
+      partialBaseline,
+    );
+    expect(restored.values.integration).toBe("hosted");
+    expect(restored.values.instanceUrl).toBe(partial.instanceUrl);
+    expect(restored.configChanged).toBe(true);
+    expect(restored.saved).toBe(false);
+  });
+});
 
 describe("Provider setup routing", () => {
   it("recognizes only the official Slack endpoint", () => {
