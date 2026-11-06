@@ -1,0 +1,116 @@
+package mcpconnectionattempts
+
+import "github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+
+// LabelOther stands in for any provider, app or client that is not on a fixed list.
+const LabelOther = "other"
+
+// knownProviderHosts are issuer hosts one vendor serves to every customer, so none can
+// name a customer. A host with a tenant part, such as an Okta or Salesforce subdomain,
+// must never be added: long-term rows would hold it for 13 months.
+var knownProviderHosts = map[string]struct{}{
+	"accounts.google.com":       {},
+	"login.microsoftonline.com": {},
+	"github.com":                {},
+	"slack.com":                 {},
+	"linear.app":                {},
+	"mcp.linear.app":            {},
+	"mcp.notion.com":            {},
+	"api.notion.com":            {},
+	"auth.atlassian.com":        {},
+	"mcp.atlassian.com":         {},
+	"mcp.stripe.com":            {},
+	"connect.stripe.com":        {},
+	"mcp.sentry.dev":            {},
+	"sentry.io":                 {},
+	"mcp.asana.com":             {},
+	"app.asana.com":             {},
+	"mcp.hubspot.com":           {},
+	"app.hubspot.com":           {},
+	"mcp.intercom.com":          {},
+	"mcp.vercel.com":            {},
+	"vercel.com":                {},
+	"mcp.cloudflare.com":        {},
+	"dash.cloudflare.com":       {},
+	"mcp.figma.com":             {},
+	"www.figma.com":             {},
+	"mcp.box.com":               {},
+	"account.box.com":           {},
+	"mcp.zapier.com":            {},
+	"mcp.supabase.com":          {},
+	"api.supabase.com":          {},
+	"mcp.monday.com":            {},
+	"auth.monday.com":           {},
+	"mcp.canva.com":             {},
+	"mcp.paypal.com":            {},
+	"mcp.squareup.com":          {},
+	"app.getgram.ai":            {},
+}
+
+// knownAppKinds are the app_key values that name a kind of app, not an app.
+var knownAppKinds = map[string]struct{}{
+	AppDCR.key:          {},
+	AppFirstParty.key:   {},
+	AppUnverified.key:   {},
+	AppWorkload.key:     {},
+	AppCodeMode.key:     {},
+	AppRecoveryLink.key: {},
+	AppBackground.key:   {},
+}
+
+// catalogAppHosts are the hosts of every client metadata document in the client catalog,
+// disabled ones included, since a disabled entry still names a vendor.
+var catalogAppHosts = buildCatalogAppHosts()
+
+func buildCatalogAppHosts() map[string]struct{} {
+	hosts := map[string]struct{}{}
+	for _, preset := range admission.Catalog() {
+		if host := NormalizeProviderHost(preset.URL); host != "" {
+			hosts[host] = struct{}{}
+		}
+	}
+	return hosts
+}
+
+var knownClientFamilies = map[string]struct{}{
+	FamilyCodexCLI: {}, FamilyClaudeCode: {}, FamilyClaudeAI: {}, FamilyOpenAIConnector: {},
+	FamilyCursor: {}, FamilyVSCode: {}, FamilyPerplexity: {}, FamilyScript: {}, FamilyBrowser: {},
+	FamilyOther: {}, FamilyCopilot: {}, FamilyZed: {}, FamilyKiro: {}, FamilyReplit: {}, FamilyNotion: {},
+}
+
+// ProviderLabel keeps a provider host only when it is a known vendor's shared host.
+// Empty stays empty: the attempt reached no provider.
+func ProviderLabel(host string) string {
+	if host == "" {
+		return ""
+	}
+	if _, ok := knownProviderHosts[host]; ok {
+		return host
+	}
+	return LabelOther
+}
+
+// AppLabel keeps an app_key only when it is a catalog app's host or a kind of app.
+func AppLabel(appKey string) string {
+	if appKey == "" {
+		return ""
+	}
+	if _, ok := knownAppKinds[appKey]; ok {
+		return appKey
+	}
+	if _, ok := catalogAppHosts[appKey]; ok {
+		return appKey
+	}
+	return LabelOther
+}
+
+// ClientFamilyLabel keeps a client family only when it is on the fixed list.
+func ClientFamilyLabel(family string) string {
+	if family == "" {
+		return ""
+	}
+	if _, ok := knownClientFamilies[family]; ok {
+		return family
+	}
+	return LabelOther
+}

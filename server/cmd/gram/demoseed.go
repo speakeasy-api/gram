@@ -1,9 +1,11 @@
 package gram
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
@@ -12,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
@@ -179,6 +182,18 @@ func newDemoSeedCommand() *cli.Command {
 
 			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
 				return fmt.Errorf("apply demo org seed: %w", err)
+			}
+
+			// The long-term outcomes table has no tenant, so only the local seed
+			// fills it, by running the daily job over the seeded days. Production
+			// never writes the demo organization's made-up attempts into it.
+			outcomes := dailyoutcomes.NewBuilder(logger, db, ch)
+			now := time.Now()
+			for daysAgo := 1; daysAgo <= demoseed.ConnectionAttemptDays; daysAgo++ {
+				day := dailyoutcomes.StartOfDay(now.AddDate(0, 0, -daysAgo))
+				if _, err := outcomes.BuildDay(ctx, day, now); err != nil && !errors.Is(err, dailyoutcomes.ErrDayOpen) {
+					return fmt.Errorf("build local connection outcomes: %w", err)
+				}
 			}
 
 			return nil

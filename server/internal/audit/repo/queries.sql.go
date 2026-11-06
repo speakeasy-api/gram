@@ -311,6 +311,60 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 	return items, nil
 }
 
+const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
+SELECT subject_id, actor_type, actor_id, created_at
+FROM audit_logs
+WHERE organization_id = $1
+  AND subject_id = ANY($2::text[])
+  AND created_at > $3
+  AND created_at < $4
+`
+
+type ListAuditActorsOnSubjectsParams struct {
+	OrganizationID string
+	SubjectIds     []string
+	After          pgtype.Timestamptz
+	Before         pgtype.Timestamptz
+}
+
+type ListAuditActorsOnSubjectsRow struct {
+	SubjectID string
+	ActorType string
+	ActorID   string
+	CreatedAt pgtype.Timestamptz
+}
+
+// Who changed any of these subjects in an organization within a time range.
+func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditActorsOnSubjectsParams) ([]ListAuditActorsOnSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listAuditActorsOnSubjects,
+		arg.OrganizationID,
+		arg.SubjectIds,
+		arg.After,
+		arg.Before,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditActorsOnSubjectsRow
+	for rows.Next() {
+		var i ListAuditActorsOnSubjectsRow
+		if err := rows.Scan(
+			&i.SubjectID,
+			&i.ActorType,
+			&i.ActorID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT a.id, a.is_internal, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a

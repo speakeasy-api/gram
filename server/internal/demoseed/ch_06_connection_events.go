@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	// connectionAttemptDays stays well inside the events table's 30-day TTL.
-	connectionAttemptDays = 12
+	// ConnectionAttemptDays stays well inside the events table's 30-day TTL.
+	ConnectionAttemptDays = 12
 
 	// connectionAttemptsPerDay gives every server and result rows on most days.
 	connectionAttemptsPerDay = 12
@@ -114,8 +114,8 @@ var connectionRequestEndings = []connectionEnding{
 func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 	scopes := s.connectionScopes()
 	subject := urn.NewUserSubject(s.userID("amara"))
-	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*len(connectionRequestEndings))
-	for day := range connectionAttemptDays {
+	rows := make([]mcpconnectionattempts.Row, 0, ConnectionAttemptDays*len(connectionRequestEndings))
+	for day := range ConnectionAttemptDays {
 		for n, ending := range connectionRequestEndings {
 			key := "connection-request-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
@@ -160,8 +160,8 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 	scopes := s.connectionScopes()
 
-	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*connectionAttemptsPerDay*2)
-	for day := range connectionAttemptDays {
+	rows := make([]mcpconnectionattempts.Row, 0, ConnectionAttemptDays*connectionAttemptsPerDay*2)
+	for day := range ConnectionAttemptDays {
 		for n := range connectionAttemptsPerDay {
 			key := "connection-attempt-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]

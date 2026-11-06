@@ -597,6 +597,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
+	temporalWorker.RegisterActivity(activities.PlanMCPConnectionOutcomeDays)
+	temporalWorker.RegisterActivity(activities.BuildMCPConnectionOutcomesDay)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -760,6 +762,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesSweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesDayWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -1010,6 +1014,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPConnectionOutcomesSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP connection outcomes schedule", attr.SlogError(err))
 	}
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {

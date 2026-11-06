@@ -253,3 +253,12 @@ ORDER BY count DESC, action ASC;
 UPDATE audit_logs
 SET created_at = @created_at
 WHERE id = ANY(@ids::uuid[]);
+
+-- name: ListAuditActorsOnSubjects :many
+-- Who changed any of these subjects in an organization within a time range.
+SELECT subject_id, actor_type, actor_id, created_at
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND subject_id = ANY(@subject_ids::text[])
+  AND created_at > @after
+  AND created_at < @before;
