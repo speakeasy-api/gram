@@ -227,3 +227,20 @@ UPDATE assets SET deleted_at = clock_timestamp() WHERE id = @id;
 -- name: RestorePlatformIconAssetFixture :exec
 -- Test fixture: restores a catalog icon asset after an invalid association.
 UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, deleted_at = NULL WHERE id = @id;
+
+-- name: ExportPublishedCatalog :many
+-- Administrative transfer is global, deliberately not tenant scoped. Fail closed
+-- at the caller if the sentinel row exceeds its bundle limit.
+SELECT data FROM mcp_registry_entries WHERE published
+ORDER BY (data #>> '{server,name}') COLLATE "C" LIMIT 10001;
+
+-- name: PublishedCatalogSize :one
+SELECT count(*)::bigint AS entries, coalesce(sum(octet_length(data::text)), 0)::bigint AS bytes
+FROM mcp_registry_entries WHERE published;
+
+-- name: LockCatalogTransfer :exec
+-- Global catalog import preserves all existing identities, including concurrent
+-- creates and edits from the admin service. Readers remain available.
+-- Never wait while holding the mapping advisory lock: a composed writer may
+-- already hold ROW EXCLUSIVE before requesting that advisory lock.
+LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT;

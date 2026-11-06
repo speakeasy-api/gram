@@ -4205,3 +4205,21 @@ func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(Regis
 func SlogRegistrySeedOutcome(v string) slog.Attr {
 	return slog.String(string(RegistrySeedOutcomeKey), v)
 }
+
+const (
+	CatalogTransferEntriesKey   Key = "gram.catalog.transfer.entries"
+	CatalogTransferAssetsKey    Key = "gram.catalog.transfer.assets"
+	CatalogTransferCreatedKey   Key = "gram.catalog.transfer.created"
+	CatalogTransferConflictsKey Key = "gram.catalog.transfer.conflicts"
+)
+
+func SlogCatalogTransferEntries(v int) slog.Attr {
+	return slog.Int(string(CatalogTransferEntriesKey), v)
+}
+func SlogCatalogTransferAssets(v int) slog.Attr { return slog.Int(string(CatalogTransferAssetsKey), v) }
+func SlogCatalogTransferCreated(v int) slog.Attr {
+	return slog.Int(string(CatalogTransferCreatedKey), v)
+}
+func SlogCatalogTransferConflicts(v int) slog.Attr {
+	return slog.Int(string(CatalogTransferConflictsKey), v)
+}
