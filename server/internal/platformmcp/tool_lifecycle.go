@@ -42,7 +42,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
-		setupInput := IssueSetupHandoffInput(input)
+		setupInput := IssueSetupHandoffInput{ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID, ProviderKey: input.ProviderKey, CatalogRef: input.CatalogRef, NextAction: ""}
 		if isBrowserCatalogProviderKey(input.ProviderKey) || input.ProviderKey == directRemoteProviderKey {
 			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
 				if budgetResult, ok := operationBudgetToolResult(err); ok {
