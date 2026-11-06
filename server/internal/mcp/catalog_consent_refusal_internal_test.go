@@ -106,6 +106,14 @@ func catalogConsentRemedyCases() map[string]struct {
 			text:   `The sign-in for the "db" server changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access.`,
 			reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, detail: consentRejectionAuthenticationChanged, who: mcpconnectionattempts.WhoAdmin,
 		},
+		"consent cannot approve the new settings": {
+			gate: func(s *Service, member uuid.UUID) *metaGateContext {
+				return staleChoiceRemedyGate(s, map[uuid.UUID]bool{member: false})
+			},
+			remedy: staleChoiceAskAdmin,
+			text:   `The settings for the "db" server changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access.`,
+			reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, detail: consentRejectionConfigurationChanged, who: mcpconnectionattempts.WhoAdmin,
+		},
 		"whoever approved the connection approves again": {
 			gate: func(*Service, uuid.UUID) *metaGateContext {
 				return &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New(), authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}

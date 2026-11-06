@@ -10,15 +10,20 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -34,6 +39,7 @@ type serviceChoiceGateway struct {
 	serverID uuid.UUID
 	orgID    string
 	services []uuid.UUID
+	upstream string
 }
 
 func seedServiceChoiceGateway(t *testing.T, connected int) (context.Context, serviceChoiceGateway) {
@@ -45,7 +51,7 @@ func seedServiceChoiceGateway(t *testing.T, connected int) (context.Context, ser
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 	upstream := newCatalogUpstream(t, 1)
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
-	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil}
+	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil, upstream: upstream.url}
 	for i := range connected {
 		registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "service-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
 		_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
@@ -168,4 +174,39 @@ func TestGatewayConsentIgnoresAPickOutsideTheConnectedServices(t *testing.T) {
 	}
 	page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {unconnected.String()}})
 	require.Equal(t, uuid.NullUUID{UUID: fallback, Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
+}
+
+// A connection in an outage stays a choice, since the outage leaves it in place, but is not the default.
+func TestGatewayConsentOffersAServiceInAnOutage(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedServiceChoiceGateway(t, 2)
+	outage := fx.services[1]
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn: urn.NewUserSubject(mockidp.MockUserID), UserSessionIssuerID: fx.issuerID, RemoteSessionClientID: outage,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: pgtype.Text{String: fx.upstream, Valid: true},
+	})
+	require.NoError(t, err)
+	session, err := remotesessionsrepo.New(fx.ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject(mockidp.MockUserID), RemoteSessionClientID: outage})
+	require.NoError(t, err)
+	require.NoError(t, fx.ti.cacheAdapter.Set(ctx, remotesessions.RefreshOutageKey(session), remotesessions.RefreshOutageProvider, time.Hour))
+	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
+
+	page := consentPageWithPicks(t, ctx, fx, stateID, nil)
+	for _, service := range fx.services {
+		require.Contains(t, page, `value="`+service.String()+`"`)
+	}
+	require.Equal(t, fx.services[0], selectedService(t, page), "the default is the working connection")
+	require.Equal(t, uuid.NullUUID{UUID: fx.services[0], Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
+
+	next, _ := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
+	page = consentPageWithPicks(t, ctx, fx, next, url.Values{"auth_client.source": {outage.String()}})
+	require.Equal(t, outage, selectedService(t, page), "the person can still pick it")
+	outcomes := gatewayOutcomesFromPage(page)
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "unavailable", outcomes[0].Status, "its tools can't be listed until the outage ends")
 }

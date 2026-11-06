@@ -482,9 +482,10 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 }
 
 // gatewayConsentServiceChoices offers a choice between a member's connected services where typed auth clients are not enforced.
-// It selects the page's pick, else the person's last approved service, else the first.
+// It selects the page's pick, else the person's last approved service, else the first, preferring one not in an outage.
 func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
 	choices := map[uuid.UUID]*consentServerAuth{}
+	outages := map[uuid.UUID]bool{}
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
 		if member.backend != metaMemberBackendProxied {
@@ -508,6 +509,9 @@ func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Requ
 				name += " (" + card.ConnectedAs + ")"
 			}
 			options = append(options, consentAuthClientOption{ID: id, Name: name, Type: clientType, State: consentClientReady, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: id, Valid: true}})
+			if card.Unavailable {
+				outages[id] = true
+			}
 		}
 		if len(options) < 2 {
 			continue
@@ -537,6 +541,13 @@ func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Requ
 			picked = id
 		}
 		selectConsentAuthClient(auth, picked, remembered[member.serverID])
+		if selected := auth.Selected(); selected != nil && outages[selected.ID] && selected.ID != picked && selected.ID != remembered[member.serverID] {
+			// A default lands on a working connection when there is one.
+			if healthy := slices.IndexFunc(auth.Options, func(o consentAuthClientOption) bool { return !outages[o.ID] }); healthy >= 0 {
+				selected.Selected = false
+				auth.Options[healthy].Selected = true
+			}
+		}
 	}
 	return choices, nil
 }
