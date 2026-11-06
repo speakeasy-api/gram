@@ -148,7 +148,7 @@ export function AgentIdentityAudit({
  * run, and they buried every check that says what the agent may reach. They
  * are left out on the server, so the total does not count them either.
  */
-export const HIDDEN_AGENT_CHECK_SCOPES = ["org:hooks_ingest"];
+const HIDDEN_AGENT_CHECK_SCOPES = ["org:hooks_ingest"];
 
 export function AgentIdentityChallenges({
   agent,
