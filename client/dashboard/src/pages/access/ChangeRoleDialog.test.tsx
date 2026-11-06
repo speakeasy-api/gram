@@ -28,7 +28,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: vi.fn(),
-  useRoles: () => ({ data: { roles: [builder, auditor] } }),
+  useRoles: () => ({ data: { roles: [builder, auditor, oneProject, wide] } }),
 }));
 vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
   useUpdateMemberRolesMutation: () => ({
@@ -80,6 +80,35 @@ const auditor = {
   isSystem: false,
   memberCount: 0,
 } as unknown as Role;
+const oneProject = {
+  id: "one-project",
+  name: "One project",
+  description: "",
+  principalUrn: "role:organization:one-project",
+  grants: [
+    {
+      scope: "log:read",
+      selectors: [{ resourceKind: "project", resourceId: "p1" }],
+    },
+  ],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+const wide = {
+  id: "wide",
+  name: "Wide",
+  description: "",
+  principalUrn: "role:organization:wide",
+  // The server stores an unrestricted grant as a wildcard selector.
+  grants: [
+    {
+      scope: "log:read",
+      selectors: [{ resourceKind: "project", resourceId: "*" }],
+    },
+  ],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
 const member = {
   id: "member-1",
   name: "Ada Lovelace",
@@ -88,9 +117,12 @@ const member = {
   directoryRoleIds: [],
 } as unknown as AccessMember;
 
-function renderDialog() {
+function renderDialog(roleIds: string[] = ["builder"]) {
   return render(
-    <ChangeRoleDialog member={member} onOpenChange={vi.fn<() => void>()} />,
+    <ChangeRoleDialog
+      member={{ ...member, roleIds } as AccessMember}
+      onOpenChange={vi.fn<() => void>()}
+    />,
   );
 }
 function addAuditor() {
@@ -126,6 +158,29 @@ describe("adding a role that gives sensitive access", () => {
     expect(
       state.update.mock.calls[0]![0].request.updateMemberRolesForm,
     ).toEqual({ userId: "member-1", roleIds: ["builder", "auditor"] });
+  });
+});
+
+describe("adding a role that widens a permission the member holds", () => {
+  it("asks for the acknowledgement when one project's tool logs become every project's", () => {
+    renderDialog(["one-project"]);
+    fireEvent.click(screen.getByText("Wide"));
+    expect(
+      screen.getByText("These roles add 1 permission, 1 is sensitive:"),
+    ).toBeTruthy();
+    expect(updateButton().disabled).toBe(true);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+    );
+    expect(updateButton().disabled).toBe(false);
+  });
+
+  it("needs none for a narrower grant of a permission held everywhere", () => {
+    renderDialog(["wide"]);
+    fireEvent.click(screen.getByText("One project"));
+    expect(screen.queryByText("These roles add", { exact: false })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(updateButton().disabled).toBe(false);
   });
 });
 

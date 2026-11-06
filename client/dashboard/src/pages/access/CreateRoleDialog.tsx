@@ -35,7 +35,9 @@ import { ReviewGrantsStep } from "./ReviewGrantsStep";
 import {
   addedPermissions,
   liftedExceptions,
+  reviewNeedsConfirmation,
   type AddedPermission,
+  type NewHolders,
 } from "./reviewGrants";
 import { scopeCatalogue } from "./scopeCatalogue";
 import {
@@ -279,6 +281,7 @@ export function CreateRoleDialog({
   // What the pending save adds, shown for review before it goes through.
   const [review, setReview] = useState<{
     added: AddedPermission[];
+    newHolders: NewHolders | null;
     confirmed: boolean;
   } | null>(null);
   const [editingScopeSlug, setEditingScopeSlug] = useState<Scope | null>(null);
@@ -683,14 +686,16 @@ export function CreateRoleDialog({
 
   // ─── Submit ───────────────────────────────────────────────────
 
-  // A save that adds a permission goes through the review step first; the
-  // confirmation there is required only when a sensitive one is among them.
+  // A save that adds a permission, or adds holders to a role that grants
+  // sensitive access, goes through the review step first; the confirmation
+  // there is required only when something sensitive is among what it gives.
   const handleSubmit = () => {
     if (!scopeDefinitions) return;
 
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
     if (dialogStep !== "review") {
       let addGrants = sdkGrants;
+      let newHolders: NewHolders | null = null;
       if (isEditing) {
         const changes = diffGrants(
           sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
@@ -702,10 +707,24 @@ export function CreateRoleDialog({
           ...changes.addGrants,
           ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
         ];
+        // Whoever the save adds to the role gains everything it grants, as
+        // the save leaves it. A new role's grants are all additions already.
+        const members = [...selectedMembers].filter(
+          (id) => !initialMembers.has(id),
+        ).length;
+        const agents = [...selectedAgents].filter(
+          (id) => !initialAgents.has(id),
+        ).length;
+        if (members + agents > 0) {
+          const sensitive = addedPermissions(sdkGrants, catalogue).filter(
+            (p) => p.sensitive,
+          );
+          if (sensitive.length > 0) newHolders = { members, agents, sensitive };
+        }
       }
       const added = addedPermissions(addGrants, catalogue);
-      if (added.length > 0) {
-        setReview({ added, confirmed: false });
+      if (added.length > 0 || newHolders) {
+        setReview({ added, newHolders, confirmed: false });
         setDialogStep("review");
         return;
       }
@@ -713,8 +732,8 @@ export function CreateRoleDialog({
     commitSave(sdkGrants);
   };
 
-  const reviewNeedsConfirmation =
-    !!review && review.added.some((p) => p.sensitiveVia.length > 0);
+  const needsReviewConfirmation =
+    !!review && reviewNeedsConfirmation(review.added, review.newHolders);
   const holdersNote = editingRole
     ? `${editingRole.memberCount} ${editingRole.memberCount === 1 ? "member holds" : "members hold"} this role today.`
     : selectedMembers.size > 0
@@ -1251,12 +1270,15 @@ export function CreateRoleDialog({
               Review changes to &ldquo;{name.trim() || "this role"}&rdquo;
             </Dialog.Title>
             <Dialog.Description>
-              These permissions are added when the role is saved.
+              {review && review.added.length === 0
+                ? "The members and agents added to this role gain its sensitive permissions when it is saved."
+                : "These permissions are added when the role is saved."}
             </Dialog.Description>
           </Dialog.Header>
           {review && (
             <ReviewGrantsStep
               added={review.added}
+              newHolders={review.newHolders}
               holdersNote={holdersNote}
               confirmed={review.confirmed}
               onConfirmedChange={(confirmed) =>
@@ -1273,7 +1295,7 @@ export function CreateRoleDialog({
               disabled={
                 isMutating ||
                 !review ||
-                (reviewNeedsConfirmation && !review.confirmed)
+                (needsReviewConfirmation && !review.confirmed)
               }
             >
               {isMutating && (

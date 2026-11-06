@@ -1,3 +1,4 @@
+import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import { describe, expect, it } from "vitest";
@@ -6,7 +7,6 @@ import {
   addedPermissions,
   liftedExceptions,
   permissionsAddedByRoles,
-  rolePermissionSummary,
 } from "./reviewGrants";
 import { scopeCatalogue } from "./scopeCatalogue";
 
@@ -39,6 +39,8 @@ const catalogue = scopeCatalogue([
   def("org:blocked_read", "Exception: view organization", {
     visibility: "internal" as ScopeDefinition["visibility"],
   }),
+  // Not sensitive itself; sensitive through what it includes.
+  def("org:owner", "Own organization", { subScopes: ["org:admin"] }),
   def("project:read", "View projects"),
   def("project:write", "Manage projects", { subScopes: ["project:read"] }),
   def("mcp:connect", "Connect to MCP servers"),
@@ -74,6 +76,7 @@ describe("addedPermissions", () => {
         scope: "mcp:write",
         label: "Manage MCP servers",
         description: "Manage MCP servers.",
+        sensitive: false,
         sensitiveVia: [],
         includes: ["View MCP servers", "Connect to MCP servers"],
         places: null,
@@ -82,23 +85,38 @@ describe("addedPermissions", () => {
         scope: "log:read",
         label: "View tool logs",
         description: "View tool logs.",
-        sensitiveVia: ["log:read"],
+        sensitive: true,
+        sensitiveVia: [],
         includes: [],
         places: 2,
       },
     ]);
   });
 
-  it("marks a permission sensitive through what it includes", () => {
+  it("says which included permissions make one sensitive", () => {
+    const [owner] = addedPermissions(
+      [{ scope: "org:owner" as never, selectors: undefined }],
+      catalogue,
+    );
+    expect(owner?.sensitive).toBe(true);
+    expect(owner?.sensitiveVia).toEqual([
+      "Manage organization",
+      "View agent sessions",
+    ]);
+    expect(owner?.includes).toEqual([
+      "Manage organization",
+      "View organization",
+      "View agent sessions",
+    ]);
+  });
+
+  it("names no reason for a permission that is sensitive itself", () => {
     const [admin] = addedPermissions(
       [{ scope: "org:admin" as never, selectors: undefined }],
       catalogue,
     );
-    expect(admin?.sensitiveVia).toEqual(["org:admin", "chat:read"]);
-    expect(admin?.includes).toEqual([
-      "View organization",
-      "View agent sessions",
-    ]);
+    expect(admin?.sensitive).toBe(true);
+    expect(admin?.sensitiveVia).toEqual([]);
   });
 
   it("keeps the slug for a scope the catalogue has not loaded", () => {
@@ -109,31 +127,9 @@ describe("addedPermissions", () => {
     expect(unknown).toMatchObject({
       scope: "widget:read",
       label: "widget:read",
+      sensitive: false,
       sensitiveVia: [],
     });
-  });
-});
-
-describe("rolePermissionSummary", () => {
-  it("lists what a role gives in catalogue order with the sensitive subset", () => {
-    const summary = rolePermissionSummary(
-      {
-        grants: [
-          { scope: "chat:write" as never, selectors: undefined },
-          { scope: "mcp:write" as never, selectors: undefined },
-          { scope: "org:blocked_read" as never, selectors: undefined },
-        ],
-      },
-      catalogue,
-    );
-    expect(summary.scopes).toEqual([
-      "mcp:connect",
-      "mcp:read",
-      "mcp:write",
-      "chat:read",
-      "chat:write",
-    ]);
-    expect(summary.sensitive).toEqual(["chat:read", "chat:write"]);
   });
 });
 
@@ -189,5 +185,62 @@ describe("permissionsAddedByRoles", () => {
     expect(
       permissionsAddedByRoles([viewer, reviewer], [viewer], catalogue),
     ).toEqual({ scopes: [], sensitive: [] });
+  });
+
+  /** A role with one grant of the scope on one resource, or on every one with "*". */
+  const roleWith = (scope: string, resourceKind: string, resourceId: string) =>
+    ({
+      grants: [{ scope, selectors: [{ resourceKind, resourceId }] }],
+    }) as unknown as Pick<Role, "grants">;
+  const oneProject = roleWith("log:read", "project", "p1");
+  // The server stores an unrestricted grant as a wildcard selector.
+  const everyProject = roleWith("log:read", "project", "*");
+  const sessionsEverywhere = {
+    grants: [{ scope: "chat:write" as never, selectors: undefined }],
+  };
+
+  it("counts a permission held on one project and now held everywhere", () => {
+    expect(
+      permissionsAddedByRoles(
+        [oneProject],
+        [oneProject, everyProject],
+        catalogue,
+      ),
+    ).toEqual({ scopes: ["log:read"], sensitive: ["log:read"] });
+  });
+
+  it("counts nothing for a narrower grant of a permission held everywhere", () => {
+    expect(
+      permissionsAddedByRoles(
+        [everyProject],
+        [everyProject, oneProject],
+        catalogue,
+      ),
+    ).toEqual({ scopes: [], sensitive: [] });
+  });
+
+  it("counts nothing for another project of a permission held on one", () => {
+    const otherProject = roleWith("log:read", "project", "p2");
+    expect(
+      permissionsAddedByRoles(
+        [oneProject],
+        [oneProject, otherProject],
+        catalogue,
+      ),
+    ).toEqual({ scopes: [], sensitive: [] });
+  });
+
+  it("carries breadth down what a grant includes", () => {
+    const oneSession = roleWith("chat:read", "chat", "c1");
+    expect(
+      permissionsAddedByRoles(
+        [oneSession],
+        [oneSession, sessionsEverywhere],
+        catalogue,
+      ),
+    ).toEqual({
+      scopes: ["chat:read", "chat:write"],
+      sensitive: ["chat:read", "chat:write"],
+    });
   });
 });

@@ -19,7 +19,12 @@ export interface AddedPermission {
   scope: string;
   label: string;
   description: string;
-  /** Scopes in the closure that are sensitive, the permission itself first. */
+  /** True when the permission, or something it includes, is sensitive. */
+  sensitive: boolean;
+  /**
+   * Labels of the included permissions that make it sensitive, when it is
+   * not sensitive itself: "Sensitive because it includes View tool logs".
+   */
   sensitiveVia: string[];
   /** Labels of the other permissions a grant of this one carries along. */
   includes: string[];
@@ -28,7 +33,7 @@ export interface AddedPermission {
 }
 
 /**
- * The permissions a set of added grants gives, one per scope, with what each
+ * The permissions a set of grants gives, one per scope, with what each
  * carries along and whether any of it is sensitive. Exception and
  * provisioned scopes are not permissions a person reviews and are skipped.
  */
@@ -51,11 +56,18 @@ export function addedPermissions(
     }
     const closure = scopeClosure(catalogue, scope);
     const entry = catalogue.get(scope);
+    const sensitiveItself = isSensitiveScope(catalogue, scope);
+    const sensitiveVia = sensitiveItself
+      ? []
+      : closure
+          .filter((s) => s !== scope && isSensitiveScope(catalogue, s))
+          .map((s) => scopeLabel(catalogue, s));
     byScope.set(scope, {
       scope,
       label: scopeLabel(catalogue, scope),
       description: entry?.description ?? "",
-      sensitiveVia: closure.filter((s) => isSensitiveScope(catalogue, s)),
+      sensitive: sensitiveItself || sensitiveVia.length > 0,
+      sensitiveVia,
       includes: closure
         .filter((s) => s !== scope && isPresentableScope(catalogue, s))
         .map((s) => scopeLabel(catalogue, s)),
@@ -63,6 +75,24 @@ export function addedPermissions(
     });
   }
   return [...byScope.values()];
+}
+
+/** The members and agents a save adds to a role, and what they gain by it. */
+export interface NewHolders {
+  members: number;
+  agents: number;
+  /** The sensitive permissions the role gives, which every new holder gains. */
+  sensitive: AddedPermission[];
+}
+
+/** Whether a review needs the acknowledgement: something sensitive is granted. */
+export function reviewNeedsConfirmation(
+  added: AddedPermission[],
+  newHolders: NewHolders | null,
+): boolean {
+  return (
+    added.some((p) => p.sensitive) || (newHolders?.sensitive.length ?? 0) > 0
+  );
 }
 
 /**
@@ -97,22 +127,53 @@ function baseScopeOfException(
   return undefined;
 }
 
-/** The permissions a set of roles gives, in catalogue order, closed over inclusion. */
-function permissionsOfRoles(
+/**
+ * Whether a grant reaches every resource of its kind. The server stores an
+ * unrestricted grant as a wildcard selector, so both forms count; a selector
+ * that names a project, tool or server is narrower.
+ */
+function coversEverywhere(selectors: SdkRoleGrant["selectors"]): boolean {
+  if (!selectors || selectors.length === 0) return true;
+  return selectors.some(
+    (s) =>
+      s.resourceId === "*" &&
+      !s.projectId &&
+      !s.tool &&
+      !s.disposition &&
+      !s.serverUrl,
+  );
+}
+
+/**
+ * How widely a set of roles holds each permission, closed over inclusion:
+ * true when some grant reaches every resource, false when every grant names
+ * some. A grant of mcp:write on one server holds mcp:read on that server.
+ */
+function coverageOfRoles(
   roles: readonly Pick<Role, "grants">[],
   catalogue: ScopeCatalogue,
-): string[] {
-  const held = new Set<string>();
+): Map<string, boolean> {
+  const held = new Map<string, boolean>();
   for (const role of roles) {
     for (const grant of role.grants) {
+      const everywhere = coversEverywhere(grant.selectors);
       for (const scope of scopeClosure(catalogue, grant.scope as string)) {
-        if (isPresentableScope(catalogue, scope)) held.add(scope);
+        if (!isPresentableScope(catalogue, scope)) continue;
+        held.set(scope, (held.get(scope) ?? false) || everywhere);
       }
     }
   }
-  const ordered = [...catalogue.keys()].filter((scope) => held.has(scope));
-  // Scopes the catalogue has not loaded yet keep their slug at the end.
-  for (const scope of held) {
+  return held;
+}
+
+/** Scopes in catalogue order; ones the catalogue has not loaded keep their slug at the end. */
+function inCatalogueOrder(
+  scopes: Iterable<string>,
+  catalogue: ScopeCatalogue,
+): string[] {
+  const wanted = new Set(scopes);
+  const ordered = [...catalogue.keys()].filter((scope) => wanted.has(scope));
+  for (const scope of wanted) {
     if (!catalogue.has(scope)) ordered.push(scope);
   }
   return ordered;
@@ -125,31 +186,27 @@ export interface PermissionSummary {
   sensitive: string[];
 }
 
-/** What one role gives, for a preview before it is assigned. */
-export function rolePermissionSummary(
-  role: Pick<Role, "grants">,
-  catalogue: ScopeCatalogue,
-): PermissionSummary {
-  const scopes = permissionsOfRoles([role], catalogue);
-  return {
-    scopes,
-    sensitive: scopes.filter((scope) => isSensitiveScope(catalogue, scope)),
-  };
-}
-
 /**
  * What a member gains when their roles change from before to after: the
- * permissions the new set gives that the old set did not.
+ * permissions the new set gives that the old set did not, and the ones the
+ * old set gave only on some resources that the new set gives everywhere. A
+ * member who could read one project's tool logs and is given unrestricted
+ * log:read gains log:read; one who already held it everywhere gains nothing
+ * from a narrower grant. The server's audit row makes the same comparison.
  */
 export function permissionsAddedByRoles(
   before: readonly Pick<Role, "grants">[],
   after: readonly Pick<Role, "grants">[],
   catalogue: ScopeCatalogue,
 ): PermissionSummary {
-  const had = new Set(permissionsOfRoles(before, catalogue));
-  const scopes = permissionsOfRoles(after, catalogue).filter(
-    (scope) => !had.has(scope),
-  );
+  const had = coverageOfRoles(before, catalogue);
+  const has = coverageOfRoles(after, catalogue);
+  const added: string[] = [];
+  for (const [scope, everywhere] of has) {
+    const held = had.get(scope);
+    if (held === undefined || (everywhere && !held)) added.push(scope);
+  }
+  const scopes = inCatalogueOrder(added, catalogue);
   return {
     scopes,
     sensitive: scopes.filter((scope) => isSensitiveScope(catalogue, scope)),

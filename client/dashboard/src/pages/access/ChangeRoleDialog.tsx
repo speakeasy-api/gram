@@ -5,7 +5,6 @@ import { invalidateAllResourceAudience } from "@gram/client/react-query/resource
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { RoleLink } from "@/components/role-link";
 import { Badge } from "@/components/ui/Badge";
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Command,
   CommandEmpty,
@@ -35,6 +34,7 @@ import {
   getUnselectedRoles,
   isUpdateDisabled,
 } from "./changeRoleState";
+import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
 import { permissionsAddedByRoles } from "./reviewGrants";
 import { RolePermissionPreview } from "./RolePermissionPreview";
 import { scopeLabel } from "./scopeCatalogue";
@@ -268,18 +268,13 @@ export function ChangeRoleDialog({
               </div>
             )}
             {needsConfirmation && (
-              <label className="flex cursor-pointer items-start gap-3 text-left">
-                <Checkbox
-                  checked={confirmed}
-                  onCheckedChange={(checked) => setConfirmed(checked === true)}
-                  aria-label="Confirm sensitive permissions"
-                  className="mt-0.5"
-                />
-                <Text variant="body" className="text-sm">
-                  I reviewed the sensitive permissions above and want{" "}
-                  {member.name} to have them.
-                </Text>
-              </label>
+              <ConfirmSensitiveAccess
+                checked={confirmed}
+                onCheckedChange={setConfirmed}
+              >
+                I reviewed the sensitive permissions above and want{" "}
+                {member.name} to have them.
+              </ConfirmSensitiveAccess>
             )}
 
             {directoryRoles.length > 0 && (

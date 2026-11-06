@@ -23,8 +23,9 @@ import {
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
 import { CreateRoleDialog } from "./CreateRoleDialog";
-import { rolePermissionSummary } from "./reviewGrants";
+import { permissionsAddedByRoles } from "./reviewGrants";
 import { RolePermissionPreview } from "./RolePermissionPreview";
 import {
   breadthLabel,
@@ -72,8 +73,10 @@ export function GrantAccessDialog({
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
-  // A role that gives sensitive access is previewed before it is assigned.
+  // A role that adds sensitive access is previewed before it is assigned,
+  // and the preview waits for an acknowledgement.
   const [confirming, setConfirming] = useState<Role | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const {
     data: membersData,
@@ -138,8 +141,22 @@ export function GrantAccessDialog({
     );
   };
 
+  // What a role adds to what the member's roles already give: a permission
+  // they hold everywhere is not added, one they hold on one project and the
+  // role gives everywhere is. Manage Roles makes the same comparison.
+  const memberRoles = useMemo(() => {
+    const byId = new Map((rolesData?.roles ?? []).map((r) => [r.id, r]));
+    return (member?.roleIds ?? []).flatMap((id) => {
+      const role = byId.get(id);
+      return role ? [role] : [];
+    });
+  }, [rolesData?.roles, member?.roleIds]);
+  const addedBy = (role: Role) =>
+    permissionsAddedByRoles(memberRoles, [...memberRoles, role], catalogue);
+
   const requestAssign = (role: Role) => {
-    if (rolePermissionSummary(role, catalogue).sensitive.length > 0) {
+    if (addedBy(role).sensitive.length > 0) {
+      setConfirmed(false);
       setConfirming(role);
       return;
     }
@@ -325,19 +342,27 @@ export function GrantAccessDialog({
                 Assign &ldquo;{confirming.name}&rdquo; to {member.name}
               </Dialog.Title>
               <Dialog.Description>
-                Check what the role gives before it is assigned.
+                Check what the role adds before it is assigned.
               </Dialog.Description>
             </Dialog.Header>
             <RolePermissionPreview
-              lead="This role gives"
-              summary={rolePermissionSummary(confirming, catalogue)}
+              lead="This role adds"
+              summary={addedBy(confirming)}
               labelFor={labelFor}
             />
+            <ConfirmSensitiveAccess
+              checked={confirmed}
+              onCheckedChange={setConfirmed}
+            >
+              I reviewed the sensitive permissions above and want {member.name}{" "}
+              to have them.
+            </ConfirmSensitiveAccess>
             <Dialog.Footer>
               <Button variant="secondary" onClick={() => setConfirming(null)}>
                 Cancel
               </Button>
               <Button
+                disabled={!confirmed}
                 onClick={() => {
                   assignRole(confirming.id);
                   setConfirming(null);

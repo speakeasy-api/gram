@@ -533,6 +533,63 @@ describe("the review step", () => {
     expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
     expect(mocks.update).toHaveBeenCalledOnce();
   });
+
+  function addAda() {
+    mocks.members = [
+      {
+        id: "member-1",
+        name: "Ada Lovelace",
+        email: "ada@example.com",
+        roleIds: [],
+      },
+    ];
+  }
+  function tickAda() {
+    fireEvent.click(screen.getByText("Assign Members"));
+    fireEvent.click(screen.getByText("Ada Lovelace"));
+  }
+
+  it("reviews the sensitive access new holders gain from a role that already grants it", () => {
+    // The grant diff is empty, but the member gains log:read by holding the
+    // role, which is what the audit row records; the review says so.
+    addAda();
+    renderEditor({ ...role, grants: [{ scope: "log:read" }] });
+    tickAda();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(
+      review.getByText("Sensitive access for 1 new member · 1"),
+    ).toBeTruthy();
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    expect(review.queryByText("Added permission", { exact: false })).toBeNull();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.click(
+      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+    );
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.memberIds).toEqual(["member-1"]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("saves straight away when new holders gain nothing sensitive", () => {
+    addAda();
+    renderEditor({ ...role, grants: [{ scope: "org:read" }] });
+    tickAda();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(
+      mocks.update.mock.calls[0]![0].request.updateRoleForm.memberIds,
+    ).toEqual(["member-1"]);
+  });
 });
 
 describe("the access grid", () => {
