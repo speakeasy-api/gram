@@ -272,6 +272,8 @@ type Service struct {
 	// consentToolInventoryCache holds bounded gateway challenge captures and
 	// single-server attempt snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
+	// memberToolSchemaCache holds each gateway member's last listed tools.
+	memberToolSchemaCache cache.TypedCacheObject[memberToolSchemas]
 	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
 	connectionCatalogCache cache.Cache
 	// staleNoAuthLog dedupes stale no-auth choice warnings.
@@ -711,6 +713,11 @@ func NewService(
 		),
 		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](
 			logger.With(attr.SlogCacheNamespace("consent_tool_inventory")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		memberToolSchemaCache: cache.NewTypedObjectCache[memberToolSchemas](
+			logger.With(attr.SlogCacheNamespace("member_tool_schemas")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
