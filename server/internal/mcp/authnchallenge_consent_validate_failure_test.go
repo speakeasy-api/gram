@@ -88,7 +88,7 @@ func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *tes
 	require.Equal(t, http.StatusInternalServerError, status)
 	require.Contains(t, page, "Couldn't check the connection")
 	require.Contains(t, page, "Checking the server's connection")
-	require.Contains(t, page, "If it keeps happening, share the technical details below with Speakeasy support.")
+	require.Contains(t, page, "Share the technical details below with Speakeasy support.")
 	require.NotContains(t, page, "again shortly")
 	require.NotContains(t, page, "resolve upstream tokens")
 	require.Contains(t, page, "Error ID")
@@ -221,9 +221,10 @@ func TestHandleIDPCallback_FirstPartyProviderErrors(t *testing.T) {
 		says   string
 		what   mcpconnectionattempts.Code
 	}{
-		{"server_error", http.StatusServiceUnavailable, "Try connecting again shortly.", mcpconnectionattempts.CodeIDPTransientFailure},
-		{"temporarily_unavailable", http.StatusServiceUnavailable, "Try connecting again shortly.", mcpconnectionattempts.CodeIDPTransientFailure},
+		{"server_error", http.StatusServiceUnavailable, "Your sign-in service isn't available right now.", mcpconnectionattempts.CodeIDPTransientFailure},
+		{"temporarily_unavailable", http.StatusServiceUnavailable, "Your sign-in service isn't available right now.", mcpconnectionattempts.CodeIDPTransientFailure},
 		{"invalid_request", http.StatusInternalServerError, "This is a problem on our side", mcpconnectionattempts.CodeInternalError},
+		{"request_not_supported", http.StatusInternalServerError, "Share the technical details below with Speakeasy support.", mcpconnectionattempts.CodeInternalError},
 		{"login_required", http.StatusBadRequest, "Your sign-in service needs you to sign in again", mcpconnectionattempts.CodeReauthenticationRequired},
 		{"made_up_by_caller", http.StatusBadRequest, "sign-in provider returned an error: unregistered", mcpconnectionattempts.CodeSignInProviderError},
 	} {

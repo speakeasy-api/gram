@@ -673,9 +673,11 @@ type firstPartyIDPFailure struct {
 func firstPartyIDPFailureOf(label string) firstPartyIDPFailure {
 	switch label {
 	case oautherr.CodeServerError, oautherr.CodeTemporarilyUnavailable:
-		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeIDPTransientFailure, code: oops.CodeUnavailable, page: oauthui.ReasonProviderUnavailable}
-	case oautherr.CodeInvalidRequest, oautherr.CodeUnauthorizedClient, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope:
-		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeInternalError, code: oops.CodeUnexpected, page: oauthui.ReasonDefault}
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeIDPTransientFailure, code: oops.CodeUnavailable, page: oauthui.ReasonSignInUnavailable}
+	case oautherr.CodeInvalidRequest, oautherr.CodeUnauthorizedClient, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope,
+		oautherr.OIDCCodeRequestNotSupported, oautherr.OIDCCodeRequestURINotSupported, oautherr.OIDCCodeInvalidRequestURI,
+		oautherr.OIDCCodeInvalidRequestObject, oautherr.OIDCCodeRegistrationNotSupported:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeInternalError, code: oops.CodeUnexpected, page: oauthui.ReasonInternal}
 	case oautherr.OIDCCodeLoginRequired, oautherr.OIDCCodeConsentRequired, oautherr.OIDCCodeInteractionRequired, oautherr.OIDCCodeAccountSelectionRequired:
 		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeReauthenticationRequired, code: oops.CodeBadRequest, page: oauthui.ReasonSignInRequired}
 	default:

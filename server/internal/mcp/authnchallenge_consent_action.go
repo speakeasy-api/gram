@@ -285,7 +285,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errRemoteSessionNoUsableCredential):
-			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			notice := ""
+			if kind := noUsableCredentialNotice(ctx, err); kind != verifyNoticeSignIn {
+				notice = "&validate_notice=" + url.QueryEscape(string(kind))
+			}
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String())+notice, http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errValidationUnfinished):
 			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)

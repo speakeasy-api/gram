@@ -145,6 +145,10 @@ const (
 	ReasonCheckUnavailable Reason = "check-unavailable"
 	// ReasonSignInRequired identifies a sign-in service that needs the person to sign in again.
 	ReasonSignInRequired Reason = "sign-in-required"
+	// ReasonCheckNotAllowed identifies a server connection check for a server the person has no access to.
+	ReasonCheckNotAllowed Reason = "check-not-allowed"
+	// ReasonSignInUnavailable identifies a sign-in service that is down for now.
+	ReasonSignInUnavailable Reason = "sign-in-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
 )
@@ -152,9 +156,9 @@ const (
 // check reports a failed server connection check, rather than a failed connection.
 func (r Reason) check() bool {
 	switch r {
-	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin:
+	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable:
 		return false
 	default:
 		return false

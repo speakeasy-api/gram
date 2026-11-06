@@ -331,8 +331,8 @@ func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
 		want      string
 		wantRetry bool
 	}{
-		{"internal fault", http.StatusInternalServerError, "If it keeps happening, share the technical details below with Speakeasy support.", false},
-		{"not implemented", http.StatusNotImplemented, "If it keeps happening, share the technical details below with Speakeasy support.", false},
+		{"internal fault", http.StatusInternalServerError, "Share the technical details below with Speakeasy support.", false},
+		{"not implemented", http.StatusNotImplemented, "Share the technical details below with Speakeasy support.", false},
 		{"bad gateway", http.StatusBadGateway, "Try connecting again shortly.", true},
 		{"outage", http.StatusServiceUnavailable, "Try connecting again shortly.", true},
 		{"gateway timeout", http.StatusGatewayTimeout, "Try connecting again shortly.", true},
@@ -358,9 +358,10 @@ func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
 		want      string
 		wantRetry bool
 	}{
-		{oauthui.ReasonCheckFailed, "If it keeps happening, share the technical details below with Speakeasy support.", false},
+		{oauthui.ReasonCheckFailed, "Share the technical details below with Speakeasy support.", false},
 		{oauthui.ReasonCheckUnavailable, "Try again shortly. If it keeps happening, share the technical details below with Speakeasy support.", true},
 		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
+		{oauthui.ReasonCheckNotAllowed, "Ask your IT administrators for access. Share the technical details below with them.", false},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -398,4 +399,15 @@ func TestAuthorizationErrorPageSetupFault(t *testing.T) {
 	page := pageText(response)
 	require.Contains(t, page, "Speakeasy couldn't finish checking your setup. This is a problem on our side")
 	require.NotContains(t, page, "incomplete")
+}
+
+// A first-party sign-in service outage names the sign-in service, not the connection's service.
+func TestAuthorizationErrorPageSignInServiceUnavailable(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonSignInUnavailable, ClientName: "Speakeasy dashboard"}))
+	page := pageText(response)
+	require.Contains(t, page, "Your sign-in service isn't available right now. This isn't something you did.")
+	require.Contains(t, page, "Try again in a few minutes. If it keeps happening, share the technical details below with your IT administrators or Speakeasy support.")
+	require.NotContains(t, page, "The service this connection uses")
 }

@@ -89,10 +89,7 @@ func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
 		// Nothing was checked, the request ended, or another row already says what happened.
 		return none, false
 	case errors.Is(err, errRemoteSessionNoUsableCredential):
-		code := mcpconnectionattempts.CodeInvalidRemoteSession
-		if refusal, ok := errors.AsType[noUsableCredentialError](err); ok && refusal.cause != nil {
-			code = checkFailureCode(ctx, refusal.cause)
-		}
+		code := noUsableCredentialCode(ctx, err)
 		return checkFailure{code: code, page: oauthui.ReasonDefault}, code != (mcpconnectionattempts.Code{})
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return checkFailure{code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin}, true
@@ -107,6 +104,10 @@ func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
 
 // checkFailureCode names the cause of a failed check: a store outage, a credential or member failure, or our own fault.
 func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code {
+	// A refusal of the person's access to the server is the admin's to grant.
+	if refusal, ok := errors.AsType[*oops.ShareableError](err); ok && refusal.Code == oops.CodeForbidden {
+		return mcpconnectionattempts.CodeNoServerAccess
+	}
 	code := resolveFailureHappened(err)
 	if member, ok := errors.AsType[memberConnectionError](err); ok {
 		code = member.code
@@ -127,6 +128,9 @@ func checkFailureBrowserError(ctx context.Context, err error) error {
 
 // checkFailurePage suggests retrying only for our outage. A party no failed check reaches this page for gets the generic page.
 func checkFailurePage(code mcpconnectionattempts.Code) oauthui.Reason {
+	if code == mcpconnectionattempts.CodeNoServerAccess {
+		return oauthui.ReasonCheckNotAllowed
+	}
 	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
 	switch meaning.WhoFixes {
 	case mcpconnectionattempts.WhoAdmin:
@@ -263,8 +267,7 @@ func (s *Service) probeRemoteSession(
 		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
 			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
 		}
-		message, reason, cause := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, skipped, tokenProjectIDs)
-		return oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: cause}, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
+		return s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, skipped, tokenProjectIDs)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -372,10 +375,11 @@ func unservedCredentialReason(projects int, linked bool) string {
 	}
 }
 
-// noUsableCredentialRefusal is the person's message, the log reason, and the
-// cause for a grant that yielded no token. The cause is nil when token
-// resolution gave no reason and the card is not connected or its grant
-// expired, which the person fixes by reconnecting.
+// noUsableCredentialRefusal refuses a check whose grant yielded no token. An
+// unreadable card state stops the check like an outage. Otherwise the refusal
+// carries the cause: token resolution's own reason when it gave one, nil when
+// the grant is missing, expired or lapsed (the person reconnects), and the log
+// reason when a stored grant's token could not be obtained (ours to fix).
 func (s *Service) noUsableCredentialRefusal(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -384,38 +388,80 @@ func (s *Service) noUsableCredentialRefusal(
 	client remotesessions.Client,
 	skipped *remotesessions.SkippedClients,
 	projectIDs []uuid.UUID,
-) (message, reason string, cause error) {
+) error {
 	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
 	if err != nil {
-		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
-		return noWorkingSignInMessage, "grant state could not be read", err
+		logger.ErrorContext(ctx, "verify stopped: remote session status unreadable", attr.SlogError(err))
+		return fmt.Errorf("%w: read remote session status: %w", errValidationUnfinished, err)
 	}
 	state, connected := statuses[client.ID]
-	message, reason = noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
+	reason := describeNoUsableCredential(state, connected, time.Now())
+	var cause error
 	// Token resolution's own reason wins: it carries whether a refresh already wrote this failure's row.
 	for _, projectID := range projectIDs {
 		if skip := skipped.Reason(projectID, client.RemoteSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}); skip != nil {
-			return message, reason, fmt.Errorf("skipped during token resolution: %w", skip)
+			cause = fmt.Errorf("skipped during token resolution: %w", skip)
+			break
 		}
 	}
-	if !connected || state.Status == remotesessions.RemoteSessionExpired {
-		return message, reason, nil
+	if cause == nil && state.Status != remotesessions.RemoteSessionExpired && reason == grantUnobtainableReason {
+		cause = errors.New(reason)
 	}
-	return message, reason, errors.New(reason)
+	return oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: cause}, "%s", reason).LogWarn(ctx, logger, attr.SlogReason(reason))
 }
 
-// noWorkingSignInMessage covers an outage, a broken client setup and an unreadable token: token resolution hides which.
+// grantUnobtainableReason is the log reason for a stored, unexpired grant whose token could not be obtained.
+const grantUnobtainableReason = "grant is stored but its token could not be obtained or refreshed"
+
+// noWorkingSignInMessage covers a broken client setup or an unknown cause: token resolution hides which.
 const noWorkingSignInMessage = "We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator."
 
-// noUsableCredentialMessage follows the card's state, so it names a control the card shows.
-func noUsableCredentialMessage(state remotesessions.RemoteSessionState, connected bool) string {
-	switch {
-	case !connected:
-		return "Connect this service before verifying it."
-	case state.Status == remotesessions.RemoteSessionExpired:
-		return "Reconnect this service."
+// verifyNotice selects the card notice after a Verify that found no usable credential.
+type verifyNotice string
+
+const (
+	// verifyNoticeSignIn is the default: a broken client setup or an unknown cause.
+	verifyNoticeSignIn verifyNotice = ""
+	// verifyNoticeReconnect is a grant the person replaces by connecting again.
+	verifyNoticeReconnect verifyNotice = "reconnect"
+	// verifyNoticeOurs is a stored grant Speakeasy could not get a token for.
+	verifyNoticeOurs verifyNotice = "ours"
+)
+
+// verifyNoticeMessage is the card text for a notice; an unknown value reads as the default.
+func verifyNoticeMessage(notice string) string {
+	switch verifyNotice(notice) {
+	case verifyNoticeReconnect:
+		// Shown only on a connected card, which offers Disconnect, not Reconnect.
+		return "Disconnect this service, then connect it again."
+	case verifyNoticeOurs:
+		return "We couldn't check this service. If it still fails, share this with Speakeasy support."
+	case verifyNoticeSignIn:
+		return noWorkingSignInMessage
 	default:
 		return noWorkingSignInMessage
+	}
+}
+
+// noUsableCredentialCode is the row's code for a check refused for no usable credential.
+func noUsableCredentialCode(ctx context.Context, err error) mcpconnectionattempts.Code {
+	if refusal, ok := errors.AsType[noUsableCredentialError](err); ok && refusal.cause != nil {
+		return checkFailureCode(ctx, refusal.cause)
+	}
+	return mcpconnectionattempts.CodeInvalidRemoteSession
+}
+
+// noUsableCredentialNotice picks the card notice from the same code the row records.
+func noUsableCredentialNotice(ctx context.Context, err error) verifyNotice {
+	code := noUsableCredentialCode(ctx, err)
+	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
+	switch {
+	case meaning.WhoFixes == mcpconnectionattempts.WhoPerson:
+		return verifyNoticeReconnect
+	case code == mcpconnectionattempts.CodeInternalError:
+		return verifyNoticeOurs
+	default:
+		return verifyNoticeSignIn
 	}
 }
 
@@ -432,7 +478,7 @@ func describeNoUsableCredential(state remotesessions.RemoteSessionState, connect
 	case lapsed(state.AccessExpiresAt) && !state.CanRefresh:
 		return "access token has expired and the grant has no refresh token"
 	default:
-		return "grant is stored but its token could not be obtained or refreshed"
+		return grantUnobtainableReason
 	}
 }
 

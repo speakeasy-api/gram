@@ -86,6 +86,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "check-unavailable"}}
             Speakeasy couldn't check this server's connection right now. This is
             a problem on our side, not something you did.
+            {{else if eq .Kind "check-not-allowed"}}
+            You don't have access to this server, so Speakeasy couldn't check it.
+            {{else if eq .Kind "sign-in-unavailable"}}
+            Your sign-in service isn't available right now. This isn't something
+            you did.
             {{else if eq .Kind "sign-in-required"}}
             Your sign-in service needs you to sign in again before
             {{template "client" .}} can connect to {{template "server" .}}.
@@ -139,11 +144,16 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           technical details below with your IT administrators or Speakeasy
           support.
           {{else if or (eq .Kind "internal") (eq .Kind "check-failed")}}
-          If it keeps happening, share the technical details below with
-          Speakeasy support.
+          Share the technical details below with Speakeasy support.
           {{else if eq .Kind "check-unavailable"}}
           Try again shortly. If it keeps happening, share the technical details
           below with Speakeasy support.
+          {{else if eq .Kind "check-not-allowed"}}
+          Ask your IT administrators for access. Share the technical details
+          below with them.
+          {{else if eq .Kind "sign-in-unavailable"}}
+          Try again in a few minutes. If it keeps happening, share the technical
+          details below with your IT administrators or Speakeasy support.
           {{else if eq .Kind "sign-in-required"}}
           Start connecting again, and sign in when your sign-in service asks.
           {{else if eq .Kind "check-needs-admin"}}

@@ -730,7 +730,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		for i := range cards {
 			// An expired or unconnected card already names its action.
 			if cards[i].ClientID == failed && cards[i].Connected {
-				cards[i].ValidationNotice = noWorkingSignInMessage
+				cards[i].ValidationNotice = verifyNoticeMessage(r.URL.Query().Get("validate_notice"))
 			}
 		}
 	}
