@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   refetchScopes: vi.fn(),
   scopes: "ready" as "ready" | "loading" | "error",
+  // The catalogue as last read; a test can have it read again with more.
+  definitions: [] as ScopeDefinition[],
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
@@ -30,7 +32,16 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: vi.fn(),
   useRoles: () => ({
     data: {
-      roles: [builder, auditor, oneProject, otherProject, wide, admin, blocker],
+      roles: [
+        builder,
+        auditor,
+        reviewer,
+        oneProject,
+        otherProject,
+        wide,
+        admin,
+        blocker,
+      ],
     },
   }),
 }));
@@ -42,7 +53,9 @@ vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
 }));
 vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
-    catalogue: scopeCatalogue(state.scopes === "ready" ? definitions : []),
+    catalogue: scopeCatalogue(
+      state.scopes === "ready" ? state.definitions : [],
+    ),
     tasks: [],
     isLoading: state.scopes === "loading",
     isError: state.scopes === "error",
@@ -53,6 +66,18 @@ vi.mock("@/components/role-link", () => ({
   RoleLink: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+// A scope the catalogue can gain on a later read.
+const chatRead: ScopeDefinition = {
+  slug: "chat:read" as ScopeDefinition["slug"],
+  label: "View agent sessions",
+  description: "Read other members' agent session transcripts.",
+  resourceType: "chat",
+  category: "session" as ScopeDefinition["category"],
+  visibility: "user_visible",
+  agentEligible: false,
+  sensitive: true,
+  subScopes: [],
+};
 const definitions: ScopeDefinition[] = [
   {
     slug: "log:read" as ScopeDefinition["slug"],
@@ -93,6 +118,15 @@ const auditor = {
   description: "",
   principalUrn: "role:organization:auditor",
   grants: [{ scope: "log:read" }],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+const reviewer = {
+  id: "reviewer",
+  name: "Reviewer",
+  description: "",
+  principalUrn: "role:organization:reviewer",
+  grants: [{ scope: "log:read" }, { scope: "chat:read" }],
   isSystem: false,
   memberCount: 0,
 } as unknown as Role;
@@ -187,6 +221,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.scopes = "ready";
+  state.definitions = definitions;
 });
 
 describe("adding a role that gives sensitive access", () => {
@@ -243,6 +278,45 @@ describe("adding a role that widens a permission the member holds", () => {
     expect(screen.queryByText("These roles add", { exact: false })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(updateButton().disabled).toBe(false);
+  });
+});
+
+describe("after the sensitive permissions to acknowledge change", () => {
+  it("asks again when the catalogue read again marks more of them sensitive", () => {
+    // A fresh element each time, or React skips the render it would bail
+    // out of for an element it has seen.
+    const onOpenChange = vi.fn<() => void>();
+    const current = { ...member, roleIds: ["builder"] } as AccessMember;
+    const tree = () => (
+      <ChangeRoleDialog member={current} onOpenChange={onOpenChange} />
+    );
+    const { rerender } = render(tree());
+    fireEvent.click(screen.getByText("Reviewer"));
+    expect(
+      screen.getByText("These roles add 2 permissions, 1 is sensitive:"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
+    );
+    expect(updateButton().disabled).toBe(false);
+
+    // The catalogue is read again and now says chat:read is sensitive too:
+    // the acknowledgement given was of log:read alone.
+    state.definitions = [...definitions, chatRead];
+    rerender(tree());
+    expect(
+      screen.getByText("These roles add 2 permissions, 2 are sensitive:"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("checkbox", { name: /I reviewed the sensitive permissions/ })
+        .getAttribute("data-state"),
+    ).toBe("unchecked");
+    expect(updateButton().disabled).toBe(true);
+    fireEvent.click(updateButton());
+    expect(state.update).not.toHaveBeenCalled();
   });
 });
 

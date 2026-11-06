@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   refetchScopes: vi.fn(),
   scopes: "ready" as "ready" | "loading" | "error",
   memberRoleIds: [] as string[],
+  // The catalogue as last read; a test can have it read again with more.
+  definitions: [] as ScopeDefinition[],
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
@@ -30,7 +32,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: vi.fn(),
   useRoles: () => ({
-    data: { roles: [auditor, oneProject, wide] },
+    data: { roles: [auditor, reviewer, oneProject, wide] },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -46,7 +48,9 @@ vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
 }));
 vi.mock("@/hooks/useScopeCatalogue", () => ({
   useScopeCatalogue: () => ({
-    catalogue: scopeCatalogue(state.scopes === "ready" ? definitions : []),
+    catalogue: scopeCatalogue(
+      state.scopes === "ready" ? state.definitions : [],
+    ),
     tasks: [],
     isLoading: state.scopes === "loading",
     isError: state.scopes === "error",
@@ -57,6 +61,19 @@ vi.mock("./CreateRoleDialog", () => ({ CreateRoleDialog: () => null }));
 vi.mock("@/components/role-link", () => ({
   RoleLink: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+
+// A scope the catalogue can gain on a later read.
+const chatRead: ScopeDefinition = {
+  slug: "chat:read" as ScopeDefinition["slug"],
+  label: "View agent sessions",
+  description: "Read other members' agent session transcripts.",
+  resourceType: "chat",
+  category: "session" as ScopeDefinition["category"],
+  visibility: "user_visible",
+  agentEligible: false,
+  sensitive: true,
+  subScopes: [],
+};
 
 const definitions: ScopeDefinition[] = [
   {
@@ -84,6 +101,15 @@ const auditor = {
   description: "",
   principalUrn: "role:organization:auditor",
   grants: [{ scope: "log:read" }],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+const reviewer = {
+  id: "reviewer",
+  name: "Reviewer",
+  description: "",
+  principalUrn: "role:organization:reviewer",
+  grants: [{ scope: "log:read" }, { scope: "chat:read" }],
   isSystem: false,
   memberCount: 0,
 } as unknown as Role;
@@ -140,6 +166,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.scopes = "ready";
   state.memberRoleIds = [];
+  state.definitions = definitions;
 });
 
 describe("assigning a role that adds sensitive access", () => {
@@ -179,6 +206,43 @@ describe("assigning a role that adds sensitive access", () => {
     expect(
       screen.getByText("This role adds 1 permission, 1 is sensitive:"),
     ).toBeTruthy();
+  });
+
+  it("asks again when the catalogue read again marks more of what the role adds sensitive", () => {
+    // A fresh element each time, or React skips the render it would bail
+    // out of for an element it has seen.
+    const onClose = vi.fn<() => void>();
+    const tree = () => (
+      <GrantAccessDialog
+        userId={member.id}
+        scope="log:read"
+        onClose={onClose}
+      />
+    );
+    const { rerender } = render(tree());
+    fireEvent.click(assignButton("Reviewer"));
+    expect(
+      screen.getByText("This role adds 2 permissions, 1 is sensitive:"),
+    ).toBeTruthy();
+    const assign = () =>
+      screen.getByRole("button", { name: "Assign role" }) as HTMLButtonElement;
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
+    );
+    expect(assign().disabled).toBe(false);
+
+    // The catalogue is read again and now says chat:read is sensitive too:
+    // the acknowledgement given was of log:read alone.
+    state.definitions = [...definitions, chatRead];
+    rerender(tree());
+    expect(
+      screen.getByText("This role adds 2 permissions, 2 are sensitive:"),
+    ).toBeTruthy();
+    expect(assign().disabled).toBe(true);
+    fireEvent.click(assign());
+    expect(state.assign).not.toHaveBeenCalled();
   });
 
   it("assigns straight away when the member already holds the permission everywhere", () => {

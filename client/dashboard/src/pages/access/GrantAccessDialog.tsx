@@ -74,9 +74,11 @@ export function GrantAccessDialog({
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
   // A role that adds sensitive access is previewed before it is assigned,
-  // and the preview waits for an acknowledgement.
+  // and the preview waits for an acknowledgement. The acknowledgement is of
+  // one set of sensitive permissions, keyed by their slugs, so a catalogue
+  // read again that marks more of them sensitive asks again.
   const [confirming, setConfirming] = useState<Role | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const {
     data: membersData,
@@ -156,12 +158,15 @@ export function GrantAccessDialog({
 
   const requestAssign = (role: Role) => {
     if (addedBy(role).sensitive.length > 0) {
-      setConfirmed(false);
+      setConfirmedFor(null);
       setConfirming(role);
       return;
     }
     assignRole(role.id);
   };
+  const confirmingAdds = confirming ? addedBy(confirming) : null;
+  const sensitiveKey = confirmingAdds?.sensitive.join(" ") ?? null;
+  const confirmed = sensitiveKey !== null && confirmedFor === sensitiveKey;
 
   const isLoading = membersLoading || rolesLoading || scopesLoading;
   // Suggestions and sensitivity warnings are read off the catalogue, so a
@@ -329,7 +334,7 @@ export function GrantAccessDialog({
         />
       )}
 
-      {confirming && member && (
+      {confirming && member && confirmingAdds && (
         <Dialog
           open
           onOpenChange={(open) => {
@@ -347,12 +352,14 @@ export function GrantAccessDialog({
             </Dialog.Header>
             <RolePermissionPreview
               lead="This role adds"
-              summary={addedBy(confirming)}
+              summary={confirmingAdds}
               labelFor={labelFor}
             />
             <ConfirmSensitiveAccess
               checked={confirmed}
-              onCheckedChange={setConfirmed}
+              onCheckedChange={(next) =>
+                setConfirmedFor(next ? sensitiveKey : null)
+              }
             >
               I reviewed the sensitive permissions above and want {member.name}{" "}
               to have them.

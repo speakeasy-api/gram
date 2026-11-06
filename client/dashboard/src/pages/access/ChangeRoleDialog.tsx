@@ -51,8 +51,10 @@ export function ChangeRoleDialog({
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   // Sensitive permissions the new roles add must be acknowledged before the
-  // update goes through; any change to the selection asks again.
-  const [confirmed, setConfirmed] = useState(false);
+  // update goes through. The acknowledgement is of one set of permissions,
+  // keyed by their slugs, so any change to the selection, or to what the
+  // catalogue says is sensitive, asks again.
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   const {
@@ -81,18 +83,18 @@ export function ChangeRoleDialog({
   useEffect(() => {
     setSelectedRoleIds(member?.roleIds ?? []);
     setSearch("");
-    setConfirmed(false);
+    setConfirmedFor(null);
   }, [member]);
 
   const addRole = (roleId: string) => {
     setSelectedRoleIds((prev) => addRoleToSelection(prev, roleId));
     setSearch("");
-    setConfirmed(false);
+    setConfirmedFor(null);
   };
 
   const removeRole = (roleId: string) => {
     setSelectedRoleIds((prev) => removeRoleFromSelection(prev, roleId));
-    setConfirmed(false);
+    setConfirmedFor(null);
   };
 
   const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
@@ -115,6 +117,8 @@ export function ChangeRoleDialog({
     );
   }, [originalRoleIds, selectedRoleIds, roleById, catalogue]);
   const needsConfirmation = added.sensitive.length > 0;
+  const sensitiveKey = added.sensitive.join(" ");
+  const confirmed = confirmedFor === sensitiveKey;
 
   // Sensitivity is read off the catalogue, so until it has loaded without
   // error nothing can be told apart from safe and the update waits.
@@ -270,7 +274,9 @@ export function ChangeRoleDialog({
             {needsConfirmation && (
               <ConfirmSensitiveAccess
                 checked={confirmed}
-                onCheckedChange={setConfirmed}
+                onCheckedChange={(next) =>
+                  setConfirmedFor(next ? sensitiveKey : null)
+                }
               >
                 I reviewed the sensitive permissions above and want{" "}
                 {member.name} to have them.
