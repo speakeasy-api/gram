@@ -44,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -67,9 +66,9 @@ type Service struct {
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
 	auth              *auth.Auth
+	authz             *authz.Engine
 	chatSessions      *chatsessions.Manager
 	toolset           *toolsets.Toolsets
-	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
 	scanEvaluator     *mcpriskscan.Evaluator
@@ -104,20 +103,19 @@ func NewService(
 	authzEngine *authz.Engine,
 	scanEvaluator *mcpriskscan.Evaluator,
 ) *Service {
-	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
 	logger = logger.With(attr.SlogComponent("instances"))
 
 	return &Service{
-		logger:           logger,
-		tracer:           tracer,
-		db:               db,
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		chatSessions:     chatSessions,
-		toolset:          toolsets.NewToolsets(db),
-		environmentsRepo: envRepo,
-		env:              env,
-		tracking:         tracking,
+		logger:       logger,
+		tracer:       tracer,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		chatSessions: chatSessions,
+		toolset:      toolsets.NewToolsets(db),
+		env:          env,
+		tracking:     tracking,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -338,12 +336,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
-		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
-			ProjectID: *authCtx.ProjectID,
-			Slug:      strings.ToLower(environmentSlug),
-		})
+		envModel, err := environments.ResolveReadableEnvironment(ctx, logger, s.authz, s.db, *authCtx.ProjectID, toolconfig.Slug(environmentSlug))
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return err
 		}
 
 		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)

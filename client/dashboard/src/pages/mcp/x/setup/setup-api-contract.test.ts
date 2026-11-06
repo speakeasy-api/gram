@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { GramCore } from "@gram/client/core";
 import { HTTPClient } from "@gram/client/lib/http";

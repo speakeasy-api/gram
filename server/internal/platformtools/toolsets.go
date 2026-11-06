@@ -22,6 +22,12 @@ const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 // organization.
 const PlatformMCPReadToolsetSlug = "platform"
 
+// SpeakeasySlackPlatformToolsetSlug is the reserved slug for the toolset a
+// project's managed assistant replies through when the Speakeasy Slack app
+// routes a workspace to its project. The tools post with that workspace's bot
+// token, resolved on the server per call.
+const SpeakeasySlackPlatformToolsetSlug = "speakeasy-slack"
+
 // ResearchToolsetSlug is the reserved slug for the MCP research agent's web
 // tools (search and page fetch). No assistant is granted it by default; the
 // research-agent runner attaches it explicitly, and its tools are gated on
@@ -47,6 +53,7 @@ type ToolsetDependencies struct {
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 	PlatformMCPReadTools          []ExternalTool
+	SpeakeasySlackTools           []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -68,6 +75,11 @@ var toolsetRegistry = []toolsetBuilder{
 		tools := make([]ExternalTool, 0, len(deps.PlatformMCPReadTools))
 		tools = append(tools, deps.PlatformMCPReadTools...)
 		return NewPlatformMCPReadToolset(tools...)
+	},
+	func(deps ToolsetDependencies) Toolset {
+		tools := make([]ExternalTool, 0, len(deps.SpeakeasySlackTools))
+		tools = append(tools, deps.SpeakeasySlackTools...)
+		return Toolset{Slug: SpeakeasySlackPlatformToolsetSlug, Tools: tools}
 	},
 }
 
@@ -105,6 +117,8 @@ func PlatformToolsetName(slug string) string {
 		return "Speakeasy managed assistant tools"
 	case PlatformMCPReadToolsetSlug:
 		return "Speakeasy Platform MCP"
+	case SpeakeasySlackPlatformToolsetSlug:
+		return "Speakeasy Slack app"
 	default:
 		return slug
 	}

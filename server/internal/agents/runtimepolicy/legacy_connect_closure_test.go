@@ -14,7 +14,7 @@ import (
 func TestStoredPoliciesKeepReadWriteConnect(t *testing.T) {
 	t.Parallel()
 
-	for version := DelegatedPolicyVersion1; version <= DelegatedPolicyVersion6; version++ {
+	for version := DelegatedPolicyVersion1; version <= DelegatedPolicyVersion7; version++ {
 		for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
 			effective := `{"scope":"mcp:connect","selector":{"resource_id":"*","resource_kind":"mcp"}},{"scope":"mcp:read","selector":{"resource_id":"*","resource_kind":"mcp"}}`
 			if scope == authz.ScopeMCPWrite {
@@ -37,12 +37,12 @@ func TestStoredPoliciesKeepReadWriteConnect(t *testing.T) {
 	}
 }
 
-// From version 7 a delegated policy records no connect for read or write.
-func TestVersion7PoliciesRecordNoImpliedConnect(t *testing.T) {
+// From version 8 a delegated policy records no connect for read or write.
+func TestVersion8PoliciesRecordNoImpliedConnect(t *testing.T) {
 	t.Parallel()
 
 	for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
-		policy, err := NewDelegatedPolicy(DelegatedPolicyVersion7, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
+		policy, err := NewDelegatedPolicy(DelegatedPolicyVersion8, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
 		require.NoError(t, err)
 		for _, grant := range policy.Effective {
 			require.NotEqual(t, authz.ScopeMCPConnect, grant.Scope, scope)

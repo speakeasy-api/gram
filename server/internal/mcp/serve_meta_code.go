@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,7 +41,7 @@ Next run: use the described path and inputSchema. Example, if tracker--list_issu
 
 Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None, server=None, verify=False) lists visible prefixes and connection state. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means this connection needs new consent.
 
-Connection recovery: servers() reports connection.consent and connection.authentication without probing upstreams. unknown does not mean disconnected; verified_at_consent is historical. After browser sign-in, use tools.servers(server="tracker", verify=True) for a live connection check and checked_at. Verification does not change tool consent. For one member needing sign-in or consent, call await tools.connect(server="tracker"). Return its authorization_url and instructions to the user, then stop. If client_reconnect_required, they must also reconnect this gateway in their MCP client. After they finish, use a fresh execution; do not poll or replay the previous program.
+Connection recovery: servers() reports connection.consent and connection.authentication without probing upstreams. unknown does not mean disconnected; verified_at_consent is historical. After browser sign-in, use tools.servers(server="tracker", verify=True) for a live connection check and checked_at. Verification does not change tool consent. For one member needing sign-in or consent, call await tools.connect(server="tracker"). Return its authorization_url and instructions to the user, then stop. If client_reconnect_required, they must also reconnect this gateway in their AI app. After they finish, use a fresh execution; do not poll or replay the previous program.
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
@@ -93,7 +92,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	case len(gate.hiddenMembers) > 1:
 		fmt.Fprintf(&description, "The user hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
 	}
-	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
+	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Title: "Run Python with Tools", Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code tool catalog").LogError(ctx, logger)
 	}
@@ -117,7 +116,7 @@ func (s *Service) codeCallableMembers(ctx context.Context, gate *metaGateContext
 	callable := make([]metaMember, 0, len(selected))
 	for _, member := range selected {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-			if _, consent := errors.AsType[catalogConsentError](err); !consent || !keepConsentRequired {
+			if !needsNewConsent(err) || !keepConsentRequired {
 				continue
 			}
 		}

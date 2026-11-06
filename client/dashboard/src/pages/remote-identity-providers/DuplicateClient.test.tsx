@@ -101,6 +101,7 @@ function source(overrides: Partial<RemoteSessionClient> = {}) {
     organizationId: "org-1",
     userSessionIssuerIds: [],
     legacyCallbackUrl: false,
+    forwardClientName: false,
     credentialOwner: "subject",
     tokenEndpointAuthMethod: "client_secret_basic",
     scope: ["read", "write"],

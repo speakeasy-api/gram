@@ -2,12 +2,14 @@ package agentmanagement
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -141,4 +143,32 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	require.Equal(t, int64(1), rows.Agents)
 	require.Equal(t, int64(1), rows.Grants)
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create"}, agentWebhookOutboxActions(t, conn, "org-create-policy"))
+}
+
+// Deleting an agent removes every grant naming it, including server rules
+// written elsewhere, so no surface keeps a rule for a principal that no
+// longer validates.
+func TestDeleteAgentRemovesItsGrants(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-delete-grants")
+	seedOrganizationUser(t, conn, "org-delete-grants", "owner")
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	service := newTestService(conn, engine)
+	ctx := validatedHumanContext(t, "org-delete-grants", "owner")
+	seedGrant(t, ctx, conn, "org-delete-grants", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeMCPRead, "*")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Retired agent", PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
+	require.NoError(t, err)
+	agentID := uuid.MustParse(created.ID)
+	seedGrant(t, ctx, conn, "org-delete-grants", urn.NewPrincipal(urn.PrincipalTypeAgent, created.ID), authz.ScopeMCPBlockedConnect, uuid.NewString())
+
+	listGrants := func() []repo.ListAgentPolicyGrantsRow {
+		rows, err := repo.New(conn).ListAgentPolicyGrants(ctx, repo.ListAgentPolicyGrantsParams{OrganizationID: "org-delete-grants", AgentID: agentID})
+		require.NoError(t, err)
+		return rows
+	}
+	require.Len(t, listGrants(), 2)
+
+	require.NoError(t, service.Delete(ctx, &gen.DeletePayload{AgentID: created.ID}))
+	require.Empty(t, listGrants())
 }

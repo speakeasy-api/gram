@@ -307,7 +307,7 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 			}
 			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: server.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
+				Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			})
 			if err != nil {
 				return fmt.Errorf("check upstream connection: %w", err)

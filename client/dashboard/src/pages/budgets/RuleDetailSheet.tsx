@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { enumPresentation } from "@/lib/enum";
 import { IdentityLink } from "@/components/identity-link";
 import type { IdentityRef } from "@/lib/identity-urn";
@@ -11,7 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { Loader2, Pencil, Search, Users } from "lucide-react";
+import { Pencil, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
 import {
@@ -350,7 +351,10 @@ function PeopleSection({
           People {matchedCount > 0 ? `(${matchedCount})` : ""}
         </Text>
         {loading && (
-          <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+          <Spinner
+            label="Loading people"
+            className="text-muted-foreground mr-0 size-3.5"
+          />
         )}
       </div>
 

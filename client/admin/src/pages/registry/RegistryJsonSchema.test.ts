@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it, vi } from "vitest";
 import canonical from "../../../../../server/internal/mcpregistry/contract/record.schema.json";
 import speakeasyRegistry from "../../../../../server/internal/mcpregistry/contract/speakeasy-registry.schema.json";

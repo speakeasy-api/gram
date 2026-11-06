@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -24,11 +26,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
+
+// errRemoteSessionNoUsableCredential marks a card whose grant cannot produce a token right now, so nothing was probed.
+var errRemoteSessionNoUsableCredential = errors.New("remote session has no usable credential")
 
 // errRemoteSessionVerdictNotRecorded: the upstream was dialled but the verdict could not be written.
 var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not recorded")
@@ -36,14 +42,28 @@ var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not 
 // errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
 var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
 
-// errValidationRateLimited marks a verify refused before any probe ran.
+// errValidationRateLimited marks a verify that ran no probe: rate limited, or another refresh is running.
 var errValidationRateLimited = errors.New("remote session validation rate limited")
 
 // validationRate caps verifies per consent challenge.
 var validationRate = ratelimit.PerMinute(6)
 
+// errValidationUnfinished marks a verify an outage stopped; the connect page reports it.
+var errValidationUnfinished = errors.New("remote session validation did not finish")
+
+// verifyHitStoreOutage rules out the caller's own deadline, which is no outage.
+func verifyHitStoreOutage(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && oops.IsInfrastructureFailure(err)
+}
+
+// validationUnfinishedNotice follows a Verify that reached no verdict; it says nothing about now.
+const validationUnfinishedNotice = "Your last Verify didn't finish. Try again shortly. If it keeps happening, ask your administrator to contact Speakeasy support."
+
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
+
+// refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
+const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
 
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
@@ -59,11 +79,16 @@ type validationTarget struct {
 	build memberProxyBuilder
 	// tunnelID is set when the upstream is reached through a tunnel, so a keepalive can skip a dial that has no route.
 	tunnelID uuid.NullUUID
+	// memberID is the gateway member dialled, nil on a direct server.
+	memberID uuid.UUID
+	// setupFailed means routing failed before the provider could be contacted.
+	setupFailed bool
 }
 
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
 func (s *Service) validateRemoteSession(
 	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -79,7 +104,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -88,7 +113,9 @@ func (s *Service) validateRemoteSession(
 // keepalive through its claim lease and per-host limiter.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
+	attribution remotesessions.RefreshAttribution,
 	logger *slog.Logger,
+	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
@@ -109,17 +136,40 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if verifyHitStoreOutage(ctx, rerr) {
+			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
+			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
+			if candidate.SessionUnavailable() {
+				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
+					return errValidationRateLimited
+				}
+				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
+					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
+				} else {
+					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
+				}
+				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
+			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break
 		}
 	}
 	if !usable {
-		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+		}
+		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
+			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
+		}
+		message, reason := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -178,6 +228,7 @@ func (s *Service) probeRemoteSession(
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
+	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
@@ -193,6 +244,80 @@ func (s *Service) probeRemoteSession(
 	}
 	logger.InfoContext(ctx, "remote session validated", attr.SlogReason(reason))
 	return nil
+}
+
+// clientLinkedToSignIn reports whether token resolution can reach client: a typed registration need not be linked to the sign-in.
+func (s *Service) clientLinkedToSignIn(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, projectIDs []uuid.UUID) (bool, error) {
+	for _, projectID := range projectIDs {
+		linked, err := remotesessions_repo.New(s.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   endpoint.UserSessionIssuerID,
+			ProjectID:             projectID,
+			OrganizationID:        endpoint.OrganizationID,
+		})
+		if err != nil {
+			return false, fmt.Errorf("check remote session client binding: %w", err)
+		}
+		if linked {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// unservedCredentialReason names why token resolution can't reach this client; empty when it can.
+func unservedCredentialReason(projects int, linked bool) string {
+	switch {
+	case projects == 0:
+		return "this client serves no project on this endpoint"
+	case !linked:
+		return "this client is not linked to the endpoint's sign-in"
+	default:
+		return ""
+	}
+}
+
+// noUsableCredentialRefusal is the person's message and the log reason for a grant that yielded no token.
+func (s *Service) noUsableCredentialRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client) (message, reason string) {
+	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	if err != nil {
+		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
+		return noWorkingSignInMessage, "grant state could not be read"
+	}
+	state, connected := statuses[client.ID]
+	return noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
+}
+
+// noWorkingSignInMessage covers an outage, a broken client setup and an unreadable token: token resolution hides which.
+const noWorkingSignInMessage = "We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator."
+
+// noUsableCredentialMessage follows the card's state, so it names a control the card shows.
+func noUsableCredentialMessage(state remotesessions.RemoteSessionState, connected bool) string {
+	switch {
+	case !connected:
+		return "Connect this service before verifying it."
+	case state.Status == remotesessions.RemoteSessionExpired:
+		return "Reconnect this service."
+	default:
+		return noWorkingSignInMessage
+	}
+}
+
+// describeNoUsableCredential is the log reason for a grant that yielded no token.
+func describeNoUsableCredential(state remotesessions.RemoteSessionState, connected bool, now time.Time) string {
+	lapsed := func(deadline *time.Time) bool { return deadline != nil && !deadline.After(now) }
+	switch {
+	case !connected:
+		return "no grant is stored for this subject and client"
+	case lapsed(state.AuthorizationExpiresAt):
+		return "grant authorization lifetime has ended"
+	case lapsed(state.RefreshExpiresAt):
+		return "grant refresh token lifetime has ended"
+	case lapsed(state.AccessExpiresAt) && !state.CanRefresh:
+		return "access token has expired and the grant has no refresh token"
+	default:
+		return "grant is stored but its token could not be obtained or refreshed"
+	}
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.
@@ -288,9 +413,12 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		discoveryMode: "progressive",
-		projectID:     endpoint.ProjectID,
-		metaServerID:  endpoint.MetaMcpServerID.UUID,
+		fromRequest:      mcpconnectionattempts.FromRequest(nil),
+		skippedUpstreams: nil,
+		request:          nil,
+		discoveryMode:    "progressive",
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent keys reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: endpoint.IsOrganizationGateway(),
@@ -341,7 +469,7 @@ func (s *Service) metaValidationTarget(
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			// An unservable member is the probe's failure to report, not a reason to refuse the check.
-			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID}, nil
+			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: true}, nil
 		}
 		return ctx, none, fmt.Errorf("dial meta MCP member: %w", err)
 	}
@@ -353,7 +481,7 @@ func (s *Service) metaValidationTarget(
 	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
-	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID}, nil
+	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: false}, nil
 }
 
 // standaloneValidationTarget dials a proxied endpoint's own backend, routed as serveRemoteBackend and serveTunneledBackend route it.
@@ -405,7 +533,7 @@ func (s *Service) standaloneValidationTarget(
 		if berr != nil {
 			return ctx, none, fmt.Errorf("build remote backend proxy for validation: %w", berr)
 		}
-		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, memberID: uuid.Nil, setupFailed: false}, nil
 	}
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
@@ -425,7 +553,7 @@ func (s *Service) standaloneValidationTarget(
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}
 		return p, nil
-	}), tunnelID: server.TunneledMcpServerID}, nil
+	}), tunnelID: server.TunneledMcpServerID, memberID: uuid.Nil, setupFailed: false}, nil
 }
 
 // tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.

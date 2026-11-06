@@ -3389,6 +3389,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		ForwardClientName:               v.ForwardClientName,
 		LegacyCallbackURL:               v.LegacyCallbackURL,
 		CredentialOwner:                 v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,

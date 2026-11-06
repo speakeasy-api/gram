@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -71,8 +73,8 @@ func (s *Service) handleMetaDescribeServerCall(
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaToolError(ctx, logger, req.ID, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		return nil, err
 	}
@@ -168,8 +170,8 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
-			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
+			if _, ok := errors.AsType[*metaMemberError](err); ok {
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: s.memberFailureMessage(ctx, logger, gate, mr.member, err)})
 				continue
 			}
 			return nil, err
@@ -217,16 +219,33 @@ func (s *Service) handleMetaExecuteToolCall(
 	argsRaw json.RawMessage,
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
+	start := time.Now()
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
+		s.logMetaToolCallFailure(ctx, gate, metamcp.ToolExecuteTool, argsRaw, newMetaToolCallAttempt(start), err)
 		return nil, err
 	}
 
 	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
 }
 
-// executeMetaMemberTool is shared by Direct calls and Progressive execute_tool.
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
+// and Code Mode. A call that fails before its member dispatch writes the
+// member's tool_call row is logged here, so every failed call leaves one row
+// stamped with this gateway.
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+	attempt := newMetaToolCallAttempt(time.Now())
+	body, err := s.dispatchMetaMemberTool(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt), logger, gate, members, req, qualified, arguments, meta, attempt)
+	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
+		return body, err
+	}
+	s.logMetaToolCallFailure(ctx, gate, qualified, arguments, attempt, err)
+	return body, err
+}
+
+// dispatchMetaMemberTool routes one member tool call, recording on attempt
+// how far it got and why it failed.
+func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta, attempt *metaToolCallAttempt) (json.RawMessage, error) {
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
@@ -240,6 +259,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
+			// Absence from this cached view does not prove consent excluded a real
+			// tool: misspelled, removed, or unknown member tools are absent too.
+			attempt.fail(http.StatusForbidden, remotemcp.ToolNotApprovedMessage)
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -247,9 +269,12 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
+	attempt.member = &member
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			message := s.memberFailureMessage(ctx, logger, gate, member, err)
+			attempt.fail(metaMemberErrorStatus(err), message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, message)
 		}
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 			return nil, err
@@ -263,21 +288,25 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
 	}
+	attempt.toolsetSlug = toolset.Slug
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
 	// member-scoped result (as in serveToolsetResolved). Members keep their
 	// toolset's hosting publicness.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, hosting.Public, inputs)
+	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil {
 		return nil, err
 	}
 	if !satisfied {
-		return marshalMetaToolError(ctx, logger, req.ID,
-			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
+		s.recordMemberFailure(ctx, gate, member, failureCode)
+		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
+		attempt.fail(http.StatusUnauthorized, message)
+		return marshalMetaToolError(ctx, logger, req.ID, message)
 	}
 	ctx = withMemberProjectAuthContext(ctx, toolset.ProjectID)
 
@@ -307,6 +336,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
+		if code, ok := toolsCallRefusal(err); ok {
+			s.recordMemberFailure(ctx, gate, member, code)
+		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults — unexpected errors and server
@@ -327,8 +359,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
 				invocation.rejected = true
 			}
-			return marshalMetaToolError(ctx, logger, req.ID,
-				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error())
+			attempt.fail(shareable.HTTPStatus(ctx), message)
+			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
 		return nil, err
 	}
@@ -472,7 +505,7 @@ func (s *Service) buildMemberDispatch(
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, err
+		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberReconnectURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
@@ -509,6 +542,7 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
+		request:               gate.request,
 		projectID:             projectID,
 		organizationID:        toolset.OrganizationID,
 		toolset:               toolset.Slug,
@@ -670,7 +704,10 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // records, for Code Mode, whether connecting the member is its remedy.
 func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, err error, message string) (json.RawMessage, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
-		_, invocation.credential = errors.AsType[memberCredentialError](err)
+		_, credential := errors.AsType[memberCredentialError](err)
+		_, stale := errors.AsType[memberStaleChoiceError](err)
+		invocation.credential = credential && !stale
+		invocation.rejected = invocation.rejected || stale
 	}
 	return marshalMetaToolError(ctx, logger, id, message)
 }

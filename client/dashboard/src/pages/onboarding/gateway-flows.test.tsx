@@ -34,9 +34,7 @@ vi.mock("@/components/page-templates", async () => {
       scopeAll,
       resourceId,
       children,
-    }: ComponentProps<
-      typeof import("@/components/page-templates").FormPage
-    >) =>
+    }: ComponentProps<typeof import("@/components/page-templates").FormPage>) =>
       scope ? (
         <RequireScope
           scope={scope}

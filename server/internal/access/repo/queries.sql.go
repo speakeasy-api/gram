@@ -2738,6 +2738,59 @@ func (q *Queries) ListLiveDirectoryRoleMappingsForSource(ctx context.Context, ar
 	return items, nil
 }
 
+const listManagedAssistantAgentIDs = `-- name: ListManagedAssistantAgentIDs :many
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = $1
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY($2::uuid[])
+`
+
+type ListManagedAssistantAgentIDsParams struct {
+	OrganizationID string
+	AgentIds       []uuid.UUID
+}
+
+// The requested agents that are currently bound to a project's managed
+// assistant. Only these agents may hold organization-wide read policy; every
+// other agent has org:read filtered out of its runtime policy.
+func (q *Queries) ListManagedAssistantAgentIDs(ctx context.Context, arg ListManagedAssistantAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listManagedAssistantAgentIDs, arg.OrganizationID, arg.AgentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var agent_id uuid.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
 WITH active_users AS (
   SELECT users.id AS user_id
@@ -3805,6 +3858,24 @@ type LockResourceAudienceParams struct {
 // The lock is held until the transaction ends.
 func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudienceParams) error {
 	_, err := q.db.Exec(ctx, lockResourceAudience, arg.OrganizationID, arg.ResourceID)
+	return err
+}
+
+const lockRolePrincipalGrants = `-- name: LockRolePrincipalGrants :exec
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockRolePrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Serializes grant writes for one role principal in an organization until the
+// transaction ends. Role edits and the assistant-role-grants backfill both take
+// it, so a backfill cannot recheck a role, lose a race with a revocation, and
+// then write grants back.
+func (q *Queries) LockRolePrincipalGrants(ctx context.Context, arg LockRolePrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockRolePrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
 	return err
 }
 

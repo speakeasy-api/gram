@@ -700,7 +700,7 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"
-	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil, nil)
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
 }

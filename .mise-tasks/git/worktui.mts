@@ -218,6 +218,10 @@ async function collect(): Promise<Row[]> {
     ["--config-set", "list.json-schema=1", "list", "--format", "json"],
     {
       maxBuffer: 16 * 1024 * 1024,
+      // A hung `wt list` would otherwise hold the single-flight refresh
+      // forever and silently freeze the table. Rejecting keeps the last good
+      // frame and lets polling resume.
+      timeout: 120_000,
     },
   );
   const list = JSON.parse(strip(stdout));
@@ -376,9 +380,13 @@ async function run() {
   }
 
   // PRs load in the background — first frame renders without the column
-  // filled, then it appears on the next draw.
-  void fetchPRs(rows);
-  const prPoll = setInterval(() => void fetchPRs(rows), 60_000);
+  // filled, then it appears as soon as the lookup finishes. `draw` is
+  // declared below; the arrow only runs after this function has defined it.
+  void fetchPRs(rows).then(() => draw());
+  const prPoll = setInterval(
+    () => void fetchPRs(rows).then(() => draw()),
+    60_000,
+  );
   prPoll.unref?.();
 
   let cursor = 0;
@@ -550,23 +558,62 @@ async function run() {
     }
   };
 
+  // At most one `wt list` at a time. Listing can take far longer than the
+  // poll interval (each worktree runs `git diff-tree --patch` for squash-merge
+  // detection), and overlapping runs slow each other down until they pile up
+  // into dozens of processes and gigabytes of memory. An explicit refresh
+  // requested mid-flight (post-remove) runs once afterwards instead of in
+  // parallel.
+  let refreshing = false;
+  let refreshQueued = false;
   const refresh = async () => {
+    if (refreshing) {
+      refreshQueued = true;
+      return;
+    }
+    refreshing = true;
     try {
-      rows = await collect();
-      if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
-      for (const b of selected)
-        if (!rows.some((r) => r.branch === b)) selected.delete(b);
-    } catch {
-      /* keep last good frame; wt can be busy during removals */
+      do {
+        refreshQueued = false;
+        try {
+          rows = await collect();
+          if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
+          for (const b of selected)
+            if (!rows.some((r) => r.branch === b)) selected.delete(b);
+        } catch {
+          /* keep last good frame; wt can be busy during removals */
+        }
+        draw();
+      } while (refreshQueued);
+    } finally {
+      refreshing = false;
     }
-    // Keep the services pane live: refetch on the same cadence as the list.
-    if (view === "logs" && logMode === "services" && logTarget) {
-      void fetchServiceLogs(logTarget);
-    }
-    draw();
   };
 
-  const poll = setInterval(refresh, 2000);
+  // Poll 2s after the previous refresh settles rather than on a fixed
+  // interval, so a slow `wt list` stretches the cadence instead of running
+  // back to back. A tick that lands mid-refresh is dropped, not queued.
+  let poll: ReturnType<typeof setTimeout>;
+  const schedulePoll = () => {
+    poll = setTimeout(async () => {
+      try {
+        if (!refreshing) await refresh();
+      } finally {
+        schedulePoll();
+      }
+    }, 2000);
+  };
+  schedulePoll();
+
+  // Log panes stay live on their own cheap tick, independent of the slow
+  // `wt list` cycle: the services pane refetches pitchfork logs (single-flight
+  // via serviceFetching, and it draws when done), the boot pane re-reads
+  // stack.log on draw.
+  const logTick = setInterval(() => {
+    if (view !== "logs" || !logTarget) return;
+    if (logMode === "services") void fetchServiceLogs(logTarget);
+    else draw();
+  }, 2000);
 
   const startRemove = async (branches: string[]) => {
     view = "remove";
@@ -645,11 +692,16 @@ async function run() {
           : c.red(`✗ exited ${code} — press any key to go back`),
       );
       selected.clear();
-      // Success needs no reading — return to the list on the next refresh.
+      // Success needs no reading — return to the list shortly. Drop the
+      // removed rows right away rather than waiting a full `wt list` cycle,
+      // so they can't be re-selected for another (failing) remove meanwhile.
       // Failures stay up until a keypress so the error is actually seen.
       if (code === 0) {
+        rows = rows.filter((r) => !branches.includes(r.branch));
+        if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1);
         setTimeout(() => {
           if (view === "remove" && !removeRunning) view = "list";
+          draw();
           void refresh();
         }, 1500);
       } else {
@@ -663,7 +715,8 @@ async function run() {
   process.stdin.on("data", (buf: Buffer) => {
     const k = buf.toString();
     if (k === "\x03" || (k === "q" && !confirmRemove)) {
-      clearInterval(poll);
+      clearTimeout(poll);
+      clearInterval(logTick);
       process.exit(0);
     }
     if (confirmRemove) {

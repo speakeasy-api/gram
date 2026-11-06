@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -231,7 +232,7 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
-			return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+			return authorizedCtx, nil, "", err
 		}
 		keySlot = billing.ModelUsageSourceElements
 	}
@@ -360,7 +361,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    visibility.ExternalUserID,
 		UserID:            visibility.UserID,
-		OwnedAgentIds:     visibility.OwnedAgentIDs,
+		OwnedAgentIds:     visibility.ScopedAgentIDs,
 		AgentID:           agentID,
 		FromTime:          fromTime,
 		ToTime:            toTime,
@@ -395,7 +396,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			ProjectID:         *authCtx.ProjectID,
 			ExternalUserID:    visibility.ExternalUserID,
 			UserID:            visibility.UserID,
-			OwnedAgentIds:     visibility.OwnedAgentIDs,
+			OwnedAgentIds:     visibility.ScopedAgentIDs,
 			AgentID:           agentID,
 			FromTime:          fromTime,
 			ToTime:            toTime,
@@ -463,7 +464,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
-			Title:                row.Title.String,
+			Title:                chattitle.Display(row.Title.String, row.TitleManuallySet),
 			NumMessages:          int(row.NumMessages),
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -495,7 +496,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat participants").LogError(ctx, s.logger)
 	}
-	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: ids, ExternalUserID: visibility.ExternalUserID, UserID: visibility.UserID, OwnedAgentIds: visibility.OwnedAgentIDs})
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: ids, ExternalUserID: visibility.ExternalUserID, UserID: visibility.UserID, OwnedAgentIds: visibility.ScopedAgentIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat channels").LogError(ctx, s.logger)
 	}
@@ -787,7 +788,7 @@ func (s *Service) logChatAccess(ctx context.Context, authCtx *contextvalues.Auth
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		ChatSessionURN:   urn.NewChatSession(chat.ID),
-		ChatTitle:        chat.Title.String,
+		ChatTitle:        chattitle.Display(chat.Title.String, chat.TitleManuallySet),
 		OwnerUserID:      chat.UserID.String,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record chat access audit log").LogError(ctx, s.logger)
@@ -813,7 +814,7 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		ProjectID:      *authCtx.ProjectID,
 		ExternalUserID: visibility.ExternalUserID,
 		UserID:         visibility.UserID,
-		OwnedAgentIds:  visibility.OwnedAgentIDs,
+		OwnedAgentIds:  visibility.ScopedAgentIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
@@ -858,7 +859,7 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		ChatIds:        chatIDs,
 		ExternalUserID: visibility.ExternalUserID,
 		UserID:         visibility.UserID,
-		OwnedAgentIds:  visibility.OwnedAgentIDs,
+		OwnedAgentIds:  visibility.ScopedAgentIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list session links").LogError(ctx, s.logger)
@@ -874,8 +875,8 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		link := &gen.ChatSessionLink{
 			ParentChatID:   nil,
 			ChildChatID:    nil,
-			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
-			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
+			ParentTitle:    displayTitlePtr(row.ParentTitle, row.ParentTitleManuallySet),
+			ChildTitle:     displayTitlePtr(row.ChildTitle, row.ChildTitleManuallySet),
 			ParentCaptured: row.ParentCaptured,
 			ChildCaptured:  row.ChildCaptured,
 			Kind:           row.Kind,
@@ -930,12 +931,12 @@ type chatVisibility struct {
 	// UserID restricts the listing to one Speakeasy user's sessions.
 	UserID string
 
-	// OwnedAgentIDs widens a UserID restriction to the sessions of the agents
-	// that user owns. Agent-actor capture leaves a session's user_id empty, so
-	// without this an agent's owner could not see what their agent did. Only
-	// set when UserID is the caller's own-session scope, never for a filter an
-	// unrestricted caller chose.
-	OwnedAgentIDs []uuid.UUID
+	// ScopedAgentIDs widens a UserID restriction to the sessions of the agents
+	// that user owns or may edit (agent:write). Agent-actor capture leaves a
+	// session's user_id empty, so without this an agent's owner could not see
+	// what their agent did. Only set when UserID is the caller's own-session
+	// scope, never for a filter an unrestricted caller chose.
+	ScopedAgentIDs []uuid.UUID
 }
 
 // agentSessionScope says whether a visibility scope also covers the sessions of
@@ -951,7 +952,8 @@ const (
 // endpoints. Callers holding an unrestricted chat:read grant (only admins do)
 // and the managed-assistant runtime see all project sessions (optionally
 // narrowed by the payload's external user id and user id filters); everyone
-// else is restricted to their own sessions and those of the agents they own.
+// else is restricted to their own sessions and those of the agents they own
+// or may edit (agent:write, only where RBAC is enforced).
 // Agent ownership is resolved only for queries that include agent-attributed
 // sessions; assistant summaries consume only the human visibility scope.
 // Visibility is never a hard gate on the route — when the chat:read check
@@ -997,19 +999,19 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 
 	switch {
 	case authCtx.ExternalUserID != "":
-		return chatVisibility{ExternalUserID: authCtx.ExternalUserID, UserID: "", OwnedAgentIDs: nil}, nil
+		return chatVisibility{ExternalUserID: authCtx.ExternalUserID, UserID: "", ScopedAgentIDs: nil}, nil
 	case canReadAllSessions, isAssistantCall:
 		return chatVisibility{
 			ExternalUserID: conv.PtrValOr(payloadExternalUserID, ""),
 			UserID:         conv.PtrValOr(payloadUserID, ""),
-			OwnedAgentIDs:  nil,
+			ScopedAgentIDs: nil,
 		}, nil
 	default:
 		if authCtx.UserID == "" {
 			return chatVisibility{}, oops.C(oops.CodeUnauthorized)
 		}
 		if agentSessions == humanSessionsOnly {
-			return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, OwnedAgentIDs: nil}, nil
+			return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, ScopedAgentIDs: nil}, nil
 		}
 		ownedAgentIDs, err := s.repo.ListOwnedAgentIDs(ctx, repo.ListOwnedAgentIDsParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -1018,8 +1020,82 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 		if err != nil {
 			return chatVisibility{}, oops.E(oops.CodeUnexpected, err, "resolve owned agents").LogError(ctx, s.logger)
 		}
-		return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, OwnedAgentIDs: ownedAgentIDs}, nil
+		editableAgentIDs, err := s.editableAgentIDs(ctx, authCtx)
+		if err != nil {
+			return chatVisibility{}, err
+		}
+		return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, ScopedAgentIDs: unionAgentIDs(ownedAgentIDs, editableAgentIDs)}, nil
 	}
+}
+
+// editableAgentIDs lists the organization's agents the caller holds agent:write
+// on. An agent's editors answer for what it does as its owner does, so they
+// read its sessions too. When RBAC is not enforced the engine would allow every
+// agent, so no agent is editable on that basis and only ownership counts, the
+// same way a disabled check never widens chat:read above.
+func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.AuthContext) ([]uuid.UUID, error) {
+	enforce, err := s.authz.ShouldEnforce(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for agent session visibility; showing owned agents only", attr.SlogError(err))
+		return nil, nil
+	}
+	if !enforce {
+		return nil, nil
+	}
+
+	agentIDs, err := s.repo.ListOrganizationAgentIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization agents").LogError(ctx, s.logger)
+	}
+	if len(agentIDs) == 0 {
+		return nil, nil
+	}
+
+	checks := make([]authz.Check, 0, len(agentIDs))
+	for _, id := range agentIDs {
+		checks = append(checks, agentWriteCheck(id))
+	}
+	allowed, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		// Visibility is never a hard gate: fall back to owned agents.
+		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
+		return nil, nil
+	}
+
+	editable := make([]uuid.UUID, 0, len(allowed))
+	for _, raw := range allowed {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse editable agent id").LogError(ctx, s.logger)
+		}
+		editable = append(editable, id)
+	}
+	return editable, nil
+}
+
+func agentWriteCheck(agentID uuid.UUID) authz.Check {
+	return authz.Check{
+		Scope:        authz.ScopeAgentWrite,
+		ResourceKind: authz.ResourceKindAgent,
+		ResourceID:   agentID.String(),
+		Dimensions:   nil,
+	}
+}
+
+// unionAgentIDs merges agent id lists without repeating an id.
+func unionAgentIDs(lists ...[]uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{})
+	merged := make([]uuid.UUID, 0)
+	for _, list := range lists {
+		for _, id := range list {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			merged = append(merged, id)
+		}
+	}
+	return merged
 }
 
 // chatAccess selects which scope a non-owner needs to reach a chat. Reads and
@@ -1111,21 +1187,18 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// holds. The managed-assistant runtime is exempt — it consumes transcripts
 	// programmatically, not as a reviewer.
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	// An agent's session has no human owner, so the agent's owner stands in for
-	// one — for reading only. A session that also carries a human identity
-	// (user_id or external_user_id) stays that human's, whatever agent_id says.
-	// Deleting or otherwise mutating what the agent did still needs chat:write.
+	// An agent's session has no human owner, so the agent's owner and its
+	// editors (agent:write) stand in for one, for reading only. A session that
+	// also carries a human identity (user_id or external_user_id) stays that
+	// human's, whatever agent_id says. Deleting or otherwise mutating what the
+	// agent did still needs chat:write.
 	agentOnlySession := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
 	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && agentOnlySession {
-		owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
-			AgentID:        chat.AgentID.UUID,
-			OrganizationID: chat.OrganizationID,
-			OwnerUserID:    authCtx.UserID,
-		})
+		answers, err := s.answersForAgent(ctx, authCtx, chat)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
+			return err
 		}
-		isOwner = owns
+		isOwner = answers
 	}
 	if !isAssistantCall && !isOwner {
 		if filteredGrant != nil {
@@ -1140,6 +1213,53 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	}
 
 	return nil
+}
+
+// answersForAgent reports whether the caller owns the agent behind an
+// agent-only session or holds agent:write on it. The write check is evaluated
+// only when RBAC is enforced: a disabled check allows everything and must not
+// turn every agent's sessions into the caller's.
+func (s *Service) answersForAgent(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) (bool, error) {
+	owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
+		AgentID:        chat.AgentID.UUID,
+		OrganizationID: chat.OrganizationID,
+		OwnerUserID:    authCtx.UserID,
+	})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
+	}
+	if owns {
+		return true, nil
+	}
+
+	enforce, err := s.authz.ShouldEnforce(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for agent session access", attr.SlogError(err))
+		return false, nil
+	}
+	if !enforce {
+		return false, nil
+	}
+	// A grant on a deleted or foreign agent id answers for nothing, as the
+	// listing's candidate agents exclude them.
+	live, err := s.repo.IsLiveAgent(ctx, repo.IsLiveAgentParams{
+		AgentID:        chat.AgentID.UUID,
+		OrganizationID: chat.OrganizationID,
+	})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "resolve agent").LogError(ctx, s.logger)
+	}
+	if !live {
+		return false, nil
+	}
+	// Evaluate, not Require: falling through to the chat:read gate below is
+	// the expected outcome for a non-editor, not a denial worth recording.
+	canEdit, err := s.authz.Evaluate(ctx, agentWriteCheck(chat.AgentID.UUID))
+	if err != nil {
+		s.logger.WarnContext(ctx, "agent:write check failed for agent session access", attr.SlogError(err))
+		return false, nil
+	}
+	return canEdit, nil
 }
 
 // loadAuthorizedChat loads a chat by id and applies the shared access gate
@@ -1593,7 +1713,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	if err != nil {
 		return nil, err
 	}
-	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: []uuid.UUID{chat.ID}, ExternalUserID: channelVisibility.ExternalUserID, UserID: channelVisibility.UserID, OwnedAgentIds: channelVisibility.OwnedAgentIDs})
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: []uuid.UUID{chat.ID}, ExternalUserID: channelVisibility.ExternalUserID, UserID: channelVisibility.UserID, OwnedAgentIds: channelVisibility.ScopedAgentIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat channel").LogError(ctx, s.logger)
 	}
@@ -1608,7 +1728,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		SlackChannelName:     conv.PtrEmpty(channel.SlackChannelName),
 		Participants:         participants[chat.ID.String()],
 		ID:                   chat.ID.String(),
-		Title:                chat.Title.String,
+		Title:                chattitle.Display(chat.Title.String, chat.TitleManuallySet),
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
@@ -2429,7 +2549,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	// available on the next list()/fetch().
 	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
-		title = chat.Title.String
+		title = chattitle.Display(chat.Title.String, chat.TitleManuallySet)
 	}
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
@@ -3609,7 +3729,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 		case "claude-code":
 			return true
 		case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-			"claude", "claude-chat-web", "assistants", "playground":
+			"claude", "claude-chat-web", "assistants", "speakeasy-slack", "playground":
 			return false
 		default:
 			return true
@@ -3622,7 +3742,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 	case "claude-code", "claude-code-desktop", "cowork", "litellm":
 		return true
 	case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-		"claude", "claude-chat-web", "assistants", "playground":
+		"claude", "claude-chat-web", "assistants", "speakeasy-slack", "playground":
 		return false
 	default:
 		return true

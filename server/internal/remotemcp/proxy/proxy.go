@@ -373,6 +373,10 @@ type Proxy struct {
 	// [ToolsCallFailureInterceptor].
 	ToolsCallFailureInterceptors []ToolsCallFailureInterceptor
 
+	// ToolsCallRefusalInterceptors run once for a "tools/call" a request or
+	// response interceptor refused. See [ToolsCallRefusalInterceptor].
+	ToolsCallRefusalInterceptors []ToolsCallRefusalInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -597,6 +601,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	var (
 		upstreamStatus int
+		upstreamHeader http.Header
 		responseBytes  int64
 	)
 	defer func() {
@@ -806,7 +811,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			if failure != nil {
 				cause = failure
 			}
-			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Err: cause})
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, Err: cause})
 		}
 	}()
 
@@ -862,6 +867,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
 
 	upstreamStatus = upstreamResp.StatusCode
+	upstreamHeader = upstreamResp.Header
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
 	}
@@ -1199,13 +1205,13 @@ func (p *Proxy) forwardRequest(
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
+		return nil, nil, &ForwardSetupError{Err: oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger), Kind: ForwardSetupInternal}
 	}
 	if p.Identity.RemoteMCPServerID != "" {
 		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
 			phaseTimer.Stop()
 			forwardCancel()
-			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+			return nil, nil, &ForwardSetupError{Err: p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false), Kind: ForwardSetupConfiguration}
 		}
 	}
 
@@ -1799,6 +1805,7 @@ func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *T
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call request", interceptor.Name(), err)
 		}
 		span.End()
@@ -1818,11 +1825,23 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call response", interceptor.Name(), err)
 		}
 		span.End()
 	}
 	return nil
+}
+
+// runToolsCallRefusalInterceptors invokes each configured
+// ToolsCallRefusalInterceptor in order. They observe only.
+func (p *Proxy) runToolsCallRefusalInterceptors(ctx context.Context, refusal error) {
+	for _, interceptor := range p.ToolsCallRefusalInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallRefusalInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptToolsCallRefusal(iterCtx, refusal)
+		span.End()
+	}
 }
 
 // runToolsCallFailureInterceptors invokes each configured
@@ -2070,7 +2089,38 @@ func (p *Proxy) dispatchInterceptorError(
 	if _, ok := errors.AsType[*MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
+	if refusal, ok := errors.AsType[*UpstreamListingRefusalError](err); ok {
+		return p.answerUpstreamListingRefusal(ctx, w, span, id, refusal, responseBytes)
+	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)
+	return nil
+}
+
+// answerUpstreamListingRefusal answers the way the POST path answers the same
+// failure on a forwarded request: a [RejectError] as a JSON-RPC error, any other
+// cause returned for the caller's error path, and an upstream refusal relayed
+// with its status and challenge.
+func (p *Proxy) answerUpstreamListingRefusal(
+	ctx context.Context,
+	w http.ResponseWriter,
+	span trace.Span,
+	id jsonrpc.ID,
+	refusal *UpstreamListingRefusalError,
+	responseBytes *int64,
+) error {
+	if refusal.Cause != nil {
+		if rejection, ok := errors.AsType[*RejectError](refusal.Cause); ok {
+			*responseBytes = p.writeRejection(ctx, w, span, id, rejection)
+			return nil
+		}
+		return fmt.Errorf("upstream listing: %w", refusal.Cause)
+	}
+
+	written, err := writeResponse(w, refusal.Response, http.NoBody, p.WWWAuthenticate)
+	*responseBytes = written
+	if err != nil {
+		return fmt.Errorf("relay upstream listing refusal: %w", err)
+	}
 	return nil
 }
 

@@ -47,7 +47,7 @@ func requireStoredRotation(t *testing.T, ctx context.Context, env syntheticExpir
 	require.NoError(t, err)
 	require.Equal(t, "refresh-rotated", stored)
 
-	token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "access-rotated", token)
 	require.EqualValues(t, 1, refreshes.Load(), "the next request must use the stored token, not refresh again")
@@ -69,7 +69,7 @@ func TestResolveAccessToken_CallerCancelDuringRefreshKeepsRotatedToken(t *testin
 	}
 	returned := make(chan resolved, 1)
 	go func() {
-		token, err := env.mgr.ResolveAccessToken(requestCtx, env.clientID, env.subject, "")
+		token, err := env.mgr.ResolveAccessToken(requestCtx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		returned <- resolved{token: token, err: err}
 	}()
 
@@ -77,7 +77,7 @@ func TestResolveAccessToken_CallerCancelDuringRefreshKeepsRotatedToken(t *testin
 	cancelRequest()
 	select {
 	case got := <-returned:
-		require.NoError(t, got.err)
+		require.ErrorIs(t, got.err, context.Canceled, "the caller leaving is not an outage")
 		require.Empty(t, got.token)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the caller must stop waiting when its context ends")
@@ -106,7 +106,7 @@ func TestRefreshNow_CallerDeadlineHoldsWhileRefreshFinishes(t *testing.T) {
 		<-arrived
 		cancel()
 	}()
-	_, err = env.refresher.RefreshNow(budgetCtx, active, "", remotesessionmetrics.RefreshTriggerRequest)
+	_, err = env.refresher.RefreshNow(budgetCtx, active, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, context.Canceled)
 	var refreshErr *remotesessions.RefreshError
 	require.ErrorAs(t, err, &refreshErr)
@@ -131,8 +131,8 @@ func TestDrainRefreshes_WaitsForARefreshThatOutlivedItsCaller(t *testing.T) {
 		<-arrived
 		cancelRequest()
 	}()
-	_, err := env.mgr.ResolveAccessToken(requestCtx, env.clientID, env.subject, "")
-	require.NoError(t, err)
+	_, err := env.mgr.ResolveAccessToken(requestCtx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
+	require.ErrorIs(t, err, context.Canceled)
 
 	expired, cancelExpired := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancelExpired()
@@ -232,7 +232,7 @@ func TestRefreshNow_HoldsTheLeaseUntilTheOutcomeIsStored(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 
 	require.Greater(t, time.Duration(ttlDuringPost.Load()), lockTTL, "the lease must outlast the store, not only the POST")
@@ -255,7 +255,7 @@ func TestRefreshNow_LostLeaseDoesNotPresentTheToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "the caller retries rather than reconnecting")
 	require.Zero(t, refreshes.Load(), "another caller may be presenting this token")
 
@@ -288,7 +288,7 @@ func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {
 	}
 	returned := make(chan refreshed, 1)
 	go func() {
-		result, err := env.refresher.RefreshNow(adminCtx, active, "", remotesessionmetrics.RefreshTriggerManual)
+		result, err := env.refresher.RefreshNow(adminCtx, active, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 		returned <- refreshed{result: result, err: err}
 	}()
 
@@ -325,8 +325,8 @@ func TestResolveAccessToken_CallerCancelStillClearsARefusedGrant(t *testing.T) {
 		<-arrived
 		cancelRequest()
 	}()
-	token, err := env.mgr.ResolveAccessToken(requestCtx, env.clientID, env.subject, "")
-	require.NoError(t, err)
+	token, err := env.mgr.ResolveAccessToken(requestCtx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
+	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, token)
 	close(release)
 

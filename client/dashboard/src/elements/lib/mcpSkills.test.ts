@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { asSchema } from "ai";
 import { describe, expect, it, vi } from "vitest";
 import {

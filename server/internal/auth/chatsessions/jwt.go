@@ -58,7 +58,8 @@ func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, e
 // reports that the token itself was rejected (malformed, bad signature,
 // expired, or revoked) and the caller should be treated as unauthenticated;
 // an error without invalidToken is a server fault, such as a failed
-// revocation lookup.
+// revocation lookup. Dashboard session epochs are checked by Authorize;
+// ValidateToken alone does not establish permission to access a resource.
 func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (claims *ChatSessionClaims, invalidToken bool, err error) {
 	//nolint:exhaustruct // no point in setting all the claims fields
 	token, err := jwt.ParseWithClaims(tokenString, &ChatSessionClaims{}, func(token *jwt.Token) (any, error) {

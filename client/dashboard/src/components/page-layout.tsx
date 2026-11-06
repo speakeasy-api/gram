@@ -13,6 +13,7 @@ import { MoreActions } from "@/components/ui/MoreActions";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { Text } from "@/components/ui/Text";
 import { XYFade } from "@/components/ui/XyFade";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { PageEyebrow } from "./page-eyebrow";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ function PageBody({
   fullHeight = false,
   noPadding = false,
   overflowHidden = false,
+  isLoading = false,
   className,
 }: {
   children: React.ReactNode;
@@ -41,6 +43,8 @@ function PageBody({
   fullHeight?: boolean;
   noPadding?: boolean;
   overflowHidden?: boolean;
+  /** Show the full-page logo loader in place of the body content. */
+  isLoading?: boolean;
   className?: string;
 }) {
   return (
@@ -75,7 +79,7 @@ function PageBody({
           className,
         )}
       >
-        {children}
+        {isLoading ? <SplashScreen /> : children}
       </div>
     </div>
   );

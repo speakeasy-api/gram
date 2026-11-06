@@ -18,16 +18,10 @@ import {
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
@@ -285,7 +279,7 @@ export function GrantDrawer({
                 </div>
               ) : areChallengesPending || catalogueLoading ? (
                 <div className="border-border flex w-full items-center gap-3 border p-4 text-left">
-                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                  <Spinner className="text-muted-foreground mr-0 h-5 w-5" />
                   <Text
                     variant="body"
                     className="text-muted-foreground text-sm"

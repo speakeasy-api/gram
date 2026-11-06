@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
   >,
   clientsLoading: false,
   clientsError: false,
+  // The sign-in's own registrations, apart from the organization-wide read.
+  linkedLoading: false,
+  linkedError: false,
   clientsRefetch: vi.fn(),
   url: "https://mcp.vendor.example.com/mcp" as string | undefined,
   sourceError: false,
@@ -26,7 +29,12 @@ const state = vi.hoisted(() => ({
   linked: [{ id: "client" }] as { id: string }[],
   registrations: [] as { id: string }[],
   clientFilters: [] as unknown[],
-  credentials: [] as { clientType?: string; remoteSessionClientId?: string }[],
+  credentials: [] as {
+    clientType?: string;
+    remoteSessionClientId?: string;
+    enabled?: boolean;
+  }[],
+  credentialsStatus: "configured" as string,
   credentialsLoading: false,
   credentialsError: false,
   credentialsRefetch: vi.fn(),
@@ -59,7 +67,7 @@ vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
 }));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => ({
-    data: { clients: state.credentials },
+    data: { status: state.credentialsStatus, clients: state.credentials },
     isLoading: state.credentialsLoading,
     isError: state.credentialsError,
     refetch: state.credentialsRefetch,
@@ -78,8 +86,12 @@ vi.mock("@/lib/remote-identity", () => ({
           : filters.userSessionIssuerId
             ? state.linked
             : state.registrations,
-      isLoading: state.clientsLoading,
-      isError: state.clientsError,
+      isLoading:
+        state.clientsLoading ||
+        (!!filters.userSessionIssuerId && state.linkedLoading),
+      isError:
+        state.clientsError ||
+        (!!filters.userSessionIssuerId && state.linkedError),
       refetch: state.clientsRefetch,
     }
   ),
@@ -162,6 +174,8 @@ beforeEach(() => {
   state.flags = { oktaConnections: true, emaProviders: true };
   state.clientsLoading = false;
   state.clientsError = false;
+  state.linkedLoading = false;
+  state.linkedError = false;
   state.clientsRefetch.mockReset();
   state.url = "https://mcp.vendor.example.com/mcp";
   state.sourceError = false;
@@ -175,6 +189,7 @@ beforeEach(() => {
   state.registrations = [];
   state.clientFilters = [];
   state.credentials = [];
+  state.credentialsStatus = "configured";
   state.credentialsLoading = false;
   state.credentialsError = false;
   state.credentialsRefetch.mockReset();
@@ -231,6 +246,109 @@ describe("IdentityChainingSection", () => {
     ).toBe("client,attached,ema-registration");
   });
 
+  it("leaves out another server's registration on a shared sign-in when upstream auth is enforced", () => {
+    state.upstreamAuth = "enforced";
+    // The organization-wide sign-in binds the other server's registration.
+    state.linked = [{ id: "other-server" }];
+    state.registrations = [{ id: "other-server" }, { id: "own" }];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "own" },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(state.clientFilters).not.toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("ignores a failed or pending read of the sign-in's registrations when the server's credentials decide", () => {
+    state.upstreamAuth = "enforced";
+    state.registrations = [{ id: "own" }];
+    state.credentials = [
+      { clientType: "remote_session", remoteSessionClientId: "own" },
+    ];
+    // A cached answer from before the organization enforced upstream auth.
+    state.linkedError = true;
+    const { unmount } = render(<IdentityChainingSection mcpServer={server} />, {
+      wrapper: Router,
+    });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(
+      screen.queryByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeNull();
+    unmount();
+
+    state.linkedError = false;
+    state.linkedLoading = true;
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+  });
+
+  it("reads the sign-in's registrations when a per-person credential names no registration", () => {
+    state.upstreamAuth = "enforced";
+    state.credentials = [{ clientType: "remote_session", enabled: true }];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+    expect(state.clientFilters).toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("ignores a disabled per-person credential that names no registration", () => {
+    state.upstreamAuth = "enforced";
+    // The organization-wide sign-in binds another server's registration.
+    state.linked = [{ id: "other-server" }];
+    state.registrations = [{ id: "own" }];
+    state.credentials = [
+      {
+        clientType: "remote_session",
+        enabled: true,
+        remoteSessionClientId: "own",
+      },
+      { clientType: "remote_session", enabled: false },
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("own");
+    expect(state.clientFilters).not.toContainEqual({
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("reads the sign-in's registrations while the server's setup is incomplete", () => {
+    state.upstreamAuth = "enforced";
+    state.credentialsStatus = "setup_incomplete";
+    state.credentials = [];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+  });
+
   it("offers only clients linked to the sign-in when upstream auth isn't enforced", () => {
     state.registrations = [{ id: "attached" }];
     state.credentials = [
@@ -245,7 +363,7 @@ describe("IdentityChainingSection", () => {
     expect(state.clientFilters).toEqual([{ userSessionIssuerId: "issuer" }]);
   });
 
-  it("lists no other registrations when the server has no per-person credential", () => {
+  it("lists no registrations when the server has no per-person credential, whatever the sign-in binds", () => {
     state.upstreamAuth = "enforced";
     state.registrations = [{ id: "attached" }];
     state.credentials = [
@@ -256,8 +374,8 @@ describe("IdentityChainingSection", () => {
       screen
         .getByTestId("identity-chaining")
         .getAttribute("data-linked-clients"),
-    ).toBe("client");
-    expect(state.clientFilters).not.toContainEqual({});
+    ).toBe("");
+    expect(state.clientFilters).toEqual([]);
   });
 
   it("holds its place while the upstream auth enforcement state loads", () => {

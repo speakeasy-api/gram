@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { initialState, reduce, ready, steps, validate } from "./state";
 

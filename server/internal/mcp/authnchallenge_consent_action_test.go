@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type consentActionFixture struct {
@@ -265,6 +267,70 @@ func TestServeConsentAction_ConnectSendsPerClientResource(t *testing.T) {
 	stateB := mintedRemoteLoginState(t, ctx, fx, locB.Query().Get("state"))
 	require.Equal(t, consentUpstreamB, stateB.Resource)
 	require.Equal(t, fx.clientB, stateB.RemoteSessionClientID)
+}
+
+func TestServeConsentAction_ConnectForwardsClientNameOnlyForAnonymousOptIn(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		optIn       bool
+		anonymous   bool
+		noClientID  bool
+		noClientRow bool
+		clientName  string
+		want        string
+	}{
+		{name: "anonymous and opted in", optIn: true, anonymous: true, want: "Example Client"},
+		{name: "anonymous without opt-in", optIn: false, anonymous: true, want: ""},
+		{name: "signed-in subject shares its grant", optIn: true, anonymous: false, want: ""},
+		{name: "no MCP client", optIn: true, anonymous: true, noClientID: true, want: ""},
+		{name: "long name is capped before it is stored", optIn: true, anonymous: true, clientName: strings.Repeat("a", 64<<10), want: strings.Repeat("a", 256)},
+		{name: "failed lookup only loses the label", optIn: true, anonymous: true, noClientRow: true, want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, fx := seedMultiClientConsentEndpoint(t)
+			_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClient(ctx, remotesessions_repo.UpdateRemoteSessionClientParams{
+				ID:                fx.clientA,
+				ProjectID:         uuid.NullUUID{UUID: fx.projectID, Valid: true},
+				ForwardClientName: pgtype.Bool{Bool: tc.optIn, Valid: true},
+			})
+			require.NoError(t, err)
+
+			state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+			require.NoError(t, err)
+			if !tc.noClientRow {
+				_, err = usersessions_repo.New(fx.ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+					UserSessionIssuerID:     fx.shared,
+					ClientID:                state.ClientID,
+					ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+					ClientName:              cmp.Or(tc.clientName, "Example Client"),
+					RedirectUris:            []string{"http://example.com/cb"},
+					ClientSecretExpiresAt:   pgtype.Timestamptz{},
+					TokenEndpointAuthMethod: "none",
+					ClientJwks:              nil,
+					ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+				})
+				require.NoError(t, err)
+			}
+			if tc.noClientID {
+				state.ClientID = ""
+			}
+			if tc.anonymous {
+				subject := urn.NewAnonymousSubject(uuid.NewString())
+				state.Subject = &subject
+			}
+			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+
+			loc := postConnectAction(t, fx, fx.clientA)
+			require.Equal(t, tc.want != "", loc.Query().Has("speakeasy_client_name"))
+			require.Equal(t, tc.want, loc.Query().Get("speakeasy_client_name"))
+			require.Equal(t, tc.want, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).ClientName)
+		})
+	}
 }
 
 func TestServeConsentAction_ConnectWithoutDerivableResourceSendsNone(t *testing.T) {
@@ -566,7 +632,7 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	require.Equal(t, consentUpstreamB, sessB.Resource.String)
 
 	// The routing layer serves both, each token qualified by its own resource.
-	tokens, err := mgr.ResolveAccessTokens(ctx, projectID, orgID, shared, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, orgID, shared, subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 2)
 	byClient := map[uuid.UUID]remotesessions.UpstreamToken{}

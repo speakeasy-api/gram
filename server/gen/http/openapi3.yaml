@@ -16315,6 +16315,93 @@ paths:
             x-speakeasy-name-override: deleteAiScanTarget
             x-speakeasy-react-hook:
                 name: DeleteAiScanTarget
+    /rpc/agent.getClaudeObservabilityPlugin:
+        get:
+            description: 'Download the organization''s Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude''s cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user''s previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.'
+            operationId: getAgentClaudeObservabilityPlugin
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/zip:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                    headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
+                        Content-Type:
+                            schema:
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: getClaudeObservabilityPlugin agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getClaudeObservabilityPlugin
     /rpc/agent.getConfiguration:
         get:
             description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -28691,7 +28778,7 @@ paths:
             x-speakeasy-name-override: revoke
     /rpc/cliAuth.authorize:
         post:
-            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
             operationId: cliAuthAuthorize
             parameters:
                 - allowEmptyValue: true
@@ -28776,7 +28863,7 @@ paths:
             x-speakeasy-name-override: authorize
     /rpc/cliAuth.redeem:
         post:
-            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
+            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
             operationId: cliAuthRedeem
             requestBody:
                 content:
@@ -45617,13 +45704,13 @@ paths:
                     example: https://mcp.box.com
                     type: string
                 - allowEmptyValue: true
-                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-                  example: com.pulsemcp.mirror/box
+                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+                  example: io.example/server
                   in: query
                   name: registry_specifier
                   schema:
-                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-                    example: com.pulsemcp.mirror/box
+                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+                    example: io.example/server
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -78680,6 +78767,99 @@ paths:
             x-speakeasy-name-override: listPersonAccounts
             x-speakeasy-react-hook:
                 name: SlackPersonAccounts
+    /rpc/slackDirectoryConnections.setDefaultProject:
+        post:
+            description: Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.
+            operationId: setSlackDirectoryDefaultProject
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSlackDirectoryDefaultProjectRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SlackDirectoryConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: setDefaultProject slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: setDefaultProject
+            x-speakeasy-react-hook:
+                name: SetSlackDirectoryDefaultProject
     /rpc/slackDirectoryConnections.setMapping:
         post:
             description: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
@@ -80564,6 +80744,94 @@ paths:
             x-speakeasy-name-override: getObservabilityOverview
             x-speakeasy-react-hook:
                 name: GetObservabilityOverview
+                type: query
+    /rpc/telemetry.getOrgMcpServerActivity:
+        post:
+            description: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
+            operationId: getOrgMcpServerActivity
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetMcpServerActivityPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetOrgMcpServerActivityResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getOrgMcpServerActivity telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getOrgMcpServerActivity
+            x-speakeasy-react-hook:
+                name: GetOrgMcpServerActivity
                 type: query
     /rpc/telemetry.getOrganizationGatewayOverview:
         post:
@@ -95961,6 +96229,66 @@ components:
             description: Result of a strictly additive tool metadata batch insert.
             required:
                 - tools
+        AdminAuditLog:
+            type: object
+            properties:
+                acting_client_id:
+                    type: string
+                    description: The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.
+                acting_surface:
+                    type: string
+                    description: 'How the change was made: ''dashboard'', ''api_key'', ''platform_mcp'', ''project_assistant'', or ''unknown'' when no surface was identifiable. Always present.'
+                action:
+                    type: string
+                actor_display_name:
+                    type: string
+                actor_id:
+                    type: string
+                actor_slug:
+                    type: string
+                actor_type:
+                    type: string
+                after_snapshot: {}
+                before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
+                created_at:
+                    type: string
+                    description: The creation date of the audit log.
+                    format: date-time
+                id:
+                    type: string
+                is_internal:
+                    type: boolean
+                    description: Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+                metadata:
+                    type: object
+                    additionalProperties: true
+                project_id:
+                    type: string
+                project_slug:
+                    type: string
+                subject_display_name:
+                    type: string
+                subject_id:
+                    type: string
+                subject_slug:
+                    type: string
+                subject_type:
+                    type: string
+            required:
+                - id
+                - actor_id
+                - actor_type
+                - action
+                - subject_id
+                - subject_type
+                - acting_surface
+                - created_at
         AdminBackfillMCPAuthGrantsResult:
             type: object
             properties:
@@ -96566,7 +96894,7 @@ components:
                 logs:
                     type: array
                     items:
-                        $ref: '#/components/schemas/AuditLog'
+                        $ref: '#/components/schemas/AdminAuditLog'
                     description: List of organization activity.
                 next_cursor:
                     type: string
@@ -98090,6 +98418,9 @@ components:
                     type: string
                 eligible:
                     type: boolean
+                endpoint_guide_slug:
+                    type: string
+                    description: Slug of the one pinned guide that documents the suggested public endpoint.
                 id:
                     type: string
                 mcp_server_id:
@@ -98118,6 +98449,14 @@ components:
                     type: string
                 remote_mcp_server_id:
                     type: string
+                setup_guides:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryPromotionSetupGuide'
+                    description: Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.
+                setup_guides_version:
+                    type: string
+                    description: Pinned setup-docs export version that setup_guides came from.
                 source_name:
                     type: string
                 source_revision:
@@ -98156,6 +98495,17 @@ components:
                     type: string
             required:
                 - candidates
+        AdminRegistryPromotionSetupGuide:
+            type: object
+            properties:
+                slug:
+                    type: string
+                title:
+                    type: string
+            description: A setup guide in the setup-docs export pinned in the server.
+            required:
+                - slug
+                - title
         AdminRegistryPromotionSuggestions:
             type: object
             properties:
@@ -101513,9 +101863,16 @@ components:
                     description: PKCE challenge method. Only S256 is supported.
                     enum:
                         - S256
+                key_scope:
+                    type: string
+                    description: The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+                    default: agent_user
+                    enum:
+                        - agent_user
+                        - producer
                 project_slug:
                     type: string
-                    description: Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+                    description: Optional project slug. For agent_user keys it is the project the key is scoped to; for producer keys it is only reported back to the CLI as its default project. Defaults to the org's default (first) project when omitted.
             required:
                 - code_challenge
                 - code_challenge_method
@@ -108829,7 +109186,7 @@ components:
                     format: uri
                 is_read_only:
                     type: boolean
-                    description: Whether every tool on the server is read-only
+                    description: Whether every declared tool is read-only, when catalog evidence is available
                 mcp_server_id:
                     type: string
                     description: ID of the attached MCP server backing this server
@@ -108867,7 +109224,7 @@ components:
                     description: Display name for the server
                 tool_count:
                     type: integer
-                    description: Number of tools the server exposes
+                    description: Number of declared tools, when catalog evidence is available
                     format: int64
                 toolset_id:
                     type: string
@@ -108882,8 +109239,6 @@ components:
                 - registry_specifier
                 - version
                 - description
-                - tool_count
-                - is_read_only
                 - supports_dcr
         ExternalMCPTool:
             type: object
@@ -110413,6 +110768,22 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
+        GetOrgMcpServerActivityResult:
+            type: object
+            properties:
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProjectMcpServerActivity'
+                    description: One entry per readable project whose activity was read
+                recent_window_days:
+                    type: integer
+                    description: The recent-activity window size in days that was applied
+                    format: int64
+            description: Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
+            required:
+                - projects
+                - recent_window_days
         GetOrganizationGatewayActivityPayload:
             type: object
             properties:
@@ -120574,6 +120945,22 @@ components:
                 - id
                 - name
                 - slug
+        ProjectMcpServerActivity:
+            type: object
+            properties:
+                activity:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpServerActivity'
+                    description: One entry per MCP server in the project with at least one tool call inside the recent window
+                project_id:
+                    type: string
+                    description: The project the activity belongs to
+                    format: uuid
+            description: Recent MCP server activity for one project
+            required:
+                - project_id
+                - activity
         ProjectOverviewSummary:
             type: object
             properties:
@@ -121627,7 +122014,7 @@ components:
             properties:
                 access_token:
                     type: string
-                    description: The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+                    description: The raw gram_ API key, carrying the scope requested at authorize. Returned exactly once.
                 project_slug:
                     type: string
                     description: Slug of the project the key is scoped to.
@@ -122054,6 +122441,9 @@ components:
                     type: string
                     description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
                     format: uri
+                forward_client_name:
+                    type: boolean
+                    description: Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
                 grant_types:
                     type: array
                     items:
@@ -122121,6 +122511,7 @@ components:
                 - user_session_issuer_ids
                 - client_id
                 - legacy_callback_url
+                - forward_client_name
                 - credential_owner
                 - created_at
                 - updated_at
@@ -127520,6 +127911,19 @@ components:
             required:
                 - mcp_server_id
                 - scopes
+        SetSlackDirectoryDefaultProjectRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Durable organization workspace connection ID.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: Project in the organization. Omit to clear the default project.
+                    format: uuid
+            required:
+                - id
         SetSlackIdentityMappingRequestBody:
             type: object
             properties:
@@ -129393,6 +129797,10 @@ components:
         SlackDirectoryConnection:
             type: object
             properties:
+                default_project_id:
+                    type: string
+                    description: Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+                    format: uuid
                 directory_status:
                     type: string
                     description: Whether a snapshot belongs to the usable current authorization.
@@ -131979,6 +132387,19 @@ components:
                 target_label:
                     type: string
                     description: User-facing target label
+                target_meta_mcp_server_agent_id:
+                    type: string
+                    description: Agent whose gateway the call reached; absent for other gateway kinds and when the agent is deleted
+                target_meta_mcp_server_kind:
+                    type: string
+                    description: 'Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent''s gateway; absent for other targets and when the gateway id resolves to no gateway of the organization'
+                    enum:
+                        - project
+                        - organization
+                        - agent
+                target_meta_mcp_server_project_slug:
+                    type: string
+                    description: 'Slug of the project whose page shows the gateway the call reached: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization'
                 target_type:
                     type: string
                     description: Tool usage target type
@@ -132010,12 +132431,25 @@ components:
                 user_label:
                     type: string
                     description: User-facing user identity label
+                via_meta_mcp_server_agent_id:
+                    type: string
+                    description: Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted
                 via_meta_mcp_server_id:
                     type: string
                     description: Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+                via_meta_mcp_server_kind:
+                    type: string
+                    description: 'Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent''s gateway; absent when the gateway id resolves to no gateway of the organization'
+                    enum:
+                        - project
+                        - organization
+                        - agent
                 via_meta_mcp_server_name:
                     type: string
                     description: Display name of the dispatching gateway; a deleted gateway keeps its last name
+                via_meta_mcp_server_project_slug:
+                    type: string
+                    description: 'Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization'
             description: A single target-aware tool usage trace row
             required:
                 - id
@@ -134479,6 +134913,9 @@ components:
                     type: boolean
                 name:
                     type: string
+                organization_id:
+                    type: string
+                    description: When provided, require the playbook to belong to this organization. Omit for global library edits.
                 playbook_id:
                     type: string
                 step_slugs:
@@ -134759,6 +135196,9 @@ components:
                     type: string
                     description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
                     maxLength: 200
+                forward_client_name:
+                    type: boolean
+                    description: Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
                 id:
                     type: string
                     description: The remote_session_client id.
@@ -137807,7 +138247,7 @@ tags:
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
-      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
     - name: dashboards
       description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
     - name: dataExports

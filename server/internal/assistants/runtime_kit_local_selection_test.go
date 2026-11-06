@@ -40,7 +40,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, versioned.kit.ServerURL())
 	require.NotEqual(t, origin.String(), versioned.kit.ServerURL().String(), "Kit's own server URL is not the inference provider origin")
-	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
+	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)
 	q := assistantrepo.New(db)

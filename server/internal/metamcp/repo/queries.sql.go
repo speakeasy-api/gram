@@ -830,12 +830,29 @@ WHERE m.meta_mcp_server_id = $1
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = $3
-      AND a.deleted IS FALSE
+  AND (
+    (NOT $3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $4
+        AND a.deleted IS FALSE
+    ))
+    OR ($3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = $4
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY m.sort_order, m.created_at, m.id
 `
@@ -843,6 +860,7 @@ ORDER BY m.sort_order, m.created_at, m.id
 type ListMetaMCPMembersForRemoteSessionClientParams struct {
 	MetaMcpServerID       uuid.UUID
 	ProjectID             uuid.UUID
+	TypedOffers           bool
 	RemoteSessionClientID uuid.UUID
 }
 
@@ -861,12 +879,22 @@ type ListMetaMCPMembersForRemoteSessionClientRow struct {
 // caller still fails closed on none or several, since a grant records one
 // resource.
 //
+// With typed_offers, a member is associated with the client when it offers
+// the client's registration through an enabled personal or identity-provider
+// auth client, the offers ListServerConsentAuthClients lists, rather than
+// through mcp_server_remote_session_clients.
+//
 // upstream_url is the member's RFC 8707 resource: the remote server URL or
 // the tunneled server's recorded resource identifier (empty when a tunneled
 // member records none — the claim still lands, minting an unqualified grant).
 // Hosted and unproxied members have no upstream and cannot claim.
 func (q *Queries) ListMetaMCPMembersForRemoteSessionClient(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionClientParams) ([]ListMetaMCPMembersForRemoteSessionClientRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionClient, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionClientID)
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionClient,
+		arg.MetaMcpServerID,
+		arg.ProjectID,
+		arg.TypedOffers,
+		arg.RemoteSessionClientID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -913,11 +941,30 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = m.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
-WHERE m.meta_mcp_server_id = $1
-  AND m.project_id = $2
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT $1::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE $1::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
+WHERE m.meta_mcp_server_id = $2
+  AND m.project_id = $3
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
@@ -925,6 +972,7 @@ ORDER BY m.sort_order, m.created_at, m.id, a.remote_session_client_id
 `
 
 type ListMetaMCPProxiedMemberResourcesParams struct {
+	TypedOffers     bool
 	MetaMcpServerID uuid.UUID
 	ProjectID       uuid.UUID
 }
@@ -938,11 +986,12 @@ type ListMetaMCPProxiedMemberResourcesRow struct {
 }
 
 // Every proxied member's associated clients and RFC 8707 resource, one row
-// per member and associated client, with the member filters of
-// ListMetaMCPMembersForRemoteSessionClient, so a consent render resolves
-// resource display ownership for every card from one read.
+// per member and associated client, with the member filters and the
+// typed_offers reading of ListMetaMCPMembersForRemoteSessionClient, so a
+// consent render resolves resource display ownership for every card from one
+// read.
 func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg ListMetaMCPProxiedMemberResourcesParams) ([]ListMetaMCPProxiedMemberResourcesRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.MetaMcpServerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.TypedOffers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -967,29 +1016,52 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = $1
-ORDER BY deleted ASC, created_at DESC
+const listMetaMCPServerLabelsForTelemetry = `-- name: ListMetaMCPServerLabelsForTelemetry :many
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = $1
+  AND p.organization_id = $1
+  AND ms.id = ANY($2::uuid[])
 `
 
-type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
-	ID   uuid.UUID
-	Name string
+type ListMetaMCPServerLabelsForTelemetryParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
 }
 
-// Gateway names for telemetry labels, deleted gateways included.
-func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+type ListMetaMCPServerLabelsForTelemetryRow struct {
+	ID             uuid.UUID
+	Name           string
+	ProjectID      uuid.UUID
+	Deleted        bool
+	ProjectSlug    string
+	ProjectDeleted bool
+}
+
+// Names the stored gateways among telemetry ids, deleted gateways included: a
+// member's calls are logged in the member's project, which need not be the
+// gateway's. Ids that are not stored gateways (agent and organization gateways
+// stamp derived ids) simply match nothing. The project and deleted flags let a
+// label link to the gateway's page while it still has one, and say which
+// project the caller must be able to read to see the name.
+func (q *Queries) ListMetaMCPServerLabelsForTelemetry(ctx context.Context, arg ListMetaMCPServerLabelsForTelemetryParams) ([]ListMetaMCPServerLabelsForTelemetryRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerLabelsForTelemetry, arg.OrganizationID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	var items []ListMetaMCPServerLabelsForTelemetryRow
 	for rows.Next() {
-		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		var i ListMetaMCPServerLabelsForTelemetryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.Deleted,
+			&i.ProjectSlug,
+			&i.ProjectDeleted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1084,12 +1156,30 @@ WHERE p.organization_id = $1
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = $3
-      AND a.deleted IS FALSE
+  AND (
+    (NOT $3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $4
+        AND a.deleted IS FALSE
+    ))
+    OR ($3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.organization_id = p.organization_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = $4
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY s.project_id, s.slug
 `
@@ -1097,6 +1187,7 @@ ORDER BY s.project_id, s.slug
 type ListOrganizationMCPServersForRemoteSessionClientParams struct {
 	OrganizationID        string
 	ProjectID             uuid.NullUUID
+	TypedOffers           bool
 	RemoteSessionClientID uuid.UUID
 }
 
@@ -1113,8 +1204,8 @@ type ListOrganizationMCPServersForRemoteSessionClientRow struct {
 // ListMetaMCPMembersForRemoteSessionClient: the organization's proxied servers
 // associated with a given upstream OAuth client, filtered as
 // ListServableMCPServersByOrganizationID so a server the gateway cannot serve
-// cannot claim a credential either. Returns the same columns, so callers
-// treat both alike.
+// cannot claim a credential either. Returns the same columns and reads
+// typed_offers the same way, so callers treat both alike.
 //
 // project_id narrows the claim to one project's servers, for a client that a
 // project owns: that client's grant routes only to its own project's members.
@@ -1122,7 +1213,12 @@ type ListOrganizationMCPServersForRemoteSessionClientRow struct {
 // apply each server's network access mode for the request's surface, as the
 // member snapshot does.
 func (q *Queries) ListOrganizationMCPServersForRemoteSessionClient(ctx context.Context, arg ListOrganizationMCPServersForRemoteSessionClientParams) ([]ListOrganizationMCPServersForRemoteSessionClientRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionClient, arg.OrganizationID, arg.ProjectID, arg.RemoteSessionClientID)
+	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionClient,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TypedOffers,
+		arg.RemoteSessionClientID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,16 +1263,41 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
-WHERE p.organization_id = $1
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT $1::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE $1::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.organization_id = p.organization_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
+WHERE p.organization_id = $2
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
 ORDER BY s.project_id, s.slug, a.remote_session_client_id
 `
+
+type ListOrganizationProxiedMCPServerResourcesParams struct {
+	TypedOffers    bool
+	OrganizationID string
+}
 
 type ListOrganizationProxiedMCPServerResourcesRow struct {
 	RemoteSessionClientID      uuid.UUID
@@ -1188,11 +1309,11 @@ type ListOrganizationProxiedMCPServerResourcesRow struct {
 
 // The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
 // over the servers ListOrganizationMCPServersForRemoteSessionClient considers:
-// one row per server and associated client. Each row carries its server's
-// project and network access mode, which the caller matches against a card's
-// client and the request's surface.
-func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context, organizationID string) ([]ListOrganizationProxiedMCPServerResourcesRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationProxiedMCPServerResources, organizationID)
+// one row per server and associated client, read by typed_offers the same
+// way. Each row carries its server's project and network access mode, which
+// the caller matches against a card's client and the request's surface.
+func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context, arg ListOrganizationProxiedMCPServerResourcesParams) ([]ListOrganizationProxiedMCPServerResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProxiedMCPServerResources, arg.TypedOffers, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

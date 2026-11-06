@@ -71,6 +71,7 @@ func TestPrincipalCredentialAdmissionRejectsEachParentGate(t *testing.T) {
 			mutate(t, fixture)
 			_, err := fixture.engine.PrepareContext(fixture.requestContext)
 			requireUnauthorized(t, err)
+			require.ErrorIs(t, err, ErrPrincipalNotAdmitted)
 		})
 	}
 }

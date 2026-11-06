@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
@@ -7,6 +8,8 @@ import {
   buildClaudeUsageByMessageId,
   formatByteCount,
   formatDurationFromNanos,
+  isCostUnknown,
+  totalTokensFor,
 } from "./claudeUsage";
 
 let seqCounter = 0;
@@ -118,5 +121,32 @@ describe("formatByteCount", () => {
 describe("formatDurationFromNanos", () => {
   it("carries seconds into minutes", () => {
     expect(formatDurationFromNanos("0", "59999000000")).toBe("1m 0s");
+  });
+});
+
+describe("isCostUnknown", () => {
+  it("treats tokens with no cost as an unknown cost", () => {
+    expect(isCostUnknown({ totalCost: 0, totalTokens: 10 })).toBe(true);
+    expect(isCostUnknown({ totalInputTokens: 4, totalOutputTokens: 6 })).toBe(
+      true,
+    );
+  });
+
+  it("keeps a reported cost", () => {
+    expect(isCostUnknown({ totalCost: 0.5, totalTokens: 10 })).toBe(false);
+  });
+
+  it("does not flag a session with no usage at all", () => {
+    expect(isCostUnknown({ totalCost: 0, totalTokens: 0 })).toBe(false);
+    expect(isCostUnknown({})).toBe(false);
+  });
+});
+
+describe("totalTokensFor", () => {
+  it("prefers the reported total and falls back to input plus output", () => {
+    expect(totalTokensFor({ totalTokens: 12, totalInputTokens: 1 })).toBe(12);
+    expect(totalTokensFor({ totalInputTokens: 3, totalOutputTokens: 4 })).toBe(
+      7,
+    );
   });
 });

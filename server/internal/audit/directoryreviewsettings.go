@@ -45,6 +45,7 @@ func (l *Logger) LogDirectoryReviewSettingsUpdate(ctx context.Context, dbtx repo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

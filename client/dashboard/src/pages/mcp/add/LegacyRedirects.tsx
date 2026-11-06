@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { useActiveDeployment } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -118,12 +118,7 @@ export function RedirectToSourceDetail(): JSX.Element {
   ].some((query) => query.isFetching);
 
   if (resolving) {
-    return (
-      <div className="mx-auto w-full max-w-[1270px] space-y-3 px-8 py-8">
-        <Skeleton className="h-6 w-64" />
-        <Skeleton className="h-4 w-96" />
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   const target = resolveLegacySourceRedirect(kind, sourceSlug ?? "", {
@@ -209,7 +204,7 @@ export function RedirectFromMcpXNamespace(): JSX.Element | null {
       <Navigate to={`${target}${location.search}${location.hash}`} replace />
     );
   }
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!server) return <Navigate to={routes.mcp.href()} replace />;
   const rest = location.pathname
     .split("/")

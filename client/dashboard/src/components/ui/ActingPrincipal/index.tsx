@@ -227,9 +227,16 @@ export function PersonFace({
   );
 }
 
-/** Two letters, matching the member facepile so the two read as one system. */
+/**
+ * Two letters, matching the member facepile so the two read as one system.
+ *
+ * A name can fall back to an email address. Its domain is shared by everyone
+ * in an organization, so only the part before the @ names the person, split
+ * into words the way `IdentityAvatar` does: "j.smith@" is "JS", not "J.".
+ */
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const local = name.trim().split("@")[0] ?? "";
+  const parts = local.split(/[.\-_+\s]+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();

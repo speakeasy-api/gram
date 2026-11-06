@@ -45,6 +45,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   gemini: "Gemini",
   glean: "Glean",
   bedrock: "AWS Bedrock",
+  // Sessions from the built-in Speakeasy Slack app. The server stamps this
+  // surface from the trigger source; other assistant sessions stay "assistants".
+  "speakeasy-slack": "Speakeasy Slackbot",
   "aws-bedrock": "AWS Bedrock",
 };
 

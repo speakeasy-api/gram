@@ -121,7 +121,7 @@ func TestKitLifecycleNewAssistantSelectionOnly(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	for _, version := range []int16{0, 3, 4} {
 		core.newAssistantRuntimeVersion = version
-		created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", fmt.Sprintf("New assistant %d", version), "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
+		created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", fmt.Sprintf("New assistant %d", version), "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil, nil)
 		require.NoError(t, err)
 		expected := int16(2)
 		if version == 3 {

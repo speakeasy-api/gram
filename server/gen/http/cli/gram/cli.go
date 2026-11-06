@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
+		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
@@ -195,9 +195,9 @@ func UsageCommands() []string {
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions|link|unlink|list-links)",
-		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
+		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|set-default-project|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-organization-gateway-overview|get-organization-gateway-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-organization-gateway-overview|get-organization-gateway-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|get-org-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -305,6 +305,9 @@ func ParseEndpoint(
 		agentGetMyConnectionsFlags           = flag.NewFlagSet("get-my-connections", flag.ExitOnError)
 		agentGetMyConnectionsApikeyTokenFlag = agentGetMyConnectionsFlags.String("apikey-token", "", "")
 		agentGetMyConnectionsEmailFlag       = agentGetMyConnectionsFlags.String("email", "", "")
+
+		agentGetClaudeObservabilityPluginFlags           = flag.NewFlagSet("get-claude-observability-plugin", flag.ExitOnError)
+		agentGetClaudeObservabilityPluginApikeyTokenFlag = agentGetClaudeObservabilityPluginFlags.String("apikey-token", "", "")
 
 		agentHideMcpServerFlags           = flag.NewFlagSet("hide-mcp-server", flag.ExitOnError)
 		agentHideMcpServerBodyFlag        = agentHideMcpServerFlags.String("body", "REQUIRED", "")
@@ -3833,6 +3836,10 @@ func ParseEndpoint(
 		slackDirectoryConnectionsBeginBodyFlag         = slackDirectoryConnectionsBeginFlags.String("body", "REQUIRED", "")
 		slackDirectoryConnectionsBeginSessionTokenFlag = slackDirectoryConnectionsBeginFlags.String("session-token", "", "")
 
+		slackDirectoryConnectionsSetDefaultProjectFlags            = flag.NewFlagSet("set-default-project", flag.ExitOnError)
+		slackDirectoryConnectionsSetDefaultProjectBodyFlag         = slackDirectoryConnectionsSetDefaultProjectFlags.String("body", "REQUIRED", "")
+		slackDirectoryConnectionsSetDefaultProjectSessionTokenFlag = slackDirectoryConnectionsSetDefaultProjectFlags.String("session-token", "", "")
+
 		slackDirectoryConnectionsDisconnectFlags            = flag.NewFlagSet("disconnect", flag.ExitOnError)
 		slackDirectoryConnectionsDisconnectBodyFlag         = slackDirectoryConnectionsDisconnectFlags.String("body", "REQUIRED", "")
 		slackDirectoryConnectionsDisconnectSessionTokenFlag = slackDirectoryConnectionsDisconnectFlags.String("session-token", "", "")
@@ -4107,6 +4114,10 @@ func ParseEndpoint(
 		telemetryGetMcpServerActivityApikeyTokenFlag      = telemetryGetMcpServerActivityFlags.String("apikey-token", "", "")
 		telemetryGetMcpServerActivitySessionTokenFlag     = telemetryGetMcpServerActivityFlags.String("session-token", "", "")
 		telemetryGetMcpServerActivityProjectSlugInputFlag = telemetryGetMcpServerActivityFlags.String("project-slug-input", "", "")
+
+		telemetryGetOrgMcpServerActivityFlags            = flag.NewFlagSet("get-org-mcp-server-activity", flag.ExitOnError)
+		telemetryGetOrgMcpServerActivityBodyFlag         = telemetryGetOrgMcpServerActivityFlags.String("body", "REQUIRED", "")
+		telemetryGetOrgMcpServerActivitySessionTokenFlag = telemetryGetOrgMcpServerActivityFlags.String("session-token", "", "")
 
 		telemetryListHooksTracesFlags                = flag.NewFlagSet("list-hooks-traces", flag.ExitOnError)
 		telemetryListHooksTracesBodyFlag             = telemetryListHooksTracesFlags.String("body", "REQUIRED", "")
@@ -5543,6 +5554,7 @@ func ParseEndpoint(
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
 	agentGetMyConnectionsFlags.Usage = agentGetMyConnectionsUsage
+	agentGetClaudeObservabilityPluginFlags.Usage = agentGetClaudeObservabilityPluginUsage
 	agentHideMcpServerFlags.Usage = agentHideMcpServerUsage
 	agentUnhideMcpServerFlags.Usage = agentUnhideMcpServerUsage
 	agentListSyncedUsersFlags.Usage = agentListSyncedUsersUsage
@@ -6319,6 +6331,7 @@ func ParseEndpoint(
 	slackDirectoryConnectionsGetMemberFlags.Usage = slackDirectoryConnectionsGetMemberUsage
 	slackDirectoryConnectionsSetMappingFlags.Usage = slackDirectoryConnectionsSetMappingUsage
 	slackDirectoryConnectionsBeginFlags.Usage = slackDirectoryConnectionsBeginUsage
+	slackDirectoryConnectionsSetDefaultProjectFlags.Usage = slackDirectoryConnectionsSetDefaultProjectUsage
 	slackDirectoryConnectionsDisconnectFlags.Usage = slackDirectoryConnectionsDisconnectUsage
 
 	spendRulesFlags.Usage = spendRulesUsage
@@ -6370,6 +6383,7 @@ func ParseEndpoint(
 	telemetryListToolUsageTracesFlags.Usage = telemetryListToolUsageTracesUsage
 	telemetryGetToolUsageFilterOptionsFlags.Usage = telemetryGetToolUsageFilterOptionsUsage
 	telemetryGetMcpServerActivityFlags.Usage = telemetryGetMcpServerActivityUsage
+	telemetryGetOrgMcpServerActivityFlags.Usage = telemetryGetOrgMcpServerActivityUsage
 	telemetryListHooksTracesFlags.Usage = telemetryListHooksTracesUsage
 
 	templatesFlags.Usage = templatesUsage
@@ -6966,6 +6980,9 @@ func ParseEndpoint(
 
 			case "get-my-connections":
 				epf = agentGetMyConnectionsFlags
+
+			case "get-claude-observability-plugin":
+				epf = agentGetClaudeObservabilityPluginFlags
 
 			case "hide-mcp-server":
 				epf = agentHideMcpServerFlags
@@ -9151,6 +9168,9 @@ func ParseEndpoint(
 			case "begin":
 				epf = slackDirectoryConnectionsBeginFlags
 
+			case "set-default-project":
+				epf = slackDirectoryConnectionsSetDefaultProjectFlags
+
 			case "disconnect":
 				epf = slackDirectoryConnectionsDisconnectFlags
 
@@ -9299,6 +9319,9 @@ func ParseEndpoint(
 
 			case "get-mcp-server-activity":
 				epf = telemetryGetMcpServerActivityFlags
+
+			case "get-org-mcp-server-activity":
+				epf = telemetryGetOrgMcpServerActivityFlags
 
 			case "list-hooks-traces":
 				epf = telemetryListHooksTracesFlags
@@ -10289,6 +10312,9 @@ func ParseEndpoint(
 			case "get-my-connections":
 				endpoint = c.GetMyConnections()
 				data, err = agentc.BuildGetMyConnectionsPayload(*agentGetMyConnectionsApikeyTokenFlag, *agentGetMyConnectionsEmailFlag)
+			case "get-claude-observability-plugin":
+				endpoint = c.GetClaudeObservabilityPlugin()
+				data, err = agentc.BuildGetClaudeObservabilityPluginPayload(*agentGetClaudeObservabilityPluginApikeyTokenFlag)
 			case "hide-mcp-server":
 				endpoint = c.HideMcpServer()
 				data, err = agentc.BuildHideMcpServerPayload(*agentHideMcpServerBodyFlag, *agentHideMcpServerApikeyTokenFlag, *agentHideMcpServerEmailFlag)
@@ -12500,6 +12526,9 @@ func ParseEndpoint(
 			case "begin":
 				endpoint = c.Begin()
 				data, err = slackdirectoryconnectionsc.BuildBeginPayload(*slackDirectoryConnectionsBeginBodyFlag, *slackDirectoryConnectionsBeginSessionTokenFlag)
+			case "set-default-project":
+				endpoint = c.SetDefaultProject()
+				data, err = slackdirectoryconnectionsc.BuildSetDefaultProjectPayload(*slackDirectoryConnectionsSetDefaultProjectBodyFlag, *slackDirectoryConnectionsSetDefaultProjectSessionTokenFlag)
 			case "disconnect":
 				endpoint = c.Disconnect()
 				data, err = slackdirectoryconnectionsc.BuildDisconnectPayload(*slackDirectoryConnectionsDisconnectBodyFlag, *slackDirectoryConnectionsDisconnectSessionTokenFlag)
@@ -12649,6 +12678,9 @@ func ParseEndpoint(
 			case "get-mcp-server-activity":
 				endpoint = c.GetMcpServerActivity()
 				data, err = telemetryc.BuildGetMcpServerActivityPayload(*telemetryGetMcpServerActivityBodyFlag, *telemetryGetMcpServerActivityApikeyTokenFlag, *telemetryGetMcpServerActivitySessionTokenFlag, *telemetryGetMcpServerActivityProjectSlugInputFlag)
+			case "get-org-mcp-server-activity":
+				endpoint = c.GetOrgMcpServerActivity()
+				data, err = telemetryc.BuildGetOrgMcpServerActivityPayload(*telemetryGetOrgMcpServerActivityBodyFlag, *telemetryGetOrgMcpServerActivitySessionTokenFlag)
 			case "list-hooks-traces":
 				endpoint = c.ListHooksTraces()
 				data, err = telemetryc.BuildListHooksTracesPayload(*telemetryListHooksTracesBodyFlag, *telemetryListHooksTracesApikeyTokenFlag, *telemetryListHooksTracesSessionTokenFlag, *telemetryListHooksTracesProjectSlugInputFlag)
@@ -13838,6 +13870,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
 	fmt.Fprintln(os.Stderr, `    get-my-connections: Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.`)
+	fmt.Fprintln(os.Stderr, `    get-claude-observability-plugin: Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.`)
 	fmt.Fprintln(os.Stderr, `    hide-mcp-server: Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.`)
 	fmt.Fprintln(os.Stderr, `    unhide-mcp-server: Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.`)
 	fmt.Fprintln(os.Stderr, `    list-synced-users: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.`)
@@ -13904,6 +13937,24 @@ func agentGetMyConnectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-my-connections --apikey-token \"abc123\" --email \"dev@acme.corp\"")
+}
+
+func agentGetClaudeObservabilityPluginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-claude-observability-plugin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-claude-observability-plugin --apikey-token \"abc123\"")
 }
 
 func agentHideMcpServerUsage() {
@@ -16986,11 +17037,11 @@ func chatSessionsRevokeUsage() {
 
 // cliAuthUsage displays the usage of the cli-auth command and its subcommands.
 func cliAuthUsage() {
-	fmt.Fprintln(os.Stderr, `Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.`)
+	fmt.Fprintln(os.Stderr, `Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] cli-auth COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
-	fmt.Fprintln(os.Stderr, `    redeem: Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
+	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `    redeem: Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s cli-auth COMMAND --help\n", os.Args[0])
@@ -17004,7 +17055,7 @@ func cliAuthAuthorizeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -17012,7 +17063,7 @@ func cliAuthAuthorizeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth authorize --body '{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth authorize --body '{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"key_scope\": \"producer\",\n      \"project_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func cliAuthRedeemUsage() {
@@ -17023,7 +17074,7 @@ func cliAuthRedeemUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
+	fmt.Fprintln(os.Stderr, `Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -19223,7 +19274,7 @@ func mcpRegistriesGetSetupDocsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-setup-docs --server-url \"https://mcp.box.com\" --registry-specifier \"com.pulsemcp.mirror/box\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-setup-docs --server-url \"https://mcp.box.com\" --registry-specifier \"io.example/server\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // functionsUsage displays the usage of the functions command and its
@@ -24971,7 +25022,7 @@ func organizationRemoteSessionClientsUpdateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"forward_client_name\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsAttachClientKeySetUsage() {
@@ -25271,7 +25322,7 @@ func remoteSessionClientsUpdateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"forward_client_name\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsAttachUserSessionIssuerUsage() {
@@ -29454,6 +29505,7 @@ func slackDirectoryConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-member: Read current Slack profile and mapping before an administrator confirms a selection.`)
 	fmt.Fprintln(os.Stderr, `    set-mapping: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.`)
 	fmt.Fprintln(os.Stderr, `    begin: Begin implements begin.`)
+	fmt.Fprintln(os.Stderr, `    set-default-project: Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.`)
 	fmt.Fprintln(os.Stderr, `    disconnect: Disconnect implements disconnect.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -29613,6 +29665,26 @@ func slackDirectoryConnectionsBeginUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections begin --body '{\n      \"connection_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func slackDirectoryConnectionsSetDefaultProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] slack-directory-connections set-default-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack-directory-connections set-default-project --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func slackDirectoryConnectionsDisconnectUsage() {
@@ -29913,6 +29985,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-tool-usage-traces: List target-aware MCP and tool usage traces`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-filter-options: Get filter options for target-aware MCP and tool usage metrics`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-activity: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.`)
+	fmt.Fprintln(os.Stderr, `    get-org-mcp-server-activity: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.`)
 	fmt.Fprintln(os.Stderr, `    list-hooks-traces: List hook traces aggregated by trace_id with user information`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -30786,6 +30859,26 @@ func telemetryGetMcpServerActivityUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-mcp-server-activity --body '{\n      \"recent_window_days\": 2\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetOrgMcpServerActivityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-org-mcp-server-activity", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-org-mcp-server-activity --body '{\n      \"recent_window_days\": 2\n   }' --session-token \"abc123\"")
 }
 
 func telemetryListHooksTracesUsage() {
@@ -34355,7 +34448,7 @@ func adminUpdateOnboardingPlaybookUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminDeleteOnboardingPlaybookUsage() {

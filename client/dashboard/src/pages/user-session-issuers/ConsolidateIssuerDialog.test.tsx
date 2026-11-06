@@ -269,7 +269,9 @@ describe("ConsolidateIssuerDialog", () => {
       />,
     );
 
-    expect(screen.getByText("Loading authorization servers…")).toBeDefined();
+    expect(
+      screen.getByRole("status", { name: "Loading authorization servers" }),
+    ).toBeDefined();
     expect(screen.queryByText(/No other authorization server/)).toBeNull();
   });
 });

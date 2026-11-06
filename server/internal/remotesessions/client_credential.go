@@ -201,6 +201,7 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
+		refreshFailureRecorded:             false,
 	}, nil
 }
 
@@ -241,6 +242,9 @@ func (m *ChallengeManager) RenewClientCredential(ctx context.Context, tok Upstre
 // rejected the request; anything else (an unreachable or failing token
 // endpoint, a rate limit, a signing or cache outage) clears on its own.
 func classifyClientCredentialError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
 	if errors.Is(err, ErrClientCredentialClientNotFound) || errors.Is(err, ErrTokenEndpointConfiguration) {
 		return fmt.Errorf("%w: %w", ErrClientCredentialMisconfigured, err)
 	}

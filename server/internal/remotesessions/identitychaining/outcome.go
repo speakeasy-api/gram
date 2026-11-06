@@ -33,6 +33,9 @@ type Outcome struct {
 	// provider, so repeating the attempt could mint a duplicate grant.
 	Submitted bool `json:"submitted,omitempty"`
 
+	// Retained reports a saved sign-in paused for automatic retry.
+	Retained bool `json:"retained,omitempty"`
+
 	// Failures lists every provider's failure when more than one provider in
 	// the order was tried or skipped and none succeeded.
 	Failures []ProviderFailure `json:"failures,omitempty"`
@@ -81,7 +84,7 @@ func (o Outcome) ProviderRefusal() bool {
 }
 
 func newOutcome(stage Stage, reason Reason, confidence Confidence, retryable bool) Outcome {
-	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", Unavailable: "", Submitted: false, Failures: nil, providerDescription: ""}
+	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", Unavailable: "", Submitted: false, Retained: false, Failures: nil, providerDescription: ""}
 }
 
 var (
