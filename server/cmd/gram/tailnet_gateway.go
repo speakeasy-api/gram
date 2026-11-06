@@ -164,6 +164,7 @@ func newTailnetGatewayCommand() *cli.Command {
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "tailnet-gateway"
+
 			logger := PullLogger(c.Context).With(
 				attr.SlogComponent("tailnet_gateway"),
 				attr.SlogServiceName(serviceName),
@@ -171,8 +172,10 @@ func newTailnetGatewayCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
+
 			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
@@ -185,21 +188,25 @@ func newTailnetGatewayCommand() *cli.Command {
 				defer shutdownCancel()
 				_ = shutdownOTel(shutdownCtx)
 			}()
+
 			meterProvider := otel.GetMeterProvider()
 
-			config, err := tailnetGatewayConfigFromCLI(c)
-			if err != nil {
-				return err
-			}
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{enableUnsafeLogging: c.Bool("unsafe-db-log")})
 			if err != nil {
 				return err
 			}
 			defer db.Close()
+
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
 				return fmt.Errorf("create encryption client: %w", err)
 			}
+
+			config, err := tailnetGatewayConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+
 			gateway, err := tailnetgateway.New(logger, meterProvider, db, encryptionClient, config, tailnetgateway.NewTsnetRuntime(tailnetgateway.WithLogger(logger)))
 			if err != nil {
 				return fmt.Errorf("configure tailnet gateway: %w", err)
@@ -210,7 +217,9 @@ func newTailnetGatewayCommand() *cli.Command {
 				return fmt.Errorf("listen for tailnet gateway health checks: %w", err)
 			}
 			defer func() { _ = healthListener.Close() }()
+
 			dbHealth := o11y.NewHealthCheckHandler(nil, []*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}}, nil, nil)
+
 			healthMux := http.NewServeMux()
 			healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 				if err := gateway.Healthy(); err != nil {
@@ -236,8 +245,10 @@ func newTailnetGatewayCommand() *cli.Command {
 
 			sigctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
+
 			serveErrors := make(chan error, 1)
 			go func() { serveErrors <- healthServer.Serve(healthListener) }()
+
 			logger.InfoContext(ctx, "tailnet gateway started",
 				attr.SlogServerAddress(healthListener.Addr().String()),
 				attr.SlogTailnetGatewaySlot(config.Ordinal))
@@ -273,22 +284,27 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		}
 		podName = hostname
 	}
+
 	ordinal, err := tailnetgateway.ParsePodOrdinal(c.String("ordinal"), podName)
 	if err != nil {
 		return tailnetgateway.Config{}, fmt.Errorf("resolve tailnet gateway ordinal: %w", err)
 	}
+
 	upstream, err := url.Parse(c.String("upstream-url"))
 	if err != nil {
 		return tailnetgateway.Config{}, fmt.Errorf("parse private listener upstream: %w", err)
 	}
+
 	caPEM, err := os.ReadFile(c.String("upstream-ca-file"))
 	if err != nil {
 		return tailnetgateway.Config{}, fmt.Errorf("read private listener CA bundle: %w", err)
 	}
+
 	transport, err := netingress.NewAttestorTransport(caPEM)
 	if err != nil {
 		return tailnetgateway.Config{}, fmt.Errorf("configure private listener transport: %w", err)
 	}
+
 	stateDir := c.String("state-dir")
 	if stateDir == "" {
 		stateDir, err = os.MkdirTemp("", "gram-tailnet-gateway-")
@@ -296,6 +312,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 			return tailnetgateway.Config{}, fmt.Errorf("create tailnet gateway state dir: %w", err)
 		}
 	}
+
 	config := tailnetgateway.Config{
 		Ordinal:            ordinal,
 		PodName:            podName,
@@ -315,5 +332,6 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 	if err := config.Validate(); err != nil {
 		return tailnetgateway.Config{}, fmt.Errorf("validate tailnet gateway configuration: %w", err)
 	}
+
 	return config, nil
 }
