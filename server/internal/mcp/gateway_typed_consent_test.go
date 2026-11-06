@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
-	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -82,7 +81,8 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 				registration = client.ID
 				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: fx.shared}))
 			}
-			member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "typed-gw-member-"+uuid.NewString()[:8], upstream, uuid.NullUUID{}, 0)
+			memberSlug := "typed-gw-member-" + uuid.NewString()[:8]
+			member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, memberSlug, upstream, uuid.NullUUID{}, 0)
 			seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), member.mcpServerID)
 			if tc.associated {
 				_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: fx.orgID, ProjectID: fx.projectID, McpServerID: member.mcpServerID, RemoteSessionClientID: registration})
@@ -107,27 +107,14 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 					ResourcePolicyUri: "https://typed-member.example.com/policy",
 				})
 				require.NoError(t, err)
-				code, html, _ := render(t, fx)
-				require.Equal(t, http.StatusOK, code, html)
-				// Gateway pages render member names, not the resource branding on
-				// flat service cards. Check the display ownership rows directly.
-				q := metamcprepo.New(fx.ti.conn)
-				var resources []metamcprepo.ListMetaMCPProxiedMemberResourcesRow
-				if tc.orgGateway {
-					rows, err := q.ListOrganizationProxiedMCPServerResources(ctx, metamcprepo.ListOrganizationProxiedMCPServerResourcesParams{TypedOffers: true, OrganizationID: fx.orgID})
-					require.NoError(t, err)
-					for _, row := range rows {
-						resources = append(resources, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
-					}
-				} else {
-					resources, err = q.ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{TypedOffers: true, MetaMcpServerID: metaServerID, ProjectID: fx.projectID})
-					require.NoError(t, err)
-				}
-				require.Len(t, resources, 1)
-				require.Equal(t, registration, resources[0].RemoteSessionClientID)
-				require.Equal(t, member.mcpServerID, resources[0].McpServerID)
 				require.NotEmpty(t, display.ResourceIdentifier.String)
-				require.Equal(t, display.ResourceIdentifier.String, resources[0].UpstreamUrl)
+				// The gateway overview lists servers; the focused connect page
+				// renders the service card and its resource branding.
+				fx.server = memberSlug
+				code, html, _ := render(t, fx)
+				require.Equal(t, http.StatusOK, code)
+				require.True(t, strings.Contains(html, "Typed member resource"), "the member's card uses its typed registration's resource name")
+				require.True(t, strings.Contains(html, `href="https://typed-member.example.com/policy"`), "the member's card uses its typed registration's resource policy link")
 			}
 			if tc.orgClient {
 				// No grant exists: validation must find the typed offer's project,
