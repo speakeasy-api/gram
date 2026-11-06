@@ -968,8 +968,8 @@ export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
   // Share a host app's QueryClient so content rendered inside this provider
-  // (the dashboard mounts it around the page outlet) stays in one cache with
-  // the rest of the app. Standalone embeds get their own.
+  // and sibling content connected through the context bridge stay in one cache
+  // with the rest of the app. Standalone embeds get their own.
   const hostQueryClient = useContext(QueryClientContext);
   return (
     <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
@@ -19,7 +20,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
+import { ExternalLink, FolderSync, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
@@ -153,7 +154,7 @@ function WorkOSPortalButton({
       >
         {generatePortalLink.isPending && (
           <Button.LeftIcon>
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="mr-0" />
           </Button.LeftIcon>
         )}
         {label}

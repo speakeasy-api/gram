@@ -224,10 +224,15 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 
 // memberCredentialLoadError says retry only when a retry can help: a broken query needs a fix.
 func memberCredentialLoadError(member metaMember, err error) error {
-	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
-		return newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil)
+	// A caller that went away says nothing about the member.
+	code := mcpconnectionattempts.Code{}
+	if !errors.Is(err, context.Canceled) {
+		code = resolveFailureHappened(err)
 	}
-	return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
+		return memberConnectionError{newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil), code}
+	}
+	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code}
 }
 
 // chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.

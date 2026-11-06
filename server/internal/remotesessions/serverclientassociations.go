@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,14 +45,38 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
-	if _, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
+	}
+
+	requiredClientIDs := []string{}
+	if server.UserSessionIssuerID.Valid {
+		q := repo.New(s.db)
+		bound, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
+			UserSessionIssuerID: server.UserSessionIssuerID.UUID,
+			ProjectID:           conv.ToNullUUID(*authCtx.ProjectID),
+			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
+			OrganizationWide:    false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list clients bound to user session issuer").LogError(ctx, logger)
+		}
+		ids := make([]uuid.UUID, 0, len(bound))
+		for _, client := range bound {
+			ids = append(ids, client.ClientID)
+		}
+		required, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "decide required MCP server clients").LogError(ctx, logger)
+		}
+		requiredClientIDs = uuidStrings(required)
 	}
 
 	rows, err := upstreamclientsrepo.New(s.db).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{
@@ -82,7 +108,47 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 			AssociatedAt:          row.AssociatedAt.Time.Format(time.RFC3339),
 		})
 	}
-	return &gen.ListServerClientAssociationsResult{Associations: associations}, nil
+	return &gen.ListServerClientAssociationsResult{Associations: associations, RequiredClientIds: requiredClientIDs}, nil
+}
+
+// errClientNotDetachable says a server has nothing to detach from a client: it
+// has no association with it, and either the client is not one it falls back to
+// needing or the detach is already on record.
+var errClientNotDetachable = errors.New("client is not detachable from this mcp server")
+
+// recordUnclaimedClientDetach records that a server gives up a client bound to
+// its issuer that it has no association with, returning the client's external
+// id. Only an unclaimed client qualifies, since that is the only kind the server
+// could still need without an association.
+func recordUnclaimedClientDetach(ctx context.Context, dbtx pgx.Tx, organizationID string, server mcpserversrepo.McpServer, clientID uuid.UUID) (string, error) {
+	if !server.UserSessionIssuerID.Valid {
+		return "", errClientNotDetachable
+	}
+	uses, err := repo.New(dbtx).DescribeBoundClientUse(ctx, repo.DescribeBoundClientUseParams{
+		McpServerID:            server.ID,
+		OrganizationID:         organizationID,
+		UserSessionIssuerID:    server.UserSessionIssuerID.UUID,
+		RemoteSessionClientIds: []uuid.UUID{clientID},
+	})
+	if err != nil {
+		return "", fmt.Errorf("describe bound client use: %w", err)
+	}
+	if len(uses) != 1 || !clientUnclaimed(uses[0]) {
+		return "", errClientNotDetachable
+	}
+	externalClientID, err := upstreamclientsrepo.New(dbtx).RecordMCPServerRemoteSessionClientDetach(ctx, upstreamclientsrepo.RecordMCPServerRemoteSessionClientDetachParams{
+		OrganizationID:        organizationID,
+		McpServerID:           server.ID,
+		ProjectID:             server.ProjectID,
+		RemoteSessionClientID: clientID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errClientNotDetachable
+	}
+	if err != nil {
+		return "", fmt.Errorf("record mcp server client detach: %w", err)
+	}
+	return externalClientID, nil
 }
 
 func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *gen.DetachServerClientAssociationPayload) error {
@@ -162,16 +228,22 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 			break
 		}
 	}
-	if !found {
-		return oops.E(oops.CodeNotFound, nil, "MCP server is not associated with this client").LogWarn(ctx, logger)
-	}
-
-	if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
-		McpServerID:           serverID,
-		RemoteSessionClientID: clientID,
-		ProjectID:             *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+	if found {
+		if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+			McpServerID:           serverID,
+			RemoteSessionClientID: clientID,
+			ProjectID:             *authCtx.ProjectID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+		}
+	} else {
+		externalClientID, err = recordUnclaimedClientDetach(ctx, dbtx, authCtx.ActiveOrganizationID, server, clientID)
+		switch {
+		case errors.Is(err, errClientNotDetachable):
+			return oops.E(oops.CodeNotFound, err, "MCP server is not associated with this client").LogWarn(ctx, logger)
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "record MCP server client detach").LogError(ctx, logger)
+		}
 	}
 
 	// The association is what the server's link to its typed auth client was

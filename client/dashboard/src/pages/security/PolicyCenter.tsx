@@ -39,11 +39,12 @@ import {
   Plus,
   Shield,
   Ellipsis,
-  Loader2,
   ChevronRight,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Fragment,
   useState,
@@ -815,7 +816,7 @@ function PolicyCenterContent() {
         <Button.Text className="flex gap-2">
           {createMutation.isPending ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0" />
               Creating...
             </>
           ) : (
@@ -1043,11 +1044,7 @@ function PolicyCenterContent() {
     />
   );
   if (isLoading) {
-    policiesBody = (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
+    policiesBody = <SkeletonTable label="Loading policies" />;
   } else if (policyRows.length === 0) {
     policiesBody = policiesEmptyState;
   }
@@ -1112,11 +1109,7 @@ function PolicyCenterContent() {
       />
     );
   if (quarantinesLoading) {
-    quarantinesBody = (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
+    quarantinesBody = <SkeletonTable label="Loading session quarantines" />;
   } else if (quarantinesError) {
     quarantinesBody = (
       <div className="border-border flex flex-col items-center gap-3 border py-12 text-center">

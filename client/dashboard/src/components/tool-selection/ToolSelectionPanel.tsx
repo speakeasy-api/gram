@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ChevronRight, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -585,8 +586,13 @@ function ServerRow({
   let expandedBody: React.ReactNode;
   if (isLoading) {
     expandedBody = (
-      <div className="text-muted-foreground px-8 py-3 text-sm">
-        Loading tools…
+      <div role="status" className="px-8 py-3">
+        <span className="sr-only">Loading tools…</span>
+        <Skeleton>
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+        </Skeleton>
       </div>
     );
   } else if (isError) {

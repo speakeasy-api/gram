@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import {
   DangerSettingsSection,
   FooterSaveButton,
@@ -512,7 +513,7 @@ function GatewayDangerZoneSection({
             >
               {remove.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Delete gateway</Button.Text>

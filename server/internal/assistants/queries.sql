@@ -1205,13 +1205,13 @@ WHERE assistant_id = @assistant_id
 
 -- name: ListInactiveAssistantRuntimesForReap :many
 -- Returns runtime rows that still carry backend metadata and are safe to
--- collect, in two cases:
+-- collect, in three cases:
 --   1. Orphans: finalized (soft-deleted or ended; the state value is ignored
 --      since a tombstone can carry any state, e.g. one stamped by a racing
---      turn) or under a soft-deleted assistant, whose owning assistant has had
---      no runtime activity since @inactive_before — i.e. Stop/Reap never
---      completed. A live row under a live assistant is never an orphan: an
---      idle runtime keeps its VM until the assistant is deleted.
+--      turn) or under a soft-deleted assistant or project, whose owning
+--      assistant has had no runtime activity since @inactive_before — i.e.
+--      Stop/Reap never completed. A live row under a live assistant and project
+--      is never an orphan: inactivity alone does not discard its workspace.
 --   2. Superseded backend: a row on a backend the process no longer targets
 --      (backend <> @target_backend), parked at @stopped_state after its warm
 --      window. Collecting it frees the deprecated backend's resources so the
@@ -1236,6 +1236,12 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
           WHERE a.id = r.assistant_id
             AND a.project_id = r.project_id
             AND a.deleted IS TRUE
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM projects p
+          WHERE p.id = r.project_id
+            AND p.deleted IS TRUE
         )
       )
       AND NOT EXISTS (
@@ -1291,8 +1297,8 @@ WHERE id = @runtime_id
 -- Returns live v2 runtime rows that carry backend metadata for runtime
 -- reconciliation sweeps. Only `active` rows qualify: `starting` rows are
 -- mid-boot, while expiring/stopped rows are already being torn down or await
--- re-admission. Rows orphaned by a deleted assistant belong to the
--- deleted-assistant janitor and are excluded here.
+-- re-admission. Rows orphaned by a deleted assistant or project belong to the
+-- inactivity janitor and are excluded here so maintenance cannot delay collection.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state
@@ -1306,6 +1312,12 @@ WHERE r.state = @active_state
     WHERE a.id = r.assistant_id
       AND a.project_id = r.project_id
       AND a.deleted IS TRUE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = r.project_id
+      AND p.deleted IS TRUE
   )
 ORDER BY r.updated_at ASC;
 

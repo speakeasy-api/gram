@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
 import { ServerUsageImpactById } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { Text } from "@/components/ui/Text";
@@ -11,7 +12,6 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -184,7 +184,7 @@ function DeleteRemoteIdentityProviderDialogBody({
         >
           {submitting && (
             <Button.LeftIcon>
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>{submitting ? "Removing" : "Remove"}</Button.Text>

@@ -473,7 +473,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 // record to correlation IDs and comparison results: never log the catalog,
 // credentials, configuration hashes, headers, or tool definitions.
 func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, reason consentRejectionReason, message string, comparisons map[string]bool) error {
-	err := catalogConsentError{&metaMemberError{message: message}}
+	err := catalogConsentError{metaMemberError: &metaMemberError{message: message}, reason: reason}
 	if gate.consentDiagnostics != nil {
 		key := consentDiagnosticKey{catalogID: gate.catalog.ID, memberID: member.serverID, reason: reason}
 		if _, seen := gate.consentDiagnostics.seen.LoadOrStore(key, struct{}{}); seen {
@@ -510,7 +510,12 @@ type consentDiagnosticKey struct {
 
 // catalogConsentError is a member whose approval no longer matches it. Only a
 // new consent fixes it; retrying or changing the call cannot.
-type catalogConsentError struct{ *metaMemberError }
+type catalogConsentError struct {
+	*metaMemberError
+
+	// reason names which part of the approval no longer matches.
+	reason consentRejectionReason
+}
 
 func (e catalogConsentError) Unwrap() error { return e.metaMemberError }
 

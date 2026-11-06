@@ -78,7 +78,10 @@ import {
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
-import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+import {
+  invalidateAllListAPIKeys,
+  useListAPIKeys,
+} from "@gram/client/react-query/listAPIKeys.js";
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
@@ -133,6 +136,9 @@ type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
+
+// The session cookie authenticates the dashboard; the header is a placeholder.
+const keysSecurity = { sessionHeaderGramSession: "" };
 
 // Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
 // them without mcp:auth, and nothing here can choose auth clients yet, so it is
@@ -387,6 +393,33 @@ export function CredentialsWizard({
   // is delivered. Every step is a destination because none of them creates
   // anything until the key is issued.
   const existing = agent !== undefined;
+  // An agent opened again usually has a working key already. The install
+  // step cannot show it, but must not read as if the agent were unconnected.
+  // Same options and permission gate as the agent's own pages, so all of them
+  // read one cached list and none sends a request it would be refused.
+  const agentKeys = useListAPIKeys({ agentId: agent?.id ?? "" }, keysSecurity, {
+    queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
+    enabled: existing && agent.permissions.authorize,
+    retry: false,
+    throwOnError: false,
+  });
+  // `null` only once a read confirms there is no live key; `undefined` while
+  // the list is not read, loading or failed, so the step claims neither. A
+  // disabled query still reports a list cached before authorize was lost.
+  const existingKey = useMemo(() => {
+    if (!existing) return null;
+    if (!agent.permissions.authorize || !agentKeys.isSuccess) return undefined;
+    const now = Date.now();
+    const live = agentKeys.data.keys.filter(
+      (key) => !key.expiresAt || key.expiresAt.getTime() > now,
+    );
+    if (live.length === 0) return null;
+    const lastUsedAt = live
+      .map((key) => key.lastAccessedAt)
+      .filter((at): at is Date => at !== undefined)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    return { lastUsedAt };
+  }, [existing, agent, agentKeys.isSuccess, agentKeys.data]);
 
   // Opened for a named platform: the credential is settled and the agent is
   // named after what will be signing in, so the flow starts at the servers —
@@ -2036,6 +2069,7 @@ export function CredentialsWizard({
             onIssue={() => void provision()}
             issuing={provisioning || minting}
             secret={secret}
+            existingKey={existingKey}
             gatewayURL={gatewayURL}
             serverCount={allServers ? "all" : selected.length}
           />

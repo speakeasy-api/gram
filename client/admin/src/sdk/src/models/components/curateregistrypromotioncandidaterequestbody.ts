@@ -6,17 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export const CurateRegistryPromotionCandidateRequestBodyAction = {
+export const Action = {
   Reject: "reject",
   Archive: "archive",
   Restore: "restore",
 } as const;
-export type CurateRegistryPromotionCandidateRequestBodyAction = ClosedEnum<
-  typeof CurateRegistryPromotionCandidateRequestBodyAction
->;
+export type Action = ClosedEnum<typeof Action>;
 
 export type CurateRegistryPromotionCandidateRequestBody = {
-  action: CurateRegistryPromotionCandidateRequestBodyAction;
+  action: Action;
   curationRevision: string;
   organizationId: string;
   promotionId: string;
@@ -24,9 +22,9 @@ export type CurateRegistryPromotionCandidateRequestBody = {
 };
 
 /** @internal */
-export const CurateRegistryPromotionCandidateRequestBodyAction$outboundSchema:
-  z.ZodMiniEnum<typeof CurateRegistryPromotionCandidateRequestBodyAction> = z
-    .enum(CurateRegistryPromotionCandidateRequestBodyAction);
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
 
 /** @internal */
 export type CurateRegistryPromotionCandidateRequestBody$Outbound = {
@@ -44,7 +42,7 @@ export const CurateRegistryPromotionCandidateRequestBody$outboundSchema:
     CurateRegistryPromotionCandidateRequestBody
   > = z.pipe(
     z.object({
-      action: CurateRegistryPromotionCandidateRequestBodyAction$outboundSchema,
+      action: Action$outboundSchema,
       curationRevision: z.string(),
       organizationId: z.string(),
       promotionId: z.string(),
