@@ -235,13 +235,15 @@ func TestOnce_AHeldBackRowAfterShutdownIsCounted(t *testing.T) {
 	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
 	recorder := newTestRecorder(t, conn, testConfig())
 	scope := testScope()
-	for range onceKeyBurst {
+	for range onceKeyBurst + 1 {
 		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
 	}
 	require.NoError(t, recorder.Shutdown(t.Context()))
+	// The row held back before shutdown is written by the final pass.
+	require.Equal(t, int64(onceKeyBurst+1), conn.rows.Load()+conn.repeats.Load())
 
 	require.False(t, recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest))
-	require.Equal(t, int64(onceKeyBurst), conn.rows.Load())
+	require.Equal(t, int64(onceKeyBurst+1), conn.rows.Load()+conn.repeats.Load())
 	require.Equal(t, int64(1), recorder.droppedTotal(t))
 	require.Equal(t, int64(1), recorder.dropped(t, dropShutdown))
 }
