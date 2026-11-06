@@ -395,7 +395,7 @@ export function ChatLanding({
   );
 }
 
-/** Start a fresh landing conversation, then transfer any fallback draft. */
+/** Transfer the fallback draft after the landing conversation is reset. */
 function SeedComposerDraft({
   value,
   onSeeded,
