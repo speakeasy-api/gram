@@ -86,6 +86,26 @@ func TestError_UnnamedEnvelopeFailureStaysServerFault(t *testing.T) {
 	require.Equal(t, "slack reactions.add: request failed", err.Error())
 }
 
+func TestError_NeededOnlyForMissingScope(t *testing.T) {
+	t.Parallel()
+
+	missing := newEnvelopeError("conversations.list", http.StatusOK, ResponseEnvelope{
+		Ok:               false,
+		Error:            "missing_scope",
+		Warning:          "",
+		ResponseMetadata: nil,
+	}, "channels:read")
+	require.Equal(t, "channels:read", missing.Needed)
+
+	other := newEnvelopeError("conversations.list", http.StatusOK, ResponseEnvelope{
+		Ok:               false,
+		Error:            "invalid_auth",
+		Warning:          "",
+		ResponseMetadata: nil,
+	}, "channels:read")
+	require.Empty(t, other.Needed)
+}
+
 func TestError_StatusCodesFollowTheHTTPSplit(t *testing.T) {
 	t.Parallel()
 

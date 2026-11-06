@@ -67,6 +67,11 @@ func newStatusError(method string, statusCode int, body []byte) *Error {
 }
 
 func newEnvelopeError(method string, statusCode int, envelope ResponseEnvelope, needed string) *Error {
+	// Needed is documented as the missing_scope scope only, so drop whatever
+	// `needed` any other refusal carried.
+	if envelope.Error != "missing_scope" {
+		needed = ""
+	}
 	return &Error{
 		Method:     method,
 		Code:       envelope.Error,
