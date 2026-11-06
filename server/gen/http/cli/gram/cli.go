@@ -752,12 +752,18 @@ func ParseEndpoint(
 		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
-		authLoginRedirectFlag       = authLoginFlags.String("redirect", "", "")
-		authLoginOrgNameFlag        = authLoginFlags.String("org-name", "", "")
-		authLoginPartnerCodeFlag    = authLoginFlags.String("partner-code", "", "")
-		authLoginEmailFlag          = authLoginFlags.String("email", "", "")
-		authLoginSupportHandoffFlag = authLoginFlags.String("support-handoff", "", "")
+		authLoginFlags                  = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag           = authLoginFlags.String("redirect", "", "")
+		authLoginOrgNameFlag            = authLoginFlags.String("org-name", "", "")
+		authLoginPartnerCodeFlag        = authLoginFlags.String("partner-code", "", "")
+		authLoginEmailFlag              = authLoginFlags.String("email", "", "")
+		authLoginSupportHandoffFlag     = authLoginFlags.String("support-handoff", "", "")
+		authLoginUtmSourceFlag          = authLoginFlags.String("utm-source", "", "")
+		authLoginUtmMediumFlag          = authLoginFlags.String("utm-medium", "", "")
+		authLoginUtmCampaignFlag        = authLoginFlags.String("utm-campaign", "", "")
+		authLoginUtmTermFlag            = authLoginFlags.String("utm-term", "", "")
+		authLoginUtmContentFlag         = authLoginFlags.String("utm-content", "", "")
+		authLoginAnalyticsSessionIDFlag = authLoginFlags.String("analytics-session-id", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -10605,7 +10611,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag, *authLoginUtmSourceFlag, *authLoginUtmMediumFlag, *authLoginUtmCampaignFlag, *authLoginUtmTermFlag, *authLoginUtmContentFlag, *authLoginAnalyticsSessionIDFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -15941,6 +15947,12 @@ func authLoginUsage() {
 	fmt.Fprint(os.Stderr, " -partner-code STRING")
 	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -support-handoff STRING")
+	fmt.Fprint(os.Stderr, " -utm-source STRING")
+	fmt.Fprint(os.Stderr, " -utm-medium STRING")
+	fmt.Fprint(os.Stderr, " -utm-campaign STRING")
+	fmt.Fprint(os.Stderr, " -utm-term STRING")
+	fmt.Fprint(os.Stderr, " -utm-content STRING")
+	fmt.Fprint(os.Stderr, " -analytics-session-id STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -15953,10 +15965,16 @@ func authLoginUsage() {
 	fmt.Fprintln(os.Stderr, `    -partner-code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -support-handoff STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-source STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-medium STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-campaign STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-term STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-content STRING: `)
+	fmt.Fprintln(os.Stderr, `    -analytics-session-id STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --partner-code \"aaa\" --email \"abc123\" --support-handoff \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --partner-code \"aaa\" --email \"abc123\" --support-handoff \"abc123\" --utm-source \"abc123\" --utm-medium \"abc123\" --utm-campaign \"abc123\" --utm-term \"abc123\" --utm-content \"abc123\" --analytics-session-id \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
