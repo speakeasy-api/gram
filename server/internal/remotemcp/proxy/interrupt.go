@@ -34,7 +34,7 @@ const upstreamCancelTimeout = 2 * time.Second
 func interruptedRejection(method string) *RejectError {
 	return &RejectError{
 		Code:    RejectCodeInternalError,
-		Message: "Speakeasy is restarting and stopped waiting for the MCP server's response. The request may still complete on the MCP server.",
+		Message: "The gateway is restarting and stopped waiting for the MCP server's response. The request may still complete on the MCP server.",
 		// Only tools/call can have side effects the remote MCP server may
 		// already have carried out, so it is never marked retryable.
 		Data: oops.NewServerShutdownErrorData(method != methodToolsCall),
@@ -150,7 +150,7 @@ func (p *Proxy) sendUpstreamCancel(ctx context.Context, userReq *http.Request, i
 	body, err := json.Marshal(cancelledNotification{
 		JSONRPC: "2.0",
 		Method:  mcpversions.MethodNotificationsCancelled,
-		Params:  cancelledParams{RequestID: id.Raw(), Reason: "Speakeasy is restarting and stopped waiting for the response."},
+		Params:  cancelledParams{RequestID: id.Raw(), Reason: "The gateway is restarting and stopped waiting for the response."},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal notifications/cancelled: %w", err)

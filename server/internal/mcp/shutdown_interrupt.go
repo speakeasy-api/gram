@@ -16,11 +16,11 @@ const (
 	// toolCallShutdownMessage answers a tools/call the shutdown drain
 	// interrupted. The tool may have finished its work before the gateway
 	// stopped waiting, so the message does not claim it failed.
-	toolCallShutdownMessage = "Speakeasy is restarting and stopped waiting for the tool's response. The tool call may still have completed."
+	toolCallShutdownMessage = "The gateway is restarting and stopped waiting for the tool's response. The tool call may still have completed."
 
 	// resourceReadShutdownMessage answers a resources/read the shutdown drain
 	// interrupted. Reads have no side effects, so the client can retry.
-	resourceReadShutdownMessage = "Speakeasy is restarting and stopped waiting for the resource. Retry the read."
+	resourceReadShutdownMessage = "The gateway is restarting and stopped waiting for the resource. Retry the read."
 )
 
 // shutdownInterruption is how a handler answers a tools/call or resources/read

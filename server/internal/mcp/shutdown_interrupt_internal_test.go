@@ -75,7 +75,7 @@ func TestInterruptedAtShutdown_ToolsCallAnswer(t *testing.T) {
 		"id": 7,
 		"error": {
 			"code": -32603,
-			"message": "Speakeasy is restarting and stopped waiting for the tool's response. The tool call may still have completed.",
+			"message": "The gateway is restarting and stopped waiting for the tool's response. The tool call may still have completed.",
 			"data": {"reason": "server_shutdown", "retryable": false}
 		}
 	}`, string(body))

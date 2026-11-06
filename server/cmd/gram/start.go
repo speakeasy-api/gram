@@ -313,10 +313,10 @@ func restoreLocalPluginRepositories(
 }
 
 // shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
-// to complete on SIGTERM before the process exits. MCP requests that wait on
-// another server are not left to run it out: requestInterruptAfter answers
-// them first, so this only has to cover the rest of an endpoint's work plus
-// writing and recording those answers.
+// to complete on SIGTERM before the process exits. MCP tool calls, resource
+// reads and relayed requests are not left to run it out: requestInterruptAfter
+// answers them first, so this only has to cover the rest of an endpoint's work
+// plus writing and recording those answers.
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
 // terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
@@ -324,13 +324,12 @@ func restoreLocalPluginRepositories(
 // so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
-// requestInterruptAfter is how long after SIGTERM an MCP request that waits on
-// another server (a relayed remote MCP request, or a function, HTTP, or
-// external MCP tool call or resource read the gateway runs itself) may keep
-// waiting before it is answered with a JSON-RPC error. It leaves 15s of
-// shutdownDrainTimeout to write those errors, cancel the upstream calls,
-// record the interrupted calls, and let handlers return before the deadline
-// cancels whatever is left.
+// requestInterruptAfter is how long after SIGTERM an MCP request (a relayed
+// remote MCP request, or a tool call or resource read the gateway runs itself)
+// may keep running before it is cancelled and answered with a JSON-RPC error.
+// It leaves 15s of shutdownDrainTimeout to write those errors, cancel the
+// upstream calls, record the interrupted calls, and let handlers return before
+// the deadline cancels whatever is left.
 const requestInterruptAfter = 45 * time.Second
 
 func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {

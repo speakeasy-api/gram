@@ -389,44 +389,81 @@ func TestToolProxy_Do_CompletedCallIsNotInterrupted(t *testing.T) {
 	require.JSONEq(t, `{"ok":true}`, recorder.Body.String())
 }
 
-// heldPlatformExecutor runs a platform tool that waits for the test to
-// release it, recording whether its context was cancelled meanwhile.
-type heldPlatformExecutor struct {
-	entered  chan struct{}
-	release  chan struct{}
-	ctxError error
+// cancelledPlatformExecutor runs a platform tool that works until its context
+// is cancelled, then returns result and err.
+type cancelledPlatformExecutor struct {
+	entered chan struct{}
+	result  *PlatformResult
+	err     error
 }
 
-func (e *heldPlatformExecutor) ExecuteTool(ctx context.Context, _ *ToolCallPlan, _ toolconfig.ToolCallEnv, _ io.Reader) (*PlatformResult, error) {
+func (e *cancelledPlatformExecutor) ExecuteTool(ctx context.Context, _ *ToolCallPlan, _ toolconfig.ToolCallEnv, _ io.Reader) (*PlatformResult, error) {
 	close(e.entered)
-	<-e.release
-	e.ctxError = ctx.Err()
+	<-ctx.Done()
 
-	return &PlatformResult{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{"ok":true}`)}, nil
+	return e.result, e.err
 }
 
-func TestToolProxy_Do_ShutdownLeavesPlatformToolsRunning(t *testing.T) {
+func newShutdownTestPlatformPlan() *ToolCallPlan {
+	descriptor := newTestToolDescriptor()
+	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")
+
+	return NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{SourceSlug: "logs", InputSchema: nil})
+}
+
+func TestToolProxy_Do_ShutdownInterruptsPlatformTool(t *testing.T) {
 	t.Parallel()
 
-	executor := &heldPlatformExecutor{entered: make(chan struct{}), release: make(chan struct{}), ctxError: nil}
+	executor := &cancelledPlatformExecutor{
+		entered: make(chan struct{}),
+		result:  nil,
+		err:     fmt.Errorf("call slack chat.postMessage: %w", context.Canceled),
+	}
 	drain := shutdowndrain.New()
 	proxy := newShutdownTestToolProxy(t, drain, executor)
 
-	descriptor := newTestToolDescriptor()
-	descriptor.URN = urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")
-	plan := NewPlatformToolCallPlan(descriptor, &PlatformToolCallPlan{SourceSlug: "logs", InputSchema: nil})
-
-	done := runToolCall(t, proxy, plan)
+	done := runToolCall(t, proxy, newShutdownTestPlatformPlan())
 	waitForSignal(t, executor.entered, "the platform tool to start")
 
-	// Interrupt, then give the drain's callbacks time to run before the tool
-	// finishes; an interruptible call would have its context cancelled here.
+	drain.Start(0)
+
+	require.ErrorIs(t, waitForToolCall(t, done), shutdowndrain.ErrInterrupted)
+}
+
+func TestToolProxy_Do_ShutdownKeepsResultOfPlatformToolThatFinishes(t *testing.T) {
+	t.Parallel()
+
+	executor := &cancelledPlatformExecutor{
+		entered: make(chan struct{}),
+		result:  &PlatformResult{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{"ok":true}`)},
+		err:     nil,
+	}
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, executor)
+
+	done := runToolCall(t, proxy, newShutdownTestPlatformPlan())
+	waitForSignal(t, executor.entered, "the platform tool to start")
+
+	drain.Start(0)
+
+	require.NoError(t, waitForToolCall(t, done))
+}
+
+func TestToolProxy_Do_ShutdownKeepsPromptResult(t *testing.T) {
+	t.Parallel()
+
+	drain := shutdowndrain.New()
+	proxy := newShutdownTestToolProxy(t, drain, nil)
+
 	drain.Start(0)
 	interruptRan := make(chan struct{})
 	defer drain.AfterInterrupt(func() { close(interruptRan) })()
 	waitForSignal(t, interruptRan, "the interrupt deadline to pass")
-	close(executor.release)
 
-	require.NoError(t, waitForToolCall(t, done))
-	require.NoError(t, executor.ctxError, "a platform tool runs in process and must not be interrupted")
+	plan := NewPromptToolCallPlan(newTestToolDescriptor(), &PromptToolCallPlan{TemplateID: "", Prompt: "hello", Engine: "", Kind: ""})
+	recorder := httptest.NewRecorder()
+
+	err := proxy.Do(t.Context(), recorder, bytes.NewReader(emptyToolCallBody(t)), emptyToolCallEnv(), plan, tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+	require.Equal(t, "hello", recorder.Body.String())
 }

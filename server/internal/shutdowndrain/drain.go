@@ -26,10 +26,9 @@ func Interrupted(ctx context.Context) bool {
 // When it starts, streams that exist only to carry server-initiated messages
 // can end, so their clients reconnect to a replica that is still serving.
 //
-// When the interrupt deadline passes, work still waiting on a remote MCP
-// server, a function runner, or an HTTP tool's server is abandoned and its
-// request answered with an error, leaving the rest of the server's shutdown
-// window to write those answers and record them.
+// When the interrupt deadline passes, interruptible work still running is
+// cancelled and its request answered with an error, leaving the rest of the
+// server's shutdown window to write those answers and record them.
 //
 // A nil *Drain never starts, so code built without one behaves as if the
 // server never shuts down.

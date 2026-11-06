@@ -195,17 +195,12 @@ func (tp *ToolProxy) Do(
 		span.End()
 	}()
 
-	// Calls that wait on another server are abandoned at the shutdown
-	// interrupt deadline, so the caller can answer before the server stops
-	// waiting for in-flight requests. Platform tools run in process and can
-	// write state part way through, and prompts render locally, so both are
-	// left to finish.
-	if interruptibleToolKind(plan.Kind) {
-		var release func()
-		ctx, release = tp.drain.Interruptible(ctx)
-		defer release()
-		defer func() { err = shutdownInterruptedError(ctx, err) }()
-	}
+	// Every call is cancelled at the shutdown interrupt deadline, so the caller
+	// can answer before the server stops waiting for in-flight requests. A call
+	// that finishes regardless, such as a prompt render, keeps its result.
+	ctx, release := tp.drain.Interruptible(ctx)
+	defer release()
+	defer func() { err = shutdownInterruptedError(ctx, err) }()
 
 	// Capture the trace/span context onto the shared log attributes now, while the
 	// gateway.toolCall span is active. The callers (mcp tool-call handler, instances
@@ -238,17 +233,6 @@ func (tp *ToolProxy) Do(
 		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
-	}
-}
-
-// interruptibleToolKind reports whether a call of kind waits on another
-// server, so the shutdown drain may abandon it.
-func interruptibleToolKind(kind ToolKind) bool {
-	switch kind {
-	case ToolKindFunction, ToolKindHTTP, ToolKindExternalMCP:
-		return true
-	default:
-		return false
 	}
 }
 
