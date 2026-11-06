@@ -43,8 +43,9 @@ const (
 	//
 	// For streaming responses (text/event-stream), this only bounds the
 	// connect+headers phase — once headers are received, per-event idle
-	// bounds via [DefaultStreamingTimeout] take over and the stream itself
-	// is unbounded so long as upstream stays active.
+	// bounds via [DefaultStreamingTimeout] take over and the stream runs
+	// until upstream ends it, it goes idle, or it reaches the proxy's
+	// MaxStreamAge.
 	DefaultNonStreamingTimeout = 60 * time.Second
 
 	// DefaultStreamingTimeout is the per-event idle bound applied to
@@ -229,6 +230,17 @@ type Proxy struct {
 	// Callers must set an explicit value; use [DefaultStreamingTimeout]
 	// for the package default.
 	StreamingTimeout time.Duration
+
+	// MaxStreamAge bounds how long a relayed stream stays open, measured from
+	// the proxy's receipt of the request, so it ends before the load
+	// balancer's response deadline cuts it. At this age a standalone GET
+	// stream closes with an SSE retry field for the client to reopen it, a
+	// subscriptions/listen stream closes after its completion result, and any
+	// other POST stream whose response was already relayed simply ends. A POST
+	// stream still waiting on its response is left open: closing it would
+	// cancel the request. Zero or negative leaves streams open until they end
+	// on their own.
+	MaxStreamAge time.Duration
 
 	// Metrics records per-request counters and histograms. Nil is safe and
 	// disables metrics recording; tests that do not care about metrics pass
@@ -527,9 +539,12 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		label := p.resolveCacheLabel(r, len(p.ToolsListResponseInterceptors) > 0 || len(p.ResourcesListResponseInterceptors) > 0)
 		stopDrain := p.Drain.afterStart(func() { drainStream(upstreamResp.Body) })
 		defer stopDrain()
+		age := p.streamAge(start)
+		stopAge := age.afterDeadline(func() { rotateStream(upstreamResp.Body) })
+		defer stopAge()
 
 		streamStart := time.Now()
-		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false}
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: age}
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
 		responseBytes = relay.bytes
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
@@ -543,18 +558,20 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 				ResumeRequested: r.Header.Get(lastEventIDHeader) != "",
 				Duration:        time.Since(streamStart),
 			})
+			p.Metrics.RecordHTTPStreamEnd(ctx, r, reason, start, time.Now())
 		}()
 
 		switch reason {
-		case StreamEndShutdown:
+		case StreamEndShutdown, StreamEndMaxAge:
 			// The server MAY close this stream at any time; the retry field
 			// asks the client to reconnect, which reaches a replica that is
-			// still serving.
+			// still serving, or opens a fresh stream whose deadline is further
+			// away.
 			n, writeErr := writeSSERetry(w)
 			responseBytes += n
 			if writeErr != nil {
-				p.Logger.DebugContext(ctx, "write retry to remote mcp listen stream closed for shutdown",
-					attr.SlogComponent("remotemcp.proxy"), attr.SlogError(writeErr))
+				p.Logger.DebugContext(ctx, "write retry to closed remote mcp listen stream",
+					attr.SlogComponent("remotemcp.proxy"), attr.SlogRemoteMCPProxyStreamEndReason(string(reason)), attr.SlogError(writeErr))
 			}
 			return nil
 		case StreamEndIdleTimeout:
@@ -822,7 +839,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// abandon it, with errShutdownInterrupt as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
-	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false}
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
@@ -908,6 +925,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			}
 		})
 		defer stopDrain()
+		// A listen stream is rotated at its maximum age; any other stream is
+		// rotated then only if its response was already relayed, because
+		// closing a POST stream cancels a request still in flight.
+		stopAge := relay.age.afterDeadline(func() {
+			if listen || relay.responseRelayed.Load() {
+				rotateStream(upstreamResp.Body)
+			}
+		})
+		defer stopAge()
 
 		streamStart := time.Now()
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, relay, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
@@ -933,6 +959,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 				ResumeRequested: false,
 				Duration:        time.Since(streamStart),
 			})
+			p.Metrics.RecordHTTPStreamEnd(ctx, r, reason, start, time.Now())
 		}()
 
 		// Headers are already on the wire, so every ending that still owes
@@ -940,16 +967,17 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// an error returned from here would reach the client as a bare line
 		// SSE parsers drop.
 		switch reason {
-		case StreamEndShutdown:
+		case StreamEndShutdown, StreamEndMaxAge:
 			// Ending the subscription with its completion result, rather than
-			// dropping the stream, tells the client the server went away on
-			// purpose. Any other drained stream already relayed its response.
+			// dropping the stream, tells the client the server ended it on
+			// purpose. Any other drained or rotated stream already relayed its
+			// response.
 			if listen && !responseRelayed {
 				n, writeErr := p.writeListenCompletion(w, userReqID)
 				responseBytes += n
 				if writeErr != nil {
-					p.Logger.DebugContext(ctx, "write completion to subscriptions/listen stream closed for shutdown",
-						attr.SlogComponent("remotemcp.proxy"), attr.SlogError(writeErr))
+					p.Logger.DebugContext(ctx, "write completion to closed subscriptions/listen stream",
+						attr.SlogComponent("remotemcp.proxy"), attr.SlogRemoteMCPProxyStreamEndReason(string(reason)), attr.SlogError(writeErr))
 				}
 			}
 			return nil
@@ -1654,15 +1682,17 @@ func (p *Proxy) writeListenCompletion(w http.ResponseWriter, id jsonrpc.ID) (int
 }
 
 // streamEndReason classifies how a relayed SSE stream ended. A stream that
-// reached a clean EOF ended on its own even if the drain or idle bound fired
-// as it did: both end a stream by cancelling its read, which fails rather
-// than returning EOF.
+// reached a clean EOF ended on its own even if the drain, the maximum age or
+// the idle bound fired as it did: each ends a stream by cancelling its read,
+// which fails rather than returning EOF.
 func streamEndReason(r *http.Request, body io.ReadCloser, streamErr error) StreamEndReason {
 	switch {
 	case streamErr == nil:
 		return StreamEndUpstreamClosed
 	case streamDrained(body):
 		return StreamEndShutdown
+	case streamRotated(body):
+		return StreamEndMaxAge
 	case streamIdledOut(body):
 		return StreamEndIdleTimeout
 	case r.Context().Err() != nil:
@@ -1684,15 +1714,23 @@ type sseRelay struct {
 
 	// resumable reports whether any upstream event carried an SSE id.
 	resumable bool
+
+	// age is the stream's maximum age.
+	age streamAge
 }
 
 // markResponseRelayed records that the response was written to the client
-// and, once the drain has started, ends the upstream stream: the request is
-// complete, so there is nothing left to wait for.
+// and, once the drain has started or the stream has passed its maximum age,
+// ends the upstream stream: the request is complete, so there is nothing
+// left to wait for.
 func (r *sseRelay) markResponseRelayed(drain *Drain, body io.ReadCloser) {
 	r.responseRelayed.Store(true)
 	if drain.isStarted() {
 		drainStream(body)
+		return
+	}
+	if r.age.reached(time.Now()) {
+		rotateStream(body)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func TestDrainHTTPServerCancelsRequestsAndClosesConnections(t *testing.T) {
 	}
 	drainHTTPServer(t.Context(), testenv.NewLogger(t), server.Config, cancelRequests, 0, "failed to shutdown test server")
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
-	require.ErrorIs(t, context.Cause(ctx), errShutdownDeadline)
+	require.ErrorIs(t, context.Cause(ctx), httpstream.ErrServerShutdown)
 	select {
 	case <-finished:
 	case <-time.After(5 * time.Second):
