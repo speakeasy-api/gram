@@ -121,6 +121,7 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
     projectMap: new Map([
       ["project_example", { slug: "example", name: "Example project" }],
+      ["project_other", { slug: "other", name: "Other project" }],
     ]),
     toolsetMap: new Map([
       [
@@ -254,7 +255,8 @@ describe("Agent profile permissions", () => {
   });
   it("names every server's project, whether or not its grant stores one", async () => {
     // The setup flow stores a server with its project; the permission picker
-    // stores the server alone. Both rows read the same.
+    // stores the server alone. A stored project wins over the server's own,
+    // so the hosted grant stores a different project than its server's.
     mocks.list.mockResolvedValue([
       {
         id: "grant_hosted",
@@ -262,7 +264,7 @@ describe("Agent profile permissions", () => {
         selector: {
           resourceKind: "mcp",
           resourceId: "server_example",
-          projectId: "project_example",
+          projectId: "project_other",
         },
       },
       {
@@ -278,8 +280,13 @@ describe("Agent profile permissions", () => {
     ]);
     setup();
     expect(await screen.findByText("Remote server")).toBeTruthy();
-    expect(screen.getAllByText("Project: Example project")).toHaveLength(2);
-    // A server the inventory does not know gets no project, not a bare id.
+    // The hosted row keeps its stored project; the picker row reads its
+    // server's project.
+    expect(screen.getAllByText("Project: Other project")).toHaveLength(1);
+    expect(screen.getAllByText("Project: Example project")).toHaveLength(1);
+    // A server the inventory does not know is still listed, with no project
+    // and no bare id.
+    expect(screen.getByText("server_gone")).toBeTruthy();
     expect(screen.queryByText(/Project: server_gone/)).toBeNull();
   });
   it("shows an org permission as the whole organization unless narrowed to a project", async () => {
