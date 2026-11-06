@@ -184,6 +184,9 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("marshal selection: %w", err)
 		}
+		if len(raw) > selectionMaxRawBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxRawBytes)
+		}
 		return raw, nil
 	}
 	// Validate the compiled form of the selection being written: a selection
@@ -207,6 +210,9 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	raw, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: policy.Selection, Catalog: policy.Catalog})
 	if err != nil {
 		return nil, fmt.Errorf("marshal gateway policy: %w", err)
+	}
+	if len(raw) > selectionMaxRawBytes {
+		return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxRawBytes)
 	}
 	return raw, nil
 }

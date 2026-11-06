@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -212,7 +214,7 @@ func TestChosenToolSelection_UnknownAndDuplicateAnnotationsReject(t *testing.T) 
 func TestChosenToolSelection_RejectsOverCountAndOverlongNames(t *testing.T) {
 	t.Parallel()
 
-	submitted := make([]string, consentToolNameLimit+1)
+	submitted := make([]string, toolfilter.MaxTools+1)
 	for i := range submitted {
 		submitted[i] = fmt.Sprintf("tool-%d", i)
 	}
@@ -381,7 +383,7 @@ func TestAppendConsentInventoryPage_RejectsBlankOverlongAndOverCap(t *testing.T)
 	}, "")
 	require.Error(t, err)
 
-	over := make([]consentInventoryTool, consentToolNameLimit+1)
+	over := make([]consentInventoryTool, toolfilter.MaxTools+1)
 	for i := range over {
 		over[i] = consentInventoryTool{Name: fmt.Sprintf("tool_%05d", i)}
 	}
@@ -400,12 +402,12 @@ func TestMergeConsentInventoryPage_SharedInventoryCap(t *testing.T) {
 		return out
 	}
 
-	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools), "")
+	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(toolfilter.MaxTools), "")
 	require.NoError(t, err)
 	require.True(t, draft.Complete)
-	require.Len(t, draft.Tools, consentInventoryMaxTools)
+	require.Len(t, draft.Tools, toolfilter.MaxTools)
 
-	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools+1), "")
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(toolfilter.MaxTools+1), "")
 	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 
@@ -422,4 +424,37 @@ func TestConsentRoleHiddenMeta_CapsNamesKeepsCount(t *testing.T) {
 	capped := consentRoleHiddenMeta(big)
 	require.Equal(t, consentRoleHiddenNamesCap+7, capped["count"])
 	require.Len(t, capped["names"], consentRoleHiddenNamesCap)
+}
+
+func TestConsentFormFitsFullEscapedInventory(t *testing.T) {
+	t.Parallel()
+	form := url.Values{"action": {"approve"}, "state": {"state"}, "csrf_token": {"csrf"}, "tool_filtering": {"on"}}
+	for i := range toolfilter.MaxTools {
+		form.Add("tools", strings.Repeat("%", 190)+fmt.Sprintf("%010d", i))
+	}
+	require.LessOrEqual(t, int64(len(form.Encode())), consentFormMaxBytes)
+	r := httptest.NewRequest(http.MethodPost, "/?query=value", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+	require.Equal(t, form, r.PostForm)
+	require.Equal(t, "value", r.Form.Get("query"))
+	require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+}
+
+func TestConsentFormRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"invalid escape":  "state=%zz",
+		"semicolon":       "state=x;action=approve",
+		"too many fields": strings.Repeat("tools=x&", consentFormMaxFields),
+		"too many bytes":  "state=" + strings.Repeat("x", int(consentFormMaxBytes)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			require.Error(t, parseConsentForm(httptest.NewRecorder(), r))
+			require.Nil(t, r.PostForm)
+		})
+	}
 }

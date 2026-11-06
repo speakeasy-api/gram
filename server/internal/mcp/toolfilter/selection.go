@@ -112,16 +112,12 @@ type SessionSelection struct {
 	liveAnnotations []string
 }
 
-// Document caps. Entry count admits a full manual list plus one entry per
-// vocabulary annotation; the occurrence cap bounds total memory even when
-// snapshot expansions overlap.
-const (
-	selectionMaxRawBytes        = 2 << 20
-	selectionMaxAllowEntries    = 1004
-	selectionMaxSnapshotNames   = 1000
-	selectionMaxNameOccurrences = 5000
-	selectionMaxNameBytes       = 200
-)
+// MaxTools bounds a captured inventory and every selection made from it.
+const MaxTools = 10000
+
+// Serialized policies include overlapping annotation snapshots.
+const selectionMaxRawBytes = 16 << 20
+const selectionMaxNameBytes = 200
 
 // NewSessionSelection assembles, canonicalizes, and validates a selection:
 // annotation entries first in vocabulary order, tool entries after in
@@ -166,6 +162,13 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 	}
 	if err := selection.compile(); err != nil {
 		return nil, err
+	}
+	raw, err := json.Marshal(selection)
+	if err != nil {
+		return nil, fmt.Errorf("marshal tool selection: %w", err)
+	}
+	if len(raw) > selectionMaxRawBytes {
+		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxRawBytes)
 	}
 	return selection, nil
 }
@@ -218,15 +221,14 @@ func (s *SessionSelection) compile() error {
 	if s.Allow == nil {
 		return fmt.Errorf("tool selection missing allow list")
 	}
-	if len(s.Allow) > selectionMaxAllowEntries {
-		return fmt.Errorf("tool selection exceeds %d allow entries", selectionMaxAllowEntries)
+	if len(s.Allow) > MaxTools+len(KnownAnnotations) {
+		return fmt.Errorf("tool selection exceeds %d allow entries", MaxTools+len(KnownAnnotations))
 	}
 
 	names := map[string]struct{}{}
 	var live []string
 	seenTools := map[string]bool{}
 	seenAnnotations := map[string]bool{}
-	occurrences := 0
 
 	validName := func(name string) bool {
 		return name != "" && len(name) <= selectionMaxNameBytes
@@ -245,7 +247,6 @@ func (s *SessionSelection) compile() error {
 				return fmt.Errorf("tool selection repeats tool entry %q", entry.Name)
 			}
 			seenTools[entry.Name] = true
-			occurrences++
 			names[entry.Name] = struct{}{}
 
 		case AllowTypeAnnotation:
@@ -269,8 +270,8 @@ func (s *SessionSelection) compile() error {
 				if entry.Tools == nil {
 					return fmt.Errorf("snapshot annotation allow entries require a tools array")
 				}
-				if len(*entry.Tools) > selectionMaxSnapshotNames {
-					return fmt.Errorf("snapshot expansion exceeds %d names", selectionMaxSnapshotNames)
+				if len(*entry.Tools) > MaxTools {
+					return fmt.Errorf("snapshot expansion exceeds %d names", MaxTools)
 				}
 				withinEntry := map[string]bool{}
 				for _, name := range *entry.Tools {
@@ -281,7 +282,6 @@ func (s *SessionSelection) compile() error {
 						return fmt.Errorf("snapshot expansion repeats tool %q", name)
 					}
 					withinEntry[name] = true
-					occurrences++
 					names[name] = struct{}{}
 				}
 			default:
@@ -292,8 +292,8 @@ func (s *SessionSelection) compile() error {
 			return fmt.Errorf("tool selection carries unknown allow entry type %q", entry.Type)
 		}
 
-		if occurrences > selectionMaxNameOccurrences {
-			return fmt.Errorf("tool selection exceeds %d tool name occurrences", selectionMaxNameOccurrences)
+		if len(names) > MaxTools {
+			return fmt.Errorf("tool selection exceeds %d distinct tools", MaxTools)
 		}
 	}
 

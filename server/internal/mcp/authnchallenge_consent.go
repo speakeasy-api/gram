@@ -15,7 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -101,11 +103,46 @@ func (d consentTemplateData) ConsentPath() string {
 }
 
 // consentFormMaxBytes caps the consent form body to defend against memory
-// exhaustion (gosec G120). The tool picker can post consentToolNameLimit names
+// exhaustion (gosec G120). The tool picker can post toolfilter.MaxTools names
 // of up to consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
-// encoding; 1 MiB fits that worst case with room for the fixed fields while
-// staying bounded.
-const consentFormMaxBytes = 1 << 20 // 1 MiB
+// encoding, with 64 KiB reserved for fixed fields.
+const consentFormMaxBytes = int64(toolfilter.MaxTools*(3*consentInventoryMaxNameBytes+len("&tools=")) + (64 << 10))
+
+// consentFormMaxFields allows every selected tool plus room for consent metadata.
+const consentFormMaxFields = toolfilter.MaxTools + 64
+
+// parseConsentForm keeps the consent budget independent of net/url's default
+// 10,000-parameter limit, which also counts the form's non-tool fields.
+func parseConsentForm(w http.ResponseWriter, r *http.Request) error {
+	if r.PostForm != nil {
+		return r.ParseForm()
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
+	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/x-www-form-urlencoded" {
+		return r.ParseForm()
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	raw := string(body)
+	if strings.Count(raw, "&")+1 > consentFormMaxFields {
+		return fmt.Errorf("consent form exceeds %d fields", consentFormMaxFields)
+	}
+	form := make(url.Values)
+	for field := range strings.SplitSeq(raw, "&") {
+		values, err := url.ParseQuery(field)
+		if err != nil {
+			return err
+		}
+		for key, values := range values {
+			form[key] = append(form[key], values...)
+		}
+	}
+	r.PostForm = form
+	return r.ParseForm()
+}
 
 type consentApprovalError struct {
 	// Message explains why this origin or capture cannot be approved.
@@ -1090,8 +1127,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 
-	r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
+	if err := parseConsentForm(w, r); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
 

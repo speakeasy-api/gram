@@ -33,10 +33,6 @@ const (
 	// consumes the state, so a longer TTL would only keep dead entries.
 	consentToolInventoryTTL = 10 * time.Minute
 
-	// consentInventoryMaxTools bounds combined gateway inventories at capture
-	// and serving. Never truncate the approval surface.
-	consentInventoryMaxTools = 10000
-
 	// consentInventoryMaxNameBytes bounds a single upstream tool name.
 	consentInventoryMaxNameBytes = 200
 
@@ -198,12 +194,6 @@ func (s *Service) appendConsentInventoryPage(
 	pageTools []consentInventoryTool,
 	nextCursor string,
 ) (consentToolInventory, error) {
-	// Keep single-server capture within the picker's explicit-name budget.
-	// Larger servers retain the existing approve-all fallback; gateway capture
-	// bypasses this wrapper and uses the shared gateway inventory limit.
-	if len(draft.Tools)+len(pageTools) > consentToolNameLimit {
-		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, consentToolNameLimit)
-	}
 	draft, err := mergeConsentInventoryPage(draft, requestCursor, pageTools, nextCursor)
 	if err != nil {
 		return draft, err
@@ -246,8 +236,8 @@ func mergeConsentInventoryPage(
 		seen[tool.Name] = true
 		tool.Annotations = normalizeKnownAnnotations(tool.Annotations)
 	}
-	if len(draft.Tools)+len(pageTools) > consentInventoryMaxTools {
-		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, consentInventoryMaxTools)
+	if len(draft.Tools)+len(pageTools) > toolfilter.MaxTools {
+		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, toolfilter.MaxTools)
 	}
 
 	if len(nextCursor) > consentInventoryMaxCursorBytes {

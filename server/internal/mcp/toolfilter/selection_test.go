@@ -1,6 +1,7 @@
 package toolfilter
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -211,4 +212,40 @@ func TestFilterToolsBySelection_ProxyToolsFailClosed(t *testing.T) {
 	sel, err := ParseSessionSelection(docJSON(`[{"type":"tool","name":"p"}]`))
 	require.NoError(t, err)
 	require.Empty(t, FilterToolsBySelection([]*types.Tool{proxyTool("p")}, sel))
+}
+
+func TestSelectionLargeOverlappingSnapshotsRoundTrip(t *testing.T) {
+	t.Parallel()
+	names := make([]string, MaxTools)
+	for i := range names {
+		names[i] = fmt.Sprintf("%0195d_%04d", i, i)
+	}
+	mode := AnnotationModeSnapshot
+	entries := make([]AllowEntry, 0, len(KnownAnnotations))
+	for _, annotation := range KnownAnnotations {
+		entries = append(entries, AllowEntry{Type: AllowTypeAnnotation, Name: annotation, Mode: &mode, Tools: &names})
+	}
+	selection, err := NewSessionSelection(testResource, uuid.MustParse(testGrantID), entries)
+	require.NoError(t, err)
+	raw, err := json.Marshal(selection)
+	require.NoError(t, err)
+	require.Greater(t, len(raw), 2<<20)
+	restored, err := ParseSessionSelection(raw)
+	require.NoError(t, err)
+	require.True(t, restored.AllowsName(names[len(names)-1]))
+}
+
+func TestSelectionRejectsOversizedUnion(t *testing.T) {
+	t.Parallel()
+	first, second := make([]string, 6000), make([]string, 6000)
+	for i := range first {
+		first[i] = fmt.Sprintf("first_%d", i)
+		second[i] = fmt.Sprintf("second_%d", i)
+	}
+	mode := AnnotationModeSnapshot
+	_, err := NewSessionSelection(testResource, uuid.MustParse(testGrantID), []AllowEntry{
+		{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &mode, Tools: &first},
+		{Type: AllowTypeAnnotation, Name: AnnotationIdempotent, Mode: &mode, Tools: &second},
+	})
+	require.ErrorContains(t, err, "distinct tools")
 }

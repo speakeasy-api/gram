@@ -341,7 +341,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	require.Zero(t, upstream.requests.Load(), "an ambiguous typed choice never reaches an upstream through legacy auth")
 }
 
-func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string) catalogConnection {
+func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {
 	t.Helper()
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuerID, client, gatewayID, slug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
@@ -352,6 +352,10 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 	if tools != nil {
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
+	}
+	if len(annotations) > 0 {
+		form.Set("tool_filtering", "on")
+		form["tool_annotations"] = annotations
 	}
 	// The approval arrives from the person's browser, which carries no
 	// Speakeasy request authentication; the challenge names the person.

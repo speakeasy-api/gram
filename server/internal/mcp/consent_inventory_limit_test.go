@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -50,4 +51,43 @@ func TestGatewayOverLimitExplainsRecovery(t *testing.T) {
 	page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
 	require.Contains(t, page, "This gateway has too many tools to approve. Ask an administrator to reduce the tool inventory.")
 	require.NotContains(t, page, "Try again later")
+}
+
+func TestGatewayLargeSelectedInventoryApproval(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"manual", "annotation"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "selected-catalog-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := newCatalogUpstream(t, toolfilter.MaxTools)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+			var selected []string
+			var annotations []string
+			if kind == "manual" {
+				for i := range toolfilter.MaxTools {
+					selected = append(selected, fmt.Sprintf("source--tool_%03d", i))
+				}
+			} else {
+				annotations = []string{toolfilter.AnnotationReadOnly}
+			}
+			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, selected, annotations...)
+			response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			var listed struct {
+				Result struct {
+					Tools []json.RawMessage `json:"tools"`
+				} `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &listed))
+			require.Len(t, listed.Result.Tools, toolfilter.MaxTools)
+			result := callGatewayTool(t, ti, slug, connection.token, fmt.Sprintf("source--tool_%03d", toolfilter.MaxTools-1), map[string]any{})
+			require.NotContains(t, result, `"isError":true`)
+			require.Contains(t, result, "executed live")
+		})
+	}
 }
