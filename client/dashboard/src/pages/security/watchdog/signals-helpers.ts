@@ -1,6 +1,6 @@
 import { ACCENT_RED, SEVERITY, TREND } from "@/components/chart/palette";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
-import type { SeverityRating } from "../risk-utils";
+import { scoreToRating, type SeverityRating } from "../risk-utils";
 
 /**
  * Score-number color per severity band, shared by the signal rows and the
@@ -256,4 +256,21 @@ export function signalBucketStarts(
     starts: Array.from({ length }, (_, i) => alignedFrom * 1000 + i * bucketMs),
     bucketMs,
   };
+}
+
+/** StatTile tone for the a risk score, mirroring the signal table's
+ * severity coding: red for high/critical bands, amber for medium, plain
+ * ink for low. */
+export function riskScoreTone(
+  score: number,
+): "destructive" | "warning" | "neutral" {
+  switch (scoreToRating(score)) {
+    case "critical":
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    case "low":
+      return "neutral";
+  }
 }

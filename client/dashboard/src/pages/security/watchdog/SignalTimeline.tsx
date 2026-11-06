@@ -7,7 +7,7 @@ import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { useMemo } from "react";
 import { signalBucketStarts } from "./signals-helpers";
 
-const CHART_HEIGHT = 160;
+const DEFAULT_HEIGHT = 160;
 
 /**
  * Findings per time bucket for one signal across the page's window, so the
@@ -19,11 +19,13 @@ export function SignalTimeline({
   from,
   to,
   color,
+  height = DEFAULT_HEIGHT,
 }: {
   sparkline: number[];
   from: Date;
   to: Date;
   color: string;
+  height?: number;
 }): JSX.Element {
   const chart = useMemo(() => {
     const { starts, bucketMs } = signalBucketStarts(from, to, sparkline.length);
@@ -52,7 +54,7 @@ export function SignalTimeline({
     return (
       <div
         className="flex items-center justify-center"
-        style={{ height: CHART_HEIGHT }}
+        style={{ height: height }}
       >
         <ChartNoData message="No findings in this period" />
       </div>
@@ -66,7 +68,7 @@ export function SignalTimeline({
       bucketMs={chart.bucketMs}
       tooltipLabels={chart.tooltipLabels}
       datasets={chart.datasets}
-      height={CHART_HEIGHT}
+      height={height}
     />
   );
 }

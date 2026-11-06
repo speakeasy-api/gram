@@ -122,13 +122,11 @@ function SignalServers({
 
 function SignalRow({
   signal,
-  active,
   selection,
   onSelect,
   serverNames,
 }: {
   signal: RiskSignal;
-  active: boolean;
   selection: RowSelection<RiskSignal>;
   onSelect: (signal: RiskSignal) => void;
   serverNames: ReadonlyMap<string, string> | null;
@@ -145,10 +143,7 @@ function SignalRow({
   return (
     <div
       style={{ borderLeftColor: SEVERITY_ACCENT[rating] }}
-      className={cn(
-        "bg-card hover:bg-muted/40 divide-border flex w-full items-stretch divide-x border-l-2 transition-colors",
-        active && "bg-muted/30",
-      )}
+      className="bg-card hover:bg-muted/40 divide-border flex w-full items-stretch divide-x border-l-2 transition-colors"
     >
       <div
         className="flex shrink-0 cursor-pointer items-center px-3"
@@ -245,14 +240,12 @@ function SignalRow({
 export function SignalsList({
   groups,
   mode,
-  selectedKey,
   selection,
   onSelect,
   serverNames = null,
 }: {
   groups: SignalGroup[];
   mode: SignalGroupMode;
-  selectedKey: string | null;
   selection: RowSelection<RiskSignal>;
   onSelect: (signal: RiskSignal) => void;
   // Set only when MCP-scoped guardrails are enabled; turns on the server/tool
@@ -275,7 +268,6 @@ export function SignalsList({
                 <SignalRow
                   key={signal.key}
                   signal={signal}
-                  active={signal.key === selectedKey}
                   selection={selection}
                   onSelect={onSelect}
                   serverNames={serverNames}
