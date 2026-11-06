@@ -371,7 +371,7 @@ describe("Snowflake instructions", () => {
     task("begin");
     expect(
       screen.getByRole("heading", {
-        name: "Let’s connect your Snowflake Cortex Agent to Speakeasy.",
+        name: "Let’s connect Snowflake to Speakeasy.",
       }),
     ).toBeDefined();
     expect(

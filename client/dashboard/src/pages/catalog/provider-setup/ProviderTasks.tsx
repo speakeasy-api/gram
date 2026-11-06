@@ -37,9 +37,7 @@ function Plan() {
           <Link className="mt-1 size-5" aria-hidden />
           <div>
             <h3 className="mb-4 text-lg font-normal">
-              Let’s connect{" "}
-              {snowflake ? "your Snowflake Cortex Agent" : names[s.provider]} to
-              Speakeasy.
+              Let’s connect {names[s.provider]} to Speakeasy.
             </h3>
             <p>
               {snowflake
