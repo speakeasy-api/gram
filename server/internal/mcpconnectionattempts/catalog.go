@@ -198,7 +198,7 @@ var (
 	CodeCanceled                 = define("canceled", OutcomeDeclined, WhoPerson, "The sign-in was canceled.", "Connect again if you still want access.")
 
 	// Enterprise-managed sign-in to Speakeasy.
-	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This server or gateway does not accept agent connections.", "Connect the agent to a server that accepts agents.")
+	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this kind of connection.", "Ask for it to be allowed.")
 	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask for this identity to be allowed.")
 	CodeClientNotCIMD                  = define("client_not_cimd", OutcomeBlocked, WhoApp, "This app cannot use this kind of sign-in.", "Use an app that publishes its details at a public address.")
 	CodeSubjectNotProvisioned          = define("subject_not_provisioned", OutcomeBlocked, WhoAdmin, "This account is not set up in the organization's directory.", "Ask to be added to the directory and the organization.")
@@ -288,6 +288,8 @@ var (
 	CodeConsentNotApproved = defineResult("consent_not_approved", resultNeedsConsent, OutcomeBlocked, WhoPerson, "This server needs your approval for this connection.", "Connect again and approve the server.")
 	CodeCatalogTooLarge    = define("catalog_too_large", OutcomeFailed, WhoAdmin, "The tools for this connection are too large to approve.", "Choose fewer tools if you can, or ask for some to be removed.")
 
-	// Refresh, the app's fault.
+	// Refresh refusals, by who is at fault.
 	CodeRefreshTokenClientMismatch = define("refresh_token_client_mismatch", OutcomeFailed, WhoApp, "The app sent a sign-in that belongs to a different app.", "Update the app, or report the problem to its makers.")
+	CodeRefreshTokenUsedByOtherApp = define("refresh_token_used_by_other_app", OutcomeFailed, WhoPerson, "This connection ended because another app used its sign-in.", "Connect to the server again. If it keeps happening, report it to the app's makers.")
+	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoSpeakeasy, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
 )

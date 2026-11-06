@@ -2,6 +2,8 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,12 +14,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	agents_repo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestInboundRefresh_Refreshed(t *testing.T) {
@@ -161,6 +166,92 @@ func TestInboundRefresh_Expired(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeFailed), row.Outcome, "expiry is not a policy")
 	require.Equal(t, "failed", row.StepResult)
+}
+
+// Another app's unrotated token burns the owner's session, so the person reconnects.
+func TestInboundRefresh_OtherAppBurnsTheSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, _, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	other := seedOtherRefreshClient(t, ctx, ti, issuer.ID)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, "refresh_token_client_mismatch", row.SubReason)
+}
+
+// Another app replaying a rotated token leaves the owner's session alone, so the app is wrong.
+func TestInboundRefresh_OtherAppReplayBlamesTheApp(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	other := seedOtherRefreshClient(t, ctx, ti, issuer.ID)
+
+	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refreshed.err)
+	require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenClientMismatch)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+	require.Equal(t, "refresh_token_client_mismatch", row.SubReason)
+}
+
+// A stored tool selection that does not parse is damage on our side.
+func TestInboundRefresh_MalformedToolSelection(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	refreshToken := "refresh-" + uuid.NewString()
+	refreshHash := sha256.Sum256([]byte(refreshToken))
+	_, err := usersessions_repo.New(ti.conn).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: issuer.ID,
+		UserSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
+		SubjectUrn:          urn.NewUserSubject("refresh-replay-user"),
+		Jti:                 uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true},
+		ToolSelection:       []byte(`{"version":99}`),
+	})
+	require.NoError(t, err)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeStoredSessionInvalid)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Equal(t, "tool_selection_malformed", row.SubReason)
+}
+
+func seedOtherRefreshClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) usersessions_repo.UserSessionClient {
+	t.Helper()
+	other, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                "other-client-" + uuid.NewString(),
+		ClientName:              "other client",
+		RedirectUris:            []string{"http://localhost:3001/callback"},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	return other
 }
 
 // A client that authenticated and sent a spent or unknown token gets a row; the limiter bounds it.

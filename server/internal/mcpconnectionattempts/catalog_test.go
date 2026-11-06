@@ -121,6 +121,8 @@ var frozenCodes = []string{
 	"tunnel_at_capacity",
 	"caller_credential_missing",
 	"refresh_token_client_mismatch",
+	"refresh_token_used_by_other_app",
+	"stored_session_invalid",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -280,8 +282,9 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
 		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
-		{CodeEndpointNotAgentAddressable, WhoAdmin, []string{"server or gateway", "agent"}, []string{"ask for it to be allowed"}},
 		{CodeRefreshTokenClientMismatch, WhoApp, []string{"different app"}, []string{"connect to the server again"}},
+		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
+		{CodeStoredSessionInvalid, WhoSpeakeasy, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {

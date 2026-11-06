@@ -1798,8 +1798,13 @@ func (s *Service) writeRefreshTokenReplay(
 	}
 	if payload.ClientID != clientRow.ID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
-		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
-		return refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_client_mismatch", mcpconnectionattempts.Subject(payload.Subject))
+		if err := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client"); err != nil {
+			tracker.Continue()
+			return err
+		}
+		// The owner's rotation stands, so only the presenting app is wrong.
+		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenClientMismatch, mcpconnectionattempts.Detail("refresh_token_client_mismatch"), mcpconnectionattempts.Subject(payload.Subject), mcpconnectionattempts.FromRequest(r))
+		return nil
 	}
 	// Re-signing below moves an issuer-scoped session between surfaces of the
 	// same issuer. A resource-bound session must not move at all, so a replay
