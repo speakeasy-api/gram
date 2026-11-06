@@ -756,6 +756,7 @@ trackedFiles:
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
+  src/funcs/telemetryGetOrgMcpServerActivity.ts: {}
   src/funcs/telemetryGetOrganizationGatewayOverview.ts: {}
   src/funcs/telemetryGetOrganizationGatewayUsage.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
@@ -1327,6 +1328,7 @@ trackedFiles:
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
   src/models/components/getorganizationgatewayactivitypayload.ts: {}
+  src/models/components/getorgmcpserveractivityresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -1749,6 +1751,7 @@ trackedFiles:
   src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
+  src/models/components/projectmcpserveractivity.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
   src/models/components/projectsummary.ts: {}
   src/models/components/promoterequestbody.ts: {}
@@ -2587,6 +2590,7 @@ trackedFiles:
   src/models/operations/getorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/getorganizationusersessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuermigratepreflight.ts: {}
+  src/models/operations/getorgmcpserveractivity.ts: {}
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
@@ -3519,6 +3523,8 @@ trackedFiles:
   src/react-query/getMeterUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getOrgMcpServerActivity.core.ts: {}
+  src/react-query/getOrgMcpServerActivity.ts: {}
   src/react-query/getOrganizationGatewayOverview.core.ts: {}
   src/react-query/getOrganizationGatewayOverview.ts: {}
   src/react-query/getOrganizationGatewayUsage.core.ts: {}
@@ -8085,6 +8091,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrgMcpServerActivity:
+    speakeasy-default-get-org-mcp-server-activity:
+      requestBody:
+        application/json: {"recent_window_days": 14}
+      responses:
+        "200":
+          application/json: {"projects": [{"activity": [{"recent_tool_calls": 288382, "target_id": "<id>", "target_label": "<value>", "target_type": "tunneled_mcp_server", "total_tool_calls": 479128}], "project_id": "bebcff46-c317-4c84-a76f-4b84eab42751"}], "recent_window_days": 578686}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getOrganization:
     speakeasy-default-get-organization:
       responses:

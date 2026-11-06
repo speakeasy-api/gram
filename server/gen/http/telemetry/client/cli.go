@@ -3273,6 +3273,37 @@ func BuildGetMcpServerActivityPayload(telemetryGetMcpServerActivityBody string, 
 	return v, nil
 }
 
+// BuildGetOrgMcpServerActivityPayload builds the payload for the telemetry
+// getOrgMcpServerActivity endpoint from CLI flags.
+func BuildGetOrgMcpServerActivityPayload(telemetryGetOrgMcpServerActivityBody string, telemetryGetOrgMcpServerActivitySessionToken string) (*telemetry.GetOrgMcpServerActivityPayload, error) {
+	var err error
+	var body GetOrgMcpServerActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetOrgMcpServerActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recent_window_days\": 2\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetOrgMcpServerActivitySessionToken != "" {
+			sessionToken = &telemetryGetOrgMcpServerActivitySessionToken
+		}
+	}
+	v := &telemetry.GetOrgMcpServerActivityPayload{
+		RecentWindowDays: body.RecentWindowDays,
+	}
+	{
+		var zero int
+		if v.RecentWindowDays == zero {
+			v.RecentWindowDays = 14
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListHooksTracesPayload builds the payload for the telemetry
 // listHooksTraces endpoint from CLI flags.
 func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryListHooksTracesApikeyToken string, telemetryListHooksTracesSessionToken string, telemetryListHooksTracesProjectSlugInput string) (*telemetry.ListHooksTracesPayload, error) {

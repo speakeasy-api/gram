@@ -120,6 +120,10 @@ type Service interface {
 	// and recent tool-call counts plus the last tool-call time, so the listing can
 	// flag servers that have never received a tool call or that have gone quiet.
 	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
+	// Get recent per-MCP-server tool-call activity for every project in the
+	// organization the caller can read, in one request. Only the recent window is
+	// scanned.
+	GetOrgMcpServerActivity(context.Context, *GetOrgMcpServerActivityPayload) (res *GetOrgMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -146,7 +150,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [38]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [39]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "getOrgMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -447,6 +451,25 @@ type GetObservabilityOverviewResult struct {
 	TopToolsByFailureRate []*ToolMetric
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64
+}
+
+// GetOrgMcpServerActivityPayload is the payload type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityPayload struct {
+	SessionToken *string
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int
+}
+
+// GetOrgMcpServerActivityResult is the result type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityResult struct {
+	// One entry per readable project whose activity was read
+	Projects []*ProjectMcpServerActivity
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int
 }
 
 // GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
@@ -1620,6 +1643,15 @@ type ObservabilitySummary struct {
 	FailedToolCalls int64
 	// Average tool latency in milliseconds
 	AvgLatencyMs float64
+}
+
+// Recent MCP server activity for one project
+type ProjectMcpServerActivity struct {
+	// The project the activity belongs to
+	ProjectID string
+	// One entry per MCP server in the project with at least one tool call inside
+	// the recent window
+	Activity []*McpServerActivity
 }
 
 // Aggregated project-level summary metrics for a time period

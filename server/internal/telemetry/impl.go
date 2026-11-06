@@ -4063,20 +4063,110 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 	}
 
 	now := time.Now()
-	timeEnd := now.UnixNano()
-	timeStart := now.AddDate(0, 0, -mcpServerActivityLookbackDays).UnixNano()
-	recentThreshold := now.AddDate(0, 0, -recentWindowDays).UnixNano()
+	activity, err := s.projectMcpServerActivity(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID,
+		now.AddDate(0, 0, -mcpServerActivityLookbackDays), now.AddDate(0, 0, -recentWindowDays), now)
+	if err != nil {
+		return nil, err
+	}
 
-	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
+	return &telem_gen.GetMcpServerActivityResult{
+		Activity:         activity,
+		RecentWindowDays: recentWindowDays,
+		LookbackDays:     mcpServerActivityLookbackDays,
+	}, nil
+}
+
+// maxConcurrentOrgActivityProjects bounds the per-project ClickHouse reads
+// one org activity request runs at once.
+const maxConcurrentOrgActivityProjects = 4
+
+// GetOrgMcpServerActivity answers getMcpServerActivity for every project the
+// caller can read in one request. It scans only the recent window: the
+// org-wide callers want "is this server busy lately", and a 90-day scan per
+// project is what made the per-project fan-out time out.
+func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_gen.GetOrgMcpServerActivityPayload) (*telem_gen.GetOrgMcpServerActivityResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	recentWindowDays := payload.RecentWindowDays
+	if recentWindowDays <= 0 {
+		recentWindowDays = 14
+	}
+	recentWindowDays = min(recentWindowDays, mcpServerActivityLookbackDays)
+	result := &telem_gen.GetOrgMcpServerActivityResult{
+		Projects:         []*telem_gen.ProjectMcpServerActivity{},
+		RecentWindowDays: recentWindowDays,
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return result, nil
+	}
+
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing projects")
+	}
+	checks := make([]authz.Check, len(projects))
+	for i, project := range projects {
+		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}
+	}
+	allowed, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	since := now.AddDate(0, 0, -recentWindowDays)
+	read := make([]*telem_gen.ProjectMcpServerActivity, len(allowed))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentOrgActivityProjects)
+	for i, id := range allowed {
+		projectID, err := uuid.Parse(id)
+		if err != nil {
+			continue
+		}
+		g.Go(func() error {
+			activity, err := s.projectMcpServerActivity(gctx, authCtx.ActiveOrganizationID, projectID, since, since, now)
+			if err != nil {
+				// One unreadable project leaves its counts unknown rather
+				// than failing every other project's.
+				s.logger.WarnContext(gctx, "read project mcp server activity", attr.SlogError(err), attr.SlogProjectID(id))
+				return nil
+			}
+			read[i] = &telem_gen.ProjectMcpServerActivity{ProjectID: id, Activity: activity}
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	for _, project := range read {
+		if project != nil {
+			result.Projects = append(result.Projects, project)
+		}
+	}
+	return result, nil
+}
+
+// projectMcpServerActivity reads one project's per-server tool-call counts
+// between timeStart and timeEnd; calls at or after recentStart also count as
+// recent.
+func (s *Service) projectMcpServerActivity(ctx context.Context, organizationID string, projectID uuid.UUID, timeStart, recentStart, timeEnd time.Time) ([]*telem_gen.McpServerActivity, error) {
+	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, projectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
 
 	rows, err := s.chRepo.GetMcpServerActivity(ctx, repo.GetMcpServerActivityParams{
-		GramProjectID:     authCtx.ProjectID.String(),
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		RecentThresholdNs: recentThreshold,
+		GramProjectID:     projectID.String(),
+		TimeStart:         timeStart.UnixNano(),
+		TimeEnd:           timeEnd.UnixNano(),
+		RecentThresholdNs: recentStart.UnixNano(),
 		HostedMCPMatchers: hostedMCPMatchers,
 		MCPServerMatchers: mcpServerMatchers,
 	})
@@ -4084,7 +4174,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching mcp server activity")
 	}
 
-	if err := s.resolveMetaMCPServerLabels(ctx, authCtx, rows); err != nil {
+	if err := s.resolveMetaMCPServerLabels(ctx, organizationID, projectID, rows); err != nil {
 		return nil, err
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -4110,17 +4200,12 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		}
 		activity = append(activity, entry)
 	}
-
-	return &telem_gen.GetMcpServerActivityResult{
-		Activity:         activity,
-		RecentWindowDays: recentWindowDays,
-		LookbackDays:     mcpServerActivityLookbackDays,
-	}, nil
+	return activity, nil
 }
 
 // resolveMetaMCPServerLabels swaps gateway rows' id label for the gateway
 // name; a deleted gateway keeps its id.
-func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, authCtx *contextvalues.AuthContext, rows []repo.McpServerActivityRow) error {
+func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, organizationID string, projectID uuid.UUID, rows []repo.McpServerActivityRow) error {
 	hasGateway := false
 	for i := range rows {
 		if rows[i].TargetType == repo.ToolUsageTargetTypeMetaMCP {
@@ -4132,8 +4217,8 @@ func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, authCtx *conte
 		return nil
 	}
 	metaServers, err := metamcpRepo.New(s.db).ListMetaMCPServers(ctx, metamcpRepo.ListMetaMCPServersParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error listing meta mcp servers")

@@ -72630,6 +72630,95 @@ paths:
       x-speakeasy-react-hook:
         name: GetObservabilityOverview
         type: query
+  /rpc/telemetry.getOrgMcpServerActivity:
+    post:
+      description: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
+      operationId: getOrgMcpServerActivity
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpServerActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetOrgMcpServerActivityResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOrgMcpServerActivity telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getOrgMcpServerActivity
+      x-speakeasy-react-hook:
+        name: GetOrgMcpServerActivity
+        type: query
   /rpc/telemetry.getOrganizationGatewayOverview:
     post:
       description: Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
@@ -99074,6 +99163,22 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
+    GetOrgMcpServerActivityResult:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpServerActivity'
+          description: One entry per readable project whose activity was read
+        recent_window_days:
+          type: integer
+          description: The recent-activity window size in days that was applied
+          format: int64
+      description: Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
+      required:
+        - projects
+        - recent_window_days
     GetOrganizationGatewayActivityPayload:
       type: object
       properties:
@@ -108883,6 +108988,22 @@ components:
         - id
         - name
         - slug
+    ProjectMcpServerActivity:
+      type: object
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerActivity'
+          description: One entry per MCP server in the project with at least one tool call inside the recent window
+        project_id:
+          type: string
+          description: The project the activity belongs to
+          format: uuid
+      description: Recent MCP server activity for one project
+      required:
+        - project_id
+        - activity
     ProjectOverviewSummary:
       type: object
       properties:
