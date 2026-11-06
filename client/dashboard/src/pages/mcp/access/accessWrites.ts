@@ -218,12 +218,28 @@ export function clearScopeWrite(
   resourceName?: string,
 ): AudienceWrite {
   const label = SCOPE_ROWS.find((line) => line.key === scope)?.label ?? scope;
+  const entries = withoutRules(direct, [
+    ruleId({ principalUrn: row.principalUrn, level: scope }),
+    ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
+  ]);
+  const cleared = `Cleared ${row.displayName}'s ${label.toLowerCase()} setting on ${serverLabel(resourceName)}.`;
+  // The list shows a row for each principal with a rule here or one covering
+  // every server. Clearing the last of them takes the row off the list, which
+  // the admin would otherwise go looking for.
+  const staysListed =
+    entries.some((rule) => rule.principalUrn === row.principalUrn) ||
+    SCOPE_ROWS.some(({ key }) =>
+      [...row.cells[key].grants, ...row.cells[key].blocks].some(
+        (rule) =>
+          rule.principalUrn === row.principalUrn &&
+          rule.appliesTo === "all_resources",
+      ),
+    );
   return {
-    entries: withoutRules(direct, [
-      ruleId({ principalUrn: row.principalUrn, level: scope }),
-      ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
-    ]),
-    message: `Cleared ${row.displayName}'s ${label.toLowerCase()} setting on ${serverLabel(resourceName)}.`,
+    entries,
+    message: staysListed
+      ? cleared
+      : `${cleared} ${row.displayName} has nothing else set here and is no longer listed.`,
   };
 }
 

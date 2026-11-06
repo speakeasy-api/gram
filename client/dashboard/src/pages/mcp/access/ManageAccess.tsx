@@ -74,6 +74,7 @@ import {
   keptIndividually,
   reachableTools,
   inheritedGrants,
+  openedElsewhere,
   scopeState,
   type ScopeState,
   SCOPE_ROWS,
@@ -909,6 +910,11 @@ function scopeOptions({
   onAllowDestructive: () => void;
 }): InlineChoiceOption[] {
   const state = scopeState(row, scope, catalog);
+  // With another rule opening the whole line, opening it here only lifts this
+  // row's own block and drops its own rule: the same write as Clear, so it is
+  // offered once, as Clear.
+  const allowIsClear =
+    state.canClear && !state.granted && openedElsewhere(row, scope);
   const options = choiceOptions({
     row,
     scope,
@@ -918,11 +924,15 @@ function scopeOptions({
     onNarrow,
     onBlockDestructive,
     onAllowDestructive,
-  });
+  }).filter((option) => !(allowIsClear && option.onSelect === onAllow));
   // Clearing deletes this row's own grant and block for the line and writes
   // nothing in their place, so the line is left unset rather than flipped.
   if (state.canClear) {
-    options.push({ label: "Clear", onSelect: onClear, separatorBefore: true });
+    options.push({
+      label: "Clear",
+      onSelect: onClear,
+      separatorBefore: options.length > 0,
+    });
   }
   return options;
 }
@@ -951,18 +961,17 @@ function choiceOptions({
   // would survive it: the change has to be made where the block is.
   if (!state.granted && state.capped) return [];
   // Closing a line something else grants writes a block, which then
-  // outranks those grants, so the choice is named for what it leaves.
-  const revokeLabel = state.subtracts ? "Blocked" : "No access";
-  // Without anything else granting the line, closing it only deletes this
-  // row's own rule, which is what Clear does, so it is not offered twice.
-  const offersRevoke = state.subtracts || !state.canClear;
+  // outranks those grants. Without anything else granting it, closing it
+  // only deletes this row's own rule, which is what Clear does, so it is not
+  // offered twice.
+  const revoke: InlineChoiceOption[] = state.subtracts
+    ? [{ label: "Blocked", onSelect: onRevoke }]
+    : [];
 
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
     // to narrow, so the line is on or off.
-    if (state.granted) {
-      return offersRevoke ? [{ label: revokeLabel, onSelect: onRevoke }] : [];
-    }
+    if (state.granted) return revoke;
     return [{ label: "Allowed", onSelect: onAllow }];
   }
 
@@ -992,9 +1001,7 @@ function choiceOptions({
       });
     }
   }
-  if (state.canRevoke && offersRevoke) {
-    options.push({ label: revokeLabel, onSelect: onRevoke });
-  }
+  if (state.canRevoke) options.push(...revoke);
   return options;
 }
 

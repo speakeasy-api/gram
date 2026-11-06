@@ -491,18 +491,57 @@ describe("a blocking role", () => {
     expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
   });
 
-  it("offers clear instead of no access when only the role's own rule grants", () => {
-    renderList([entry({ ...engineering })]);
+  it("offers only clear, with no divider, when only the role's own rule grants", () => {
+    renderList([entry({ ...engineering, level: "view" })]);
     expandFirstRow();
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Allowed/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Clear"]);
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("offers clear alone when another rule would open a blocked line anyway", () => {
+    // Lifting the agent's block and clearing it write the same thing, so the
+    // menu names that once.
+    renderList([
+      entry({
+        principalUrn: "agent:a1",
+        kind: "agent",
+        displayName: "Releaser",
+        level: "blocked_view",
+      }),
+      entry({
+        ...engineering,
+        appliesTo: "all_resources",
+        level: "view",
+        agentIds: ["a1"],
+      }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
       button: 0,
       ctrlKey: false,
       pointerType: "mouse",
     });
 
-    expect(screen.getByRole("menuitem", { name: "Clear" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Allowed" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
+    expect(
+      savedEntries().entries.filter(
+        (e: { principalUrn: string }) => e.principalUrn === "agent:a1",
+      ),
+    ).toEqual([]);
   });
 
   it("clears a block without writing a grant in its place", () => {
