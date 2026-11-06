@@ -36,7 +36,9 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
       toolsetMap: new Map([
         ["server_ops", { slug: "acme-ops", name: "Acme Ops", projectId: "p" }],
       ]),
-      mcpServerMap: new Map(),
+      mcpServerMap: new Map([
+        ["server_slug_only", { slug: "slug-only-server", projectId: "p" }],
+      ]),
     };
   },
 }));
@@ -260,8 +262,9 @@ it("lists failed checks first, then the servers the agent reached by name, then 
               row("allow", "mcp:connect", "server_ops", 8),
               row("allow", "mcp:connect", "server_ops", 7),
               row("allow", "mcp:connect", "server_ops", 6),
+              row("allow", "mcp:connect", "server_slug_only", 5),
             ],
-            total: 3,
+            total: 4,
           },
         };
       }
@@ -296,9 +299,11 @@ it("lists failed checks first, then the servers the agent reached by name, then 
   expect(screen.getByText("Acme Ops")).toBeTruthy();
   expect(screen.getByText(/Allowed 3 times/)).toBeTruthy();
   expect(screen.getByText(/mcp server_linear/)).toBeTruthy();
-  expect(screen.getByText(/Allowed once/)).toBeTruthy();
+  // A server listed with no name falls back to its slug.
+  expect(screen.getByText("slug-only-server")).toBeTruthy();
+  expect(screen.getAllByText(/Allowed once/)).toHaveLength(2);
   expect(
-    screen.getByText(/2 failed and 4 allowed checks in this period/),
+    screen.getByText(/2 failed and 5 allowed checks in this period/),
   ).toBeTruthy();
 });
 it("says when the agent had no failed checks in the period", () => {

@@ -312,7 +312,8 @@ export function AgentIdentityChallenges({
   const serverName = (group: CheckGroup) =>
     group.resourceKind === "mcp"
       ? (maps.toolsetMap.get(group.resourceId)?.name ??
-        maps.mcpServerMap.get(group.resourceId)?.name)
+        maps.mcpServerMap.get(group.resourceId)?.name ??
+        maps.mcpServerMap.get(group.resourceId)?.slug)
       : undefined;
   const handoffParams = new URLSearchParams({
     identity: principalUrn,
