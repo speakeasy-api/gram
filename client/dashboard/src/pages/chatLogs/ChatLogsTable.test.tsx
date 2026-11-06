@@ -140,7 +140,7 @@ describe("ChatLogsTable", () => {
     expect(screen.queryByText("$0.0000")).toBeNull();
   });
 
-  it("shows duration and message count under the start time, not the chat id", () => {
+  it("shows duration and message count under the last activity time, not the chat id", () => {
     const chatId = "chat_01HXQ1P84WV3S9J7Z52DKVE7NE";
 
     renderTable(
@@ -167,30 +167,34 @@ describe("ChatLogsTable", () => {
     expect(screen.getByTitle("Duration").textContent).toBe("3m");
   });
 
-  it("shows created and last activity timestamps", () => {
-    renderTable(
-      <ChatLogsTable
-        chats={[makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")]}
-        onDeleteChat={() => {
-          /* test stub */
-        }}
-        onSelectChat={() => {
-          /* test stub */
-        }}
-        isLoading={false}
-        error={null}
-      />,
-    );
+  it.each([true, false])(
+    "shows last message time, falling back to creation when absent (has messages: %s)",
+    (hasMessages) => {
+      const chat = makeChat("chat-activity");
+      if (!hasMessages) chat.lastMessageTimestamp = undefined;
 
-    // The column shows when the session started and how long it ran. Both
-    // timestamps in full wrapped the column mid-date for two values that are
-    // nearly always the same minute, so the exact pair moved to the title.
-    const started = screen.getByText(/^Jan 1, \d{2}:00$/);
-    expect(started).toBeTruthy();
-    expect(started.getAttribute("title")).toMatch(
-      /^Created Jan 1, \d{2}:00 · Last activity Jan 1, \d{2}:03$/,
-    );
-  });
+      renderTable(
+        <ChatLogsTable
+          chats={[chat]}
+          onDeleteChat={() => {}}
+          onSelectChat={() => {}}
+          isLoading={false}
+          error={null}
+        />,
+      );
+
+      const activity = screen.getByTitle(/^Created .* · Last activity /);
+      expect(activity.textContent).toBe(
+        activity.getAttribute("title")?.split(" · Last activity ")[1],
+      );
+      expect(activity.textContent).toMatch(
+        hasMessages ? /^Jan 1, \d{2}:03$/ : /^Jan 1, \d{2}:00$/,
+      );
+      expect(activity.getAttribute("title")).toMatch(
+        /^Created Jan 1, \d{2}:00 · Last activity /,
+      );
+    },
+  );
 
   it("shows the normalized product surface for a session source", () => {
     renderTable(

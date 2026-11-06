@@ -476,13 +476,11 @@ function Cell({
   );
 }
 
-/** When the session started, when it last moved, and how long that spanned. */
+/** Latest message time (or creation time), session duration, and message count. */
 function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
   const lastActivityTimestamp = chat.lastMessageTimestamp ?? chat.createdAt;
-  // One date, not two. Both timestamps are nearly always the same minute of
-  // the same day, so printing each in full wrapped the column mid-date and
-  // read as four facts where there are two: when it started, and how long it
-  // ran. The exact pair stays in the title attribute.
+  // Show the same timestamp used by Activity sorting. Keep creation time
+  // in the tooltip without crowding the column with a second date.
   return (
     <Cell
       className="font-mono whitespace-nowrap"
@@ -494,10 +492,10 @@ function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
             "MMM d, HH:mm",
           )}`}
         >
-          {format(chat.createdAt, "MMM d, HH:mm")}
+          {format(lastActivityTimestamp, "MMM d, HH:mm")}
         </span>
       }
-      // Smaller and iconed so the start time reads as the cell's headline and
+      // Smaller and iconed so last activity reads as the cell's headline and
       // these two read as facts about it.
       secondary={
         // `leading-none` on the text: the mono face's default line box sits
