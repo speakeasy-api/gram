@@ -18,9 +18,6 @@ import (
 )
 
 const (
-	// UnsupportedCatalogSourceFailureReason identifies terminal unsupported-source failures in logs and workflows.
-	UnsupportedCatalogSourceFailureReason = "unsupported_catalog_source"
-
 	registrySourceTypeNative = "native_v1"
 
 	registryAuthProfileNone = "none"
@@ -252,18 +249,6 @@ func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, org
 	return *selected, nil
 }
 
-// SelectSource admits an explicit registry ID for a NEW selection.
-func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organizationSlug string, id uuid.UUID) (CatalogSource, error) {
-	source, err := s.SelectedSource(ctx, organizationID, organizationSlug)
-	if err != nil {
-		return zeroCatalogSource(), err
-	}
-	if source.Registry.ID != id {
-		return zeroCatalogSource(), ErrCatalogSourceNotFound
-	}
-	return source, nil
-}
-
 // IdentitySource resolves persisted/accepted work.
 // Unsupported identities are rejected before enabled/certified admission; identities never switch.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
@@ -288,23 +273,6 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 		return zeroCatalogSource(), err
 	}
 	return source, nil
-}
-
-// IdentityDetails reads an installed or accepted registry identity without new-selection admission.
-func (s *CatalogService) IdentityDetails(ctx context.Context, id uuid.UUID, name string, allowed []string) (*ServerDetails, error) {
-	source, err := s.IdentitySource(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	reader, err := s.ReaderFor(source)
-	if err != nil {
-		return nil, err
-	}
-	details, err := reader.GetServerDetails(ctx, source.Registry, name, allowed)
-	if err != nil {
-		return nil, fmt.Errorf("read catalog identity details: %w", err)
-	}
-	return details, nil
 }
 
 type catalogRepository interface {
@@ -371,25 +339,6 @@ func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, 
 		Priority:             row.Priority,
 		SourceKey:            row.SourceKey,
 	})
-}
-
-// AdmitNewEntry checks the organization-selected source and current native entry
-// eligibility. Persisted identities and accepted continuations use IdentityDetails.
-func (s *CatalogService) AdmitNewEntry(ctx context.Context, organizationID, organizationSlug string, id uuid.UUID, name string) error {
-	source, err := s.SelectSource(ctx, organizationID, organizationSlug, id)
-	if err != nil {
-		return err
-	}
-	reader, err := s.ReaderFor(source)
-	if err != nil {
-		return err
-	}
-	native, ok := reader.(*NativeRegistryReader)
-	if !ok {
-		return ErrUnknownRegistrySource
-	}
-	_, err = native.discoveryEntry(ctx, name)
-	return err
 }
 
 // discoveryEntry deliberately does not use the retained GetByName lookup.
