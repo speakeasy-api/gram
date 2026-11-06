@@ -1577,6 +1577,58 @@ type DashboardWidget struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type DataEncryptionKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	EncryptionConfigID uuid.UUID
+	// @access: confidential
+	UseCase string
+	// @access: confidential
+	State string
+	// @access: confidential
+	ActivatedAt pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type DataEncryptionKeyWrap struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	DataEncryptionKeyID uuid.UUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: restricted
+	ExternalKeyVersion pgtype.Text
+	// @access: secret-restricted
+	WrappedKey []byte
+	// @access: confidential
+	LastUnwrappedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type DataExportRoute struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -2282,6 +2334,8 @@ type ExternalKey struct {
 	ExternalCredentialID uuid.UUID
 	// @access: confidential
 	Provider string
+	// @access: confidential
+	Purpose string
 	// @access: confidential
 	Algorithm string
 	// @access: confidential
@@ -3029,6 +3083,19 @@ type LitellmInstance struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type ManagedEncryptionKey struct {
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	KmsDisabledAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Append-only approve/deny history with the rationale and the evidence it rested on.
@@ -4102,6 +4169,43 @@ type OpenrouterSpendDaily struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+}
+
+type OrganizationEncryptionConfig struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Mode string
+	// @access: confidential
+	State string
+	// @access: confidential
+	KekExternalKeyID uuid.UUID
+	// @access: confidential
+	PreviousKekExternalKeyID uuid.NullUUID
+	// @access: confidential
+	SwitchStartedAt pgtype.Timestamptz
+	// @access: confidential
+	SwitchCompletedAt pgtype.Timestamptz
+	// @access: confidential
+	SuspendedAt pgtype.Timestamptz
+	// Provider error summary; never carries key material or ciphertext.
+	// @access: restricted
+	SuspendedReason pgtype.Text
+	// @access: confidential
+	LastKekCheckAt pgtype.Timestamptz
+	// Provider error summary; never carries key material or ciphertext.
+	// @access: restricted
+	LastKekCheckError pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type OrganizationFeature struct {
