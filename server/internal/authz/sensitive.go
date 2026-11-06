@@ -7,9 +7,9 @@ package authz
 // reports chat:write alone. Nil when nothing sensitive was added.
 //
 // The comparison is scope-level: a scope held on some resources before and on
-// every resource after is not an addition here. Role edits record that
-// widening in their snapshots; membership changes have no such record and use
-// SensitiveScopesWidened instead.
+// more, or every, resource after is not an addition here. Role edits record
+// that widening in their snapshots; membership changes have no such record
+// and use SensitiveScopesWidened instead.
 //
 // Exception scopes (*:blocked_*) are grants of nothing: they withdraw access
 // rather than give it, are never sensitive themselves, and imply no other
@@ -22,12 +22,14 @@ func SensitiveScopesAdded(before, after []Scope) []string {
 }
 
 // SensitiveScopesWidened lists, in catalogue order, the sensitive scopes the
-// after coverage holds that before did not, or that before held only on some
-// resources where after holds them on every resource. A member who could read
-// one project's tool logs and is given a role with unrestricted log:read is
-// reported as gaining log:read. Implication carries coverage along: an
-// unrestricted chat:write holds chat:read unrestricted too. Nil when nothing
-// sensitive was added or widened.
+// after coverage reaches somewhere the before coverage did not: scopes not
+// held before, held on some resources before and on every resource after, or
+// held on some resources before and on another resource after. A member who
+// could read one project's tool logs and is given a role with log:read on a
+// second project, or on every project, is reported as gaining log:read.
+// Implication carries coverage along: an unrestricted chat:write holds
+// chat:read unrestricted too. Nil when nothing sensitive was added or
+// widened.
 func SensitiveScopesWidened(before, after []ScopeCoverage) []string {
 	had := impliedCoverage(before)
 	has := impliedCoverage(after)
@@ -36,12 +38,11 @@ func SensitiveScopesWidened(before, after []ScopeCoverage) []string {
 		if !entry.Sensitive() {
 			continue
 		}
-		hasUnrestricted, ok := has[entry.Scope]
+		reach, ok := has[entry.Scope]
 		if !ok {
 			continue
 		}
-		hadUnrestricted, held := had[entry.Scope]
-		if held && (hadUnrestricted || !hasUnrestricted) {
+		if held, ok := had[entry.Scope]; ok && held.covers(reach) {
 			continue
 		}
 		added = append(added, string(entry.Scope))
@@ -49,13 +50,44 @@ func SensitiveScopesWidened(before, after []ScopeCoverage) []string {
 	return added
 }
 
-// impliedCoverage maps every scope a coverage set satisfies to whether it is
-// satisfied on every resource.
-func impliedCoverage(coverage []ScopeCoverage) map[Scope]bool {
-	implied := make(map[Scope]bool, len(coverage))
-	for _, held := range coverage {
-		for _, satisfied := range ScopeImplicationClosure(held.Scope) {
-			implied[satisfied] = implied[satisfied] || held.Unrestricted
+// coverage is how widely one scope is held: on every resource, or on the
+// resources keyed in restricted.
+type coverage struct {
+	unrestricted bool
+	restricted   map[string]struct{}
+}
+
+// covers reports whether everything other reaches, c reaches too.
+func (c *coverage) covers(other *coverage) bool {
+	if c.unrestricted {
+		return true
+	}
+	if other.unrestricted {
+		return false
+	}
+	for key := range other.restricted {
+		if _, ok := c.restricted[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// impliedCoverage maps every scope a coverage set satisfies to how widely it
+// is satisfied.
+func impliedCoverage(held []ScopeCoverage) map[Scope]*coverage {
+	implied := make(map[Scope]*coverage, len(held))
+	for _, holding := range held {
+		for _, satisfied := range ScopeImplicationClosure(holding.Scope) {
+			reach, ok := implied[satisfied]
+			if !ok {
+				reach = &coverage{unrestricted: false, restricted: make(map[string]struct{})}
+				implied[satisfied] = reach
+			}
+			reach.unrestricted = reach.unrestricted || holding.Unrestricted
+			for _, key := range holding.Resources {
+				reach.restricted[key] = struct{}{}
+			}
 		}
 	}
 	return implied
@@ -64,7 +96,7 @@ func impliedCoverage(coverage []ScopeCoverage) map[Scope]bool {
 func unrestrictedCoverage(scopes []Scope) []ScopeCoverage {
 	coverage := make([]ScopeCoverage, 0, len(scopes))
 	for _, scope := range scopes {
-		coverage = append(coverage, ScopeCoverage{Scope: scope, Unrestricted: true})
+		coverage = append(coverage, ScopeCoverage{Scope: scope, Unrestricted: true, Resources: nil})
 	}
 	return coverage
 }

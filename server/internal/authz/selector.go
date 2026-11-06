@@ -3,7 +3,10 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
+	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -388,6 +391,22 @@ func (s Selector) CoversEveryResource() bool {
 		}
 	}
 	return true
+}
+
+// Key is a canonical text form of the selector: two selectors that name the
+// same resource the same way have the same key, whatever order their
+// dimensions were set in.
+func (s Selector) Key() string {
+	var b strings.Builder
+	for i, key := range slices.Sorted(maps.Keys(s)) {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(s[key])
+	}
+	return b.String()
 }
 
 // SelectorFromRow parses the selectors JSONB column into a Selector.

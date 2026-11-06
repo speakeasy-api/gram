@@ -127,39 +127,75 @@ function baseScopeOfException(
   return undefined;
 }
 
+type Selector = NonNullable<SdkRoleGrant["selectors"]>[number];
+
 /**
- * Whether a grant reaches every resource of its kind. The server stores an
- * unrestricted grant as a wildcard selector, so both forms count; a selector
- * that names a project, tool or server is narrower.
+ * Whether a selector reaches every resource of its kind. The server stores an
+ * unrestricted grant as a wildcard selector, so it counts; a selector that
+ * names a resource, project, tool or server is narrower.
  */
-function coversEverywhere(selectors: SdkRoleGrant["selectors"]): boolean {
-  if (!selectors || selectors.length === 0) return true;
-  return selectors.some(
-    (s) =>
-      s.resourceId === "*" &&
-      !s.projectId &&
-      !s.tool &&
-      !s.disposition &&
-      !s.serverUrl,
+function coversEveryResource(selector: Selector): boolean {
+  return Object.entries(selector).every(
+    ([key, value]) =>
+      key === "resourceKind" ||
+      (key === "resourceId" ? value === "*" : value === undefined),
+  );
+}
+
+/** One key per resource a selector names, however its fields were set. */
+function resourceKey(selector: Selector): string {
+  return JSON.stringify(
+    Object.entries(selector)
+      .filter(([, value]) => value !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b)),
   );
 }
 
 /**
- * How widely a set of roles holds each permission, closed over inclusion:
- * true when some grant reaches every resource, false when every grant names
- * some. A grant of mcp:write on one server holds mcp:read on that server.
+ * How widely a set of roles holds one permission: everywhere, or on the
+ * resources its grants name.
+ */
+interface Coverage {
+  everywhere: boolean;
+  /** Keys of the resources named by grants that reach some, not every. */
+  resources: Set<string>;
+}
+
+function extendCoverage(
+  held: Map<string, Coverage>,
+  scope: string,
+  selectors: SdkRoleGrant["selectors"],
+): void {
+  const reach = held.get(scope) ?? { everywhere: false, resources: new Set() };
+  if (!selectors || selectors.length === 0) reach.everywhere = true;
+  for (const selector of selectors ?? []) {
+    if (coversEveryResource(selector)) reach.everywhere = true;
+    else reach.resources.add(resourceKey(selector));
+  }
+  held.set(scope, reach);
+}
+
+/** Whether everything `after` reaches, `before` reached too. */
+function covers(before: Coverage, after: Coverage): boolean {
+  if (before.everywhere) return true;
+  if (after.everywhere) return false;
+  return [...after.resources].every((key) => before.resources.has(key));
+}
+
+/**
+ * How widely a set of roles holds each permission, closed over inclusion. A
+ * grant of mcp:write on one server holds mcp:read on that server.
  */
 function coverageOfRoles(
   roles: readonly Pick<Role, "grants">[],
   catalogue: ScopeCatalogue,
-): Map<string, boolean> {
-  const held = new Map<string, boolean>();
+): Map<string, Coverage> {
+  const held = new Map<string, Coverage>();
   for (const role of roles) {
     for (const grant of role.grants) {
-      const everywhere = coversEverywhere(grant.selectors);
       for (const scope of scopeClosure(catalogue, grant.scope as string)) {
         if (!isPresentableScope(catalogue, scope)) continue;
-        held.set(scope, (held.get(scope) ?? false) || everywhere);
+        extendCoverage(held, scope, grant.selectors);
       }
     }
   }
@@ -188,11 +224,11 @@ export interface PermissionSummary {
 
 /**
  * What a member gains when their roles change from before to after: the
- * permissions the new set gives that the old set did not, and the ones the
- * old set gave only on some resources that the new set gives everywhere. A
- * member who could read one project's tool logs and is given unrestricted
- * log:read gains log:read; one who already held it everywhere gains nothing
- * from a narrower grant. The server's audit row makes the same comparison.
+ * permissions the new set reaches somewhere the old set did not. A member
+ * who could read one project's tool logs and is given log:read on a second
+ * project, or everywhere, gains log:read; one who already held it everywhere
+ * gains nothing from a narrower grant. The server's audit row makes the same
+ * comparison.
  */
 export function permissionsAddedByRoles(
   before: readonly Pick<Role, "grants">[],
@@ -202,9 +238,9 @@ export function permissionsAddedByRoles(
   const had = coverageOfRoles(before, catalogue);
   const has = coverageOfRoles(after, catalogue);
   const added: string[] = [];
-  for (const [scope, everywhere] of has) {
+  for (const [scope, reach] of has) {
     const held = had.get(scope);
-    if (held === undefined || (everywhere && !held)) added.push(scope);
+    if (held === undefined || !covers(held, reach)) added.push(scope);
   }
   const scopes = inCatalogueOrder(added, catalogue);
   return {

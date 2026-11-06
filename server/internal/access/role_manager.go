@@ -1939,20 +1939,25 @@ func grantScopes(grants []*gen.RoleGrant) []authz.Scope {
 
 // grantCoverage reads how widely a role's grants hold each scope. A grant
 // without selectors is the API's form of an unrestricted one; a stored
-// wildcard selector reads the same.
+// wildcard selector reads the same. Every other selector names a resource.
 func grantCoverage(grants []*gen.RoleGrant) []authz.ScopeCoverage {
 	coverage := make([]authz.ScopeCoverage, 0, len(grants))
 	for _, grant := range grants {
 		if grant == nil {
 			continue
 		}
-		unrestricted := grant.Selectors == nil
+		held := authz.ScopeCoverage{Scope: authz.Scope(grant.Scope), Unrestricted: grant.Selectors == nil, Resources: nil}
 		for _, selector := range grant.Selectors {
-			if selector != nil && genSelectorToAuthz(selector).CoversEveryResource() {
-				unrestricted = true
+			if selector == nil {
+				continue
+			}
+			if authzSelector := genSelectorToAuthz(selector); authzSelector.CoversEveryResource() {
+				held.Unrestricted = true
+			} else {
+				held.Resources = append(held.Resources, authzSelector.Key())
 			}
 		}
-		coverage = append(coverage, authz.ScopeCoverage{Scope: authz.Scope(grant.Scope), Unrestricted: unrestricted})
+		coverage = append(coverage, held)
 	}
 	return coverage
 }

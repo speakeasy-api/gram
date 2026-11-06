@@ -72,11 +72,17 @@ func TestSensitiveScopesAdded(t *testing.T) {
 func TestSensitiveScopesWidened(t *testing.T) {
 	t.Parallel()
 
-	restricted := func(scope authz.Scope) authz.ScopeCoverage {
-		return authz.ScopeCoverage{Scope: scope, Unrestricted: false}
+	// A scope held on the named resources alone, keyed as ScopeCoverageTx
+	// keys the grants it reads.
+	restricted := func(scope authz.Scope, resources ...string) authz.ScopeCoverage {
+		keys := make([]string, 0, len(resources))
+		for _, resource := range resources {
+			keys = append(keys, authz.NewSelector(scope, resource).Key())
+		}
+		return authz.ScopeCoverage{Scope: scope, Unrestricted: false, Resources: keys}
 	}
 	everywhere := func(scope authz.Scope) authz.ScopeCoverage {
-		return authz.ScopeCoverage{Scope: scope, Unrestricted: true}
+		return authz.ScopeCoverage{Scope: scope, Unrestricted: true, Resources: nil}
 	}
 
 	tests := []struct {
@@ -87,32 +93,50 @@ func TestSensitiveScopesWidened(t *testing.T) {
 	}{
 		{
 			name:   "held on one project, now everywhere",
-			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
-			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead), everywhere(authz.ScopeLogRead)},
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1"), everywhere(authz.ScopeLogRead)},
 			want:   []string{"log:read"},
 		},
 		{
 			name:   "held everywhere, another restricted grant adds nothing",
 			before: []authz.ScopeCoverage{everywhere(authz.ScopeLogRead)},
-			after:  []authz.ScopeCoverage{everywhere(authz.ScopeLogRead), restricted(authz.ScopeLogRead)},
+			after:  []authz.ScopeCoverage{everywhere(authz.ScopeLogRead), restricted(authz.ScopeLogRead, "project-1")},
 			want:   nil,
 		},
 		{
 			name:   "held on one project, now on another too",
-			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
-			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1"), restricted(authz.ScopeLogRead, "project-2")},
+			want:   []string{"log:read"},
+		},
+		{
+			name:   "remaining restricted coverage does not widen",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1")},
+			want:   nil,
+		},
+		{
+			name:   "held on two projects, now on one of them",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-1", "project-2")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead, "project-2")},
 			want:   nil,
 		},
 		{
 			name:   "not held before counts whatever its breadth",
 			before: nil,
-			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead)},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead, "chat-1")},
 			want:   []string{"chat:read"},
 		},
 		{
 			name:   "an unrestricted broader scope widens what it implies",
-			before: []authz.ScopeCoverage{restricted(authz.ScopeChatRead)},
-			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead), everywhere(authz.ScopeChatWrite)},
+			before: []authz.ScopeCoverage{restricted(authz.ScopeChatRead, "chat-1")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead, "chat-1"), everywhere(authz.ScopeChatWrite)},
+			want:   []string{"chat:read", "chat:write"},
+		},
+		{
+			name:   "a broader scope on another resource widens what it implies",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeChatRead, "chat-1")},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead, "chat-1"), restricted(authz.ScopeChatWrite, "chat-2")},
 			want:   []string{"chat:read", "chat:write"},
 		},
 	}

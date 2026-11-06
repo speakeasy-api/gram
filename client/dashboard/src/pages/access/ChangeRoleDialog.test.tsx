@@ -28,7 +28,9 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: vi.fn(),
-  useRoles: () => ({ data: { roles: [builder, auditor, oneProject, wide] } }),
+  useRoles: () => ({
+    data: { roles: [builder, auditor, oneProject, otherProject, wide] },
+  }),
 }));
 vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
   useUpdateMemberRolesMutation: () => ({
@@ -89,6 +91,20 @@ const oneProject = {
     {
       scope: "log:read",
       selectors: [{ resourceKind: "project", resourceId: "p1" }],
+    },
+  ],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+const otherProject = {
+  id: "other-project",
+  name: "Other project",
+  description: "",
+  principalUrn: "role:organization:other-project",
+  grants: [
+    {
+      scope: "log:read",
+      selectors: [{ resourceKind: "project", resourceId: "p2" }],
     },
   ],
   isSystem: false,
@@ -173,6 +189,15 @@ describe("adding a role that widens a permission the member holds", () => {
       screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
     );
     expect(updateButton().disabled).toBe(false);
+  });
+
+  it("asks for the acknowledgement when a second project's tool logs are added to one project's", () => {
+    renderDialog(["one-project"]);
+    fireEvent.click(screen.getByText("Other project"));
+    expect(
+      screen.getByText("These roles add 1 permission, 1 is sensitive:"),
+    ).toBeTruthy();
+    expect(updateButton().disabled).toBe(true);
   });
 
   it("needs none for a narrower grant of a permission held everywhere", () => {

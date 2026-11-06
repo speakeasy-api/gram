@@ -282,6 +282,51 @@ func TestService_UpdateMemberRoles_AuditLog_SensitiveScopesWidened(t *testing.T)
 	require.Nil(t, record.Metadata)
 }
 
+func TestService_UpdateMemberRoles_AuditLog_SensitiveScopesWidened_AnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	firstID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_first", "First project", "custom-first", ""))
+	secondID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_second", "Second project", "custom-second", ""))
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+firstID), authz.ScopeLogRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+secondID), authz.ScopeLogRead, "project-2")
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "custom-first"))
+
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlugs:      []string{"custom-first", "custom-second"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Maybe()
+
+	// The member reads one project's tool logs and is given a second
+	// project's: the scope is not new to them, but the project is.
+	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{firstID, secondID}})
+	require.NoError(t, err)
+	require.NotNil(t, member)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessMemberRoleUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "local_user_1", record.SubjectID)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{string(authz.ScopeLogRead)}, metadata["sensitive_scopes_added"])
+
+	// Giving up one of the two projects adds nothing.
+	member, err = ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{secondID}})
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	record, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAccessMemberRoleUpdate)
+	require.NoError(t, err)
+	require.Nil(t, record.Metadata)
+}
+
 func TestRoleManager_AddMemberRole_AuditLog_SensitiveScopesAdded(t *testing.T) {
 	t.Parallel()
 

@@ -219,7 +219,7 @@ describe("permissionsAddedByRoles", () => {
     ).toEqual({ scopes: [], sensitive: [] });
   });
 
-  it("counts nothing for another project of a permission held on one", () => {
+  it("counts a permission held on one project and now on another too", () => {
     const otherProject = roleWith("log:read", "project", "p2");
     expect(
       permissionsAddedByRoles(
@@ -227,6 +227,34 @@ describe("permissionsAddedByRoles", () => {
         [oneProject, otherProject],
         catalogue,
       ),
+    ).toEqual({ scopes: ["log:read"], sensitive: ["log:read"] });
+  });
+
+  it("counts nothing for the same project again", () => {
+    const sameProject = roleWith("log:read", "project", "p1");
+    expect(
+      permissionsAddedByRoles(
+        [oneProject],
+        [oneProject, sameProject],
+        catalogue,
+      ),
+    ).toEqual({ scopes: [], sensitive: [] });
+  });
+
+  it("counts nothing for one of two projects already held", () => {
+    const twoProjects = {
+      grants: [
+        {
+          scope: "log:read" as never,
+          selectors: [
+            { resourceKind: "project" as const, resourceId: "p1" },
+            { resourceKind: "project" as const, resourceId: "p2" },
+          ],
+        },
+      ],
+    };
+    expect(
+      permissionsAddedByRoles([twoProjects], [oneProject], catalogue),
     ).toEqual({ scopes: [], sensitive: [] });
   });
 

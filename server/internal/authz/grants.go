@@ -341,12 +341,17 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 type ScopeCoverage struct {
 	Scope        Scope
 	Unrestricted bool
+	// Resources keys the selectors of the grants that name some resources
+	// (Selector.Key), so two holdings of the scope compare resource by
+	// resource. Empty when every grant is unrestricted.
+	Resources []string
 }
 
 // ScopeCoverageTx reads, in one query, which scopes each principal holds
-// grants for and whether any of those grants names every resource. It reads
-// inside the caller's transaction so a membership change can be compared with
-// the state it replaces. Principals without grants have no entry.
+// grants for, whether any of those grants names every resource, and which
+// resources the others name. It reads inside the caller's transaction so a
+// membership change can be compared with the state it replaces. Principals
+// without grants have no entry.
 func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) (map[string][]ScopeCoverage, error) {
 	if len(principalURNs) == 0 {
 		return nil, nil
@@ -376,9 +381,13 @@ func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principa
 		if !ok {
 			at = len(held)
 			index[key{principal, scope}] = at
-			held = append(held, ScopeCoverage{Scope: scope, Unrestricted: false})
+			held = append(held, ScopeCoverage{Scope: scope, Unrestricted: false, Resources: nil})
 		}
-		held[at].Unrestricted = held[at].Unrestricted || selector.CoversEveryResource()
+		if selector.CoversEveryResource() {
+			held[at].Unrestricted = true
+		} else {
+			held[at].Resources = append(held[at].Resources, selector.Key())
+		}
 		coverage[principal] = held
 	}
 	return coverage, nil
