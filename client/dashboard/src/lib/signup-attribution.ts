@@ -10,7 +10,7 @@
  * sign-up events.
  */
 
-export const UTM_KEYS = [
+const UTM_KEYS = [
   "utm_source",
   "utm_medium",
   "utm_campaign",
