@@ -184,7 +184,7 @@ function WritablePluginStatusBanner({
     string,
     { name: string; allServers: boolean }[]
   >();
-  for (const match of audience?.rolePlugins ?? []) {
+  for (const match of (canAdmin ? audience?.rolePlugins : undefined) ?? []) {
     const entry = audience?.entries.find(
       (e) => e.principalUrn === match.principalUrn,
     );
