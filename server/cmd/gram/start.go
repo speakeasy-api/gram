@@ -673,6 +673,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
 	return flags
@@ -1173,6 +1174,10 @@ func newStartCommand() *cli.Command {
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
+			if err != nil {
+				return err
+			}
+			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
@@ -2265,6 +2270,7 @@ func newStartCommand() *cli.Command {
 						IssuerMetadataRefresher:        issuerMetadataRefresher,
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
+						OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryptionProvisioner),
 						StartupSeeds:                   startupSeeds(logger, db, siteURL),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,

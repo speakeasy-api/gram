@@ -358,6 +358,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -840,6 +841,13 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// A misconfigured organization encryption turns its sweep off with
+			// an error log instead of stopping every workflow.
+			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				logger.ErrorContext(ctx, "organization encryption unavailable; its sweep is off", attr.SlogError(err))
+				orgEncryptionProvisioner = nil
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -909,6 +917,7 @@ func newWorkerCommand() *cli.Command {
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
+				OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryptionProvisioner),
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
