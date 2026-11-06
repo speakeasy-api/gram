@@ -232,7 +232,12 @@ export function ProjectDashboard(): JSX.Element {
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
   // tool-call activity. Only returned when the project has no hook data.
-  const externalUsersData = overview?.externalUsers;
+  // Goa omits an empty list from the JSON, so a loaded overview without the
+  // field means no external users, not a pending fetch.
+  const externalUsersData = useMemo(
+    () => (overview ? (overview.externalUsers ?? []) : undefined),
+    [overview],
+  );
 
   // Top end-users by MCP tool-call volume. External IDs are customer-supplied,
   // not Speakeasy members, so they render raw (no member resolution).

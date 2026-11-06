@@ -1268,52 +1268,6 @@ func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProject
 	return i, err
 }
 
-const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
-SELECT
-  COALESCE(m.source, 'unknown') as client_name,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND m.created_at >= $2
-  AND m.created_at <= $3
-  AND m.role IN ('user', 'assistant')
-GROUP BY client_name
-ORDER BY message_count DESC
-`
-
-type GetLLMClientBreakdownByMessagesParams struct {
-	ProjectID uuid.UUID
-	TimeStart pgtype.Timestamptz
-	TimeEnd   pgtype.Timestamptz
-}
-
-type GetLLMClientBreakdownByMessagesRow struct {
-	ClientName   string
-	MessageCount int64
-}
-
-func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLLMClientBreakdownByMessagesParams) ([]GetLLMClientBreakdownByMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getLLMClientBreakdownByMessages, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetLLMClientBreakdownByMessagesRow
-	for rows.Next() {
-		var i GetLLMClientBreakdownByMessagesRow
-		if err := rows.Scan(&i.ClientName, &i.MessageCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getLatestChatUserPromptSource = `-- name: GetLatestChatUserPromptSource :one
 SELECT source
 FROM chat_messages
@@ -1587,62 +1541,6 @@ func (q *Queries) GetToolCallSummaryContext(ctx context.Context, arg GetToolCall
 	var i GetToolCallSummaryContextRow
 	err := row.Scan(&i.ToolCalls, &i.ToolCallSummaries, &i.ResultContent)
 	return i, err
-}
-
-const getTopUsersByMessages = `-- name: GetTopUsersByMessages :many
-SELECT
-  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
-  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND m.created_at >= $2
-  AND m.created_at <= $3
-  AND m.role IN ('user', 'assistant')
-  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
-GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
-ORDER BY message_count DESC
-LIMIT $4
-`
-
-type GetTopUsersByMessagesParams struct {
-	ProjectID   uuid.UUID
-	TimeStart   pgtype.Timestamptz
-	TimeEnd     pgtype.Timestamptz
-	ResultLimit int32
-}
-
-type GetTopUsersByMessagesRow struct {
-	UserID       pgtype.Text
-	UserType     string
-	MessageCount int64
-}
-
-func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMessagesParams) ([]GetTopUsersByMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getTopUsersByMessages,
-		arg.ProjectID,
-		arg.TimeStart,
-		arg.TimeEnd,
-		arg.ResultLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTopUsersByMessagesRow
-	for rows.Next() {
-		var i GetTopUsersByMessagesRow
-		if err := rows.Scan(&i.UserID, &i.UserType, &i.MessageCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const inferenceChatExists = `-- name: InferenceChatExists :one

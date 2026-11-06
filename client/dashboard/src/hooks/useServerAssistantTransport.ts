@@ -41,7 +41,8 @@ export interface UseServerAssistantTransportResult {
 
 // Several components call this hook at once (the dock plus each chat list).
 // Each instance would otherwise fire its own write-scoped ensure on the same
-// 404, so in-flight ensures are shared per query client and project.
+// 404, so in-flight ensures are shared per query client and project. Slugs are
+// unique only within an org, so the key includes the organization id.
 const inflightEnsures = new WeakMap<
   QueryClient,
   Map<string, Promise<Assistant>>
@@ -49,6 +50,7 @@ const inflightEnsures = new WeakMap<
 
 function ensureManagedAssistantOnce(
   queryClient: QueryClient,
+  organizationId: string,
   projectSlug: string,
   ensure: () => Promise<Assistant>,
 ): Promise<Assistant> {
@@ -57,7 +59,8 @@ function ensureManagedAssistantOnce(
     byProject = new Map();
     inflightEnsures.set(queryClient, byProject);
   }
-  const inflight = byProject.get(projectSlug);
+  const key = `${organizationId}/${projectSlug}`;
+  const inflight = byProject.get(key);
   if (inflight) return inflight;
 
   const request = ensure()
@@ -72,9 +75,9 @@ function ensureManagedAssistantOnce(
       return assistant;
     })
     .finally(() => {
-      byProject.delete(projectSlug);
+      byProject.delete(key);
     });
-  byProject.set(projectSlug, request);
+  byProject.set(key, request);
   return request;
 }
 
@@ -149,6 +152,7 @@ export function useServerAssistantTransport(
   const isOtherError = !!getQuery.error && !is404;
 
   const queryClient = useQueryClient();
+  const organizationId = organization.id;
   const ensure = useEnsureManagedAssistantMutation();
   const ensureMutateAsync = ensure.mutateAsync;
 
@@ -179,7 +183,7 @@ export function useServerAssistantTransport(
     // gramProject is explicit so the ensure targets the slug the hook was
     // called with, not whatever the SDK client's default header resolves to
     // — the active project may not be the same one (org-scoped routes).
-    ensureManagedAssistantOnce(queryClient, projectSlug, () =>
+    ensureManagedAssistantOnce(queryClient, organizationId, projectSlug, () =>
       ensureMutateAsync({ request: { gramProject: projectSlug } }),
     ).then(
       (assistant) => {
@@ -208,6 +212,7 @@ export function useServerAssistantTransport(
     );
   }, [
     authorized,
+    organizationId,
     projectSlug,
     is404,
     canCreate,

@@ -13,26 +13,24 @@ import (
 func TestGetProjectOverviewEmptyProject(t *testing.T) {
 	t.Parallel()
 
-	for _, sessionCapture := range []bool{true, false} {
-		ctx, ti := newTestLogsServiceWithSessionCapture(t, sessionCapture)
-		to := time.Now().UTC().Truncate(time.Second)
+	ctx, ti := newTestLogsService(t)
+	to := time.Now().UTC().Truncate(time.Second)
 
-		result, err := ti.service.GetProjectOverview(ctx, &gen.GetProjectOverviewPayload{
-			ApikeyToken:      nil,
-			SessionToken:     nil,
-			ProjectSlugInput: nil,
-			From:             to.Add(-24 * time.Hour).Format(time.RFC3339),
-			To:               to.Format(time.RFC3339),
-			IncludeUsage:     false,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result.Summary)
-		require.Zero(t, result.Summary.TotalChats)
-		require.Zero(t, result.Summary.TotalToolCalls)
-		require.Zero(t, result.Summary.ActiveServersCount)
-		require.NotNil(t, result.Summary.TopServers)
-		require.Empty(t, result.Summary.TopServers)
-	}
+	result, err := ti.service.GetProjectOverview(ctx, &gen.GetProjectOverviewPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		From:             to.Add(-24 * time.Hour).Format(time.RFC3339),
+		To:               to.Format(time.RFC3339),
+		IncludeUsage:     false,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Summary)
+	require.Zero(t, result.Summary.TotalChats)
+	require.Zero(t, result.Summary.TotalToolCalls)
+	require.Zero(t, result.Summary.ActiveServersCount)
+	require.NotNil(t, result.Summary.TopServers)
+	require.Empty(t, result.Summary.TopServers)
 }
 
 func TestGetProjectOverviewCountsHostedServers(t *testing.T) {

@@ -2566,8 +2566,9 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 	}, nil
 }
 
-// GetProjectOverview retrieves project-level overview metrics including total chats, tool calls,
-// active servers/users, and top lists. This endpoint does not support filtering.
+// GetProjectOverview retrieves project-level overview metrics: total chats, tool calls,
+// active servers, and top servers, plus the project home usage sections when
+// include_usage is set. This endpoint does not support filtering.
 func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.GetProjectOverviewPayload) (res *telem_gen.GetProjectOverviewResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

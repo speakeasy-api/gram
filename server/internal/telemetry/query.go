@@ -122,7 +122,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 
 // query runs Query. In-process callers that read only the table pass
 // withTimeseries=false to skip the per-group timeseries read; the result then
-// has no series.
+// still carries a gap-filled zero series per group, which callers may drop.
 func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, withTimeseries bool) (*telem_gen.QueryResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {

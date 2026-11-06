@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -116,10 +117,15 @@ func (s *Service) listAllExternalUsers(ctx context.Context, from, to string) ([]
 	}
 }
 
-// logUsageError skips client faults: a caller without org:read gets the MCP
-// view by design.
+// logUsageError skips client faults and authorization denials: a caller
+// without org:read gets the MCP view by design. ShareableError does not
+// classify itself as a client fault, so its auth codes are checked here.
 func (s *Service) logUsageError(ctx context.Context, err error, msg string) {
 	if err == nil || oops.IsClientFault(err) {
+		return
+	}
+	var shareable *oops.ShareableError
+	if errors.As(err, &shareable) && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 		return
 	}
 	s.logger.ErrorContext(ctx, msg, attr.SlogError(err))

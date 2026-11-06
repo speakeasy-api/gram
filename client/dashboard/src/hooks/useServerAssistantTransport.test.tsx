@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
+    id: "org-a",
     slug: "example",
     projects: [{ id: "project-a", slug: "example" }],
   }),
@@ -131,6 +132,9 @@ describe("managed assistant authorization", () => {
       ensures[1]!.resolve({ id: "late-assistant" });
     });
     expect(result.current.ready).toBe(false);
+    state.canRead = true;
+    rerender();
+    expect(result.current.assistantId).toBe("");
   });
 
   it("fires one ensure for every instance on the same 404 and seeds the shared read", async () => {

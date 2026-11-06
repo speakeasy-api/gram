@@ -1859,37 +1859,6 @@ SELECT
   EXISTS (SELECT 1 FROM del) AS deleted,
   COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
 
--- name: GetTopUsersByMessages :many
-SELECT
-  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
-  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
-GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
-ORDER BY message_count DESC
-LIMIT @result_limit;
-
--- name: GetLLMClientBreakdownByMessages :many
-SELECT
-  COALESCE(m.source, 'unknown') as client_name,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-GROUP BY client_name
-ORDER BY message_count DESC;
-
 -- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
