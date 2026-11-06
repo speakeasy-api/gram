@@ -41,6 +41,10 @@ const adminSessionTTL = 48 * time.Hour
 // with it.
 const adminSessionMaxLifetime = 45 * 24 * time.Hour
 
+// adminSessionExpiredTTL clears a record written at or past the maximum
+// lifetime. Redis needs a positive TTL, so it can't be zero.
+const adminSessionExpiredTTL = time.Second
+
 // Session is the server-side record for an OIDC-authenticated admin user.
 // The access and refresh tokens are stored encrypted so the cache contents are
 // not directly usable if exposed.
@@ -69,10 +73,11 @@ func (s Session) CacheKey() string {
 // TTL restarts the inactivity timeout without outliving the session's maximum
 // lifetime. Verifier.Authorize enforces that lifetime on every use.
 func (s Session) TTL() time.Duration {
-	if remaining := time.Until(s.CreatedAt.Add(adminSessionMaxLifetime)); remaining > 0 && remaining < adminSessionTTL {
-		return remaining
+	remaining := time.Until(s.CreatedAt.Add(adminSessionMaxLifetime))
+	if remaining <= 0 {
+		return adminSessionExpiredTTL
 	}
-	return adminSessionTTL
+	return min(remaining, adminSessionTTL)
 }
 
 // Expired reports whether the session has reached its maximum lifetime.

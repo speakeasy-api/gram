@@ -42,8 +42,11 @@ func TestSessionTTLStopsAtMaximumLifetime(t *testing.T) {
 	require.Equal(t, adminSessionTTL, Session{CreatedAt: time.Now()}.TTL())
 
 	nearLimit := Session{CreatedAt: time.Now().Add(time.Hour - adminSessionMaxLifetime)}.TTL()
-	require.Positive(t, nearLimit)
+	require.Greater(t, nearLimit, time.Hour-time.Minute)
 	require.LessOrEqual(t, nearLimit, time.Hour)
+
+	require.Equal(t, adminSessionExpiredTTL, Session{CreatedAt: time.Now().Add(-adminSessionMaxLifetime)}.TTL())
+	require.Equal(t, adminSessionExpiredTTL, Session{}.TTL())
 }
 
 func TestSessionExpired(t *testing.T) {
