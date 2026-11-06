@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * unlink skills
  *
  * @remarks
- * Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+ * Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills_over_mcp product feature for the organization.
  */
 export function skillsUnlink(
   client: GramCore,

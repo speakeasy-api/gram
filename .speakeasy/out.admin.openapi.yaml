@@ -12093,7 +12093,7 @@ components:
           description: Whether the Skills page is enabled for the organization
         skills_over_mcp_enabled:
           type: boolean
-          description: Whether staff turned on serving managed skills over MCP for the organization. Skills over MCP is also on when the organization is in the skills-over-mcp rollout flag.
+          description: Whether staff turned on serving managed skills over MCP for the organization. Off by default.
         sso_enabled:
           type: boolean
           description: Whether SSO setup is enabled for the organization

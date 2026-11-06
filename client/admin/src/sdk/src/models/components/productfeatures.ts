@@ -94,7 +94,7 @@ export type ProductFeatures = {
    */
   skillsEnabled: boolean;
   /**
-   * Whether staff turned on serving managed skills over MCP for the organization. Skills over MCP is also on when the organization is in the skills-over-mcp rollout flag.
+   * Whether staff turned on serving managed skills over MCP for the organization. Off by default.
    */
   skillsOverMcpEnabled: boolean;
   /**
