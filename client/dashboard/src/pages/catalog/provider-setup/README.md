@@ -1,6 +1,6 @@
 # MCP provider setup
 
-Read this before changing provider instructions, catalog handoff, or the save/sign-in/test flow for Slack, GitHub, or Salesforce. Use the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for scope and approval rules. Extend the existing shell and actions; the current provider ticket and explicit user decisions govern requirements.
+Read this before changing provider instructions, catalog handoff, or the save/sign-in/test flow for Slack, GitHub, Salesforce, or Snowflake. Use the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for scope and approval rules. Extend the existing shell and actions; the current provider ticket and explicit user decisions govern requirements.
 
 ## Owning code
 
@@ -52,6 +52,22 @@ The older fixed-endpoint registry integration is a distinct server and retains g
 For a single supported catalog Add with setup enabled, retain Identity and optional Guardrails, then open Setup. Org type and native server selection belong on the guided page; install one catalog endpoint initially. Other identity modes, bulk/headless/plugin callers and rollout-disabled installs retain their existing paths.
 
 Salesforce progress uses revision 4 and persists only non-secret native server/environment/domain, app-method choices and configuration fingerprints. Older snapshots reset; they cannot restore the removed legacy-integration switch. Preserve configuration invalidation, stale-operation rejection, shared-source safeguards and guarded rollback. Compensation is not an atomic transaction.
+
+### Snowflake
+
+The native `com.snowflake/cortex-mcp` record uses an account-specific `/api/v2/databases/{database}/schemas/{schema}/mcp-servers/{name}` endpoint. The older hosted SQL integration is a different contract and stays outside this setup. The catalog dialog collects the four required values only for this exact native record/template. [snowflake-install.ts](../snowflake-install.ts) resolves a concrete URL before both probing and creation; incomplete or invalid values block installation. Other providers retain their current installation behavior. See [snowflake.ts](./snowflake.ts) for hostname validation, endpoint encoding, and complete-statement SQL generation; [SnowflakeTask.tsx](./SnowflakeTask.tsx) extends the approved new/existing server React flow.
+
+Use a public `snowflakecomputing.com` account hostname. Government regions, China, PrivateLink upstream hostnames, paths, credentials, and ports are rejected. PrivateLink changes only the generated browser-authorization setting; MCP and token exchange still require public connectivity. Setup provisions no network infrastructure.
+
+Account-scoped OAuth uses `/oauth/authorize`, `/oauth/token-request`, PKCE, required Client ID and primary Client Secret, `client_secret_post`, and `session:role:all`. SQL uses the actual API-provided callback, `OAUTH_USE_SECONDARY_ROLES = NONE`, a non-privileged allowed role, and user defaults. OAuth secret extraction uses uppercase JSON keys. SQL is displayed for the owner to execute; incomplete statements are withheld. Setup never executes provisioning SQL or calls a Cortex Agent during verification.
+
+Preserve identifier quoting/case, SQL literal escaping, specification delimiter guards, and source-bound secret-free progress. Account/server edits invalidate credentials and verification. The shared source safeguards described above also protect Snowflake endpoint writes; Snowflake adds no instance header or backend capability.
+
+Authoritative references:
+
+- [Speakeasy native setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake)
+- [Snowflake Cortex Agents MCP](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp)
+- [Snowflake custom OAuth clients](https://docs.snowflake.com/en/user-guide/oauth-custom)
 
 ## Verification and related surfaces
 

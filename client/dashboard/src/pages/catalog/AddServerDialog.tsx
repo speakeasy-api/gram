@@ -1,3 +1,8 @@
+import {
+  isSnowflakeTemplate,
+  resolveSnowflakeInstall,
+  type SnowflakeInstallValues,
+} from "./snowflake-install";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
@@ -454,6 +459,29 @@ export function AddServerDialog({
       return;
     }
 
+    if (
+      (headless || autoStartInstall) &&
+      releaseState.phase === "configure" &&
+      releaseState.serverConfigs.some((config) =>
+        config.remotes.some(
+          (remote) =>
+            isSnowflakeTemplate(config.server.registrySpecifier, remote.url) &&
+            !resolveSnowflakeInstall(config.snowflakeVariables),
+        ),
+      )
+    ) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error:
+          "Snowflake requires an account hostname, database, schema, and MCP server name. Add it through the catalog to enter these values.",
+      });
+      return;
+    }
+
     // Dead-end guard: when the issuer lookup failed, canInstall never becomes
     // true and the install never starts. Interactive users see the reason in
     // the configure step, but headless/auto-start callers would wait forever.
@@ -524,6 +552,8 @@ export function AddServerDialog({
         .join("\n"),
     });
   }, [
+    headless,
+    autoStartInstall,
     detailsError,
     onInstallFinished,
     open,
@@ -594,11 +624,22 @@ export function AddServerDialog({
 
   const isSingle = enrichedServers.length === 1;
   const title = dialogTitle(releaseState, isSingle, enrichedServers.length);
+  const snowflakeTemplate = enrichedServers.some((server) =>
+    server.remotes?.some((remote) =>
+      isSnowflakeTemplate(server.registrySpecifier, remote.url),
+    ),
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
-      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
+      <Dialog.Content
+        className={
+          snowflakeTemplate
+            ? "max-h-[90dvh] grid-cols-[minmax(0,1fr)] gap-2 overflow-y-auto"
+            : "grid-cols-[minmax(0,1fr)] gap-2"
+        }
+      >
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
@@ -921,8 +962,16 @@ function ConfigurePhaseContent({
       );
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
+  const hasSnowflakeInputs = releaseState.serverConfigs.some((config) =>
+    config.remotes.some((remote) =>
+      isSnowflakeTemplate(config.server.registrySpecifier, remote.url),
+    ),
+  );
   const nothingToConfigure =
-    singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
+    singleRemoteConfigs.length === 0 &&
+    !hasHeaderInputs &&
+    !hasIdentityChoices &&
+    !hasSnowflakeInputs;
 
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
@@ -987,6 +1036,7 @@ function ConfigurePhaseContent({
             singleRemoteConfigs={singleRemoteConfigs}
           />
         )}
+        <SnowflakeInstallFields releaseState={releaseState} />
         <IdentityConfigurations
           releaseState={releaseState}
           canCreateIdentity={canCreateIdentity}
@@ -1864,5 +1914,81 @@ function NextSteps({
         )}
       </div>
     </div>
+  );
+}
+
+function SnowflakeInstallFields({
+  releaseState,
+}: {
+  releaseState: ConfigurePhase;
+}): JSX.Element {
+  const fields: {
+    key: keyof SnowflakeInstallValues;
+    label: string;
+    placeholder: string;
+  }[] = [
+    {
+      key: "account_url",
+      label: "Public account hostname",
+      placeholder: "example-org-example-account.snowflakecomputing.com",
+    },
+    { key: "mcp_database", label: "MCP database", placeholder: "APP_DB" },
+    { key: "mcp_schema", label: "MCP schema", placeholder: "PUBLIC" },
+    {
+      key: "mcp_server_name",
+      label: "MCP server name",
+      placeholder: "SPEAKEASY_MCP",
+    },
+  ];
+  return (
+    <>
+      {releaseState.serverConfigs.map((config, index) => {
+        if (
+          !config.remotes.some((remote) =>
+            isSnowflakeTemplate(config.server.registrySpecifier, remote.url),
+          )
+        )
+          return null;
+        return (
+          <div key={index} className="space-y-3">
+            <Text small className="font-medium">
+              Snowflake connection
+            </Text>
+            <Text small muted>
+              Enter the public hostname without https://, a path, or a port.
+              PrivateLink hostnames are unsupported. Underscores in account
+              names are converted to hyphens. Use double quotes for
+              case-sensitive database, schema, or server names.
+            </Text>
+            {fields.map((field) => (
+              <div key={field.key} className="space-y-1">
+                <label htmlFor={`snowflake-${index}-${field.key}`}>
+                  {field.label} (required)
+                </label>
+                <Input
+                  id={`snowflake-${index}-${field.key}`}
+                  placeholder={field.placeholder}
+                  value={config.snowflakeVariables?.[field.key] ?? ""}
+                  onChange={(value) =>
+                    releaseState.updateServerConfig(index, {
+                      snowflakeVariables: {
+                        ...config.snowflakeVariables,
+                        [field.key]: value,
+                      },
+                    })
+                  }
+                />
+              </div>
+            ))}
+            {resolveSnowflakeInstall(config.snowflakeVariables) && (
+              <Text small muted>
+                These values determine the installed MCP server URL. Continue
+                setup to configure OAuth.
+              </Text>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

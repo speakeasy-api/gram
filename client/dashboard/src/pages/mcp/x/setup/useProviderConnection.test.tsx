@@ -105,7 +105,7 @@ const server = {
 } as McpServer;
 const clients: QueryClient[] = [];
 function mount(
-  provider: "slack" | "github" | "salesforce",
+  provider: State["provider"],
   override: Partial<State> = {},
   source = {
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
@@ -128,7 +128,9 @@ function mount(
         state,
         dispatch,
         mcpServer,
-        provider === "salesforce" ? currentSource : undefined,
+        provider === "salesforce" || provider === "snowflake"
+          ? currentSource
+          : undefined,
       );
       return { state, ...connection };
     },
@@ -1994,6 +1996,91 @@ describe("Salesforce review recovery", () => {
       expect(result.current.recovery).toBe("settings");
       expect(mocks.commit).not.toHaveBeenCalled();
       expect(mocks.updateRemote).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+describe("Snowflake shared actions", () => {
+  const oldUrl =
+    "https://example.snowflakecomputing.com/api/v2/databases/OLD/schemas/PUBLIC/mcp-servers/MCP";
+  const values = {
+    ...initialState("snowflake").values,
+    host: "example.snowflakecomputing.com",
+    database: "APP",
+    schema: "PUBLIC",
+    serverName: "MCP",
+    clientId: "app-id",
+    clientSecret: "app-secret",
+  };
+  it("saves the native endpoint and confidential account OAuth configuration", async () => {
+    mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
+    mocks.provider.mockRejectedValue({ statusCode: 404 });
+    const { result } = mount(
+      "snowflake",
+      { step: "credentials", values },
+      { url: oldUrl, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.next());
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(mocks.updateRemote).toHaveBeenCalledWith({
+      updateServerForm: {
+        id: "upstream",
+        url: oldUrl.replace("/OLD/", "/APP/"),
+      },
+    });
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        targetServerOnly: true,
+        createProvider: expect.objectContaining({
+          issuer: "https://example.snowflakecomputing.com",
+          authorizationEndpoint:
+            "https://example.snowflakecomputing.com/oauth/authorize",
+          tokenEndpoint:
+            "https://example.snowflakecomputing.com/oauth/token-request",
+          tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+        }),
+        clientConfiguration: {
+          clientId: "app-id",
+          clientSecret: "app-secret",
+          tokenEndpointAuthMethod: "client_secret_post",
+          scope: ["session:role:all"],
+        },
+      }),
+    });
+    expect(mocks.createHeader).not.toHaveBeenCalled();
+    expect(result.current.state.values.clientSecret).toBe("");
+    expect(result.current.state.authorized).toBe(false);
+  });
+  it.each(["shared source", "external edit", "authorization header"])(
+    "refuses a save after %s",
+    async (reason) => {
+      mocks.remote.mockResolvedValue({
+        id: "upstream",
+        url:
+          reason === "external edit"
+            ? oldUrl.replace("/OLD/", "/OTHER/")
+            : oldUrl,
+      });
+      if (reason === "shared source")
+        mocks.linkedServers.mockResolvedValue({
+          mcpServers: [server, { ...server, id: "other-server" }],
+        });
+      if (reason === "authorization header")
+        mocks.headers.mockResolvedValue({
+          headers: [{ name: "Authorization", value: "redacted" }],
+        });
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: oldUrl, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.error).toBeTruthy());
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.updateRemote).not.toHaveBeenCalled();
+      expect(result.current.recovery).toBe("settings");
     },
   );
 });

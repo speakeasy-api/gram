@@ -1,4 +1,8 @@
 import { SalesforceTask } from "./SalesforceTask";
+import {
+  SnowflakeTask,
+  SnowflakeCredentialInstructions,
+} from "./SnowflakeTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
@@ -127,12 +131,16 @@ function Credentials() {
           </Correction>
         </Alert>
       )}
-      <InProvider
-        actions={credentialInstructions(
-          s.provider,
-          s.values.appChoice === "existing",
-        )}
-      />
+      {s.provider === "snowflake" ? (
+        <SnowflakeCredentialInstructions />
+      ) : (
+        <InProvider
+          actions={credentialInstructions(
+            s.provider,
+            s.values.appChoice === "existing",
+          )}
+        />
+      )}
       <SetupField
         field="clientId"
         label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
@@ -440,6 +448,7 @@ export function ProviderTask({
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
   if (s.provider === "salesforce") return <SalesforceTask />;
+  if (s.provider === "snowflake") return <SnowflakeTask />;
   if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;
 }
