@@ -415,7 +415,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	}
 	dropped, err := meter.Int64Counter(meterDropped,
 		metric.WithDescription("MCP connection events lost instead of written, by reason. A row with repeats counts once per event it stands for."),
-		metric.WithUnit("{row}"))
+		metric.WithUnit("{event}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterDropped), attr.SlogError(err))
 	}
@@ -508,7 +508,7 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats and rows past its queue share are held back and written later as a
-// count, not dropped. It reports capture/queue acceptance, not eventual persistence; held-back
+// count; a held key evicted before then is lost as repeats_lost. It reports capture/queue acceptance, not eventual persistence; held-back
 // and rejected rows return false.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
@@ -518,10 +518,11 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	if r == nil || attempt.IsZero() {
 		return false
 	}
+	var row Row
 	// Recording must never panic a request.
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			r.drop(ctx, dropPanic, 1, fmt.Errorf("connection events record: %v", recovered))
+			r.drop(ctx, dropPanic, events(row), fmt.Errorf("connection events record: %v", recovered))
 			accepted = false
 		}
 	}()
