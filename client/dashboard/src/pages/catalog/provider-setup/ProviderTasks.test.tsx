@@ -3,17 +3,26 @@ import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState, reduce } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
+const callback = vi.hoisted(() => ({
+  value: "https://current.example/callback",
+  failed: false,
+}));
+beforeEach(() => {
+  callback.value = "https://current.example/callback";
+  callback.failed = false;
+});
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
   () => ({
     useNewRemoteSessionClientCallbackUrl: () => ({
-      data: { callbackUrl: "https://current.example/callback" },
-      isError: false,
+      data: callback.value ? { callbackUrl: callback.value } : undefined,
+      isError: callback.failed,
+      refetch: vi.fn<() => void>(),
     }),
   }),
 );
@@ -352,9 +361,35 @@ describe("Snowflake instructions", () => {
     );
   }
   it("withholds incomplete SQL", () => {
-    task("create");
+    const { container } = task("create", {
+      creatorRole: "EXAMPLE_CREATOR",
+      database: "",
+      schema: "",
+      serverName: "",
+    });
+    expect(container.querySelector("[data-sql]")).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy SQL" })).toBeNull();
   });
+
+  it.each([false, true])(
+    "shows callback recovery without an empty SQL instruction (failed=%s)",
+    (failed) => {
+      callback.value = "";
+      callback.failed = failed;
+      const { container } = task("oauth", {
+        oauthIntegration: "EXAMPLE_OAUTH",
+      });
+      expect(container.querySelector('[data-sql="oauth"]')).toBeNull();
+      expect(
+        screen.queryByText("Create the integration in Snowflake"),
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          failed ? /Couldn’t load the callback URL/ : /Loading callback URL/,
+        ),
+      ).toBeDefined();
+    },
+  );
   it.each([false, true])("uses the actual callback (saved=%s)", (saved) => {
     const { container } = task(
       "oauth",

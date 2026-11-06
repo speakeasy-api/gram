@@ -706,3 +706,43 @@ it("keeps interactive Snowflake configuration open while inputs are missing", as
   ).toBeDefined();
   expect(finished).not.toHaveBeenCalled();
 });
+
+it("explains rejected Snowflake connection fields inline", async () => {
+  const snowflake = {
+    ...server,
+    registrySpecifier: "com.snowflake/cortex-mcp",
+    remotes: [
+      {
+        url: snowflakeRemoteTemplate,
+        transportType: "streamable-http" as const,
+      },
+    ],
+  };
+  mockConfigureWorkflow(snowflake);
+  const result = mocks.workflow();
+  const config = result.serverConfigs[0];
+  mocks.workflow.mockReturnValue({
+    ...result,
+    serverConfigs: [
+      {
+        ...config,
+        snowflakeVariables: {
+          account_url: "example.privatelink.snowflakecomputing.com",
+          mcp_database: "bad name",
+        },
+      },
+    ],
+  });
+  renderDialog(snowflake);
+  expect(
+    await screen.findByText(/Use a public Snowflake hostname/),
+  ).toBeDefined();
+  expect(
+    screen
+      .getByLabelText("Public account hostname (required)")
+      .getAttribute("aria-invalid"),
+  ).toBe("true");
+  expect(screen.getByText(/Enter a valid name/)).toBeDefined();
+  fireEvent.blur(screen.getByLabelText("MCP schema (required)"));
+  expect(screen.getAllByText(/Enter a valid name/)).toHaveLength(2);
+});

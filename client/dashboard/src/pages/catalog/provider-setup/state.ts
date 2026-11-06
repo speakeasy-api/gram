@@ -276,11 +276,26 @@ export function reduce(s: State, a: Action): State {
       };
     case "field": {
       if (s.values[a.field] === a.value) return s;
+      const connectionChange =
+        s.provider === "snowflake" &&
+        [
+          "host",
+          "database",
+          "schema",
+          "serverName",
+          "network",
+          "oauthIntegration",
+          "accessRole",
+        ].includes(a.field);
+      const credentialChange = ["clientId", "clientSecret"].includes(a.field);
       const boundary = steps(s).findIndex((t) => t.id === s.step);
       const next: State = {
         ...s,
         values: { ...s.values, [a.field]: a.value },
-        saved: a.field === "access" && s.saved,
+        saved:
+          s.provider === "snowflake" && !connectionChange && !credentialChange
+            ? s.saved
+            : a.field === "access" && s.saved,
         authorized: false,
         tested: false,
         errors: {},
@@ -290,8 +305,7 @@ export function reduce(s: State, a: Action): State {
       };
       if (
         a.field === "appChoice" ||
-        (s.provider === "snowflake" &&
-          !["clientId", "clientSecret"].includes(a.field)) ||
+        connectionChange ||
         (s.provider === "salesforce" &&
           [
             "integration",
@@ -306,7 +320,9 @@ export function reduce(s: State, a: Action): State {
         next.showSecret = false;
       }
       if (
-        (s.provider === "salesforce" || s.provider === "snowflake") &&
+        (s.provider === "salesforce" ||
+          connectionChange ||
+          (s.provider === "snowflake" && credentialChange)) &&
         a.source !== "configuration"
       )
         next.configChanged = true;

@@ -4,6 +4,7 @@ import {
   snowflakeSelectionForUrl,
   snowflakeSql,
   publicSnowflakeHost,
+  roleAllowed,
 } from "./snowflake";
 
 const values = {
@@ -191,3 +192,14 @@ it("generates complete server creation and access SQL for valid values", () => {
   expect(existing.create).toBeUndefined();
   expect(existing.grants).toBe(sql.grants);
 });
+
+it.each(["SYSADMIN", "USERADMIN", '"SYSADMIN"', '"USERADMIN"'])(
+  "rejects administrator role %s",
+  (accessRole) => {
+    expect(roleAllowed(accessRole)).toBe(false);
+    expect(
+      snowflakeSql({ ...values, accessRole }, "https://local.example/callback")
+        .oauth,
+    ).toBeUndefined();
+  },
+);
