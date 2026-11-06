@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -168,6 +170,17 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("build member request: %w", err)
 	}
 	out.Header = req.Header.Clone()
+	if headers, ok := ctx.Value(memberParameterHeadersKey{}).(http.Header); ok && rpc.Method == mcpversions.MethodToolsCall {
+		// Replace the SDK's set: it may be stale, and it omits empty values.
+		for name := range out.Header {
+			if httpheaders.IsParamHeader(name) {
+				delete(out.Header, name)
+			}
+		}
+		for name, values := range headers {
+			out.Header[name] = slices.Clone(values)
+		}
+	}
 	rec := newMemberResponseRecorder()
 	// Capture the session before the body is buffered: a member can mint one
 	// and then fail or hang the body, and the SDK never sees such an answer.
@@ -487,6 +500,10 @@ func (t *memberClientTransport) Connect(ctx context.Context) (mcp.Connection, er
 	t.connection = connection
 	return connection, nil
 }
+
+// memberParameterHeadersKey carries one call's Mcp-Param headers, derived
+// from the member's current tool definition, to its tools/call exchange.
+type memberParameterHeadersKey struct{}
 
 // memberToolResultKey attaches a single call's capture to its HTTP exchanges.
 type memberToolResultKey struct{}

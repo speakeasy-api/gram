@@ -20,11 +20,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -570,10 +572,15 @@ func (s *Service) executeProxiedMemberTool(
 	// protocol metadata for the negotiated revision.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	upstreamResult, unsent, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
-	if unsent {
+	upstreamResult, retry, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments, false)
+	if retry == memberCallRetryUnsent {
 		// The shared session failed before this call was sent, so one retry cannot replay it.
-		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
+		upstreamResult, retry, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments, false)
+	}
+	if retry == memberCallRetryParameterHeaders {
+		// The member refused the call before running it, so one retry with
+		// headers from its current definition cannot replay it.
+		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments, true)
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
@@ -598,14 +605,46 @@ func (s *Service) executeProxiedMemberTool(
 	return bs, nil
 }
 
-// callOnMemberSession runs one tools/call on the member's session. unsent
-// reports a failure on a shared session before the call left the gateway.
-func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage) (json.RawMessage, bool, error) {
+// memberCallRetry says whether a failed member tool call may be sent again.
+type memberCallRetry string
+
+const (
+	// memberCallRetryNone means the failure is final.
+	memberCallRetryNone memberCallRetry = ""
+
+	// memberCallRetryUnsent means a shared session failed before the call left the gateway.
+	memberCallRetryUnsent memberCallRetry = "unsent"
+
+	// memberCallRetryParameterHeaders means the member refused the call for
+	// missing or stale Mcp-Param headers, which it checks before running the tool.
+	memberCallRetryParameterHeaders memberCallRetry = "parameter_headers"
+)
+
+// callOnMemberSession runs one tools/call on the member's session. With
+// mirrorParameters it first reads the tool's current definition from the
+// member and sends the Mcp-Param headers its x-mcp-header annotations require.
+func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage, mirrorParameters bool) (json.RawMessage, memberCallRetry, error) {
 	ctx, ms, err := s.openMemberSession(ctx, logger, dial, redial, member)
 	if err != nil {
-		return nil, false, err
+		return nil, memberCallRetryNone, err
 	}
 	defer ms.release(ctx, logger)
+	if mirrorParameters {
+		catalog, err := listMemberSessionTools(ctx, logger, ms.session, ms.outcome, ms.dial, member)
+		if err != nil {
+			ms.fail(ctx)
+			return nil, memberCallRetryNone, err
+		}
+		tool, ok := catalog.byName[toolName]
+		if !ok {
+			return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q no longer lists tool %q", member.slug, toolName)}
+		}
+		headers, err := externalmcp.ParameterHeaders(tool.InputSchema, arguments)
+		if err != nil {
+			return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q tool %q has parameter headers the meta MCP cannot send: %s", member.slug, toolName, err.Error())}
+		}
+		ctx = context.WithValue(ctx, memberParameterHeadersKey{}, headers)
+	}
 	// The remotemcp interceptor writes this call's log row and never sees the
 	// gate, so carry down which auth client signs the member in. A recheck
 	// while waiting for a pooled session may have routed the member to another
@@ -619,17 +658,21 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		ms.fail(ctx)
 		unsent := ms.unsent()
 		if unsent && ctx.Err() == nil {
-			return nil, true, err
+			return nil, memberCallRetryUnsent, err
 		}
 		// A call that left the gateway is logged by the upstream interceptor.
 		if !unsent {
 			markMetaToolCallProxied(ctx)
 		}
-		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
+		retry := memberCallRetryNone
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch && !mirrorParameters && ctx.Err() == nil {
+			retry = memberCallRetryParameterHeaders
+		}
+		return nil, retry, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
 	// The upstream interceptor wrote this call's row.
 	markMetaToolCallProxied(ctx)
-	return upstreamResult, false, nil
+	return upstreamResult, memberCallRetryNone, nil
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.

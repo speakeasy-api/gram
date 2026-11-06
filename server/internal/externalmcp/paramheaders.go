@@ -24,11 +24,11 @@ const (
 	maxParameterHeaderNodes = 4096
 )
 
-// parameterHeaders implements the x-mcp-header rules in go-sdk v1.7.0's
+// ParameterHeaders implements the x-mcp-header rules in go-sdk v1.7.0's
 // mcp/streamable_headers.go (SEP-2243). It validates annotations before reading
 // arguments, and never rewrites the argument bytes or includes their values in
 // errors. Like the SDK, it follows properties, not $ref or schema combinators.
-func parameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.Header, error) {
+func ParameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.Header, error) {
 	if len(schema) > maxParameterHeaderSchemaBytes {
 		return nil, errors.New("MCP tool input schema exceeds byte limit")
 	}

@@ -41,6 +41,10 @@ type Server struct {
 	// Appending to Tools after a transport server has been constructed has
 	// no effect — registration happens once, at server start.
 	Tools []Tool
+
+	// Stateless serves Streamable HTTP without sessions, which the SDK
+	// requires to negotiate protocol 2026-07-28 and its request headers.
+	Stateless bool
 }
 
 // mcpServer constructs an [mcp.Server] populated with s.Tools. It is shared
@@ -96,7 +100,17 @@ func (s *Server) streamableHTTPServer() (*httptest.Server, error) {
 
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return mcpServer
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{
+		Stateless:                    s.Stateless,
+		JSONResponse:                 false,
+		Logger:                       nil,
+		EventStore:                   nil,
+		SessionTimeout:               0,
+		DisableLocalhostProtection:   false,
+		CrossOriginProtection:        nil,
+		MaxRequestBodyBytes:          0,
+		PropagateRequestCancellation: false,
+	})
 
 	return httptest.NewServer(handler), nil
 }

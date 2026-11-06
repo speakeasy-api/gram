@@ -26,8 +26,12 @@ func IsStandardMCPRequestHeader(name string) bool {
 		return true
 	}
 
-	// The Mcp-Param-{Name} family requires a non-empty name; a bare
-	// "Mcp-Param-" is not a standard header.
+	return IsParamHeader(name)
+}
+
+// IsParamHeader reports whether name is an Mcp-Param-{Name} header. The
+// family requires a non-empty name; a bare "Mcp-Param-" is not one.
+func IsParamHeader(name string) bool {
 	return len(name) > len(ParamHeaderPrefix) && strings.EqualFold(name[:len(ParamHeaderPrefix)], ParamHeaderPrefix)
 }
 

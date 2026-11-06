@@ -31,7 +31,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -76,6 +75,12 @@ type recordedRequest struct {
 type recordingUpstream struct {
 	url string
 
+	// inputSchema is the upstream tool's input schema.
+	inputSchema map[string]any
+
+	// stateless serves without sessions, so the gateway negotiates MCP 2026-07-28.
+	stateless bool
+
 	// holdMetadataProbe makes the recorder hold protected resource metadata
 	// requests until a tools/call response has completed, forcing the probe
 	// to arrive after the credentialed call.
@@ -104,27 +109,26 @@ func withMetadataProbeHeldUntilToolCall() recordingUpstreamOption {
 	return func(u *recordingUpstream) { u.holdMetadataProbe = true }
 }
 
+// withInputSchema replaces the upstream tool's empty input schema.
+func withInputSchema(schema map[string]any) recordingUpstreamOption {
+	return func(u *recordingUpstream) { u.inputSchema = schema }
+}
+
+// withStatelessUpstream serves the upstream without sessions, so the gateway
+// negotiates MCP 2026-07-28 with it.
+func withStatelessUpstream() recordingUpstreamOption {
+	return func(u *recordingUpstream) { u.stateless = true }
+}
+
 // newRecordingUpstream stands up a real MCP SDK server behind a reverse
 // proxy that records every request it forwards.
 func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstreamOption) *recordingUpstream {
 	t.Helper()
 
-	mock := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
-		Name:        toolName,
-		Description: "returns pong",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		Response: testmcp.ToolResponse{
-			Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
-		},
-	}})
-	t.Cleanup(mock.Close)
-
-	target, err := url.Parse(mock.URL)
-	require.NoError(t, err)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
 	u := &recordingUpstream{
 		url:                     "",
+		inputSchema:             map[string]any{"type": "object", "properties": map[string]any{}},
+		stateless:               false,
 		holdMetadataProbe:       false,
 		toolCallServed:          make(chan struct{}),
 		toolCallServedOnce:      sync.Once{},
@@ -136,6 +140,23 @@ func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstre
 	for _, opt := range opts {
 		opt(u)
 	}
+
+	mock := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{
+		Tools: []testmcp.Tool{{
+			Name:        toolName,
+			Description: "returns pong",
+			InputSchema: u.inputSchema,
+			Response: testmcp.ToolResponse{
+				Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
+			},
+		}},
+		Stateless: u.stateless,
+	})
+	t.Cleanup(mock.Close)
+
+	target, err := url.Parse(mock.URL)
+	require.NoError(t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isMetadataProbe := r.Method == http.MethodGet && r.URL.Path == wellknown.OAuthProtectedResourcePath
