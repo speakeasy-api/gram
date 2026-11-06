@@ -228,3 +228,47 @@ func TestToolsCallUsageTrackingInterceptor_WithMetaMCPServerIDLeavesSharedInstan
 
 	require.Nil(t, tracker.waitForEvent(t).MetaMCPServerID)
 }
+
+func TestToolsCallUsageTrackingInterceptor_SkipsRefusedHeaderMismatch(t *testing.T) {
+	t.Parallel()
+
+	tracker := newFakeBillingTracker()
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	projectID := uuid.New()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-free",
+		AccountType:          string(billing.TierBase),
+		ProjectID:            &projectID,
+	})
+	call := newToolsCallResponseForInterceptor(t, "")
+	call.Result = nil
+	call.Error = &jsonrpc.Error{Code: mcp.CodeHeaderMismatch, Message: "header mismatch", Data: nil}
+	call.RemoteMessage.RemoteHTTPResponse = &http.Response{StatusCode: http.StatusBadRequest}
+
+	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, call))
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	require.Empty(t, tracker.events, "a call refused before the tool ran is not billed")
+}
+
+func TestToolsCallUsageTrackingInterceptor_BillsHeaderMismatchAfterDispatch(t *testing.T) {
+	t.Parallel()
+
+	tracker := newFakeBillingTracker()
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	projectID := uuid.New()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-free",
+		AccountType:          string(billing.TierBase),
+		ProjectID:            &projectID,
+	})
+	call := newToolsCallResponseForInterceptor(t, "")
+	call.Result = nil
+	call.Error = &jsonrpc.Error{Code: mcp.CodeHeaderMismatch, Message: "header mismatch", Data: nil}
+
+	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, call))
+
+	event := tracker.waitForEvent(t)
+	require.Equal(t, http.StatusOK, event.ResponseStatusCode)
+}

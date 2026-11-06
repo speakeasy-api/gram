@@ -3,9 +3,11 @@ package remotemcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -78,6 +80,10 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 		return nil
 	}
 
+	if refusedBeforeDispatch(call) {
+		return nil
+	}
+
 	toolName := call.Request.Params.Name
 	requestBytes := int64(len(call.Request.Params.Arguments))
 
@@ -125,4 +131,12 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 	go i.tracker.TrackToolCallUsage(context.WithoutCancel(ctx), event)
 
 	return nil
+}
+
+// refusedBeforeDispatch reports a 400 header mismatch: the remote server
+// checks parameter headers before running the tool, so nothing ran to bill.
+func refusedBeforeDispatch(call *proxy.ToolsCallResponse) bool {
+	return call.Error != nil && call.Error.Code == mcp.CodeHeaderMismatch &&
+		call.RemoteMessage != nil && call.RemoteMessage.RemoteHTTPResponse != nil &&
+		call.RemoteMessage.RemoteHTTPResponse.StatusCode == http.StatusBadRequest
 }

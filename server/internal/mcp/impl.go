@@ -274,6 +274,8 @@ type Service struct {
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
 	// memberToolSchemaCache holds each gateway member's last listed tools.
 	memberToolSchemaCache cache.TypedCacheObject[memberToolSchemas]
+	// memberToolSchemaLocal keeps this process's copies for when the shared cache is unavailable.
+	memberToolSchemaLocal *expirable.LRU[string, memberToolSchemas]
 	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
 	connectionCatalogCache cache.Cache
 	// staleNoAuthLog dedupes stale no-auth choice warnings.
@@ -721,6 +723,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		memberToolSchemaLocal:  expirable.NewLRU[string, memberToolSchemas](memberToolSchemasLocalSize, nil, memberToolSchemasTTL),
 		connectionCatalogCache: cacheImpl,
 		staleNoAuthLog:         newOnceLog(),
 		staleChoiceConsent:     expirable.NewLRU[string, bool](staleChoiceConsentSize, nil, staleChoiceConsentTTL),

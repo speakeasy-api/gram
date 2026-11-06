@@ -631,7 +631,9 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		return nil, memberCallRetryNone, err
 	}
 	defer ms.release(ctx, logger)
-	if negotiated := ms.session.InitializeResult(); negotiated != nil && negotiated.ProtocolVersion >= mcpversions.Version20260728 {
+	negotiated := ms.session.InitializeResult()
+	mirrorsHeaders := negotiated != nil && negotiated.ProtocolVersion >= mcpversions.Version20260728
+	if mirrorsHeaders {
 		var schema json.RawMessage
 		known := false
 		if !relist {
@@ -640,19 +642,20 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		if !known {
 			catalog, err := listMemberSessionTools(ctx, logger, ms.session, ms.outcome, ms.dial, member)
 			if err != nil {
-				ms.fail(ctx)
-				return nil, memberCallRetryNone, err
-			}
-			s.rememberMemberToolSchemas(ctx, logger, member, catalog)
-			// An unlisted tool is called as named, so the member reports it.
-			if tool, ok := catalog.byName[toolName]; ok {
-				schema = tool.InputSchema
+				// A member that refuses the headerless call gets one retry.
+				logger.WarnContext(ctx, "list member tools for parameter headers", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
+			} else {
+				s.rememberMemberToolSchemas(ctx, logger, member, catalog)
+				// An unlisted tool is called as named, so the member reports it.
+				if tool, ok := catalog.byName[toolName]; ok {
+					schema = tool.InputSchema
+				}
 			}
 		}
-		if len(schema) > 0 {
+		if declaresParameterHeaders(schema) {
 			headers, err := externalmcp.ParameterHeaders(schema, arguments)
 			if err != nil {
-				return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q tool %q has parameter headers the meta MCP cannot send: %s", member.slug, toolName, err.Error())}
+				return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q tool %q has parameter headers the gateway cannot send: %s", member.slug, toolName, err.Error())}
 			}
 			ctx = context.WithValue(ctx, memberParameterHeadersKey{}, headers)
 		}
@@ -677,7 +680,8 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 			markMetaToolCallProxied(ctx)
 		}
 		retry := memberCallRetryNone
-		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch && !relist && ctx.Err() == nil {
+		// Only a 400 refusal precedes dispatch; a relayed -32020 may follow a run.
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch && mirrorsHeaders && !relist && ms.outcome.status() == http.StatusBadRequest && ctx.Err() == nil {
 			retry = memberCallRetryParameterHeaders
 		}
 		return nil, retry, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)

@@ -1,15 +1,20 @@
 package mcp_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -208,4 +213,113 @@ func TestCodeBridgeMirrorsParameterHeaders(t *testing.T) {
 	methods := rpcMethodCounts(upstream)
 	require.Equal(t, 2, methods["tools/call"], "the member must not refuse a call")
 	require.Equal(t, 1, methods["tools/list"])
+}
+
+// newAnsweringFront forwards to upstreamURL, except the JSON-RPC methods
+// answer handles itself, and counts each method it receives.
+func newAnsweringFront(t *testing.T, upstreamURL string, answer func(w http.ResponseWriter, method string, id json.RawMessage) bool) (string, *methodCounter) {
+	t.Helper()
+	parsed, err := url.Parse(upstreamURL)
+	require.NoError(t, err)
+	forward := httputil.NewSingleHostReverseProxy(parsed)
+	counts := &methodCounter{mu: sync.Mutex{}, counts: map[string]int{}}
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			var rpc struct {
+				Method string          `json:"method"`
+				ID     json.RawMessage `json:"id"`
+			}
+			_ = json.Unmarshal(body, &rpc)
+			counts.add(rpc.Method)
+			if answer(w, rpc.Method, rpc.ID) {
+				return
+			}
+		}
+		forward.ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	return front.URL, counts
+}
+
+// methodCounter counts JSON-RPC methods across handler goroutines.
+type methodCounter struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (c *methodCounter) add(method string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counts[method]++
+}
+
+func frontCount(counts *methodCounter, method string) int {
+	counts.mu.Lock()
+	defer counts.mu.Unlock()
+	return counts.counts[method]
+}
+
+// A schema with no annotations is never checked against the header budgets,
+// however large it is.
+func TestServePublic_MetaEndpoint_ExecuteTool_LargeSchemaWithoutAnnotationsCalls(t *testing.T) {
+	t.Parallel()
+
+	properties := map[string]any{}
+	for i := range 5000 {
+		properties[fmt.Sprintf("field_%04d", i)] = map[string]any{"type": "string"}
+	}
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(map[string]any{"type": "object", "properties": properties}), withStatelessUpstream())
+	gateway := newParameterHeaderGateway(t, upstream.url)
+
+	gateway.execute(t)
+	require.Equal(t, 1, rpcMethodCounts(upstream)["tools/call"])
+	gateway.recorder.RequireNothing()
+}
+
+// A failed listing does not fail the call; it is sent without headers.
+func TestServePublic_MetaEndpoint_ExecuteTool_FailedListingStillCalls(t *testing.T) {
+	t.Parallel()
+
+	upstream := newRecordingUpstream(t, "get_file_contents", withStatelessUpstream())
+	front, counts := newAnsweringFront(t, upstream.url, func(w http.ResponseWriter, method string, _ json.RawMessage) bool {
+		if method != "tools/list" {
+			return false
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return true
+	})
+	gateway := newParameterHeaderGateway(t, front)
+
+	gateway.execute(t)
+	require.Equal(t, 1, frontCount(counts, "tools/list"))
+	require.Equal(t, 1, rpcMethodCounts(upstream)["tools/call"])
+}
+
+// A -32020 relayed in a successful HTTP response may follow a run, so it is
+// never retried.
+func TestServePublic_MetaEndpoint_ExecuteTool_HeaderMismatchAfterDispatchNotRetried(t *testing.T) {
+	t.Parallel()
+
+	upstream := newRecordingUpstream(t, "get_file_contents", withInputSchema(parameterHeaderSchema()), withStatelessUpstream())
+	front, counts := newAnsweringFront(t, upstream.url, func(w http.ResponseWriter, method string, id json.RawMessage) bool {
+		if method != "tools/call" {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": -32020, "message": "header mismatch"}}))
+		return true
+	})
+	gateway := newParameterHeaderGateway(t, front)
+
+	_, isError := metaToolResultText(t, decodeToolsCall(t, gateway.ti, gateway.slug, gateway.bearer, "execute_tool", map[string]any{
+		"name": "repo--get_file_contents", "arguments": json.RawMessage(parameterHeaderArguments),
+	}))
+	require.True(t, isError)
+	require.Equal(t, 1, frontCount(counts, "tools/call"), "the call must not run twice")
 }
