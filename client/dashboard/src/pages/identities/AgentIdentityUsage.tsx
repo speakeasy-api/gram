@@ -202,6 +202,26 @@ export function AgentIdentityUsage({
   );
 }
 
+/** What the MCP servers panel says when it has no row to show. */
+function agentServersEmptyText({
+  canReadPolicy,
+  canViewToolLogs,
+  anyServer,
+}: {
+  canReadPolicy: boolean;
+  canViewToolLogs: boolean;
+  anyServer: boolean;
+}): string {
+  if (!canReadPolicy && !canViewToolLogs)
+    return "You need permission to manage this agent, or the log:read permission on this project, to see its MCP servers.";
+  if (canReadPolicy && !anyServer)
+    return "This agent cannot connect to any MCP server.";
+  // It may connect to any server, so only its calls can name them.
+  if (!canViewToolLogs)
+    return "This agent may connect to any MCP server. You need the log:read permission on this project to see the ones it called.";
+  return "This agent called no MCP servers in this period.";
+}
+
 /**
  * Whom the agent acts for, per MCP server it can connect to, and how often it
  * called each in the period.
@@ -262,15 +282,11 @@ function AgentServersPanel({
     }
   }
 
-  let empty: string;
-  if (!canReadPolicy && !canViewToolLogs) {
-    empty =
-      "You need permission to manage this agent, or the log:read permission on this project, to see its MCP servers.";
-  } else if (canReadPolicy && !anyServer) {
-    empty = "This agent cannot connect to any MCP server.";
-  } else {
-    empty = "This agent called no MCP servers in this period.";
-  }
+  const empty = agentServersEmptyText({
+    canReadPolicy,
+    canViewToolLogs,
+    anyServer,
+  });
 
   return (
     <IdentityPanel

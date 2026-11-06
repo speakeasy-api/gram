@@ -9,6 +9,7 @@ import { onBehalfOfPeople, serverOnBehalfOf } from "./onBehalfOf";
 const mocks = vi.hoisted(() => ({
   connection: undefined as ServerConnection | undefined,
   issuerId: undefined as string | undefined,
+  inventoryFailed: false,
 }));
 vi.mock("@/pages/agents/credentials/useServerInventory", () => ({
   useServerInventory: () => ({
@@ -21,6 +22,7 @@ vi.mock("@/pages/agents/credentials/useServerInventory", () => ({
       },
     ],
     isLoading: false,
+    isError: mocks.inventoryFailed,
   }),
 }));
 vi.mock("@/pages/agents/credentials/useOwnerConnections", () => ({
@@ -44,6 +46,7 @@ afterEach(() => {
   cleanup();
   mocks.connection = undefined;
   mocks.issuerId = undefined;
+  mocks.inventoryFailed = false;
 });
 
 /** A sign-in whose access token ran out, and nothing renews it. */
@@ -304,5 +307,15 @@ describe("ServerOnBehalfOfLine", () => {
       <ServerOnBehalfOfLine agentId="agent-1" resourceId={undefined} />,
     );
     expect(container.textContent).toBe("Credential not known");
+  });
+
+  it("says it could not check when the server list failed", () => {
+    mocks.inventoryFailed = true;
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="server-unlisted" />,
+    );
+    expect(container.textContent).toBe(
+      "Could not check whose credential it uses",
+    );
   });
 });

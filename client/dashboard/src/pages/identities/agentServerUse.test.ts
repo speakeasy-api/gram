@@ -7,12 +7,16 @@ import { summarizeAgentServerUse } from "./agentServerUse";
 
 const PROJECT = "project-1";
 
-function connect(resourceId: string, id = resourceId): AgentPolicyGrant {
+function connect(
+  resourceId: string,
+  id = resourceId,
+  projectId = PROJECT,
+): AgentPolicyGrant {
   return {
     id: `grant-${id}`,
     scope: "mcp:connect",
     effect: "allow",
-    selector: { resourceKind: "mcp", resourceId, projectId: PROJECT },
+    selector: { resourceKind: "mcp", resourceId, projectId },
   } as AgentPolicyGrant;
 }
 
@@ -85,17 +89,24 @@ describe("summarizeAgentServerUse", () => {
     });
     expect(anyServer).toBe(false);
     expect(rows).toEqual([
+      // A toolset grant lists each server built on it, with its own calls.
       {
-        key: "grant:toolset-support",
-        resourceId: "toolset-support",
-        name: "Support Tools",
-        calls: 6,
+        key: "grant:toolset-support:support-b",
+        resourceId: "support-b",
+        name: "Support",
+        calls: 4,
       },
       {
         key: "grant:tracker",
         resourceId: "tracker",
         name: "Tracker",
         calls: 3,
+      },
+      {
+        key: "grant:toolset-support:support-a",
+        resourceId: "support-a",
+        name: "Support Tools",
+        calls: 2,
       },
       // Reachable but not called: listed with no calls.
       { key: "grant:ops", resourceId: "ops", name: "Ops", calls: 0 },
@@ -165,7 +176,7 @@ describe("summarizeAgentServerUse", () => {
 
   it("leaves calls uncounted when the usage read is missing or the server is in another project", () => {
     const { rows } = summarizeAgentServerUse({
-      grants: [connect("ops"), connect("tracker")],
+      grants: [connect("ops"), connect("tracker", "tracker", "project-2")],
       servers: [
         ...SERVERS.filter((candidate) => candidate.id !== "tracker"),
         server({
@@ -181,7 +192,7 @@ describe("summarizeAgentServerUse", () => {
     expect(rows.map((row) => row.calls)).toEqual([undefined, undefined]);
 
     const other = summarizeAgentServerUse({
-      grants: [connect("tracker")],
+      grants: [connect("tracker", "tracker", "project-2")],
       servers: [
         server({
           id: "tracker",
@@ -231,5 +242,40 @@ describe("summarizeAgentServerUse", () => {
       "Hidden",
       "Unlisted MCP server",
     ]);
+  });
+
+  it("lists only the servers in the project a grant is narrowed to", () => {
+    const { rows } = summarizeAgentServerUse({
+      grants: [connect("toolset-support", "support", "project-2")],
+      servers: [
+        ...SERVERS,
+        server({
+          id: "support-c",
+          resourceId: "toolset-support",
+          name: "Support elsewhere",
+          projectId: "project-2",
+        }),
+      ],
+      targets: [],
+      projectId: PROJECT,
+    });
+    expect(rows.map((row) => row.name)).toEqual(["Support elsewhere"]);
+  });
+
+  it("leaves a server uncounted when the targets read may have cut it off", () => {
+    const full = Array.from({ length: 200 }, (_, index) =>
+      target({ targetId: `other-${index}`, mcpServerId: `other-${index}` }),
+    );
+    const { rows } = summarizeAgentServerUse({
+      grants: [connect("ops"), connect("tracker")],
+      servers: SERVERS,
+      targets: [
+        ...full,
+        target({ targetId: "tracker", mcpServerId: "tracker", eventCount: 3 }),
+      ],
+      projectId: PROJECT,
+    });
+    expect(rows.find((row) => row.name === "Ops")?.calls).toBeUndefined();
+    expect(rows.find((row) => row.name === "Tracker")?.calls).toBe(3);
   });
 });

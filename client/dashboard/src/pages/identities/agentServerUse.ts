@@ -1,6 +1,7 @@
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
 import { ANY_RESOURCE } from "@/pages/agents/agent-api-key-grants";
+import { isAgentPolicyConstraint } from "@/pages/agents/agent-policy-grants";
 import { CONNECT_SCOPE } from "@/pages/agents/agentPolicyEdit";
 import type { InventoryServer } from "@/pages/agents/credentials/useServerInventory";
 
@@ -10,8 +11,15 @@ const SERVED_TARGET_TYPES = new Set([
   "tunneled_mcp_server",
 ]);
 
+/**
+ * The most targets the targets read returns (the server's TargetLimit). A
+ * response this long may have left a server out, so a server missing from it
+ * has an unknown count rather than none.
+ */
+const TARGETS_READ_LIMIT = 200;
+
 /** One MCP server on the agent's Overview, with its calls in the period. */
-export type AgentServerUse = {
+type AgentServerUse = {
   key: string;
   /**
    * The id to look the server's credential up by: the id its grant names,
@@ -21,8 +29,9 @@ export type AgentServerUse = {
   name: string;
   /**
    * Calls in the period. Undefined when they cannot be counted here: the
-   * usage read failed or is not allowed, or the server lives in another
-   * project than the page reads telemetry for.
+   * usage read failed or is not allowed, the server lives in another
+   * project than the page reads telemetry for, or the read hit its target
+   * limit without this server.
    */
   calls: number | undefined;
 };
@@ -68,42 +77,82 @@ export function summarizeAgentServerUse({
   const served = (targets ?? []).filter((target) =>
     SERVED_TARGET_TYPES.has(target.targetType),
   );
+  // Top sources lists at most TARGETS_READ_LIMIT targets, so a full list may
+  // have left out a server the agent did call.
+  const capped = (targets?.length ?? 0) >= TARGETS_READ_LIMIT;
   const counted = new Set<ToolUsageTargetSummary>();
   const rows: AgentServerUse[] = [];
   const seen = new Set<string>();
-  for (const grant of connect) {
-    const resourceId = grant.selector.resourceId;
-    if (resourceId === ANY_RESOURCE || seen.has(resourceId)) continue;
-    seen.add(resourceId);
-    // A grant on a toolset reaches every server built on it.
-    const matched = servers.filter(
-      (server) => server.resourceId === resourceId || server.id === resourceId,
-    );
-    const ids = new Set([resourceId, ...matched.map((server) => server.id)]);
-    const activity = new Set(
-      matched.flatMap((server) =>
-        server.activityTarget ? [server.activityTarget] : [],
-      ),
-    );
+  const grantRow = (
+    key: string,
+    resourceId: string,
+    server: InventoryServer | undefined,
+    ids: Set<string>,
+  ): AgentServerUse => {
+    const activity = server?.activityTarget;
     let calls = 0;
     let label: string | undefined;
     for (const target of served) {
       const hit =
         (target.mcpServerId && ids.has(target.mcpServerId)) ||
-        activity.has(`${target.targetType}:${target.targetId}`);
+        activity === `${target.targetType}:${target.targetId}`;
       if (!hit) continue;
       counted.add(target);
       calls += target.eventCount;
       label ??= target.targetLabel || target.targetId;
     }
-    const server = matched[0];
     const elsewhere = !!server && server.projectId !== projectId;
-    rows.push({
-      key: `grant:${resourceId}`,
+    const countable = !!targets && !elsewhere && (calls > 0 || !capped);
+    return {
+      key,
       resourceId,
       name: server?.name ?? label ?? "Unlisted MCP server",
-      calls: targets && !elsewhere ? calls : undefined,
-    });
+      calls: countable ? calls : undefined,
+    };
+  };
+  for (const grant of connect) {
+    const resourceId = grant.selector.resourceId;
+    if (resourceId === ANY_RESOURCE || seen.has(resourceId)) continue;
+    seen.add(resourceId);
+    // A grant narrowed to a project reaches only the servers in it.
+    const project = isAgentPolicyConstraint(grant.selector.projectId)
+      ? grant.selector.projectId
+      : undefined;
+    // A grant on a toolset reaches every server built on it. Each is its own
+    // row, with its own name, credential and calls.
+    const matched = servers.filter(
+      (server) =>
+        (server.resourceId === resourceId || server.id === resourceId) &&
+        (!project || server.projectId === project),
+    );
+    if (matched.length === 0) {
+      rows.push(
+        grantRow(
+          `grant:${resourceId}`,
+          resourceId,
+          undefined,
+          new Set([resourceId]),
+        ),
+      );
+      continue;
+    }
+    for (const server of matched) {
+      // A call recorded against the grant's own id belongs to a server only
+      // when the grant reaches no other.
+      const ids = new Set(
+        matched.length === 1 ? [resourceId, server.id] : [server.id],
+      );
+      rows.push(
+        grantRow(
+          matched.length === 1
+            ? `grant:${resourceId}`
+            : `grant:${resourceId}:${server.id}`,
+          matched.length === 1 ? resourceId : server.id,
+          server,
+          ids,
+        ),
+      );
+    }
   }
   for (const target of served) {
     if (counted.has(target)) continue;

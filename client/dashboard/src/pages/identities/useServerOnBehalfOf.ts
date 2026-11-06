@@ -26,6 +26,9 @@ export function useServerOnBehalfOf(
     agentId,
   );
   if (!resourceId) return { kind: "unknown" };
+  // A failed server list says nothing about this server: it could not be
+  // checked, which is not the same as no server going by this id.
+  if (!server && inventory.isError) return { kind: "error" };
   return serverOnBehalfOf(
     server,
     server ? connections.assignedByServer?.get(server.id) : undefined,
