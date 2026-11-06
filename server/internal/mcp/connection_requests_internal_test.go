@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,10 +12,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -26,13 +29,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -385,7 +391,7 @@ func TestResolveFailureHappened(t *testing.T) {
 		{"unclassified store", remotesessions.ErrRemoteSessionUnavailable, mcpconnectionattempts.CodeInternalError},
 		{"token endpoint", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: 503}), mcpconnectionattempts.CodeRemoteSessionUnavailable},
 		{"signer", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{Signing: true}), mcpconnectionattempts.CodeInternalError},
-		{"lock contention", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, mcpconnectionattempts.Code{}},
+		{"lock contention", errors.Join(remotesessions.ErrRemoteSessionUnavailable, remotesessions.ErrRefreshLockHeld), mcpconnectionattempts.Code{}},
 		{"misconfigured", remotesessions.ErrRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured},
 		{"no token", remotesessions.ErrNoValidToken, mcpconnectionattempts.CodeInvalidRemoteSession},
 		{"unknown", errors.New("database"), mcpconnectionattempts.CodeInternalError},
@@ -402,7 +408,7 @@ func TestRecordRemoteSessionRejectionSuppression(t *testing.T) {
 		cause error
 		want  int
 	}{
-		{"waited on another refresh", &remotesessions.RefreshError{Outcome: remotesessionmetrics.RefreshOutcomeDeferred}, 0},
+		{"waited on another refresh", errors.Join(remotesessions.ErrRemoteSessionUnavailable, remotesessions.ErrRefreshLockHeld), 0},
 		{"token endpoint outage", errors.Join(remotesessions.ErrRemoteSessionUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}), 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -473,4 +479,115 @@ func TestMemberFailureExhaustedTunnelCause(t *testing.T) {
 			require.EqualError(t, err, `server "fixture" did not answer: upstream unreachable or timed out`)
 		})
 	}
+}
+
+// A resolve failure answered with a 500 writes one row by its cause and no rejection metric; a caller that left writes none.
+func TestRemoteSessionResolveFailureRecordsOutcome(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		meta uuid.NullUUID
+		err  error
+		want mcpconnectionattempts.Code
+	}{
+		{name: "direct", meta: uuid.NullUUID{}, err: errors.New("database unavailable"), want: mcpconnectionattempts.CodeInternalError},
+		{name: "gateway", meta: validUUID(uuid.New()), err: errors.New("database unavailable"), want: mcpconnectionattempts.CodeInternalError},
+		{name: "gateway chosen client unbound", meta: validUUID(uuid.New()), err: remotesessions.ErrChosenClientUnbound, want: mcpconnectionattempts.CodeInvalidRemoteSession},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			reader := sdkmetric.NewManualReader()
+			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
+			s := &Service{logger: testenv.NewLogger(t), metrics: metrics, connections: rec.Recorder, upstreamTokens: &fakeUpstreamTokens{clientErr: tc.err}}
+			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org", ProjectID: uuid.New(), McpServerID: validUUID(uuid.New()), MetaMcpServerID: tc.meta}
+			authentication := &issuerGateAuthentication{endpoint: endpoint, subject: urn.NewUserSubject("user"), chosenClient: validUUID(uuid.New())}
+
+			_, err := s.resolveIssuerGateAccessTokens(t.Context(), httptest.NewRecorder(), authentication)
+			shareable, ok := errors.AsType[*oops.ShareableError](err)
+			require.True(t, ok, err)
+			require.Equal(t, oops.CodeUnexpected, shareable.Code)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, issuerGateReasonRemoteSessionResolveFailed, row.SubReason)
+			var collected metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &collected))
+			for _, scope := range collected.ScopeMetrics {
+				for _, metric := range scope.Metrics {
+					require.NotEqual(t, mcpmetrics.InstrumentMCPRequestRejected, metric.Name)
+				}
+			}
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			_, err = s.resolveIssuerGateAccessTokens(ctx, httptest.NewRecorder(), authentication)
+			require.Error(t, err)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// A member credential we could not load carries its cause; a caller that left carries none.
+func TestMemberCredentialLoadFailureCarriesCause(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		want   mcpconnectionattempts.Code
+		outage bool
+	}{
+		{name: "store outage", err: &pgconn.PgError{Code: "08006"}, want: mcpconnectionattempts.CodeInternalError, outage: true},
+		{name: "broken query", err: errors.New("scan remote session"), want: mcpconnectionattempts.CodeInternalError},
+		{name: "caller left", err: context.Canceled, want: mcpconnectionattempts.Code{}, outage: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			member := metaMember{serverID: uuid.New(), slug: "member", chosenClientID: validUUID(uuid.New())}
+			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return nil, tc.err
+			}}
+			_, err := choices.tokens(t.Context(), member)
+			require.ErrorContains(t, err, `server "member" could not load its connection credentials`)
+			_, outage := errors.AsType[memberUnavailableError](err)
+			require.Equal(t, tc.outage, outage)
+
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok)
+			require.Equal(t, tc.want, failure.code)
+		})
+	}
+}
+
+// A hosted gateway member whose credentials could not be loaded writes one row for that member.
+func TestHostedMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := TestInfra.CloneTestDatabase(t, "mcp_hosted_member_credential_load")
+	require.NoError(t, err)
+	orgID := "org-" + uuid.NewString()[:8]
+	require.NoError(t, orgsrepo.New(conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{ID: orgID, Name: "Hosted", Slug: orgID}))
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Hosted", Slug: "hosted", OrganizationID: orgID})
+	require.NoError(t, err)
+	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{Name: "Hosted", Slug: "hosted", OrganizationID: orgID, ProjectID: project.ID})
+	require.NoError(t, err)
+	_, err = testrepo.New(conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolset.ID, ProjectID: project.ID, ToolsetID: validUUID(toolset.ID), Visibility: "public"})
+	require.NoError(t, err)
+
+	rec := mcpconnectionattemptstest.New(t)
+	s := &Service{db: conn, logger: testenv.NewLogger(t), connections: rec.Recorder}
+	member := metaMember{serverID: toolset.ID, projectID: project.ID, slug: "member", backend: metaMemberBackendHosted, toolsetID: validUUID(toolset.ID)}
+	gate := &metaGateContext{organizationID: orgID, projectID: project.ID, metaServerID: uuid.New(), request: httptest.NewRequest(http.MethodPost, "/mcp", nil), projectTokens: &projectTokenCache{
+		resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			return nil, errors.New("scan remote session")
+		},
+		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+	}}
+	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call", Params: nil}
+	attempt := &metaToolCallAttempt{}
+
+	body, err := s.dispatchMetaMemberTool(ctx, s.logger, gate, []metaMember{member}, req, "member--tool", json.RawMessage(`{}`), nil, attempt)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "could not load its connection credentials")
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1)
 }

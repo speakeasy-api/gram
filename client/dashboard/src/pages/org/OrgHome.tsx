@@ -24,6 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
@@ -1139,8 +1140,6 @@ function RecentChallengesCompact() {
     [agents.data, agents.isError],
   );
 
-  if (isLoading) return null;
-
   return (
     <Card.Dashboard
       bodyClassName={buckets.length === 0 ? undefined : "p-0"}
@@ -1153,7 +1152,13 @@ function RecentChallengesCompact() {
         </orgRoutes.access.challenges.Link>
       }
     >
-      {buckets.length === 0 ? (
+      {isLoading ? (
+        <Skeleton label="Loading challenges">
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+          <div className="h-8 w-full" />
+        </Skeleton>
+      ) : buckets.length === 0 ? (
         // Compact copy rather than the full-page ChallengesEmptyState — inside
         // a rail card its illustration and framing box read as a second card.
         <Text muted small>

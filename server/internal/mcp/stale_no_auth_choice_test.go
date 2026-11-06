@@ -367,9 +367,11 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
 		registration := g.attachTypedOnly(t, ctx, []uuid.UUID{g.issuer})
+		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
-		_, err := g.postConnect(t, ctx, registration)
-		require.ErrorContains(t, err, "not configured for any server this gateway serves")
+		w, err := g.postConnect(t, ctx, registration)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	})
 	t.Run("not bound to the issuer", func(t *testing.T) {
 		t.Parallel()

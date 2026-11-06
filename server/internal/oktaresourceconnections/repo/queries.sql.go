@@ -314,7 +314,19 @@ JOIN projects AS p
  AND p.organization_id = $1
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+    WHERE a.mcp_server_id = ms.id
+      AND a.deleted IS FALSE
+  )
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -696,7 +708,19 @@ JOIN projects AS p
  AND p.organization_id = $1
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+    WHERE a.mcp_server_id = ms.id
+      AND a.deleted IS FALSE
+  )
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -750,10 +774,12 @@ type ListEligibleServersRow struct {
 
 // Servers the organization owns (tenancy through projects, since mcp_servers
 // has no organization column) with a live backend and an authorization server
-// the organization can see. Whether Speakeasy fronts the user login does not
-// matter: readiness is about the upstream authorization server. Undiscovered
-// issuers are returned so the list can count them; whether the issuer
-// advertises ID-JAG is decided in Go so the derivation stays pure.
+// the organization can see. The authorization server comes from the server's
+// live client associations; a server with none or several is left out. Whether
+// Speakeasy fronts the user login does not matter: readiness is about the
+// upstream authorization server. Undiscovered issuers are returned so the list
+// can count them; whether the issuer advertises ID-JAG is decided in Go so the
+// derivation stays pure.
 func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string) ([]ListEligibleServersRow, error) {
 	rows, err := q.db.Query(ctx, listEligibleServers, organizationID)
 	if err != nil {

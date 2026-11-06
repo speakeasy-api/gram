@@ -308,7 +308,6 @@ const (
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
-	ExternalMCPFailureReasonKey = attribute.Key("gram.external_mcp.failure_reason")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -938,6 +937,15 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// HookDeviceInstallRouteKey is the install route the binary reports, from
+	// speakeasy.json or SPEAKEASY_AI_HOOKS_INSTALL_ROUTE. Known routes are
+	// marketplace, download, agent_install, hooks_install and dogfood; the
+	// value is free-form. Installs that predate it don't report one.
+	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// HookEndpointGenerationKey records which generation of hook endpoint
+	// and sender produced a row (see the HookEndpointGeneration* values), so
+	// traffic on retired endpoints can be found and moved to a supported one.
+	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -3770,10 +3778,6 @@ func SlogMCPApprovalRequestID(v string) slog.Attr {
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
-
-func SlogExternalMCPFailureReason(v string) slog.Attr {
-	return slog.String(string(ExternalMCPFailureReasonKey), v)
-}
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }

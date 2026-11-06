@@ -96,6 +96,9 @@ func (s *Service) resolveMetaMemberResource(
 // An organization gateway's members span projects, so a client that a
 // project owns is claimed only by that project's members, the ones whose
 // dispatch routes through it.
+//
+// Where typed auth client resolution is enforced, a member claims the
+// registrations it offers through typed auth clients and no others.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -103,6 +106,10 @@ func (s *Service) claimingMetaMembers(
 ) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
+	}
+	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// A member claims the clients associated with it rather than every
@@ -112,6 +119,7 @@ func (s *Service) claimingMetaMembers(
 		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
@@ -132,6 +140,7 @@ func (s *Service) claimingMetaMembers(
 		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {

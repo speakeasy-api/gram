@@ -4,6 +4,7 @@
 
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
 import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
+import { agentGetClaudeObservabilityPlugin } from "../funcs/agentGetClaudeObservabilityPlugin.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetMyConnections } from "../funcs/agentGetMyConnections.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
@@ -38,6 +39,11 @@ import {
   DeleteAiScanTargetRequest,
   DeleteAiScanTargetSecurity,
 } from "../models/operations/deleteaiscantarget.js";
+import {
+  GetAgentClaudeObservabilityPluginRequest,
+  GetAgentClaudeObservabilityPluginResponse,
+  GetAgentClaudeObservabilityPluginSecurity,
+} from "../models/operations/getagentclaudeobservabilityplugin.js";
 import {
   GetAgentMyConnectionsRequest,
   GetAgentMyConnectionsSecurity,
@@ -128,6 +134,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeleteAiScanTargetResult> {
     return unwrapAsync(agentDeleteAiScanTarget(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getClaudeObservabilityPlugin agent
+   *
+   * @remarks
+   * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.
+   */
+  async getClaudeObservabilityPlugin(
+    request?: GetAgentClaudeObservabilityPluginRequest | undefined,
+    security?: GetAgentClaudeObservabilityPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetAgentClaudeObservabilityPluginResponse> {
+    return unwrapAsync(agentGetClaudeObservabilityPlugin(
       this,
       request,
       security,
