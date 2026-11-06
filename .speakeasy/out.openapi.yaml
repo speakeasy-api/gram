@@ -99160,7 +99160,7 @@ components:
           format: date-time
         include_usage:
           type: boolean
-          description: Also return the project home usage breakdowns (usage_by_user, usage_by_agent, external_users) in the same response
+          description: Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response
           default: false
         to:
           type: string
@@ -99174,11 +99174,8 @@ components:
     GetProjectOverviewResult:
       type: object
       properties:
-        external_users:
-          type: array
-          items:
-            $ref: '#/components/schemas/UserSummary'
-          description: Every external end user with activity in the period. Only set when include_usage is true and the project has no agent usage.
+        mcp_usage:
+          $ref: '#/components/schemas/ProjectMcpUsage'
         summary:
           $ref: '#/components/schemas/ProjectOverviewSummary'
         usage_by_agent:
@@ -108897,6 +108894,67 @@ components:
         - id
         - name
         - slug
+    ProjectMcpEndUser:
+      type: object
+      properties:
+        tool_calls:
+          type: integer
+          description: Number of tool calls
+          format: int64
+        user_id:
+          type: string
+          description: External end user ID
+      description: Tool calls made by one external end user
+      required:
+        - user_id
+        - tool_calls
+    ProjectMcpToolUsage:
+      type: object
+      properties:
+        calls:
+          type: integer
+          description: Number of calls
+          format: int64
+        failures:
+          type: integer
+          description: Number of failed calls
+          format: int64
+        urn:
+          type: string
+          description: Tool URN, or the tool name for agent hook events
+      description: Calls and failures for one tool made by external end users
+      required:
+        - urn
+        - calls
+        - failures
+    ProjectMcpUsage:
+      type: object
+      properties:
+        end_users_count:
+          type: integer
+          description: Number of distinct external end users with activity in the period
+          format: int64
+        top_end_users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpEndUser'
+          description: Top 5 external end users by tool calls
+        top_failing_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools with at least one failure, ranked by failure rate, then by failures
+        top_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools by calls
+      description: External end user and MCP tool usage for a project in a time period
+      required:
+        - end_users_count
+        - top_end_users
+        - top_tools
+        - top_failing_tools
     ProjectOverviewSummary:
       type: object
       properties:

@@ -238,7 +238,7 @@ type GetProjectOverviewRequestBody struct {
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Also return the project home usage breakdowns (usage_by_user,
-	// usage_by_agent, external_users) in the same response
+	// usage_by_agent, mcp_usage) in the same response
 	IncludeUsage *bool `form:"include_usage,omitempty" json:"include_usage,omitempty" xml:"include_usage,omitempty"`
 }
 
@@ -1081,9 +1081,9 @@ type GetProjectOverviewResponseBody struct {
 	// series). Only set when include_usage is true and usage_by_user has agent
 	// usage.
 	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
-	// Every external end user with activity in the period. Only set when
-	// include_usage is true and the project has no agent usage.
-	ExternalUsers []*UserSummaryResponseBody `form:"external_users,omitempty" json:"external_users,omitempty" xml:"external_users,omitempty"`
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and the project has no agent usage.
+	McpUsage *ProjectMcpUsageResponseBody `form:"mcp_usage,omitempty" json:"mcp_usage,omitempty" xml:"mcp_usage,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
@@ -8967,6 +8967,39 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
 }
 
+// ProjectMcpUsageResponseBody is used to define fields on response body types.
+type ProjectMcpUsageResponseBody struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64 `form:"end_users_count" json:"end_users_count" xml:"end_users_count"`
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUserResponseBody `form:"top_end_users" json:"top_end_users" xml:"top_end_users"`
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsageResponseBody `form:"top_tools" json:"top_tools" xml:"top_tools"`
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsageResponseBody `form:"top_failing_tools" json:"top_failing_tools" xml:"top_failing_tools"`
+}
+
+// ProjectMcpEndUserResponseBody is used to define fields on response body
+// types.
+type ProjectMcpEndUserResponseBody struct {
+	// External end user ID
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Number of tool calls
+	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+}
+
+// ProjectMcpToolUsageResponseBody is used to define fields on response body
+// types.
+type ProjectMcpToolUsageResponseBody struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string `form:"urn" json:"urn" xml:"urn"`
+	// Number of calls
+	Calls int64 `form:"calls" json:"calls" xml:"calls"`
+	// Number of failed calls
+	Failures int64 `form:"failures" json:"failures" xml:"failures"`
+}
+
 // UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
 // response body types.
 type UnproxiedMcpServerUsageBucketResponseBody struct {
@@ -10082,15 +10115,8 @@ func NewGetProjectOverviewResponseBody(res *telemetry.GetProjectOverviewResult) 
 	if res.UsageByAgent != nil {
 		body.UsageByAgent = marshalTelemetryQueryResultToQueryResultResponseBody(res.UsageByAgent)
 	}
-	if res.ExternalUsers != nil {
-		body.ExternalUsers = make([]*UserSummaryResponseBody, len(res.ExternalUsers))
-		for i, val := range res.ExternalUsers {
-			if val == nil {
-				body.ExternalUsers[i] = nil
-				continue
-			}
-			body.ExternalUsers[i] = marshalTelemetryUserSummaryToUserSummaryResponseBody(val)
-		}
+	if res.McpUsage != nil {
+		body.McpUsage = marshalTelemetryProjectMcpUsageToProjectMcpUsageResponseBody(res.McpUsage)
 	}
 	return body
 }

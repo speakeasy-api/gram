@@ -58,7 +58,7 @@ func TestGetProjectOverview_UsageOmittedByDefault(t *testing.T) {
 	res := overviewWithUsage(t, ctx, ti, now, false)
 	require.Nil(t, res.UsageByUser)
 	require.Nil(t, res.UsageByAgent)
-	require.Nil(t, res.ExternalUsers)
+	require.Nil(t, res.McpUsage)
 }
 
 func TestGetProjectOverview_UsageAgentView(t *testing.T) {
@@ -84,7 +84,7 @@ func TestGetProjectOverview_UsageAgentView(t *testing.T) {
 	require.Equal(t, "hook_source", res.UsageByAgent.GroupBy)
 	require.ElementsMatch(t, []string{"cursor", "codex"}, groupValues(res.UsageByAgent.Table))
 
-	require.Nil(t, res.ExternalUsers, "agent view never reads external users")
+	require.Nil(t, res.McpUsage, "agent view never reads MCP usage")
 }
 
 func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
@@ -93,17 +93,52 @@ func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	ctx = withProjectGrants(t, ctx, true)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
 	now := time.Now().UTC()
-	extUser := "ext-user-" + uuid.NewString()
-	insertToolCallLogWithUser(t, ctx, authCtx.ProjectID.String(), uuid.NewString(), now.Add(-9*time.Minute), "tools:http:api:call", 200, 0.5, "", extUser)
+	ts := now.Add(-9 * time.Minute)
+	userA := "ext-user-a-" + uuid.NewString()
+	userB := "ext-user-b-" + uuid.NewString()
+	const (
+		search = "tools:http:api:search"
+		create = "tools:http:api:create"
+		remove = "tools:http:api:delete"
+	)
+	insertCall := func(urn string, status int32, externalUserID string) {
+		insertToolCallLogWithUser(t, ctx, projectID, uuid.NewString(), ts, urn, status, 0.5, "", externalUserID)
+	}
+
+	// search: 4 calls, 1 failure (25%). create: 2 calls, 1 failure (50%).
+	// delete: 1 call, no failures. userA makes 5 calls, userB 2.
+	insertCall(search, 200, userA)
+	insertCall(search, 200, userA)
+	insertCall(search, 200, userB)
+	insertCall(search, 500, userA)
+	insertCall(create, 200, userA)
+	insertCall(create, 404, userB)
+	insertCall(remove, 200, userA)
+	// No external user: never counted.
+	insertCall(search, 500, "")
 
 	res := overviewWithUsage(t, ctx, ti, now, true)
 
 	require.NotNil(t, res.UsageByUser)
 	require.Nil(t, res.UsageByAgent)
-	require.NotNil(t, res.ExternalUsers)
-	require.Len(t, res.ExternalUsers, 1)
-	require.Equal(t, extUser, res.ExternalUsers[0].UserID)
+	require.Equal(t, &gen.ProjectMcpUsage{
+		EndUsersCount: 2,
+		TopEndUsers: []*gen.ProjectMcpEndUser{
+			{UserID: userA, ToolCalls: 5},
+			{UserID: userB, ToolCalls: 2},
+		},
+		TopTools: []*gen.ProjectMcpToolUsage{
+			{Urn: search, Calls: 4, Failures: 1},
+			{Urn: create, Calls: 2, Failures: 1},
+			{Urn: remove, Calls: 1, Failures: 0},
+		},
+		TopFailingTools: []*gen.ProjectMcpToolUsage{
+			{Urn: create, Calls: 2, Failures: 1},
+			{Urn: search, Calls: 4, Failures: 1},
+		},
+	}, res.McpUsage)
 }
 
 func TestGetProjectOverview_UsageWithoutOrgReadFallsBackToMCPView(t *testing.T) {
@@ -119,7 +154,7 @@ func TestGetProjectOverview_UsageWithoutOrgReadFallsBackToMCPView(t *testing.T) 
 
 	require.Nil(t, res.UsageByUser, "agent usage needs org:read")
 	require.Nil(t, res.UsageByAgent)
-	require.NotNil(t, res.ExternalUsers, "MCP view section must settle")
+	require.NotNil(t, res.McpUsage, "MCP view section must settle")
 }
 
 func groupValues(rows []*gen.QueryRow) []string {

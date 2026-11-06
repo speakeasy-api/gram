@@ -2281,7 +2281,7 @@ var GetProjectOverviewPayload = Type("GetProjectOverviewPayload", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
-	Attribute("include_usage", Boolean, "Also return the project home usage breakdowns (usage_by_user, usage_by_agent, external_users) in the same response", func() {
+	Attribute("include_usage", Boolean, "Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response", func() {
 		Default(false)
 	})
 
@@ -2294,9 +2294,39 @@ var GetProjectOverviewResult = Type("GetProjectOverviewResult", func() {
 	Attribute("summary", ProjectOverviewSummaryType, "Current period summary metrics")
 	Attribute("usage_by_user", QueryResult, "Agent usage grouped by user email, ranked by LLM tokens (top 100, no time series). Only set when include_usage is true and the caller has org:read.")
 	Attribute("usage_by_agent", QueryResult, "Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time series). Only set when include_usage is true and usage_by_user has agent usage.")
-	Attribute("external_users", ArrayOf(UserSummaryType), "Every external end user with activity in the period. Only set when include_usage is true and the project has no agent usage.")
+	Attribute("mcp_usage", ProjectMcpUsageType, "External end user and tool usage summary. Only set when include_usage is true and the project has no agent usage.")
 
 	Required("summary")
+})
+
+var ProjectMcpUsageType = Type("ProjectMcpUsage", func() {
+	Description("External end user and MCP tool usage for a project in a time period")
+
+	Attribute("end_users_count", Int64, "Number of distinct external end users with activity in the period")
+	Attribute("top_end_users", ArrayOf(ProjectMcpEndUserType), "Top 5 external end users by tool calls")
+	Attribute("top_tools", ArrayOf(ProjectMcpToolUsageType), "Top 5 tools by calls")
+	Attribute("top_failing_tools", ArrayOf(ProjectMcpToolUsageType), "Top 5 tools with at least one failure, ranked by failure rate, then by failures")
+
+	Required("end_users_count", "top_end_users", "top_tools", "top_failing_tools")
+})
+
+var ProjectMcpEndUserType = Type("ProjectMcpEndUser", func() {
+	Description("Tool calls made by one external end user")
+
+	Attribute("user_id", String, "External end user ID")
+	Attribute("tool_calls", Int64, "Number of tool calls")
+
+	Required("user_id", "tool_calls")
+})
+
+var ProjectMcpToolUsageType = Type("ProjectMcpToolUsage", func() {
+	Description("Calls and failures for one tool made by external end users")
+
+	Attribute("urn", String, "Tool URN, or the tool name for agent hook events")
+	Attribute("calls", Int64, "Number of calls")
+	Attribute("failures", Int64, "Number of failed calls")
+
+	Required("urn", "calls", "failures")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {

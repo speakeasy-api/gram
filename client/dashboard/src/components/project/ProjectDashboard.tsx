@@ -103,6 +103,7 @@ export function ProjectDashboard(): JSX.Element {
   const {
     data: overview,
     isPending: isOverviewPending,
+    isError: isOverviewError,
     isFetching: isOverviewFetching,
   } = useQuery({
     ...buildProjectOverviewQuery(client, {
@@ -230,84 +231,65 @@ export function ProjectDashboard(): JSX.Element {
     );
   }, [usageByAgentData]);
 
-  // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
-  // tool-call activity. Only returned when the project has no hook data.
-  // Goa omits an empty list from the JSON, so a loaded overview without the
-  // field means no external users, not a pending fetch.
-  const externalUsersData = useMemo(
-    () => (overview ? (overview.externalUsers ?? []) : undefined),
-    [overview],
+  // MCP-hosting fallback: external end users (customer-supplied IDs) and
+  // their tool-call activity, ranked by the server. Only returned when the
+  // project has no hook data, so a loaded overview without it means no
+  // activity, not a pending fetch. A failed overview settles it too, so the
+  // MCP cards never wait forever.
+  const mcpUsage = useMemo(
+    () =>
+      overview || isOverviewError
+        ? (overview?.mcpUsage ?? {
+            endUsersCount: 0,
+            topEndUsers: [],
+            topTools: [],
+            topFailingTools: [],
+          })
+        : undefined,
+    [overview, isOverviewError],
   );
 
-  // Top end-users by MCP tool-call volume. External IDs are customer-supplied,
-  // not Speakeasy members, so they render raw (no member resolution).
+  // External IDs are customer-supplied, not Speakeasy members, so they render
+  // raw (no member resolution).
   const topEndUsers = useMemo(
     () =>
-      [...(externalUsersData ?? [])]
-        .sort((a, b) => b.totalToolCalls - a.totalToolCalls)
-        .slice(0, 5)
-        .map((u) => ({
-          key: u.userId,
-          label: u.userId,
-          value: u.totalToolCalls,
-        })),
-    [externalUsersData],
+      (mcpUsage?.topEndUsers ?? []).map((u) => ({
+        key: u.userId,
+        label: u.userId,
+        value: u.toolCalls,
+      })),
+    [mcpUsage],
   );
 
-  // Most-used tools = aggregate per-user tool breakdowns by URN across all
-  // external users (replaces Most Used Agents, which has no MCP equivalent).
-  const mostUsedTools = useMemo(() => {
-    const byTool = new Map<string, number>();
-    for (const u of externalUsersData ?? []) {
-      for (const t of u.tools) {
-        byTool.set(t.urn, (byTool.get(t.urn) ?? 0) + t.count);
-      }
-    }
-    return [...byTool.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([urn, count]) => ({
-        key: urn,
-        label: toolLabelFromUrn(urn),
-        value: count,
-      }));
-  }, [externalUsersData]);
+  const mostUsedTools = useMemo(
+    () =>
+      (mcpUsage?.topTools ?? []).map((t) => ({
+        key: t.urn,
+        label: toolLabelFromUrn(t.urn),
+        value: t.calls,
+      })),
+    [mcpUsage],
+  );
 
-  // Top tools by failure rate (MCP view): aggregate per-tool call + failure
-  // counts across external users; rank by failure rate, tie-broken by absolute
-  // failures so a high-volume failing tool outranks a one-off 100% failure.
-  const topToolsByFailureRate = useMemo(() => {
-    const agg = new Map<string, { calls: number; failures: number }>();
-    for (const u of externalUsersData ?? []) {
-      for (const t of u.tools) {
-        const cur = agg.get(t.urn) ?? { calls: 0, failures: 0 };
-        cur.calls += t.count;
-        cur.failures += t.failureCount;
-        agg.set(t.urn, cur);
-      }
-    }
-    return [...agg.entries()]
-      .filter(([, v]) => v.failures > 0)
-      .map(([urn, v]) => ({
-        key: urn,
-        label: toolLabelFromUrn(urn),
-        rate: v.calls > 0 ? (v.failures / v.calls) * 100 : 0,
-        failures: v.failures,
-      }))
-      .sort((a, b) => b.rate - a.rate || b.failures - a.failures)
-      .slice(0, 5)
-      .map((t) => ({
-        key: t.key,
-        label: t.label,
-        // Keep the raw rate for the bar width: every tool here has ≥1 failure,
-        // so rounding (e.g. 0.4% → 0) would zero out the bar and the label.
-        value: t.rate,
-        // Never render "0%" in a failures-only list; show "<1%" below 1%.
-        valueLabel: t.rate < 1 ? "<1%" : `${Math.round(t.rate)}%`,
-      }));
-  }, [externalUsersData]);
+  const topToolsByFailureRate = useMemo(
+    () =>
+      (mcpUsage?.topFailingTools ?? []).map((t) => {
+        const rate = t.calls > 0 ? (t.failures / t.calls) * 100 : 0;
+        return {
+          key: t.urn,
+          label: toolLabelFromUrn(t.urn),
+          // Keep the raw rate for the bar width: every tool here has ≥1
+          // failure, so rounding (e.g. 0.4% → 0) would zero out the bar and
+          // the label.
+          value: rate,
+          // Never render "0%" in a failures-only list; show "<1%" below 1%.
+          valueLabel: rate < 1 ? "<1%" : `${Math.round(rate)}%`,
+        };
+      }),
+    [mcpUsage],
+  );
 
-  const endUsersCount = externalUsersData?.length ?? 0;
+  const endUsersCount = mcpUsage?.endUsersCount ?? 0;
 
   const isTopUsersLoading =
     logsEnabled &&
@@ -318,7 +300,7 @@ export function ProjectDashboard(): JSX.Element {
   // Agent breakdown (hook view) / external users (MCP view) still loading
   // after mode is known.
   const isAgentsLoading = hasHookData && isUsageByAgentPending;
-  const mcpUsersPending = !hasHookData && externalUsersData === undefined;
+  const mcpUsersPending = !hasHookData && mcpUsage === undefined;
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =

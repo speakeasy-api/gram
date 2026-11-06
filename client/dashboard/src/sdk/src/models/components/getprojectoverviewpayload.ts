@@ -14,7 +14,7 @@ export type GetProjectOverviewPayload = {
    */
   from: Date;
   /**
-   * Also return the project home usage breakdowns (usage_by_user, usage_by_agent, external_users) in the same response
+   * Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response
    */
   includeUsage?: boolean | undefined;
   /**

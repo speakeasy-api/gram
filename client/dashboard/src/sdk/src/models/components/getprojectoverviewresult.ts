@@ -8,20 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ProjectMcpUsage,
+  ProjectMcpUsage$inboundSchema,
+} from "./projectmcpusage.js";
+import {
   ProjectOverviewSummary,
   ProjectOverviewSummary$inboundSchema,
 } from "./projectoverviewsummary.js";
 import { QueryResult, QueryResult$inboundSchema } from "./queryresult.js";
-import { UserSummary, UserSummary$inboundSchema } from "./usersummary.js";
 
 /**
  * Result of project overview query
  */
 export type GetProjectOverviewResult = {
   /**
-   * Every external end user with activity in the period. Only set when include_usage is true and the project has no agent usage.
+   * External end user and MCP tool usage for a project in a time period
    */
-  externalUsers?: Array<UserSummary> | undefined;
+  mcpUsage?: ProjectMcpUsage | undefined;
   /**
    * Aggregated project-level summary metrics for a time period
    */
@@ -42,14 +45,14 @@ export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    external_users: z.optional(z.array(UserSummary$inboundSchema)),
+    mcp_usage: z.optional(ProjectMcpUsage$inboundSchema),
     summary: ProjectOverviewSummary$inboundSchema,
     usage_by_agent: z.optional(QueryResult$inboundSchema),
     usage_by_user: z.optional(QueryResult$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "external_users": "externalUsers",
+      "mcp_usage": "mcpUsage",
       "usage_by_agent": "usageByAgent",
       "usage_by_user": "usageByUser",
     });

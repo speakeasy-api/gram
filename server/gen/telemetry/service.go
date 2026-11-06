@@ -492,7 +492,7 @@ type GetProjectOverviewPayload struct {
 	// End time in ISO 8601 format
 	To string
 	// Also return the project home usage breakdowns (usage_by_user,
-	// usage_by_agent, external_users) in the same response
+	// usage_by_agent, mcp_usage) in the same response
 	IncludeUsage bool
 }
 
@@ -508,9 +508,9 @@ type GetProjectOverviewResult struct {
 	// series). Only set when include_usage is true and usage_by_user has agent
 	// usage.
 	UsageByAgent *QueryResult
-	// Every external end user with activity in the period. Only set when
-	// include_usage is true and the project has no agent usage.
-	ExternalUsers []*UserSummary
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and the project has no agent usage.
+	McpUsage *ProjectMcpUsage
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -1621,6 +1621,37 @@ type ObservabilitySummary struct {
 	FailedToolCalls int64
 	// Average tool latency in milliseconds
 	AvgLatencyMs float64
+}
+
+// Tool calls made by one external end user
+type ProjectMcpEndUser struct {
+	// External end user ID
+	UserID string
+	// Number of tool calls
+	ToolCalls int64
+}
+
+// Calls and failures for one tool made by external end users
+type ProjectMcpToolUsage struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string
+	// Number of calls
+	Calls int64
+	// Number of failed calls
+	Failures int64
+}
+
+// External end user and MCP tool usage for a project in a time period
+type ProjectMcpUsage struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUser
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsage
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsage
 }
 
 // Aggregated project-level summary metrics for a time period

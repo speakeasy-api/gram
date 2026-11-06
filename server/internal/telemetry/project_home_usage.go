@@ -1,32 +1,36 @@
 package telemetry
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"sync"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // projectHomeUsage is the usage section of the project home page, returned
 // with the overview so the page loads with one request.
 type projectHomeUsage struct {
-	byUser        *telem_gen.QueryResult
-	byAgent       *telem_gen.QueryResult
-	externalUsers []*telem_gen.UserSummary
+	byUser   *telem_gen.QueryResult
+	byAgent  *telem_gen.QueryResult
+	mcpUsage *telem_gen.ProjectMcpUsage
 }
 
 // fetchProjectHomeUsage runs the project home usage reads in process.
 //
 // The per-user and per-agent reads run at the same time. When the per-user
 // read shows no agent usage (or the caller lacks org:read), the page falls back
-// to the MCP view, which needs every external end user.
+// to the MCP view, which reads the external end user and tool summary.
 //
 // It never fails: an error drops the affected section, so the overview tiles
 // still render.
-func (s *Service) fetchProjectHomeUsage(ctx context.Context, from, to, projectID string) projectHomeUsage {
+func (s *Service) fetchProjectHomeUsage(ctx context.Context, from, to, projectID string, timeStart, timeEnd int64) projectHomeUsage {
 	var (
 		usage      projectHomeUsage
 		byUserErr  error
@@ -51,10 +55,14 @@ func (s *Service) fetchProjectHomeUsage(ctx context.Context, from, to, projectID
 	// No agent usage: the page shows the MCP view, which never reads the
 	// per-agent breakdown.
 	usage.byAgent = nil
-	users, err := s.listAllExternalUsers(ctx, from, to)
-	s.logUsageError(ctx, err, "error listing project external users")
+	mcp, err := s.chRepo.GetProjectMcpUsage(ctx, repo.GetProjectMcpUsageParams{
+		GramProjectID: projectID,
+		TimeStart:     timeStart,
+		TimeEnd:       timeEnd,
+	})
+	s.logUsageError(ctx, err, "error reading project MCP usage")
 	// Non-nil even on error, so the client knows the section has settled.
-	usage.externalUsers = users
+	usage.mcpUsage = buildProjectMcpUsage(mcp)
 	return usage
 }
 
@@ -79,42 +87,58 @@ func (s *Service) queryProjectUsage(ctx context.Context, from, to, projectID, gr
 	return res, nil
 }
 
-// listAllExternalUsers follows the searchUsers cursor to the end.
-func (s *Service) listAllExternalUsers(ctx context.Context, from, to string) ([]*telem_gen.UserSummary, error) {
-	users := []*telem_gen.UserSummary{}
-	var cursor *string
-	for {
-		res, err := s.SearchUsers(ctx, &telem_gen.SearchUsersPayload{
-			ApikeyToken:      nil,
-			SessionToken:     nil,
-			ProjectSlugInput: nil,
-			Filter: &telem_gen.SearchUsersFilter{
-				From:          from,
-				To:            to,
-				DeploymentID:  nil,
-				UserIds:       nil,
-				EventSource:   nil,
-				HookSource:    nil,
-				AccountType:   nil,
-				ExternalOrgID: nil,
-			},
-			UserType: "external",
-			GroupBy:  "employee",
-			Cursor:   cursor,
-			Sort:     "desc",
-			Limit:    1000,
-			Metrics:  "full",
-			Source:   "logs",
+// projectMcpTopToolsLimit is how many tools each MCP view tool list returns.
+// The project home cards show the top 5.
+const projectMcpTopToolsLimit = 5
+
+// buildProjectMcpUsage ranks and trims the tool lists. Most used tools rank by
+// calls. Failing tools keep only tools with a failure and rank by failure rate,
+// then by failures, so a high-volume failing tool outranks a one-off failure
+// at the same rate.
+func buildProjectMcpUsage(usage repo.ProjectMcpUsage) *telem_gen.ProjectMcpUsage {
+	endUsers := make([]*telem_gen.ProjectMcpEndUser, 0, len(usage.TopEndUsers))
+	for _, u := range usage.TopEndUsers {
+		endUsers = append(endUsers, &telem_gen.ProjectMcpEndUser{
+			UserID:    u.UserID,
+			ToolCalls: int64(u.ToolCalls), //nolint:gosec // Bounded count
 		})
-		if err != nil {
-			return users, err
-		}
-		users = append(users, res.Users...)
-		if res.NextCursor == nil || *res.NextCursor == "" {
-			return users, nil
-		}
-		cursor = res.NextCursor
 	}
+
+	tools := usage.Tools
+	slices.SortFunc(tools, func(a, b repo.ProjectMcpToolRow) int {
+		return cmp.Or(cmp.Compare(b.Calls, a.Calls), strings.Compare(a.ToolURN, b.ToolURN))
+	})
+
+	failing := slices.DeleteFunc(slices.Clone(tools), func(t repo.ProjectMcpToolRow) bool { return t.Failures == 0 })
+	slices.SortFunc(failing, func(a, b repo.ProjectMcpToolRow) int {
+		// Compare failures/calls by cross-multiplying, which stays exact.
+		// Every failure is also a call, so calls is never zero here.
+		return cmp.Or(
+			cmp.Compare(b.Failures*a.Calls, a.Failures*b.Calls),
+			cmp.Compare(b.Failures, a.Failures),
+			strings.Compare(a.ToolURN, b.ToolURN),
+		)
+	})
+
+	return &telem_gen.ProjectMcpUsage{
+		EndUsersCount:   int64(usage.EndUsersCount), //nolint:gosec // Bounded count
+		TopEndUsers:     endUsers,
+		TopTools:        toProjectMcpToolUsage(tools),
+		TopFailingTools: toProjectMcpToolUsage(failing),
+	}
+}
+
+func toProjectMcpToolUsage(rows []repo.ProjectMcpToolRow) []*telem_gen.ProjectMcpToolUsage {
+	rows = rows[:min(len(rows), projectMcpTopToolsLimit)]
+	out := make([]*telem_gen.ProjectMcpToolUsage, 0, len(rows))
+	for _, t := range rows {
+		out = append(out, &telem_gen.ProjectMcpToolUsage{
+			Urn:      t.ToolURN,
+			Calls:    int64(t.Calls),    //nolint:gosec // Bounded count
+			Failures: int64(t.Failures), //nolint:gosec // Bounded count
+		})
+	}
+	return out
 }
 
 // logUsageError skips client faults and authorization denials: a caller

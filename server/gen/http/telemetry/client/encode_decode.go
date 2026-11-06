@@ -9980,6 +9980,69 @@ func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseB
 	return res
 }
 
+// unmarshalProjectMcpUsageResponseBodyToTelemetryProjectMcpUsage builds a
+// value of type *telemetry.ProjectMcpUsage from a value of type
+// *ProjectMcpUsageResponseBody.
+func unmarshalProjectMcpUsageResponseBodyToTelemetryProjectMcpUsage(v *ProjectMcpUsageResponseBody) *telemetry.ProjectMcpUsage {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.ProjectMcpUsage{
+		EndUsersCount: *v.EndUsersCount,
+	}
+	res.TopEndUsers = make([]*telemetry.ProjectMcpEndUser, len(v.TopEndUsers))
+	for i, val := range v.TopEndUsers {
+		if val == nil {
+			res.TopEndUsers[i] = nil
+			continue
+		}
+		res.TopEndUsers[i] = unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser(val)
+	}
+	res.TopTools = make([]*telemetry.ProjectMcpToolUsage, len(v.TopTools))
+	for i, val := range v.TopTools {
+		if val == nil {
+			res.TopTools[i] = nil
+			continue
+		}
+		res.TopTools[i] = unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(val)
+	}
+	res.TopFailingTools = make([]*telemetry.ProjectMcpToolUsage, len(v.TopFailingTools))
+	for i, val := range v.TopFailingTools {
+		if val == nil {
+			res.TopFailingTools[i] = nil
+			continue
+		}
+		res.TopFailingTools[i] = unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser builds a
+// value of type *telemetry.ProjectMcpEndUser from a value of type
+// *ProjectMcpEndUserResponseBody.
+func unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser(v *ProjectMcpEndUserResponseBody) *telemetry.ProjectMcpEndUser {
+	res := &telemetry.ProjectMcpEndUser{
+		UserID:    *v.UserID,
+		ToolCalls: *v.ToolCalls,
+	}
+
+	return res
+}
+
+// unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage
+// builds a value of type *telemetry.ProjectMcpToolUsage from a value of type
+// *ProjectMcpToolUsageResponseBody.
+func unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(v *ProjectMcpToolUsageResponseBody) *telemetry.ProjectMcpToolUsage {
+	res := &telemetry.ProjectMcpToolUsage{
+		Urn:      *v.Urn,
+		Calls:    *v.Calls,
+		Failures: *v.Failures,
+	}
+
+	return res
+}
+
 // unmarshalUnproxiedMcpServerUsageBucketResponseBodyToTelemetryUnproxiedMcpServerUsageBucket
 // builds a value of type *telemetry.UnproxiedMcpServerUsageBucket from a value
 // of type *UnproxiedMcpServerUsageBucketResponseBody.

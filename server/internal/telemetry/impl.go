@@ -2659,7 +2659,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	var usageWG sync.WaitGroup
 	if payload.IncludeUsage {
 		usageWG.Go(func() {
-			usage = s.fetchProjectHomeUsage(ctx, payload.From, payload.To, projectID)
+			usage = s.fetchProjectHomeUsage(ctx, payload.From, payload.To, projectID, timeStart, timeEnd)
 		})
 	}
 
@@ -2689,9 +2689,9 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			int64(clickHouseResult.ActiveServersCount), //nolint:gosec // Bounded count that won't overflow int64
 			toTopServers(topServersWithOverrides),
 		),
-		UsageByUser:   usage.byUser,
-		UsageByAgent:  usage.byAgent,
-		ExternalUsers: usage.externalUsers,
+		UsageByUser:  usage.byUser,
+		UsageByAgent: usage.byAgent,
+		McpUsage:     usage.mcpUsage,
 	}, nil
 }
 
