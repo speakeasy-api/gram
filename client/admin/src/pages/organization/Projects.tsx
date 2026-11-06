@@ -1,18 +1,29 @@
-import { useMemo, type JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useRef, type JSX } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
+import { toast } from "sonner";
 
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import {
   dataTableFeatures,
   DataTable as Table,
   type DataTableFeatures,
 } from "@/components/data-table";
+import { Button } from "@/components/ui/button";
 import {
+  invalidateProjects,
   organizationProjectsQuery,
   organizationQuery,
 } from "@/lib/adminQueries";
-import type { AdminOrganization, AdminProject } from "@/lib/gramAdminApi";
+import {
+  getProjectRedeployPreview,
+  redeployProject,
+  type AdminOrganization,
+  type AdminProject,
+  type AdminProjectRedeployPreview,
+  type RedeployProjectRequest,
+} from "@/lib/gramAdminApi";
 import { byOldestFirst, fmtDateShort } from "@/lib/utils";
 
 // `isPending`, not `isLoading`: React Query makes the second of those
@@ -26,9 +37,102 @@ function projectsMessage(isPending: boolean, isError: boolean): string {
 
 const projectColumn = createColumnHelper<DataTableFeatures, AdminProject>();
 
+function RedeployDetails({
+  preview,
+}: {
+  preview: AdminProjectRedeployPreview;
+}): JSX.Element {
+  return (
+    <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+      <li>
+        Clones deployment{" "}
+        <span className="font-mono break-all">
+          {preview.active_deployment_id}
+        </span>
+      </li>
+      <li>{preview.openapi_assets} OpenAPI sources are processed again</li>
+      <li>{preview.function_assets} function sources redeploy their runners</li>
+      <li>{preview.packages} packages carry over</li>
+      <li>{preview.external_mcps} external MCP sources are dropped</li>
+      <li>The customer sees this in their deployments and audit log</li>
+    </ul>
+  );
+}
+
+function RedeployProjectButton({
+  organizationId,
+  project,
+}: {
+  organizationId: string;
+  project: AdminProject;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const [confirm, confirmDialog] = useConfirmDialog();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const mut = useMutation({
+    mutationFn: (request: RedeployProjectRequest) => redeployProject(request),
+    onSuccess: () => invalidateProjects(qc),
+  });
+
+  const redeploy = async (): Promise<void> => {
+    try {
+      const preview = await getProjectRedeployPreview(
+        organizationId,
+        project.id,
+      );
+      const confirmed = await confirm({
+        title: `Redeploy ${project.name}?`,
+        description:
+          "The current deployment stays active until the new one succeeds, and stays active if it fails.",
+        details: <RedeployDetails preview={preview} />,
+        confirmLabel: "Redeploy",
+      });
+      // The dialog has no opener to give the keyboard back to on its own.
+      buttonRef.current?.focus();
+      if (!confirmed) return;
+
+      const result = await mut.mutateAsync({
+        organization_id: organizationId,
+        project_id: project.id,
+        expected_active_deployment_id: preview.active_deployment_id,
+      });
+      toast.success("Redeploy started", { description: result.deployment_id });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to redeploy",
+      );
+    }
+  };
+
+  // React events cross portals, so without this a click inside the dialog would
+  // reach the row and open the project.
+  return (
+    <div
+      role="presentation"
+      onClick={(event) => {
+        event.stopPropagation();
+      }}
+    >
+      <Button
+        ref={buttonRef}
+        variant="outline"
+        size="sm"
+        disabled={mut.isPending}
+        aria-label={`Redeploy ${project.name}`}
+        onClick={() => {
+          void redeploy();
+        }}
+      >
+        Redeploy
+      </Button>
+      {confirmDialog}
+    </div>
+  );
+}
+
 // The column set is one record's projects, so the organization is the same for
 // every row and the link takes it from the route rather than from the row.
-function projectColumns(idOrSlug: string) {
+function projectColumns(idOrSlug: string, organizationId: string) {
   return projectColumn.columns([
     projectColumn.accessor("name", {
       header: "Name",
@@ -79,6 +183,16 @@ function projectColumns(idOrSlug: string) {
         <span className="text-sm">{fmtDateShort(row.original.created_at)}</span>
       ),
     }),
+    projectColumn.display({
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <RedeployProjectButton
+          organizationId={organizationId}
+          project={row.original}
+        />
+      ),
+    }),
   ]);
 }
 
@@ -113,7 +227,10 @@ export function Projects({
 
   // Rebuilt only when the record changes. A fresh column set each render
   // rebuilds the row model with it.
-  const columns = useMemo(() => projectColumns(idOrSlug), [idOrSlug]);
+  const columns = useMemo(
+    () => projectColumns(idOrSlug, org.id),
+    [idOrSlug, org.id],
+  );
 
   const table = useTable({
     features: dataTableFeatures,
