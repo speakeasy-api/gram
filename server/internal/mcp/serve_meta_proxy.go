@@ -187,7 +187,9 @@ func memberSessionKey(route any, token string) string {
 // A person connects the member on its own page, so the message gives them
 // that page's URL to open; an agent shows it to them rather than retrying.
 func memberAuthFailure(member metaMember, dial memberDial) error {
-	if dial.connectURL == "" && !dial.clientCredential && dial.ownerReconnect != nil {
+	// A member signed in by configured headers is not the owner's to fix: the
+	// agent's sign-in step does not set them.
+	if dial.connectURL == "" && !dial.clientCredential && !dial.configuredHeaders && dial.ownerReconnect != nil {
 		if fix := dial.ownerReconnect(); fix.url != "" {
 			return agentMemberAuthFailure(member, dial, fix)
 		}

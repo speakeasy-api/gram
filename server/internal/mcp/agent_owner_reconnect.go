@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -47,6 +49,24 @@ func (r agentReconnect) ask(action string) string {
 		who = fmt.Sprintf("its owner, %s,", r.owner)
 	}
 	return fmt.Sprintf("Ask %s to open %s and %s it, then retry", who, r.url, action)
+}
+
+// maxOwnerNameRunes bounds the owner's name in text the agent reads.
+const maxOwnerNameRunes = 64
+
+// ownerNameForAgent is the owner's display name as it goes into text an agent
+// reads: one line of printable characters, at most maxOwnerNameRunes long. A
+// display name is the owner's own input, so it cannot carry line breaks or
+// control characters that would make it read as separate instructions.
+func ownerNameForAgent(name string) string {
+	fields := strings.FieldsFunc(name, func(r rune) bool {
+		return unicode.IsSpace(r) || !unicode.IsPrint(r)
+	})
+	clean := []rune(strings.Join(fields, " "))
+	if len(clean) > maxOwnerNameRunes {
+		clean = clean[:maxOwnerNameRunes]
+	}
+	return strings.TrimSpace(string(clean))
 }
 
 // agentOwnerReconnect builds an agent gateway's reconnect links. It reads the
@@ -105,7 +125,7 @@ func (s *Service) newAgentOwnerReconnect(ctx context.Context, logger *slog.Logge
 			case err != nil:
 				return record, fmt.Errorf("load agent owner for reconnect link: %w", err)
 			default:
-				record.owner = profile.DisplayName
+				record.owner = ownerNameForAgent(profile.DisplayName)
 			}
 			if agent.ProjectID.Valid {
 				slug, err := project(agent.ProjectID.UUID)

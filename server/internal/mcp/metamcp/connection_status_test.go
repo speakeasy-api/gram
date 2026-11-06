@@ -179,13 +179,14 @@ func TestConnectionStatusText_AgentOwnerReconnects(t *testing.T) {
 	}
 	text := result.Text()
 	require.Contains(t, text, "- Linear: needs attention (needs re-authentication)")
-	require.Contains(t, text, "Ask its owner, Maya Chen, to open "+link+" and reconnect them, then call connection_status again to refresh.")
+	require.Contains(t, text, "Ask its owner, Maya Chen, to open "+link+" and connect or reconnect them, then call connection_status again to refresh.")
+	require.NotContains(t, text, "These servers need re-authentication", "a server's own line says what is wrong")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "sign-in page")
 
 	result.Owner = &ConnectionStatusOwner{Name: "", ReconnectURL: ""}
 	text = result.Text()
-	require.Contains(t, text, "Ask its owner to reconnect them in Speakeasy")
+	require.Contains(t, text, "Ask its owner to check them in Speakeasy")
 	require.NotContains(t, text, "administrator")
 
 	result.Owner = nil

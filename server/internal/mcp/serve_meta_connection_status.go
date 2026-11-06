@@ -114,6 +114,9 @@ func agentConnectionOwner(gate metaGateContext, members []metaMember, servers []
 		if status := servers[i].Status; status != metamcp.SignInNotConnected && status != metamcp.SignInError {
 			continue
 		}
+		if servers[i].Detail == memberCheckFailedDetail {
+			continue
+		}
 		fix := gate.agentReconnectFor(member)
 		return &metamcp.ConnectionStatusOwner{Name: fix.owner, ReconnectURL: fix.url}
 	}
@@ -182,7 +185,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	required, err := requiresAuth(ctx, member)
 	if err != nil {
 		logger.ErrorContext(ctx, "check member upstream authentication", attr.SlogError(err))
-		return metamcp.SignInError, "could not check this server", nil
+		return metamcp.SignInError, memberCheckFailedDetail, nil
 	}
 	if required {
 		return metamcp.SignInNotConnected, "", nil
@@ -274,8 +277,13 @@ func memberErrorMessage(err error) string {
 	if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 		return memberErr.message
 	}
-	return "could not check this server"
+	return memberCheckFailedDetail
 }
+
+// memberCheckFailedDetail is the detail of a member whose status could not be
+// read at all. Nothing says its connection is broken, so an agent is not sent
+// to its owner to reconnect it.
+const memberCheckFailedDetail = "could not check this server"
 
 // handleMetaResourcesList lists the gateway's single UI resource.
 func handleMetaResourcesList(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {

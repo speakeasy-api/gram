@@ -693,7 +693,7 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	rpc := decodeRPCResponse(t, response)
 	text, isError = metaToolResultText(t, rpc)
 	require.False(t, isError, text)
-	require.Contains(t, text, "this agent cannot sign in itself. "+owner+" to open ")
+	require.Contains(t, text, "that this agent cannot give itself. "+owner+" to open ")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "sign-in page")
 	var result struct {

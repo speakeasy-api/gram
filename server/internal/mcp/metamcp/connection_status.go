@@ -200,8 +200,10 @@ func (r ConnectionStatusResult) signInHint() string {
 	if r.Owner.Name != "" {
 		who = fmt.Sprintf("its owner, %s,", r.Owner.Name)
 	}
+	// Each server's line says what is wrong; a server never signed in, or one
+	// that failed for another reason, is not necessarily a broken sign-in.
 	if r.Owner.ReconnectURL == "" {
-		return fmt.Sprintf("\nThese servers need re-authentication, and this agent cannot sign in itself. Ask %s to reconnect them in Speakeasy, then call %s again to refresh.\n", who, ToolConnectionStatus)
+		return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to check them in Speakeasy, then call %s again to refresh.\n", who, ToolConnectionStatus)
 	}
-	return fmt.Sprintf("\nThese servers need re-authentication, and this agent cannot sign in itself. Ask %s to open %s and reconnect them, then call %s again to refresh.\n", who, r.Owner.ReconnectURL, ToolConnectionStatus)
+	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.Owner.ReconnectURL, ToolConnectionStatus)
 }
