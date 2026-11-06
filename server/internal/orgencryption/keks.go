@@ -142,6 +142,14 @@ func (r *keyResolver) checkKey(row repo.GetEncryptionKeyForUseRow) (string, erro
 		if err := r.checkManagedResource(row.ResourceName.String); err != nil {
 			return "", err
 		}
+		if row.KmsDisabledAt.Valid {
+			return "", fmt.Errorf("%w: managed key was disabled", ErrInvalidKey)
+		}
+		// The row names the credential, but only the configured platform
+		// credential may reach a managed key.
+		if !row.CredentialID.Valid || row.CredentialID.UUID != r.cfg.PlatformCredentialID {
+			return "", fmt.Errorf("%w: managed key does not use the configured platform credential", ErrPlatformCredentialUnusable)
+		}
 		if !strings.EqualFold(strings.TrimSpace(row.ImpersonateServiceAccount.String), r.cfg.PlatformServiceAccount) {
 			return "", fmt.Errorf("%w: managed key credential does not impersonate the platform service account", ErrPlatformCredentialUnusable)
 		}

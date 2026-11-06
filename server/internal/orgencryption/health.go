@@ -25,6 +25,11 @@ const (
 	// checkOrganizationTimeout bounds one organization's probe, so one slow
 	// customer KMS cannot stall a sweep.
 	checkOrganizationTimeout = time.Minute
+
+	// recordCheckTimeout bounds recording a probe's outcome. It runs on a
+	// context detached from the probe's, so a probe that timed out still
+	// advances the check time and moves to the back of the queue.
+	recordCheckTimeout = 10 * time.Second
 )
 
 // Check probes the organization's KEKs: it unwraps every DEK under each KEK
@@ -47,7 +52,9 @@ func (p *Provisioner) Check(ctx context.Context, organizationID string) error {
 	if probeErr != nil {
 		checkError = new(conv.TruncateDetail(probeErr.Error(), reasonMaxLen))
 	}
-	if err := q.RecordEncryptionKeyCheck(ctx, repo.RecordEncryptionKeyCheckParams{
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordCheckTimeout)
+	defer cancel()
+	if err := q.RecordEncryptionKeyCheck(recordCtx, repo.RecordEncryptionKeyCheckParams{
 		LastKekCheckError: conv.PtrToPGText(checkError),
 		OrganizationID:    organizationID,
 	}); err != nil {
@@ -113,10 +120,12 @@ func (p *Provisioner) probeKey(ctx context.Context, logger *slog.Logger, organiz
 
 	rewrapped := 0
 	for _, row := range rows {
-		if !row.WrapID.Valid {
-			continue
-		}
 		dek := row.DataEncryptionKey
+		// Every readable DEK is wrapped by every KEK the configuration reads
+		// with, so a missing wrap leaves that DEK unreadable under this key.
+		if !row.WrapID.Valid {
+			return rewrapped, fmt.Errorf("%w: data encryption key %s has no wrap under key %s", ErrKeyUnavailable, dek.ID, keyID)
+		}
 
 		dataKey, err := key.unwrap(ctx, organizationID, dek.ID, dek.UseCase, row.WrappedKey)
 		if err != nil {
@@ -218,30 +227,63 @@ func (p *Provisioner) SweepManagedKeys(ctx context.Context, pageSize int32) (int
 	disabled := 0
 	var errs []error
 	for _, row := range rows {
-		if err := p.disableManagedKey(ctx, q, client, row); err != nil {
+		done, err := p.disableManagedKey(ctx, client, row)
+		if err != nil {
 			p.logger.WarnContext(ctx, "disable unused managed encryption key", attr.SlogOrganizationID(row.OrganizationID), attr.SlogError(err))
 			errs = append(errs, err)
 			continue
 		}
-		disabled++
+		if done {
+			disabled++
+		}
 	}
 
 	return disabled, errors.Join(errs...)
 }
 
-func (p *Provisioner) disableManagedKey(ctx context.Context, q *repo.Queries, client gcpkms.EncryptionProvisioningClient, row repo.ListManagedEncryptionKeysPendingDisableRow) error {
+// disableManagedKey disables one managed KEK while holding the organization
+// lock, after re-checking that nothing uses it. The pending list is a snapshot;
+// a switch that started using the key since then commits under the same lock,
+// and takes a share lock on the key that the disabled marker then refuses.
+// The KMS calls run inside the transaction: holding one organization's lock
+// for two management calls is cheap next to disabling a key in use.
+// It reports whether it disabled the key.
+func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.EncryptionProvisioningClient, row repo.ListManagedEncryptionKeysPendingDisableRow) (bool, error) {
 	if err := p.keys.checkManagedResource(row.ResourceName); err != nil {
-		return err
-	}
-	if err := client.DisableEncryptionKey(ctx, row.ResourceName); err != nil {
-		return fmt.Errorf("disable managed encryption key: %w", err)
-	}
-	if err := client.RevokeEncrypterDecrypter(ctx, row.ResourceName, p.cfg.Keys.PlatformServiceAccount); err != nil {
-		return fmt.Errorf("revoke platform grant on managed encryption key: %w", err)
-	}
-	if err := q.MarkManagedEncryptionKeyDisabled(ctx, repo.MarkManagedEncryptionKeyDisabledParams{ExternalKeyID: row.ExternalKeyID, OrganizationID: row.OrganizationID}); err != nil {
-		return fmt.Errorf("mark managed encryption key disabled: %w", err)
+		return false, err
 	}
 
-	return nil
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin managed key disable transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	q := repo.New(tx)
+	if err := lockOrganization(ctx, q, row.OrganizationID); err != nil {
+		return false, err
+	}
+	unused, err := q.ManagedEncryptionKeyIsUnused(ctx, repo.ManagedEncryptionKeyIsUnusedParams{ExternalKeyID: row.ExternalKeyID, OrganizationID: row.OrganizationID})
+	if err != nil {
+		return false, fmt.Errorf("re-check managed encryption key use: %w", err)
+	}
+	if !unused {
+		return false, nil
+	}
+
+	if err := client.DisableEncryptionKey(ctx, row.ResourceName); err != nil {
+		return false, fmt.Errorf("disable managed encryption key: %w", err)
+	}
+	if err := client.RevokeEncrypterDecrypter(ctx, row.ResourceName, p.cfg.Keys.PlatformServiceAccount); err != nil {
+		return false, fmt.Errorf("revoke platform grant on managed encryption key: %w", err)
+	}
+	if err := q.MarkManagedEncryptionKeyDisabled(ctx, repo.MarkManagedEncryptionKeyDisabledParams{ExternalKeyID: row.ExternalKeyID, OrganizationID: row.OrganizationID}); err != nil {
+		return false, fmt.Errorf("mark managed encryption key disabled: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, &commitError{err: err}
+	}
+
+	return true, nil
 }

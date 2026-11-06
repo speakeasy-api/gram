@@ -5,8 +5,9 @@
 // (KEK): a symmetric KMS key that Speakeasy mints on first use, or that the
 // customer supplies and controls. The KEK wraps one data encryption key (DEK)
 // per registered use case. DEKs encrypt application values locally with
-// AES-256-GCM, so KMS is only called to wrap or unwrap a DEK, and a plaintext
-// DEK is cached in memory for DataKeyCacheTTL.
+// AES-256-GCM. On the data path KMS only wraps and unwraps DEKs, and a
+// plaintext DEK is cached in memory for DataKeyCacheTTL; key management also
+// calls KMS to verify a KEK before using it.
 //
 // Every ciphertext binds the organization, the use case and the column it is
 // stored in as associated data, so a value cannot be moved to another
@@ -22,7 +23,9 @@
 // next writes them, so a use case whose rows are rarely rewritten keeps its
 // decrypt-only DEKs indefinitely.
 //
-// The package fails closed. An organization with no configuration, a
-// suspended configuration, or an unreachable KEK cannot encrypt or decrypt,
-// and nothing falls back to the application key.
+// The package fails closed, and nothing falls back to the application key. An
+// organization with no configuration cannot encrypt or decrypt at all. A
+// suspension stops a process within configCacheTTL of it being recorded. An
+// unreachable or revoked KEK stops a process once its cached DEK expires,
+// within DataKeyCacheTTL.
 package orgencryption

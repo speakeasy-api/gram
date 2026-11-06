@@ -169,19 +169,30 @@ func (q *Queries) CreateEncryptionExternalKey(ctx context.Context, arg CreateEnc
 	return i, err
 }
 
-const createEncryptionGcpKmsKey = `-- name: CreateEncryptionGcpKmsKey :exec
+const createEncryptionGcpKmsKey = `-- name: CreateEncryptionGcpKmsKey :one
 INSERT INTO gcp_kms_keys (external_key_id, resource_name)
-VALUES ($1, $2)
+SELECT ek.id, $1
+FROM external_keys AS ek
+WHERE ek.id = $2
+  AND ek.organization_id = $3::text
+  AND ek.provider = 'gcp_kms'
+RETURNING external_key_id
 `
 
 type CreateEncryptionGcpKmsKeyParams struct {
-	ExternalKeyID uuid.UUID
-	ResourceName  string
+	ResourceName   string
+	ExternalKeyID  uuid.UUID
+	OrganizationID string
 }
 
-func (q *Queries) CreateEncryptionGcpKmsKey(ctx context.Context, arg CreateEncryptionGcpKmsKeyParams) error {
-	_, err := q.db.Exec(ctx, createEncryptionGcpKmsKey, arg.ExternalKeyID, arg.ResourceName)
-	return err
+// The subtype row for a GCP KMS KEK. The supertype foreign key checks only id
+// and provider, so the insert selects the key with the organization predicate
+// and inserts nothing for another organization's key.
+func (q *Queries) CreateEncryptionGcpKmsKey(ctx context.Context, arg CreateEncryptionGcpKmsKeyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createEncryptionGcpKmsKey, arg.ResourceName, arg.ExternalKeyID, arg.OrganizationID)
+	var external_key_id uuid.UUID
+	err := row.Scan(&external_key_id)
+	return external_key_id, err
 }
 
 const createManagedEncryptionKey = `-- name: CreateManagedEncryptionKey :exec
@@ -349,6 +360,7 @@ SELECT
   ek.deleted,
   gcp.resource_name,
   (mek.external_key_id IS NOT NULL)::boolean AS managed,
+  mek.kms_disabled_at,
   ec.id AS credential_id,
   gic.impersonate_service_account,
   gic.wif_pool_id,
@@ -388,6 +400,7 @@ type GetEncryptionKeyForUseRow struct {
 	Deleted                   bool
 	ResourceName              pgtype.Text
 	Managed                   bool
+	KmsDisabledAt             pgtype.Timestamptz
 	CredentialID              uuid.NullUUID
 	ImpersonateServiceAccount pgtype.Text
 	WifPoolID                 pgtype.Text
@@ -411,6 +424,7 @@ func (q *Queries) GetEncryptionKeyForUse(ctx context.Context, arg GetEncryptionK
 		&i.Deleted,
 		&i.ResourceName,
 		&i.Managed,
+		&i.KmsDisabledAt,
 		&i.CredentialID,
 		&i.ImpersonateServiceAccount,
 		&i.WifPoolID,
@@ -731,6 +745,40 @@ func (q *Queries) ListReadableDataEncryptionKeys(ctx context.Context, organizati
 	return items, nil
 }
 
+const lockEncryptionKeyForSwitch = `-- name: LockEncryptionKeyForSwitch :one
+SELECT ek.id, (mek.external_key_id IS NOT NULL)::boolean AS managed, mek.kms_disabled_at
+FROM external_keys AS ek
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = $1
+  AND ek.organization_id = $2::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+FOR SHARE OF ek
+`
+
+type LockEncryptionKeyForSwitchParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockEncryptionKeyForSwitchRow struct {
+	ID            uuid.UUID
+	Managed       bool
+	KmsDisabledAt pgtype.Timestamptz
+}
+
+// Locks the KEK a switch moves to. FOR SHARE conflicts with the FOR UPDATE the
+// key delete takes, so a key deleted after the switch verified it is seen as
+// gone here rather than becoming the organization's KEK.
+func (q *Queries) LockEncryptionKeyForSwitch(ctx context.Context, arg LockEncryptionKeyForSwitchParams) (LockEncryptionKeyForSwitchRow, error) {
+	row := q.db.QueryRow(ctx, lockEncryptionKeyForSwitch, arg.ID, arg.OrganizationID)
+	var i LockEncryptionKeyForSwitchRow
+	err := row.Scan(&i.ID, &i.Managed, &i.KmsDisabledAt)
+	return i, err
+}
+
 const lockOrganizationForEncryption = `-- name: LockOrganizationForEncryption :one
 SELECT id
 FROM organization_metadata
@@ -746,6 +794,43 @@ func (q *Queries) LockOrganizationForEncryption(ctx context.Context, organizatio
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const managedEncryptionKeyIsUnused = `-- name: ManagedEncryptionKeyIsUnused :one
+SELECT EXISTS (
+  SELECT 1
+  FROM managed_encryption_keys AS mek
+  WHERE mek.external_key_id = $1
+    AND mek.organization_id = $2::text
+    AND mek.kms_disabled_at IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM organization_encryption_configs AS c
+      WHERE c.organization_id = mek.organization_id
+        AND c.deleted IS FALSE
+        AND (c.kek_external_key_id = mek.external_key_id OR c.previous_kek_external_key_id = mek.external_key_id)
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM data_encryption_key_wraps AS w
+      WHERE w.organization_id = mek.organization_id
+        AND w.external_key_id = mek.external_key_id
+        AND w.deleted IS FALSE
+    )
+) AS unused
+`
+
+type ManagedEncryptionKeyIsUnusedParams struct {
+	ExternalKeyID  uuid.UUID
+	OrganizationID string
+}
+
+// Re-checks, under the organization lock, that a managed KEK is still unused
+// and not yet disabled, so the sweep never disables a key a concurrent switch
+// just started using.
+func (q *Queries) ManagedEncryptionKeyIsUnused(ctx context.Context, arg ManagedEncryptionKeyIsUnusedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedEncryptionKeyIsUnused, arg.ExternalKeyID, arg.OrganizationID)
+	var unused bool
+	err := row.Scan(&unused)
+	return unused, err
 }
 
 const markManagedEncryptionKeyDisabled = `-- name: MarkManagedEncryptionKeyDisabled :exec

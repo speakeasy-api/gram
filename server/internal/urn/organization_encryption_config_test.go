@@ -62,3 +62,10 @@ func TestOrganizationEncryptionConfigRejectsInvalidValues(t *testing.T) {
 	_, err = urn.NewOrganizationEncryptionConfig(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
+
+func TestParseOrganizationEncryptionConfig_RejectsNilID(t *testing.T) {
+	t.Parallel()
+
+	_, err := urn.ParseOrganizationEncryptionConfig("organization_encryption_config:00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, urn.ErrInvalid)
+}

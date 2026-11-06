@@ -25,9 +25,17 @@ INSERT INTO external_keys (organization_id, external_credential_id, provider, pu
 VALUES (@organization_id, @external_credential_id, 'gcp_kms', 'encrypt', @algorithm, @name)
 RETURNING *;
 
--- name: CreateEncryptionGcpKmsKey :exec
+-- The subtype row for a GCP KMS KEK. The supertype foreign key checks only id
+-- and provider, so the insert selects the key with the organization predicate
+-- and inserts nothing for another organization's key.
+-- name: CreateEncryptionGcpKmsKey :one
 INSERT INTO gcp_kms_keys (external_key_id, resource_name)
-VALUES (@external_key_id, @resource_name);
+SELECT ek.id, @resource_name
+FROM external_keys AS ek
+WHERE ek.id = @external_key_id
+  AND ek.organization_id = @organization_id::text
+  AND ek.provider = 'gcp_kms'
+RETURNING external_key_id;
 
 -- name: CreateManagedEncryptionKey :exec
 INSERT INTO managed_encryption_keys (external_key_id, organization_id)
@@ -46,6 +54,7 @@ SELECT
   ek.deleted,
   gcp.resource_name,
   (mek.external_key_id IS NOT NULL)::boolean AS managed,
+  mek.kms_disabled_at,
   ec.id AS credential_id,
   gic.impersonate_service_account,
   gic.wif_pool_id,
@@ -168,6 +177,21 @@ WHERE dek.organization_id = @organization_id
   AND dek.deleted IS FALSE
 ORDER BY dek.id;
 
+-- Locks the KEK a switch moves to. FOR SHARE conflicts with the FOR UPDATE the
+-- key delete takes, so a key deleted after the switch verified it is seen as
+-- gone here rather than becoming the organization's KEK.
+-- name: LockEncryptionKeyForSwitch :one
+SELECT ek.id, (mek.external_key_id IS NOT NULL)::boolean AS managed, mek.kms_disabled_at
+FROM external_keys AS ek
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+FOR SHARE OF ek;
+
 -- name: StartEncryptionConfigSwitch :one
 UPDATE organization_encryption_configs
 SET state = 'switching',
@@ -271,6 +295,30 @@ WHERE mek.kms_disabled_at IS NULL
   )
 ORDER BY mek.external_key_id
 LIMIT @page_size;
+
+-- Re-checks, under the organization lock, that a managed KEK is still unused
+-- and not yet disabled, so the sweep never disables a key a concurrent switch
+-- just started using.
+-- name: ManagedEncryptionKeyIsUnused :one
+SELECT EXISTS (
+  SELECT 1
+  FROM managed_encryption_keys AS mek
+  WHERE mek.external_key_id = @external_key_id
+    AND mek.organization_id = @organization_id::text
+    AND mek.kms_disabled_at IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM organization_encryption_configs AS c
+      WHERE c.organization_id = mek.organization_id
+        AND c.deleted IS FALSE
+        AND (c.kek_external_key_id = mek.external_key_id OR c.previous_kek_external_key_id = mek.external_key_id)
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM data_encryption_key_wraps AS w
+      WHERE w.organization_id = mek.organization_id
+        AND w.external_key_id = mek.external_key_id
+        AND w.deleted IS FALSE
+    )
+) AS unused;
 
 -- name: MarkManagedEncryptionKeyDisabled :exec
 UPDATE managed_encryption_keys

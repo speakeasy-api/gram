@@ -43,6 +43,10 @@ const (
 
 	// DataKeyStateDecryptOnly still decrypts values sealed before a rotation.
 	DataKeyStateDecryptOnly DataKeyState = "decrypt_only"
+
+	// DataKeyStateRevoked never decrypts again. No operation revokes a DEK
+	// yet; the queries already treat it as unreadable.
+	DataKeyStateRevoked DataKeyState = "revoked"
 )
 
 const (

@@ -248,7 +248,7 @@ func (p *Provisioner) recordManagedConfig(ctx context.Context, organizationID st
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, false, fmt.Errorf("record managed encryption key: %w", err)
 	}
-	if err := q.CreateEncryptionGcpKmsKey(ctx, repo.CreateEncryptionGcpKmsKeyParams{ExternalKeyID: key.ID, ResourceName: keyName}); err != nil {
+	if _, err := q.CreateEncryptionGcpKmsKey(ctx, repo.CreateEncryptionGcpKmsKeyParams{ResourceName: keyName, ExternalKeyID: key.ID, OrganizationID: organizationID}); err != nil {
 		return repo.OrganizationEncryptionConfig{}, false, fmt.Errorf("record managed encryption key resource: %w", err)
 	}
 	if err := q.CreateManagedEncryptionKey(ctx, repo.CreateManagedEncryptionKeyParams{ExternalKeyID: key.ID, OrganizationID: organizationID}); err != nil {
@@ -498,6 +498,19 @@ func (p *Provisioner) SwitchKey(ctx context.Context, organizationID string, keyI
 	}
 	if err := requireConfigUnchanged(ctx, tq, config); err != nil {
 		return repo.OrganizationEncryptionConfig{}, err
+	}
+
+	// The key was verified before the transaction; re-check it under a lock
+	// that a concurrent delete or managed-key sweep must wait on.
+	target, err := tq.LockEncryptionKeyForSwitch(ctx, repo.LockEncryptionKeyForSwitchParams{ID: keyID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: key was deleted", ErrInvalidKey)
+	case err != nil:
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("lock key encryption key for switch: %w", err)
+	}
+	if target.Managed && target.KmsDisabledAt.Valid {
+		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("%w: managed key was disabled", ErrInvalidKey)
 	}
 
 	readable, err := tq.ListReadableDataEncryptionKeys(ctx, organizationID)
