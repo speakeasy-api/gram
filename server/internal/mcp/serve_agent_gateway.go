@@ -213,7 +213,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	if member.backend != metaMemberBackendProxied {
 		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
 		if err != nil {
-			return nil, fmt.Errorf("resolve hosted member credentials: %w", err)
+			return nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
 		}
 		return tokens, nil
 	}

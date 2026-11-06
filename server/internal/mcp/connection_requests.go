@@ -145,12 +145,19 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 }
 
 // recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
-func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code) {
+func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate))
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
+}
+
+// recordConsentRefusal records a member call refused because its approval no longer matches.
+func (s *Service) recordConsentRefusal(ctx context.Context, gate *metaGateContext, member metaMember, err error) {
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeConsentNotApproved, mcpconnectionattempts.Detail(string(consent.reason)))
+	}
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
