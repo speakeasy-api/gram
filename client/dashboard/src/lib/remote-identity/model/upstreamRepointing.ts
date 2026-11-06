@@ -71,8 +71,8 @@ export function useSharedIssuerImpact(
   // A failed refetch keeps the previous answer in data, which no longer counts.
   const preview = query.isError ? undefined : query.data;
   return {
-    servers: query.data?.servers ?? [],
-    hiddenCount: query.data?.hiddenServerCount ?? 0,
+    servers: preview?.servers ?? [],
+    hiddenCount: preview?.hiddenServerCount ?? 0,
     // A cached answer for an older binding state must not arm the confirm.
     pending: query.isFetching,
     failed: query.isError && refusal === undefined,

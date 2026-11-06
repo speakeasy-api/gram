@@ -139,6 +139,8 @@ func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
 	require.Equal(t, []string{unclaimed.String()}, preview.ReleaseClientIds)
 
 	require.NoError(t, detachServerClient(ctx, ti, target, own))
+	requireServerRequires(t, ctx, ti, manager, target, issuer, unclaimed)
+
 	require.NoError(t, detachServerClient(ctx, ti, target, unclaimed))
 	requireServerRequires(t, ctx, ti, manager, target, issuer)
 }

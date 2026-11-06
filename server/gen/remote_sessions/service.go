@@ -469,10 +469,11 @@ type ListServerClientAssociationsPayload struct {
 type ListServerClientAssociationsResult struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociation
-	// The clients bound to the server's user session issuer that its callers need
-	// to sign in through. These are its associated clients, or when it has none,
-	// the bound clients no other server claims and it has not explicitly detached.
-	// Empty when the server requires no upstream sign-in.
+	// The remote_session_client_id of each client bound to the server's user
+	// session issuer that its callers need to sign in through. These are its
+	// associated clients, or when it has none, the bound clients no other server
+	// claims and it has not explicitly detached. Empty when the server requires no
+	// upstream sign-in.
 	RequiredClientIds []string
 }
 
