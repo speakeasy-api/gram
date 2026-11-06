@@ -49,6 +49,18 @@ interface ToolsAnnotationPanel {
 
 // --- Pure computation ---
 
+/**
+ * Whether a selector reaches a whole project: it names the project and no
+ * single resource, tool or disposition inside it. A "*" tool constrains
+ * nothing.
+ */
+export function isProjectWideSelector(selector: Selector): boolean {
+  if (!selector.projectId) return false;
+  if (selector.tool && selector.tool !== "*") return false;
+  if (selector.disposition) return false;
+  return !selector.resourceId || selector.resourceId === "*";
+}
+
 export function computePanelState(
   selectors: Selector[] | null,
   resourceType: ResourceType,
@@ -94,12 +106,12 @@ export function computePanelState(
     };
   }
 
-  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set)
-  const hasProjectId = selectors.some((s) => s.projectId);
-  if (hasProjectId) {
-    const selectedProjectIds = selectors
-      .filter((s) => s.projectId)
-      .map((s) => s.projectId!);
+  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set).
+  // A selector naming one resource can carry its project too, as an agent's
+  // server grants do; that selector is the resource's, not the project's.
+  const projectWide = selectors.filter(isProjectWideSelector);
+  if (projectWide.length > 0) {
+    const selectedProjectIds = projectWide.map((s) => s.projectId!);
     const count = selectedProjectIds.length;
     return {
       activePanel: "projects",
