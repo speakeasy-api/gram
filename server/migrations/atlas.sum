@@ -1,4 +1,4 @@
-h1:ouB7KP0xT2tz5POaTyKfI57ySzwI026Prkg5r7Okc9c=
+h1:N63z6oRRUcSsnpjMNfzwoZM1NRH3b4SqmfsBqm7RFGg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -520,3 +520,4 @@ h1:ouB7KP0xT2tz5POaTyKfI57ySzwI026Prkg5r7Okc9c=
 20261104224205_internal_audit_events.sql h1:DIq3iSY/2oopuYmyd5v7FfWpcWqoL3cBwancSuQvatc=
 20261105033341_registry-promotion-candidates-add-docs-outcome.sql h1:qI9REJbTfJBd/g2c/ZYnXz5d0AQsCk/fxbGtAkMJbIs=
 20261105175811_remote-session-clients-add-forward-client-name.sql h1:NlgZYpmo1fvV19RdA7Jkcla8uXjZ9ZtCOW5kU3Lr+mw=
+20261106105841_drop_principal_grants_effect.sql h1:QsQyy/FFBZ2pvUNS8cLnz/my3u+E68Wt8abRwVHIkpM=
