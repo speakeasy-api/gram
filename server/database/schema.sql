@@ -16629,3 +16629,43 @@ COMMENT ON COLUMN registry_promotion_candidates.curation_updated_by IS '@access:
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_action IS '@access: confidential';
+
+-- Global registry refresh coordination; intentionally independent of projects.
+CREATE TABLE mcp_catalog_refresh_state (
+    source_identity text PRIMARY KEY,
+    state jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT mcp_catalog_refresh_state_state_check CHECK (octet_length(state::text) <= 67108864)
+);
+COMMENT ON COLUMN mcp_catalog_refresh_state.source_identity IS 'Catalog source identity.
+@access: restricted';
+COMMENT ON COLUMN mcp_catalog_refresh_state.state IS 'Catalog refresh state.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_catalog_refresh_state.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_catalog_refresh_state.updated_at IS '@access: confidential';
+
+CREATE TABLE mcp_catalog_refresh_plans (
+    id uuid PRIMARY KEY,
+    source_identity text NOT NULL,
+    owner text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    data jsonb NOT NULL,
+    receipt jsonb,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT mcp_catalog_refresh_plans_data_check CHECK (octet_length(data::text) <= 67108864),
+    CONSTRAINT mcp_catalog_refresh_plans_receipt_check CHECK (octet_length(receipt::text) <= 67108864)
+);
+COMMENT ON COLUMN mcp_catalog_refresh_plans.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.source_identity IS 'Catalog source identity.
+@access: restricted';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.owner IS 'Plan owner identity.
+@access: confidential-pii';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.expires_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.data IS 'Catalog refresh plan.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.receipt IS 'Completed refresh receipt.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_catalog_refresh_plans.updated_at IS '@access: confidential';

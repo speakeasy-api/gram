@@ -3227,6 +3227,42 @@ type McpAuthClientHeader struct {
 	Deleted bool
 }
 
+type McpCatalogRefreshPlan struct {
+	// @access: confidential
+	ID uuid.UUID
+	// Catalog source identity.
+	// @access: restricted
+	SourceIdentity string
+	// Plan owner identity.
+	// @access: confidential-pii
+	Owner string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// Catalog refresh plan.
+	// @access: opaque-restricted
+	Data []byte
+	// Completed refresh receipt.
+	// @access: opaque-restricted
+	Receipt []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type McpCatalogRefreshState struct {
+	// Catalog source identity.
+	// @access: restricted
+	SourceIdentity string
+	// Catalog refresh state.
+	// @access: opaque-restricted
+	State []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpEndpoint struct {
 	// @access: confidential
 	ID uuid.UUID
