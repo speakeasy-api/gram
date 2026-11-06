@@ -411,3 +411,14 @@ func TestAuthorizationErrorPageSignInServiceUnavailable(t *testing.T) {
 	require.Contains(t, page, "Try again in a few minutes. If it keeps happening, share the technical details below with your IT administrators or Speakeasy support.")
 	require.NotContains(t, page, "The service this connection uses")
 }
+
+// A sign-in the service refused for an unnamed reason may be an outage or a broken setup: retry, then IT administrators.
+func TestAuthorizationErrorPageSignInFailed(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "bad_request", Reason: oauthui.ReasonSignInFailed, ClientName: "Speakeasy dashboard"}))
+	page := pageText(response)
+	require.Contains(t, page, "Your sign-in service couldn't sign you in. This isn't something you did.")
+	require.Contains(t, page, "Try again. If it keeps happening, share the technical details below with your IT administrators.")
+	require.NotContains(t, page, "isn't available right now")
+}

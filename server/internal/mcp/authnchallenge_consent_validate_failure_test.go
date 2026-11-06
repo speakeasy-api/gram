@@ -221,7 +221,7 @@ func TestHandleIDPCallback_FirstPartyProviderErrors(t *testing.T) {
 		says   string
 		what   mcpconnectionattempts.Code
 	}{
-		{"server_error", http.StatusServiceUnavailable, "Your sign-in service isn't available right now.", mcpconnectionattempts.CodeIDPTransientFailure},
+		{"server_error", http.StatusBadRequest, "Your sign-in service couldn't sign you in. This isn't something you did.", mcpconnectionattempts.CodeSignInProviderError},
 		{"temporarily_unavailable", http.StatusServiceUnavailable, "Your sign-in service isn't available right now.", mcpconnectionattempts.CodeIDPTransientFailure},
 		{"invalid_request", http.StatusInternalServerError, "This is a problem on our side", mcpconnectionattempts.CodeInternalError},
 		{"request_not_supported", http.StatusInternalServerError, "Share the technical details below with Speakeasy support.", mcpconnectionattempts.CodeInternalError},

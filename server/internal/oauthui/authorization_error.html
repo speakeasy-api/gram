@@ -88,6 +88,9 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             a problem on our side, not something you did.
             {{else if eq .Kind "check-not-allowed"}}
             You don't have access to this server, so Speakeasy couldn't check it.
+            {{else if eq .Kind "sign-in-failed"}}
+            Your sign-in service couldn't sign you in. This isn't something you
+            did.
             {{else if eq .Kind "sign-in-unavailable"}}
             Your sign-in service isn't available right now. This isn't something
             you did.
@@ -151,6 +154,9 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "check-not-allowed"}}
           Ask your IT administrators for access. Share the technical details
           below with them.
+          {{else if eq .Kind "sign-in-failed"}}
+          Try again. If it keeps happening, share the technical details below
+          with your IT administrators.
           {{else if eq .Kind "sign-in-unavailable"}}
           Try again in a few minutes. If it keeps happening, share the technical
           details below with your IT administrators or Speakeasy support.

@@ -672,8 +672,12 @@ type firstPartyIDPFailure struct {
 // service calls malformed is ours to fix.
 func firstPartyIDPFailureOf(label string) firstPartyIDPFailure {
 	switch label {
-	case oautherr.CodeServerError, oautherr.CodeTemporarilyUnavailable:
+	case oautherr.CodeTemporarilyUnavailable:
 		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeIDPTransientFailure, code: oops.CodeUnavailable, page: oauthui.ReasonSignInUnavailable}
+	case oautherr.CodeServerError:
+		// WorkOS sends this when "the SSO authentication failed for the user", an outage or a broken SSO setup:
+		// https://workos.com/docs/reference/user-management/authentication/get-authorization-url
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeSignInProviderError, code: oops.CodeBadRequest, page: oauthui.ReasonSignInFailed}
 	case oautherr.CodeInvalidRequest, oautherr.CodeUnauthorizedClient, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope,
 		oautherr.OIDCCodeRequestNotSupported, oautherr.OIDCCodeRequestURINotSupported, oautherr.OIDCCodeInvalidRequestURI,
 		oautherr.OIDCCodeInvalidRequestObject, oautherr.OIDCCodeRegistrationNotSupported:
