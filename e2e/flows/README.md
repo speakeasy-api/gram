@@ -70,6 +70,12 @@ back except through gh-aw's safe outputs (the comment and the artifact).
 Locally, `mise run flows:heal <flow>` runs the same prompt against your own
 stack, with no sandbox: the agent runs as you.
 
+`mise run test:agent-checks` tests all of this without a model, a browser or
+Linear: the workflow's sandbox, secret and safe-output invariants, the replay
+step's parsing of Playwright results, the local heal and Magellan tasks (with
+`claude` stubbed), and the Magellan filer (with Linear mocked). CI runs it as
+`agent-checks-test` in `pr.yaml`.
+
 ## Writing a new flow
 
 1. Write `story.md`.

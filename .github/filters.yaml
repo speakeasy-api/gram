@@ -98,6 +98,16 @@ db-migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
 
+agent-checks:
+  - ".github/**"
+  - "e2e/flows/**"
+  - "e2e/flows.config.ts"
+  - "mise.toml"
+  - ".mise-tasks/flows/**"
+  - ".mise-tasks/magellan/**"
+  - ".mise-tasks/test/agent-checks.sh"
+  - ".mise-tasks/test/flows.sh"
+
 glint:
   - ".github/**"
   - "glint/**"

@@ -86,7 +86,9 @@ export function parseFinding(raw: unknown): Finding {
   if (!SEVERITIES.includes(severity as Finding["severity"]))
     throw new Error("bad severity");
   const route = text(r["route"], "route", 300);
-  if (!/^\/[A-Za-z0-9/_.~%=&?-]*$/.test(route)) throw new Error("bad route");
+  // A dashboard path: no scheme, no host (`//host/...`), no markup.
+  if (!/^\/(?!\/)[A-Za-z0-9/_.~%=&?-]*$/.test(route))
+    throw new Error("bad route");
   // A safe-output tool takes strings, so steps may arrive one per line.
   const rawSteps = r["steps"];
   const steps =

@@ -92,7 +92,7 @@ steps:
       mise run test:flows || status=$?
       failing=$(jq -r '[.. | objects | select(.specs?) | .specs[]
         | select(.ok == false) | .file | split("/")[0]
-        | select(test("^[a-z0-9-]+$"))] | unique | join(" ")' \
+        | select(test("\\A[a-z0-9-]+\\z"))] | unique | join(" ")' \
         e2e/.flows/results.json 2>/dev/null || true)
       mkdir -p /tmp/gh-aw/agent
       echo "$failing" > /tmp/gh-aw/agent/failing-flows.txt
