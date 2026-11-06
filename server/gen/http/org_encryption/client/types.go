@@ -440,6 +440,43 @@ type GetConfigGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetConfigUnavailableResponseBody is the type of the "orgEncryption" service
+// "getConfig" endpoint HTTP response body for the "unavailable" error.
+type GetConfigUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetConfigFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "getConfig" endpoint HTTP response body for the
+// "failed_precondition" error.
+type GetConfigFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListKeysUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "listKeys" endpoint HTTP response body for the "unauthorized" error.
 type ListKeysUnauthorizedResponseBody struct {
@@ -607,6 +644,43 @@ type ListKeysUnexpectedResponseBody struct {
 // ListKeysGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "listKeys" endpoint HTTP response body for the "gateway_error" error.
 type ListKeysGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListKeysUnavailableResponseBody is the type of the "orgEncryption" service
+// "listKeys" endpoint HTTP response body for the "unavailable" error.
+type ListKeysUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListKeysFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "listKeys" endpoint HTTP response body for the "failed_precondition"
+// error.
+type ListKeysFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -793,6 +867,44 @@ type CreateGcpKeyUnexpectedResponseBody struct {
 // service "createGcpKey" endpoint HTTP response body for the "gateway_error"
 // error.
 type CreateGcpKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateGcpKeyUnavailableResponseBody is the type of the "orgEncryption"
+// service "createGcpKey" endpoint HTTP response body for the "unavailable"
+// error.
+type CreateGcpKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateGcpKeyFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "createGcpKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type CreateGcpKeyFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1009,6 +1121,43 @@ type VerifyKeyGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// VerifyKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "verifyKey" endpoint HTTP response body for the "unavailable" error.
+type VerifyKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "verifyKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type VerifyKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteKeyUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "deleteKey" endpoint HTTP response body for the "unauthorized" error.
 type DeleteKeyUnauthorizedResponseBody struct {
@@ -1191,6 +1340,43 @@ type DeleteKeyGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DeleteKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "deleteKey" endpoint HTTP response body for the "unavailable" error.
+type DeleteKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "deleteKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type DeleteKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SwitchKeyUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "switchKey" endpoint HTTP response body for the "unauthorized" error.
 type SwitchKeyUnauthorizedResponseBody struct {
@@ -1358,6 +1544,43 @@ type SwitchKeyUnexpectedResponseBody struct {
 // SwitchKeyGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "switchKey" endpoint HTTP response body for the "gateway_error" error.
 type SwitchKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SwitchKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "switchKey" endpoint HTTP response body for the "unavailable" error.
+type SwitchKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SwitchKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "switchKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type SwitchKeyFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1562,6 +1785,44 @@ type CompleteSwitchGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CompleteSwitchUnavailableResponseBody is the type of the "orgEncryption"
+// service "completeSwitch" endpoint HTTP response body for the "unavailable"
+// error.
+type CompleteSwitchUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompleteSwitchFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "completeSwitch" endpoint HTTP response body for the
+// "failed_precondition" error.
+type CompleteSwitchFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RollbackSwitchUnauthorizedResponseBody is the type of the "orgEncryption"
 // service "rollbackSwitch" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1736,6 +1997,44 @@ type RollbackSwitchUnexpectedResponseBody struct {
 // service "rollbackSwitch" endpoint HTTP response body for the "gateway_error"
 // error.
 type RollbackSwitchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RollbackSwitchUnavailableResponseBody is the type of the "orgEncryption"
+// service "rollbackSwitch" endpoint HTTP response body for the "unavailable"
+// error.
+type RollbackSwitchUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RollbackSwitchFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "rollbackSwitch" endpoint HTTP response body for the
+// "failed_precondition" error.
+type RollbackSwitchFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1938,6 +2237,44 @@ type RotateDataKeyGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RotateDataKeyUnavailableResponseBody is the type of the "orgEncryption"
+// service "rotateDataKey" endpoint HTTP response body for the "unavailable"
+// error.
+type RotateDataKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateDataKeyFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "rotateDataKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type RotateDataKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ResumeUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "resume" endpoint HTTP response body for the "unauthorized" error.
 type ResumeUnauthorizedResponseBody struct {
@@ -2105,6 +2442,43 @@ type ResumeUnexpectedResponseBody struct {
 // ResumeGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "resume" endpoint HTTP response body for the "gateway_error" error.
 type ResumeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeUnavailableResponseBody is the type of the "orgEncryption" service
+// "resume" endpoint HTTP response body for the "unavailable" error.
+type ResumeUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResumeFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "resume" endpoint HTTP response body for the "failed_precondition"
+// error.
+type ResumeFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2341,6 +2715,36 @@ func NewGetConfigGatewayError(body *GetConfigGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewGetConfigUnavailable builds a orgEncryption service getConfig endpoint
+// unavailable error.
+func NewGetConfigUnavailable(body *GetConfigUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetConfigFailedPrecondition builds a orgEncryption service getConfig
+// endpoint failed_precondition error.
+func NewGetConfigFailedPrecondition(body *GetConfigFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListKeysListOrgEncryptionKeysResultOK builds a "orgEncryption" service
 // "listKeys" endpoint result from a HTTP "OK" response.
 func NewListKeysListOrgEncryptionKeysResultOK(body *ListKeysResponseBody) *orgencryption.ListOrgEncryptionKeysResult {
@@ -2495,6 +2899,36 @@ func NewListKeysUnexpected(body *ListKeysUnexpectedResponseBody) *goa.ServiceErr
 // NewListKeysGatewayError builds a orgEncryption service listKeys endpoint
 // gateway_error error.
 func NewListKeysGatewayError(body *ListKeysGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListKeysUnavailable builds a orgEncryption service listKeys endpoint
+// unavailable error.
+func NewListKeysUnavailable(body *ListKeysUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListKeysFailedPrecondition builds a orgEncryption service listKeys
+// endpoint failed_precondition error.
+func NewListKeysFailedPrecondition(body *ListKeysFailedPreconditionResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2662,6 +3096,36 @@ func NewCreateGcpKeyUnexpected(body *CreateGcpKeyUnexpectedResponseBody) *goa.Se
 // NewCreateGcpKeyGatewayError builds a orgEncryption service createGcpKey
 // endpoint gateway_error error.
 func NewCreateGcpKeyGatewayError(body *CreateGcpKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateGcpKeyUnavailable builds a orgEncryption service createGcpKey
+// endpoint unavailable error.
+func NewCreateGcpKeyUnavailable(body *CreateGcpKeyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateGcpKeyFailedPrecondition builds a orgEncryption service
+// createGcpKey endpoint failed_precondition error.
+func NewCreateGcpKeyFailedPrecondition(body *CreateGcpKeyFailedPreconditionResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2851,6 +3315,36 @@ func NewVerifyKeyGatewayError(body *VerifyKeyGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewVerifyKeyUnavailable builds a orgEncryption service verifyKey endpoint
+// unavailable error.
+func NewVerifyKeyUnavailable(body *VerifyKeyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyKeyFailedPrecondition builds a orgEncryption service verifyKey
+// endpoint failed_precondition error.
+func NewVerifyKeyFailedPrecondition(body *VerifyKeyFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteKeyUnauthorized builds a orgEncryption service deleteKey endpoint
 // unauthorized error.
 func NewDeleteKeyUnauthorized(body *DeleteKeyUnauthorizedResponseBody) *goa.ServiceError {
@@ -2989,6 +3483,36 @@ func NewDeleteKeyUnexpected(body *DeleteKeyUnexpectedResponseBody) *goa.ServiceE
 // NewDeleteKeyGatewayError builds a orgEncryption service deleteKey endpoint
 // gateway_error error.
 func NewDeleteKeyGatewayError(body *DeleteKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteKeyUnavailable builds a orgEncryption service deleteKey endpoint
+// unavailable error.
+func NewDeleteKeyUnavailable(body *DeleteKeyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteKeyFailedPrecondition builds a orgEncryption service deleteKey
+// endpoint failed_precondition error.
+func NewDeleteKeyFailedPrecondition(body *DeleteKeyFailedPreconditionResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3171,6 +3695,36 @@ func NewSwitchKeyGatewayError(body *SwitchKeyGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewSwitchKeyUnavailable builds a orgEncryption service switchKey endpoint
+// unavailable error.
+func NewSwitchKeyUnavailable(body *SwitchKeyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSwitchKeyFailedPrecondition builds a orgEncryption service switchKey
+// endpoint failed_precondition error.
+func NewSwitchKeyFailedPrecondition(body *SwitchKeyFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCompleteSwitchOrgEncryptionConfigOK builds a "orgEncryption" service
 // "completeSwitch" endpoint result from a HTTP "OK" response.
 func NewCompleteSwitchOrgEncryptionConfigOK(body *CompleteSwitchResponseBody) *orgencryption.OrgEncryptionConfig {
@@ -3329,6 +3883,36 @@ func NewCompleteSwitchUnexpected(body *CompleteSwitchUnexpectedResponseBody) *go
 // NewCompleteSwitchGatewayError builds a orgEncryption service completeSwitch
 // endpoint gateway_error error.
 func NewCompleteSwitchGatewayError(body *CompleteSwitchGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompleteSwitchUnavailable builds a orgEncryption service completeSwitch
+// endpoint unavailable error.
+func NewCompleteSwitchUnavailable(body *CompleteSwitchUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompleteSwitchFailedPrecondition builds a orgEncryption service
+// completeSwitch endpoint failed_precondition error.
+func NewCompleteSwitchFailedPrecondition(body *CompleteSwitchFailedPreconditionResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3511,6 +4095,36 @@ func NewRollbackSwitchGatewayError(body *RollbackSwitchGatewayErrorResponseBody)
 	return v
 }
 
+// NewRollbackSwitchUnavailable builds a orgEncryption service rollbackSwitch
+// endpoint unavailable error.
+func NewRollbackSwitchUnavailable(body *RollbackSwitchUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRollbackSwitchFailedPrecondition builds a orgEncryption service
+// rollbackSwitch endpoint failed_precondition error.
+func NewRollbackSwitchFailedPrecondition(body *RollbackSwitchFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRotateDataKeyOrgEncryptionConfigOK builds a "orgEncryption" service
 // "rotateDataKey" endpoint result from a HTTP "OK" response.
 func NewRotateDataKeyOrgEncryptionConfigOK(body *RotateDataKeyResponseBody) *orgencryption.OrgEncryptionConfig {
@@ -3681,6 +4295,36 @@ func NewRotateDataKeyGatewayError(body *RotateDataKeyGatewayErrorResponseBody) *
 	return v
 }
 
+// NewRotateDataKeyUnavailable builds a orgEncryption service rotateDataKey
+// endpoint unavailable error.
+func NewRotateDataKeyUnavailable(body *RotateDataKeyUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateDataKeyFailedPrecondition builds a orgEncryption service
+// rotateDataKey endpoint failed_precondition error.
+func NewRotateDataKeyFailedPrecondition(body *RotateDataKeyFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewResumeOrgEncryptionConfigOK builds a "orgEncryption" service "resume"
 // endpoint result from a HTTP "OK" response.
 func NewResumeOrgEncryptionConfigOK(body *ResumeResponseBody) *orgencryption.OrgEncryptionConfig {
@@ -3839,6 +4483,36 @@ func NewResumeUnexpected(body *ResumeUnexpectedResponseBody) *goa.ServiceError {
 // NewResumeGatewayError builds a orgEncryption service resume endpoint
 // gateway_error error.
 func NewResumeGatewayError(body *ResumeGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeUnavailable builds a orgEncryption service resume endpoint
+// unavailable error.
+func NewResumeUnavailable(body *ResumeUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResumeFailedPrecondition builds a orgEncryption service resume endpoint
+// failed_precondition error.
+func NewResumeFailedPrecondition(body *ResumeFailedPreconditionResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4455,6 +5129,54 @@ func ValidateGetConfigGatewayErrorResponseBody(body *GetConfigGatewayErrorRespon
 	return
 }
 
+// ValidateGetConfigUnavailableResponseBody runs the validations defined on
+// getConfig_unavailable_response_body
+func ValidateGetConfigUnavailableResponseBody(body *GetConfigUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetConfigFailedPreconditionResponseBody runs the validations defined
+// on getConfig_failed_precondition_response_body
+func ValidateGetConfigFailedPreconditionResponseBody(body *GetConfigFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListKeysUnauthorizedResponseBody runs the validations defined on
 // listKeys_unauthorized_response_body
 func ValidateListKeysUnauthorizedResponseBody(body *ListKeysUnauthorizedResponseBody) (err error) {
@@ -4695,6 +5417,54 @@ func ValidateListKeysGatewayErrorResponseBody(body *ListKeysGatewayErrorResponse
 	return
 }
 
+// ValidateListKeysUnavailableResponseBody runs the validations defined on
+// listKeys_unavailable_response_body
+func ValidateListKeysUnavailableResponseBody(body *ListKeysUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListKeysFailedPreconditionResponseBody runs the validations defined
+// on listKeys_failed_precondition_response_body
+func ValidateListKeysFailedPreconditionResponseBody(body *ListKeysFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCreateGcpKeyUnauthorizedResponseBody runs the validations defined on
 // createGcpKey_unauthorized_response_body
 func ValidateCreateGcpKeyUnauthorizedResponseBody(body *CreateGcpKeyUnauthorizedResponseBody) (err error) {
@@ -4914,6 +5684,54 @@ func ValidateCreateGcpKeyUnexpectedResponseBody(body *CreateGcpKeyUnexpectedResp
 // ValidateCreateGcpKeyGatewayErrorResponseBody runs the validations defined on
 // createGcpKey_gateway_error_response_body
 func ValidateCreateGcpKeyGatewayErrorResponseBody(body *CreateGcpKeyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateGcpKeyUnavailableResponseBody runs the validations defined on
+// createGcpKey_unavailable_response_body
+func ValidateCreateGcpKeyUnavailableResponseBody(body *CreateGcpKeyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateGcpKeyFailedPreconditionResponseBody runs the validations
+// defined on createGcpKey_failed_precondition_response_body
+func ValidateCreateGcpKeyFailedPreconditionResponseBody(body *CreateGcpKeyFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5199,6 +6017,54 @@ func ValidateVerifyKeyGatewayErrorResponseBody(body *VerifyKeyGatewayErrorRespon
 	return
 }
 
+// ValidateVerifyKeyUnavailableResponseBody runs the validations defined on
+// verifyKey_unavailable_response_body
+func ValidateVerifyKeyUnavailableResponseBody(body *VerifyKeyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyKeyFailedPreconditionResponseBody runs the validations defined
+// on verifyKey_failed_precondition_response_body
+func ValidateVerifyKeyFailedPreconditionResponseBody(body *VerifyKeyFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteKeyUnauthorizedResponseBody runs the validations defined on
 // deleteKey_unauthorized_response_body
 func ValidateDeleteKeyUnauthorizedResponseBody(body *DeleteKeyUnauthorizedResponseBody) (err error) {
@@ -5418,6 +6284,54 @@ func ValidateDeleteKeyUnexpectedResponseBody(body *DeleteKeyUnexpectedResponseBo
 // ValidateDeleteKeyGatewayErrorResponseBody runs the validations defined on
 // deleteKey_gateway_error_response_body
 func ValidateDeleteKeyGatewayErrorResponseBody(body *DeleteKeyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteKeyUnavailableResponseBody runs the validations defined on
+// deleteKey_unavailable_response_body
+func ValidateDeleteKeyUnavailableResponseBody(body *DeleteKeyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteKeyFailedPreconditionResponseBody runs the validations defined
+// on deleteKey_failed_precondition_response_body
+func ValidateDeleteKeyFailedPreconditionResponseBody(body *DeleteKeyFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5679,6 +6593,54 @@ func ValidateSwitchKeyGatewayErrorResponseBody(body *SwitchKeyGatewayErrorRespon
 	return
 }
 
+// ValidateSwitchKeyUnavailableResponseBody runs the validations defined on
+// switchKey_unavailable_response_body
+func ValidateSwitchKeyUnavailableResponseBody(body *SwitchKeyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSwitchKeyFailedPreconditionResponseBody runs the validations defined
+// on switchKey_failed_precondition_response_body
+func ValidateSwitchKeyFailedPreconditionResponseBody(body *SwitchKeyFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateCompleteSwitchUnauthorizedResponseBody runs the validations defined
 // on completeSwitch_unauthorized_response_body
 func ValidateCompleteSwitchUnauthorizedResponseBody(body *CompleteSwitchUnauthorizedResponseBody) (err error) {
@@ -5898,6 +6860,54 @@ func ValidateCompleteSwitchUnexpectedResponseBody(body *CompleteSwitchUnexpected
 // ValidateCompleteSwitchGatewayErrorResponseBody runs the validations defined
 // on completeSwitch_gateway_error_response_body
 func ValidateCompleteSwitchGatewayErrorResponseBody(body *CompleteSwitchGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSwitchUnavailableResponseBody runs the validations defined
+// on completeSwitch_unavailable_response_body
+func ValidateCompleteSwitchUnavailableResponseBody(body *CompleteSwitchUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSwitchFailedPreconditionResponseBody runs the validations
+// defined on completeSwitch_failed_precondition_response_body
+func ValidateCompleteSwitchFailedPreconditionResponseBody(body *CompleteSwitchFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6159,6 +7169,54 @@ func ValidateRollbackSwitchGatewayErrorResponseBody(body *RollbackSwitchGatewayE
 	return
 }
 
+// ValidateRollbackSwitchUnavailableResponseBody runs the validations defined
+// on rollbackSwitch_unavailable_response_body
+func ValidateRollbackSwitchUnavailableResponseBody(body *RollbackSwitchUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRollbackSwitchFailedPreconditionResponseBody runs the validations
+// defined on rollbackSwitch_failed_precondition_response_body
+func ValidateRollbackSwitchFailedPreconditionResponseBody(body *RollbackSwitchFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRotateDataKeyUnauthorizedResponseBody runs the validations defined
 // on rotateDataKey_unauthorized_response_body
 func ValidateRotateDataKeyUnauthorizedResponseBody(body *RotateDataKeyUnauthorizedResponseBody) (err error) {
@@ -6399,6 +7457,54 @@ func ValidateRotateDataKeyGatewayErrorResponseBody(body *RotateDataKeyGatewayErr
 	return
 }
 
+// ValidateRotateDataKeyUnavailableResponseBody runs the validations defined on
+// rotateDataKey_unavailable_response_body
+func ValidateRotateDataKeyUnavailableResponseBody(body *RotateDataKeyUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateDataKeyFailedPreconditionResponseBody runs the validations
+// defined on rotateDataKey_failed_precondition_response_body
+func ValidateRotateDataKeyFailedPreconditionResponseBody(body *RotateDataKeyFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateResumeUnauthorizedResponseBody runs the validations defined on
 // resume_unauthorized_response_body
 func ValidateResumeUnauthorizedResponseBody(body *ResumeUnauthorizedResponseBody) (err error) {
@@ -6618,6 +7724,54 @@ func ValidateResumeUnexpectedResponseBody(body *ResumeUnexpectedResponseBody) (e
 // ValidateResumeGatewayErrorResponseBody runs the validations defined on
 // resume_gateway_error_response_body
 func ValidateResumeGatewayErrorResponseBody(body *ResumeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeUnavailableResponseBody runs the validations defined on
+// resume_unavailable_response_body
+func ValidateResumeUnavailableResponseBody(body *ResumeUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResumeFailedPreconditionResponseBody runs the validations defined on
+// resume_failed_precondition_response_body
+func ValidateResumeFailedPreconditionResponseBody(body *ResumeFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

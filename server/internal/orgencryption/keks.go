@@ -68,6 +68,9 @@ type openKey struct {
 	resourceName string
 	managed      bool
 	client       gcpkms.EncryptionClient
+
+	// credential is the screened identity the client authenticates as.
+	credential gcpauth.Credential
 }
 
 func (k *openKey) Close() error {
@@ -123,7 +126,7 @@ func (r *keyResolver) open(ctx context.Context, logger *slog.Logger, q *repo.Que
 		return nil, fmt.Errorf("build key encryption key kms client: %w", err)
 	}
 
-	return &openKey{id: row.ID, resourceName: resourceName, managed: row.Managed, client: client}, nil
+	return &openKey{id: row.ID, resourceName: resourceName, managed: row.Managed, client: client, credential: credential}, nil
 }
 
 // checkKey enforces what makes a key usable as a KEK and returns its KMS

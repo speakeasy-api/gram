@@ -41928,6 +41928,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -41952,6 +41958,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42016,6 +42028,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42040,6 +42058,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42103,6 +42127,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42127,6 +42157,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42185,6 +42221,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42209,6 +42251,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42267,6 +42315,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42291,6 +42345,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42349,6 +42409,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42373,6 +42439,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42431,6 +42503,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42455,6 +42533,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42519,6 +42603,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42543,6 +42633,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42607,6 +42703,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42631,6 +42733,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -42698,6 +42806,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -42728,6 +42842,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}

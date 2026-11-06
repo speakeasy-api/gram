@@ -479,10 +479,10 @@ func (s *Service) RotateDataKey(ctx context.Context, payload *gen.RotateDataKeyP
 		return nil, domainError(ctx, logger, err)
 	}
 
-	return s.GetConfig(ctx, &gen.GetConfigPayload{SessionToken: payload.SessionToken})
+	return s.configAfterChange(ctx, logger, authCtx.ActiveOrganizationID)
 }
 
-func (s *Service) Resume(ctx context.Context, payload *gen.ResumePayload) (*gen.OrgEncryptionConfig, error) {
+func (s *Service) Resume(ctx context.Context, _ *gen.ResumePayload) (*gen.OrgEncryptionConfig, error) {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
@@ -492,5 +492,17 @@ func (s *Service) Resume(ctx context.Context, payload *gen.ResumePayload) (*gen.
 		return nil, domainError(ctx, logger, err)
 	}
 
-	return s.GetConfig(ctx, &gen.GetConfigPayload{SessionToken: payload.SessionToken})
+	return s.configAfterChange(ctx, logger, authCtx.ActiveOrganizationID)
+}
+
+// configAfterChange reads the configuration a committed change produced. It
+// repeats no authorization, so a mutation that succeeded is never reported as
+// failed and retried.
+func (s *Service) configAfterChange(ctx context.Context, logger *slog.Logger, organizationID string) (*gen.OrgEncryptionConfig, error) {
+	config, err := repo.New(s.db).GetOrganizationEncryptionConfig(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "the change was applied but the configuration could not be read").LogError(ctx, logger)
+	}
+
+	return mv.BuildOrgEncryptionConfigView(config), nil
 }

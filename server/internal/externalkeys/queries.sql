@@ -1,8 +1,3 @@
--- Every read and write below is scoped to purpose 'sign'. Encryption keys
--- (purpose 'encrypt') protect organization data and are managed through the
--- organization encryption service, which refuses to drop a key that still
--- wraps data; this API never sees them.
-
 -- Loads the backing credential's provider, scoped to the organization, so the
 -- caller can validate that a key references a same-org, org-scoped credential
 -- (project_id IS NULL, matching the org-scoping the key itself requires) of the
@@ -123,7 +118,10 @@ WHERE ek.id = @id
   AND ek.deleted IS FALSE;
 
 -- Keys left behind by a tombstoned identity provider connection are hidden;
--- they stay reachable by id so the organization can delete them.
+-- they stay reachable by id so the organization can delete them. Like every
+-- external_keys read and write in this file, it is scoped to purpose 'sign':
+-- encryption keys protect organization data and are managed only through the
+-- organization encryption service, which refuses to drop one still in use.
 -- name: ListExternalKeys :many
 SELECT *
 FROM external_keys AS ek
