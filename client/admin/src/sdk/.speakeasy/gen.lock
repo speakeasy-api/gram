@@ -85,7 +85,6 @@ trackedFiles:
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminGetUpstreamOAuthMigrationStatus.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
-  src/funcs/adminListExternalMcpMigrationCandidates.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
   src/funcs/adminListOnboardingPlaybooks.ts: {}
@@ -105,9 +104,7 @@ trackedFiles:
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
-  src/funcs/adminMigrateExternalMcpServers.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
-  src/funcs/adminPreviewExternalMcpMigration.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
@@ -162,10 +159,6 @@ trackedFiles:
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
   src/models/components/admindeviceagentcell.ts: {}
-  src/models/components/adminexternalmcpmigrationcandidate.ts: {}
-  src/models/components/adminexternalmcpmigrationoutcome.ts: {}
-  src/models/components/adminexternalmcpmigrationrequest.ts: {}
-  src/models/components/adminexternalmcpmigrationresult.ts: {}
   src/models/components/adminhookclientorganization.ts: {}
   src/models/components/adminhookclientsessioncell.ts: {}
   src/models/components/adminhookclientsresult.ts: {}
@@ -176,7 +169,6 @@ trackedFiles:
   src/models/components/admininferencekeyrepairresult.ts: {}
   src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
-  src/models/components/adminlistexternalmcpmigrationcandidatesresult.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
@@ -294,10 +286,8 @@ trackedFiles:
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
-  src/models/components/migrateexternalmcpserversrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
-  src/models/components/previewexternalmcpmigrationrequestbody.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/promoteregistrycandidaterequestbody.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
@@ -456,8 +446,6 @@ trackedFiles:
   src/react-query/adminGetUpstreamOAuthMigrationStatus.ts: {}
   src/react-query/adminListCustomerUsage.core.ts: {}
   src/react-query/adminListCustomerUsage.ts: {}
-  src/react-query/adminListExternalMcpMigrationCandidates.core.ts: {}
-  src/react-query/adminListExternalMcpMigrationCandidates.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/react-query/adminListGlobalIssuers.core.ts: {}
@@ -488,7 +476,6 @@ trackedFiles:
   src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
-  src/react-query/adminMigrateExternalMcpServers.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOnboardingPlaybooks.core.ts: {}
   src/react-query/adminOnboardingPlaybooks.ts: {}
@@ -504,7 +491,6 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/adminOrganizationOnboardingStack.core.ts: {}
   src/react-query/adminOrganizationOnboardingStack.ts: {}
-  src/react-query/adminPreviewExternalMcpMigration.ts: {}
   src/react-query/adminPromoteRegistryCandidate.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}

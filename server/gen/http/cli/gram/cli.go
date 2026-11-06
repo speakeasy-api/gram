@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4762,17 +4762,6 @@ func ParseEndpoint(
 		adminGetHookClientsRefreshFlag           = adminGetHookClientsFlags.String("refresh", "", "")
 		adminGetHookClientsAdminSessionTokenFlag = adminGetHookClientsFlags.String("admin-session-token", "", "")
 
-		adminListExternalMcpMigrationCandidatesFlags                 = flag.NewFlagSet("list-external-mcp-migration-candidates", flag.ExitOnError)
-		adminListExternalMcpMigrationCandidatesAdminSessionTokenFlag = adminListExternalMcpMigrationCandidatesFlags.String("admin-session-token", "", "")
-
-		adminPreviewExternalMcpMigrationFlags                 = flag.NewFlagSet("preview-external-mcp-migration", flag.ExitOnError)
-		adminPreviewExternalMcpMigrationBodyFlag              = adminPreviewExternalMcpMigrationFlags.String("body", "REQUIRED", "")
-		adminPreviewExternalMcpMigrationAdminSessionTokenFlag = adminPreviewExternalMcpMigrationFlags.String("admin-session-token", "", "")
-
-		adminMigrateExternalMcpServersFlags                 = flag.NewFlagSet("migrate-external-mcp-servers", flag.ExitOnError)
-		adminMigrateExternalMcpServersBodyFlag              = adminMigrateExternalMcpServersFlags.String("body", "REQUIRED", "")
-		adminMigrateExternalMcpServersAdminSessionTokenFlag = adminMigrateExternalMcpServersFlags.String("admin-session-token", "", "")
-
 		adminListRegistryPromotionCandidatesFlags                 = flag.NewFlagSet("list-registry-promotion-candidates", flag.ExitOnError)
 		adminListRegistryPromotionCandidatesCursorFlag            = adminListRegistryPromotionCandidatesFlags.String("cursor", "", "")
 		adminListRegistryPromotionCandidatesStatusFlag            = adminListRegistryPromotionCandidatesFlags.String("status", "active", "")
@@ -6535,9 +6524,6 @@ func ParseEndpoint(
 	adminDescribeMcpServerHealthFlags.Usage = adminDescribeMcpServerHealthUsage
 	adminGetMcpServerToolCallsFlags.Usage = adminGetMcpServerToolCallsUsage
 	adminGetHookClientsFlags.Usage = adminGetHookClientsUsage
-	adminListExternalMcpMigrationCandidatesFlags.Usage = adminListExternalMcpMigrationCandidatesUsage
-	adminPreviewExternalMcpMigrationFlags.Usage = adminPreviewExternalMcpMigrationUsage
-	adminMigrateExternalMcpServersFlags.Usage = adminMigrateExternalMcpServersUsage
 	adminListRegistryPromotionCandidatesFlags.Usage = adminListRegistryPromotionCandidatesUsage
 	adminGetRegistryPromotionCandidateFlags.Usage = adminGetRegistryPromotionCandidateUsage
 	adminPromoteRegistryCandidateFlags.Usage = adminPromoteRegistryCandidateUsage
@@ -9748,15 +9734,6 @@ func ParseEndpoint(
 
 			case "get-hook-clients":
 				epf = adminGetHookClientsFlags
-
-			case "list-external-mcp-migration-candidates":
-				epf = adminListExternalMcpMigrationCandidatesFlags
-
-			case "preview-external-mcp-migration":
-				epf = adminPreviewExternalMcpMigrationFlags
-
-			case "migrate-external-mcp-servers":
-				epf = adminMigrateExternalMcpServersFlags
 
 			case "list-registry-promotion-candidates":
 				epf = adminListRegistryPromotionCandidatesFlags
@@ -13112,15 +13089,6 @@ func ParseEndpoint(
 			case "get-hook-clients":
 				endpoint = c.GetHookClients()
 				data, err = adminc.BuildGetHookClientsPayload(*adminGetHookClientsWindowDaysFlag, *adminGetHookClientsRefreshFlag, *adminGetHookClientsAdminSessionTokenFlag)
-			case "list-external-mcp-migration-candidates":
-				endpoint = c.ListExternalMcpMigrationCandidates()
-				data, err = adminc.BuildListExternalMcpMigrationCandidatesPayload(*adminListExternalMcpMigrationCandidatesAdminSessionTokenFlag)
-			case "preview-external-mcp-migration":
-				endpoint = c.PreviewExternalMcpMigration()
-				data, err = adminc.BuildPreviewExternalMcpMigrationPayload(*adminPreviewExternalMcpMigrationBodyFlag, *adminPreviewExternalMcpMigrationAdminSessionTokenFlag)
-			case "migrate-external-mcp-servers":
-				endpoint = c.MigrateExternalMcpServers()
-				data, err = adminc.BuildMigrateExternalMcpServersPayload(*adminMigrateExternalMcpServersBodyFlag, *adminMigrateExternalMcpServersAdminSessionTokenFlag)
 			case "list-registry-promotion-candidates":
 				endpoint = c.ListRegistryPromotionCandidates()
 				data, err = adminc.BuildListRegistryPromotionCandidatesPayload(*adminListRegistryPromotionCandidatesCursorFlag, *adminListRegistryPromotionCandidatesStatusFlag, *adminListRegistryPromotionCandidatesLimitFlag, *adminListRegistryPromotionCandidatesAdminSessionTokenFlag)
@@ -32561,9 +32529,6 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    describe-mcp-server-health: Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
 	fmt.Fprintln(os.Stderr, `    get-hook-clients: Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.`)
-	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
-	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
-	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-promotion-candidate: Refresh health evidence for one exact remote MCP deployment before staff review.`)
 	fmt.Fprintln(os.Stderr, `    promote-registry-candidate: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.`)
@@ -33944,64 +33909,6 @@ func adminGetHookClientsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hook-clients --window-days 2 --refresh false --admin-session-token \"abc123\"")
-}
-
-func adminListExternalMcpMigrationCandidatesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin list-external-mcp-migration-candidates", os.Args[0])
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-external-mcp-migration-candidates --admin-session-token \"abc123\"")
-}
-
-func adminPreviewExternalMcpMigrationUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin preview-external-mcp-migration", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin preview-external-mcp-migration --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
-}
-
-func adminMigrateExternalMcpServersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin migrate-external-mcp-servers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-external-mcp-servers --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListRegistryPromotionCandidatesUsage() {
