@@ -14130,7 +14130,8 @@ CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
 ON admin_mcp_write_proposals (connection_id);
 
 -- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
--- bounded reason codes only: no prompts, arguments, results or credentials.
+-- the operation, its target and bounded reason codes: no prompts, arguments,
+-- results or credentials.
 CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   proposal_id uuid,
@@ -14140,7 +14141,7 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   reason_code TEXT,
   request_id TEXT,
   operation TEXT,
-  -- Null for platform-global operations.
+  -- Null for platform-global operations and rows written before this column.
   organization_id TEXT,
   resource_kind TEXT,
   resource_id TEXT,
