@@ -32,7 +32,7 @@ export type OrgEncryptionKey = {
    */
   createdAt: Date;
   /**
-   * The Speakeasy identity the customer granted on the key. Not a secret.
+   * The Speakeasy principal the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**

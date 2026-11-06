@@ -101,8 +101,12 @@ type CreateGcpKeyPayload struct {
 	// projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have
 	// purpose ENCRYPT_DECRYPT.
 	ResourceName string
-	// Optional. The Speakeasy service-account email the customer granted
-	// roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. Not a secret.
+	// Optional. The Speakeasy principal, as reported by
+	// externalCredentials.getGcpSetupInfo, that the customer granted
+	// roles/iam.serviceAccountTokenCreator on the credential's service account.
+	// That service account, in the customer's project, is what holds
+	// roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never
+	// granted on the key directly. Not a secret.
 	CustomerGrantReference *string
 }
 
@@ -178,7 +182,9 @@ type OrgEncryptionKey struct {
 	// The external credential Speakeasy reaches the key with. Omitted for
 	// Speakeasy-managed keys.
 	ExternalCredentialID *string
-	// The Speakeasy identity the customer granted on the key. Not a secret.
+	// The Speakeasy principal the customer granted
+	// roles/iam.serviceAccountTokenCreator on the credential's service account.
+	// Not a secret.
 	CustomerGrantReference *string
 	// When the key was registered.
 	CreatedAt string

@@ -58,7 +58,7 @@ var OrgEncryptionKey = Type("OrgEncryptionKey", func() {
 	Attribute("external_credential_id", String, "The external credential Speakeasy reaches the key with. Omitted for Speakeasy-managed keys.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("customer_grant_reference", String, "The Speakeasy identity the customer granted on the key. Not a secret.")
+	Attribute("customer_grant_reference", String, "The Speakeasy principal the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. Not a secret.")
 	Attribute("created_at", String, "When the key was registered.", func() {
 		Format(FormatDateTime)
 	})
@@ -80,7 +80,7 @@ var CreateOrgEncryptionGcpKeyForm = Type("CreateOrgEncryptionGcpKeyForm", func()
 	})
 	Attribute("name", String, "A human-readable name for the key.")
 	Attribute("resource_name", String, "The GCP KMS crypto key resource name, without a version: projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have purpose ENCRYPT_DECRYPT.")
-	Attribute("customer_grant_reference", String, "Optional. The Speakeasy service-account email the customer granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. Not a secret.")
+	Attribute("customer_grant_reference", String, "Optional. The Speakeasy principal, as reported by externalCredentials.getGcpSetupInfo, that the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. That service account, in the customer's project, is what holds roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never granted on the key directly. Not a secret.")
 
 	Required("external_credential_id", "name", "resource_name")
 })
