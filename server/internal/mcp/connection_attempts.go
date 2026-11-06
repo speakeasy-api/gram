@@ -246,13 +246,21 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 		return memberStatus{id: "", status: "", what: nil, opts: nil}, false
 	}
 	var authClient *authClientResolution
+	var unavailable error
 	for i := range gateway.members {
 		if gateway.members[i].serverID == serverID {
 			authClient = gateway.members[i].authClient
+			unavailable = gateway.members[i].upstreamUnavailable
 			break
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
+	if _, stale := errors.AsType[memberStaleChoiceError](unavailable); stale && (what == mcpconnectionattempts.CodeNeedsSignIn || what == mcpconnectionattempts.CodeUpstreamSignInNotSetUp) {
+		detail = memberSetupChangedDetail
+		if fixable, decided := gateway.staleChoiceFixable[serverID]; decided {
+			what = staleChoiceHappened(fixable)
+		}
+	}
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
 	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
@@ -357,6 +365,17 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 		return statuses
 	}
 	return changed
+}
+
+// memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
+const memberSetupChangedDetail = "setup_changed"
+
+// staleChoiceHappened says who fixes a stale choice: the person when reconnecting replaces it, an admin otherwise.
+func staleChoiceHappened(reconnectFixes bool) mcpconnectionattempts.Code {
+	if reconnectFixes {
+		return mcpconnectionattempts.CodeNeedsSignIn
+	}
+	return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
 }
 
 // gatewayServerHappened maps a server's consent status, and any gap in its

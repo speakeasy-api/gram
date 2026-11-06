@@ -251,6 +251,22 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	return none, chained, err
 }
 
+// recordDialFailure records a member that could not be dialed for a call.
+func (s *Service) recordDialFailure(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) {
+	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+		_, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
+		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(reconnect), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+		return
+	}
+	if _, credential := errors.AsType[memberCredentialError](err); credential {
+		s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
+		return
+	}
+	if failure, ok := errors.AsType[memberConnectionError](err); ok {
+		s.recordMemberFailure(ctx, gate, member, failure.code)
+	}
+}
+
 // memberStaleChoiceError is a member whose no-auth choice predates its sign-in setup.
 type memberStaleChoiceError struct {
 	memberCredentialError
@@ -556,11 +572,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
-		if _, credential := errors.AsType[memberCredentialError](err); credential {
-			s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
-		} else if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
-		}
+		s.recordDialFailure(ctx, logger, gate, member, err)
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
 			message := s.memberFailureMessage(ctx, logger, gate, member, err)
 			failMetaToolCall(ctx, metaMemberErrorStatus(err), message)

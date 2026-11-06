@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -336,4 +338,122 @@ func TestStaleChoiceFailureInCodeModeKeepsItsMessage(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "ask your administrator", refusal.Rejection)
 	require.False(t, invocation.credential)
+}
+
+// staleChoiceRemedyGate is a person's gate whose consent remedies are already remembered.
+func staleChoiceRemedyGate(s *Service, remedies map[uuid.UUID]bool) *metaGateContext {
+	subject := urn.NewUserSubject("user_1")
+	gate := &metaGateContext{
+		organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New(), userSessionIssuerID: uuid.New(),
+		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: subject},
+		memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: subject, byServer: map[uuid.UUID]*memberTokens{}},
+	}
+	s.staleChoiceConsent = expirable.NewLRU[string, bool](16, nil, time.Minute)
+	for serverID, fixable := range remedies {
+		s.staleChoiceConsent.Add(gate.userSessionIssuerID.String()+"|"+subject.String()+"|"+serverID.String(), fixable)
+	}
+	return gate
+}
+
+func rowForMember(t *testing.T, rows []mcpconnectionattempts.Row, memberID uuid.UUID) mcpconnectionattempts.Row {
+	t.Helper()
+	for _, row := range rows {
+		if row.MemberID == memberID.String() {
+			return row
+		}
+	}
+	require.FailNow(t, "no row for member", memberID.String())
+	return mcpconnectionattempts.Row{}
+}
+
+// An admin's setup change reads apart from a sign-in never done, and names who can fix it.
+func TestRecordConsentPage_StaleChoiceIsSetupChanged(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	s := &Service{connections: rec.Recorder}
+	reconnectable, adminOnly, unchecked, neverSignedIn := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{reconnectable: true, adminOnly: false})
+	stale := gapWithChoice(authClientReasonNoAuthStale)
+	firstConnect := gapResolution(authClientReasonMissingChoice)
+	view := &gatewayConsentView{
+		members: []metaMember{
+			{serverID: reconnectable, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
+			{serverID: adminOnly, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
+			{serverID: unchecked, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
+			{serverID: neverSignedIn, authClient: &firstConnect},
+		},
+		Servers: []gatewayServer{
+			{ServerID: reconnectable.String(), Status: gatewayServerNotConnected},
+			{ServerID: adminOnly.String(), Status: gatewayServerReconnect},
+			{ServerID: unchecked.String(), Status: gatewayServerNotConnected},
+			{ServerID: neverSignedIn.String(), Status: gatewayServerNotConnected},
+		},
+	}
+	view.staleChoiceFixable = s.staleChoiceRemedies(t.Context(), testenv.NewLogger(t), gate, view.members[:2])
+
+	s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
+
+	rows := rec.Rows()
+	for name, tc := range map[string]struct {
+		member uuid.UUID
+		reason mcpconnectionattempts.Code
+		detail string
+		who    mcpconnectionattempts.WhoFixes
+	}{
+		"consent replaces the choice":  {reconnectable, mcpconnectionattempts.CodeNeedsSignIn, memberSetupChangedDetail, mcpconnectionattempts.WhoPerson},
+		"consent cannot replace it":    {adminOnly, mcpconnectionattempts.CodeUpstreamSignInNotSetUp, memberSetupChangedDetail, mcpconnectionattempts.WhoAdmin},
+		"remedy not checked":           {unchecked, mcpconnectionattempts.CodeNeedsSignIn, memberSetupChangedDetail, mcpconnectionattempts.WhoPerson},
+		"never signed in is unchanged": {neverSignedIn, mcpconnectionattempts.CodeNeedsSignIn, string(gatewayServerNotConnected), mcpconnectionattempts.WhoPerson},
+	} {
+		row := rowForMember(t, rows, tc.member)
+		require.Equal(t, tc.reason.String(), row.Reason, name)
+		require.Equal(t, tc.detail, row.SubReason, name)
+		require.Equal(t, string(tc.who), row.WhoFixes, name)
+	}
+}
+
+// The status dedupe still writes a row when a member's setup changes under the same attempt.
+func TestRecordConsentPage_SetupChangeIsANewMemberStatus(t *testing.T) {
+	t.Parallel()
+	s, rec, _ := memberStatusService(t)
+	endpoint, state := gatewayEndpoint(), openState()
+	member := uuid.New()
+	render := func(unavailable error) {
+		view := memberView(map[uuid.UUID]gatewayServerStatus{member: gatewayServerNotConnected})
+		view.members = []metaMember{{serverID: member, upstreamUnavailable: unavailable}}
+		s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
+	}
+
+	render(nil)
+	render(staleMemberError(authClientReasonNoAuthStale))
+	rows := rec.Rows()
+	require.Len(t, rows, 2)
+	require.Equal(t, memberSetupChangedDetail, rows[1].SubReason)
+}
+
+// A refused call records the same remedy the caller reads.
+func TestRecordDialFailure_StaleChoiceFollowsConsent(t *testing.T) {
+	t.Parallel()
+	rec := mcpconnectionattemptstest.New(t)
+	s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+	reconnectable, adminOnly, notConnected := uuid.New(), uuid.New(), uuid.New()
+	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{reconnectable: true, adminOnly: false})
+	stale := staleMemberError(authClientReasonNoAuthForbidden)
+
+	s.recordDialFailure(t.Context(), s.logger, gate, metaMember{serverID: reconnectable, upstreamUnavailable: stale}, stale)
+	s.recordDialFailure(t.Context(), s.logger, gate, metaMember{serverID: adminOnly, upstreamUnavailable: stale}, stale)
+	s.recordDialFailure(t.Context(), s.logger, gate, metaMember{serverID: notConnected}, memberCredentialError{&metaMemberError{message: "not connected"}})
+
+	rows := rec.Rows()
+	row := rowForMember(t, rows, reconnectable)
+	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn.String(), row.Reason)
+	require.Equal(t, memberSetupChangedDetail, row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	row = rowForMember(t, rows, adminOnly)
+	require.Equal(t, mcpconnectionattempts.CodeUpstreamSignInNotSetUp.String(), row.Reason)
+	require.Equal(t, memberSetupChangedDetail, row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	row = rowForMember(t, rows, notConnected)
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), row.Reason)
+	require.Empty(t, row.SubReason)
 }
