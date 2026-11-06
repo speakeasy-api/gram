@@ -50,6 +50,10 @@ func ParseOrganizationEncryptionConfig(value string) (OrganizationEncryptionConf
 		return OrganizationEncryptionConfig{}, fmt.Errorf("%w: invalid organization_encryption_config uuid", ErrInvalid)
 	}
 
+	if id == uuid.Nil {
+		return OrganizationEncryptionConfig{}, fmt.Errorf("%w: empty id", ErrInvalid)
+	}
+
 	return NewOrganizationEncryptionConfig(id), nil
 }
 

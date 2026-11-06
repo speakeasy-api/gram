@@ -50,6 +50,10 @@ func ParseDataEncryptionKey(value string) (DataEncryptionKey, error) {
 		return DataEncryptionKey{}, fmt.Errorf("%w: invalid data_encryption_key uuid", ErrInvalid)
 	}
 
+	if id == uuid.Nil {
+		return DataEncryptionKey{}, fmt.Errorf("%w: empty id", ErrInvalid)
+	}
+
 	return NewDataEncryptionKey(id), nil
 }
 

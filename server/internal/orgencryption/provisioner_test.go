@@ -283,3 +283,28 @@ func TestCheckDue_ChecksEachOrganizationOnce(t *testing.T) {
 	require.Zero(t, checked, "a fresh check is not due again")
 	require.False(t, ti.config(t).LastKekCheckError.Valid)
 }
+
+func TestSwitchKey_RefusesASweptManagedKey(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.provision(t)
+	managed := ti.config(t).KekExternalKeyID
+
+	customer := orgencryptiontest.CreateCustomerKey(t, ti.conn, ti.orgID, "customer-kek")
+	_, err := ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, customer, orgencryption.SystemActor())
+	require.NoError(t, err)
+	_, err = ti.fixture.Provisioner.CompleteSwitch(t.Context(), ti.orgID, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	disabled, err := ti.fixture.Provisioner.SweepManagedKeys(t.Context(), 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, disabled)
+
+	_, err = ti.fixture.Provisioner.SwitchKey(t.Context(), ti.orgID, managed, orgencryption.SystemActor())
+	require.ErrorIs(t, err, orgencryption.ErrInvalidKey, "a disabled managed key never becomes the organization's key again")
+
+	disabled, err = ti.fixture.Provisioner.SweepManagedKeys(t.Context(), 10)
+	require.NoError(t, err)
+	require.Zero(t, disabled, "a disabled key is not swept twice")
+}

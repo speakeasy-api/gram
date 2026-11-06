@@ -62,3 +62,10 @@ func TestDataEncryptionKeyRejectsInvalidValues(t *testing.T) {
 	_, err = urn.NewDataEncryptionKey(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
+
+func TestParseDataEncryptionKey_RejectsNilID(t *testing.T) {
+	t.Parallel()
+
+	_, err := urn.ParseDataEncryptionKey("data_encryption_key:00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, urn.ErrInvalid)
+}

@@ -150,10 +150,12 @@ func CreateCustomerKey(t *testing.T, conn *pgxpool.Pool, organizationID string, 
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.CreateEncryptionGcpKmsKey(t.Context(), repo.CreateEncryptionGcpKmsKeyParams{
-		ExternalKeyID: key.ID,
-		ResourceName:  CustomerKeyName(keyID),
-	}))
+	_, err = q.CreateEncryptionGcpKmsKey(t.Context(), repo.CreateEncryptionGcpKmsKeyParams{
+		ResourceName:   CustomerKeyName(keyID),
+		ExternalKeyID:  key.ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
 
 	return key.ID
 }

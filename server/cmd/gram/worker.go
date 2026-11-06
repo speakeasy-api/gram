@@ -841,12 +841,12 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			// A misconfigured organization encryption turns its sweep off with
-			// an error log instead of stopping every workflow.
+			// Unconfigured, this is nil without an error. A configuration error
+			// stops the worker: a silently disabled sweep would leave
+			// organizations whose key was revoked unsuspended.
 			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
-				logger.ErrorContext(ctx, "organization encryption unavailable; its sweep is off", attr.SlogError(err))
-				orgEncryptionProvisioner = nil
+				return err
 			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns

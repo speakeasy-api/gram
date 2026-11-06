@@ -51,7 +51,7 @@ func TestOrganizationEncryptionSweep_FailsOnlyWithoutProgress(t *testing.T) {
 	failure := errors.New("kms unreachable")
 
 	_, err := NewOrganizationEncryptionSweepActivities(testenv.NewLogger(t), stubOrganizationEncryptionSweeper{checked: 0, checkErr: failure, disabled: 0, sweepErr: failure}).Sweep(t.Context())
-	require.ErrorIs(t, err, failure, "a run with no progress is retried")
+	require.ErrorIs(t, err, failure, "a run with no progress fails, so Temporal retries it")
 
 	result, err := NewOrganizationEncryptionSweepActivities(testenv.NewLogger(t), stubOrganizationEncryptionSweeper{checked: 2, checkErr: nil, disabled: 0, sweepErr: failure}).Sweep(t.Context())
 	require.NoError(t, err, "a partial run is not retried")
@@ -77,4 +77,23 @@ func TestOrganizationEncryptionSweepWorkflow_RunsTheActivityOnce(t *testing.T) {
 	var result OrganizationEncryptionSweepResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 1, result.Checked)
+}
+
+func TestOrganizationEncryptionSweepWorkflow_RetriesARunWithNoProgress(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	failure := errors.New("kms unreachable")
+	activities := NewOrganizationEncryptionSweepActivities(testenv.NewLogger(t), stubOrganizationEncryptionSweeper{checked: 0, checkErr: failure, disabled: 0, sweepErr: failure})
+	calls := 0
+	env.RegisterActivityWithOptions(func(ctx context.Context) (OrganizationEncryptionSweepResult, error) {
+		calls++
+		return activities.Sweep(ctx)
+	}, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
+
+	env.ExecuteWorkflow(OrganizationEncryptionSweepWorkflow)
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, 2, calls, "the activity is attempted twice before the run fails")
 }

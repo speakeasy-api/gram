@@ -1855,7 +1855,10 @@ func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) back
 
 // newKMSEncryptionClients returns the symmetric KMS client factories. Locally
 // both hand out one persistent in-process client, so data wrapped in one run
-// stays readable in the next and the server and worker agree on keys.
+// stays readable in the next and the server and worker agree on keys. Disabling
+// a key is per process locally: a key the worker's sweep disables stays usable
+// in the server until it restarts. Database state still records the disable,
+// so this only weakens the KMS half of the check in local development.
 func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.EncryptionClientFactory, gcpkms.EncryptionProvisioningClientFactory, error) {
 	if c.String("environment") != "local" {
 		return gcpkms.NewEncryptionClient, gcpkms.NewEncryptionProvisioningClient, nil

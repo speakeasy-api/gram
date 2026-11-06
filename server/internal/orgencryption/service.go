@@ -182,11 +182,14 @@ func (s *Service) config(ctx context.Context, organizationID string, useCase Use
 		cfg = loaded
 	}
 
-	if cfg.state == ConfigStateSuspended {
+	switch cfg.state {
+	case ConfigStateActive, ConfigStateSwitching:
+		return cfg, nil
+	case ConfigStateSuspended:
 		return cachedConfig{}, ErrSuspended
+	default:
+		return cachedConfig{}, fmt.Errorf("%w: unknown configuration state %q", ErrInvalidState, cfg.state)
 	}
-
-	return cfg, nil
 }
 
 func (s *Service) loadConfig(ctx context.Context, organizationID string, useCase UseCase) (cachedConfig, error) {
@@ -221,8 +224,9 @@ func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID 
 		return cached, nil
 	}
 
-	result, err, _ := s.flights.Do(organizationID+"/"+dataKeyID.String(), func() (any, error) {
-		// The flight outlives any one caller's cancellation.
+	flight := s.flights.DoChan(organizationID+"/"+dataKeyID.String(), func() (any, error) {
+		// The flight outlives any one caller's cancellation, so other callers
+		// waiting on it still get the key; kmsCallTimeout bounds it.
 		unwrapped, err := s.unwrapDataKey(context.WithoutCancel(ctx), organizationID, dataKeyID)
 		if err != nil {
 			return cachedDataKey{}, err
@@ -231,13 +235,20 @@ func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID 
 
 		return unwrapped, nil
 	})
-	if err != nil {
-		return cachedDataKey{}, err
+
+	var result singleflight.Result
+	select {
+	case <-ctx.Done():
+		return cachedDataKey{}, fmt.Errorf("wait for data encryption key: %w", ctx.Err())
+	case result = <-flight:
+	}
+	if result.Err != nil {
+		return cachedDataKey{}, result.Err
 	}
 
-	dataKey, ok := result.(cachedDataKey)
+	dataKey, ok := result.Val.(cachedDataKey)
 	if !ok {
-		return cachedDataKey{}, fmt.Errorf("unexpected data key flight result %T", result)
+		return cachedDataKey{}, fmt.Errorf("unexpected data key flight result %T", result.Val)
 	}
 
 	return dataKey, nil
