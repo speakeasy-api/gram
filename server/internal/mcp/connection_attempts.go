@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -112,11 +113,22 @@ func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedM
 		return
 	}
 	attempt := challengeState.connectionAttempt(endpoint)
-	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) {
+	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) || browserBindingExpired(challengeState, time.Now()) {
 		s.endAttemptOnce(ctx, s.logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
 		return
 	}
 	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
+}
+
+// consentBrowserError records a consent request that failed its browser check
+// and refuses it: a challenge out of time as expired, any other as a request
+// from another browser.
+func (s *Service) consentBrowserError(r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, err error) error {
+	s.recordWrongConsentBrowser(r, endpoint, challengeState)
+	if errors.Is(err, errChallengeBrowserExpired) {
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge expired"), oauthui.ReasonExpired))
+	}
+	return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 }
 
 // reconnectFailure maps a failed catalogue reconnect, and whether a retry can't fix it.
