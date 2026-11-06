@@ -6,7 +6,10 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { ResourceLink } from "@/pages/access/ResourceLink";
-import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
+import {
+  useResourceLinkMaps,
+  type ResourceLinkMaps,
+} from "@/pages/access/useResourceLinkMaps";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
   agentPolicyUnrestrictedLabel,
@@ -46,11 +49,13 @@ import { Link } from "react-router";
  */
 function agentSelectorNarrowing(
   selector: AgentPolicySelector,
-  projectName?: string,
+  project: { id: string; name?: string } | undefined,
 ): string {
   const parts: string[] = [];
-  if (isAgentPolicyConstraint(selector.projectId))
-    parts.push(`Project: ${projectName || selector.projectId}`);
+  // A project the grant stores is shown even unnamed; one read from its
+  // server only when it has a name, so a row never gains a bare id.
+  if (project && (project.name || isAgentPolicyConstraint(selector.projectId)))
+    parts.push(`Project: ${project.name || project.id}`);
   if (isAgentPolicyConstraint(selector.tool))
     parts.push(`Tool: ${selector.tool}`);
   if (isAgentPolicyConstraint(selector.disposition))
@@ -60,6 +65,26 @@ function agentSelectorNarrowing(
   if (isAgentPolicyConstraint(selector.serverUrl))
     parts.push(`Server URL: ${selector.serverUrl}`);
   return parts.join(" · ");
+}
+
+/**
+ * The project a grant's resource is in. A grant on one MCP server may leave
+ * its project out: the setup flow stores the server with its project, the
+ * permission picker stores the server alone, and the gateway enforces both
+ * the same way, since a server lives in exactly one project. Read from the
+ * server itself, every server row names its project, however it was saved.
+ */
+function grantProjectId(
+  selector: AgentPolicySelector,
+  maps: ResourceLinkMaps,
+): string | undefined {
+  if (isAgentPolicyConstraint(selector.projectId)) return selector.projectId;
+  if (selector.resourceKind !== "mcp") return undefined;
+  if (!isAgentPolicyConstraint(selector.resourceId)) return undefined;
+  return (
+    maps.toolsetMap.get(selector.resourceId)?.projectId ??
+    maps.mcpServerMap.get(selector.resourceId)?.projectId
+  );
 }
 
 /**
@@ -388,11 +413,17 @@ export function AgentIdentityPermissions({
               <ul className="marker:text-muted-foreground list-disc space-y-1 pt-1 pl-5">
                 {orderGrants(scope, grants, authNames).map((grant) => {
                   const { selector } = grant;
+                  const projectId = grantProjectId(selector, maps);
                   const narrowing = agentSelectorNarrowing(
                     selector,
-                    selector.projectId
-                      ? maps.projectMap.get(selector.projectId)?.name
-                      : undefined,
+                    // Presence, not truthiness: an empty stored project still
+                    // narrows.
+                    projectId === undefined
+                      ? undefined
+                      : {
+                          id: projectId,
+                          name: maps.projectMap.get(projectId)?.name,
+                        },
                   );
                   return (
                     <li key={grant.id} className="pl-1">
