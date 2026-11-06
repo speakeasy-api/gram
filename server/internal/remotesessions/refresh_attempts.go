@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
+
+// emaBindingLookupTimeout bounds the binding lookup a refresh's row waits on. It is one
+// indexed EXISTS, so a slower answer means a struggling database, not a busy one.
+const emaBindingLookupTimeout = 500 * time.Millisecond
 
 // recordRefresh writes one refresh's row. A carried attempt gets a step; otherwise the refresh is its own attempt.
 func (s *RefreshService) recordRefresh(
@@ -30,16 +35,7 @@ func (s *RefreshService) recordRefresh(
 		return false
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
-		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-		defer cancel()
-		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
-			RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
-			UserSessionIssuerID:   sess.UserSessionIssuerID,
-		})
-		// Do not recommend re-registration unless the tenant's binding is known.
-		if lookupErr != nil || managed {
-			what = mcpconnectionattempts.CodeProviderOAuthInvalidClient
-		}
+		what = s.invalidClientHappened(ctx, attribution, sess)
 	}
 	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Provider(client.IssuerUrl),
@@ -58,6 +54,28 @@ func (s *RefreshService) recordRefresh(
 	accepted := s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
 	_, failed := what.(mcpconnectionattempts.Code)
 	return accepted && failed
+}
+
+// invalidClientHappened names a refresh_invalid_client row, recommending re-registration only
+// when the tenant's binding is known, and skips the lookup for a row that won't be stored.
+func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) mcpconnectionattempts.Code {
+	scope := attribution.scope
+	if !attribution.attempt.IsZero() {
+		scope = attribution.attempt.Scope()
+	}
+	if !s.connections.Stores(ctx, scope) {
+		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
+	}
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), emaBindingLookupTimeout)
+	defer cancel()
+	managed, err := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
+		RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
+		UserSessionIssuerID:   sess.UserSessionIssuerID,
+	})
+	if err != nil || managed {
+		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
+	}
+	return mcpconnectionattempts.CodeRefreshInvalidClient
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.

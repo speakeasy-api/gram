@@ -1147,3 +1147,65 @@ func TestRecorderOnceReportsAdmission(t *testing.T) {
 	rec.stopped = true
 	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 }
+
+// A stalled drain is cut off before the caller's deadline, the writer is joined, and every
+// lost row is counted on the metric and in the log instead of left unfinished.
+func TestShutdownAndWait_JoinsBeforeItsDeadlineAndCountsWhatItLost(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	var logged bytes.Buffer
+	reader := sdkmetric.NewManualReader()
+	recorder := testRecorder{
+		Recorder: newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, cfg),
+		reader:   reader,
+	}
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 3 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+
+	deadline := writerJoinMargin + 200*time.Millisecond
+	ctx, cancel := context.WithTimeout(t.Context(), deadline)
+	defer cancel()
+	started := time.Now()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.DeadlineExceeded)
+
+	require.Less(t, time.Since(started), deadline, "returns before the deadline its caller closes ClickHouse after")
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("writer still running after ShutdownAndWait")
+	}
+	require.Equal(t, int64(1), conn.prepares.Load(), "nothing is written once cancelled")
+	require.Zero(t, recorder.unfinished.Load())
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed), "the cancelled insert")
+	require.Equal(t, int64(3), recorder.dropped(t, dropShutdown), "the backlog")
+	require.Equal(t, int64(4), recorder.droppedTotal(t), "each lost row counted once")
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="insert_failed=1 shutdown=3"`)
+}
+
+// A drain that finishes in time loses nothing and keeps its deadline.
+func TestShutdownAndWait_CleanDrainWritesEverything(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorder(t, conn, testConfig())
+	for range 5 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, recorder.ShutdownAndWait(ctx))
+	require.Equal(t, int64(5), conn.rows.Load())
+	require.Zero(t, recorder.droppedTotal(t))
+}
