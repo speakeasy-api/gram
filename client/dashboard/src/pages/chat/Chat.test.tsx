@@ -157,6 +157,9 @@ describe("ChatLanding fallback handover", () => {
     expect(runtime.switchToNewThread).not.toHaveBeenCalled();
     runtime.state.ready = true;
     view.rerender(<ChatLanding autoFocusInput />);
+    expect(runtime.switchToNewThread).not.toHaveBeenCalled();
+    expect(screen.getByRole("combobox")).toBe(document.activeElement);
+    expect(document.querySelector(".gram-elements-composer-host")).toBeNull();
     await act(async () => {
       runtime.state.loading = false;
       runtime.emit();

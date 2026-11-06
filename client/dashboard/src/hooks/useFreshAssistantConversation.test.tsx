@@ -157,4 +157,79 @@ describe("useFreshAssistantConversation", () => {
     expect(screen.getByText("ready")).toBeTruthy();
     expect(runtime.switchToNewThread).toHaveBeenCalledTimes(1);
   });
+  it("rechecks a replacement runtime before releasing a new draft", async () => {
+    const view = render(<Landing />);
+    await waitFor(() => expect(screen.getByText("ready")).toBeTruthy());
+    runtime.setText.mockClear();
+    let finish!: () => void;
+    runtime.switchToNewThread.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    runtime.state.mainThreadId = "replacement-old";
+    runtime.state.newThreadId = "replacement-new";
+    runtime.aui = { ...runtime.aui };
+    view.rerender(<Landing />);
+    expect(screen.getByText("waiting")).toBeTruthy();
+    expect(runtime.switchToNewThread).toHaveBeenCalledTimes(2);
+    expect(runtime.setText).not.toHaveBeenCalled();
+    act(() => {
+      runtime.state.mainThreadId = "replacement-new";
+      runtime.emit();
+    });
+    expect(runtime.setText).not.toHaveBeenCalled();
+    await act(async () => finish());
+    expect(screen.getByText("ready")).toBeTruthy();
+    expect(runtime.setText).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a previous runtime's pending switch completion", async () => {
+    let finishOld!: () => void;
+    let finishNew!: () => void;
+    runtime.switchToNewThread.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    const view = render(<Landing />);
+    runtime.aui = { ...runtime.aui };
+    runtime.switchToNewThread.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishNew = resolve;
+        }),
+    );
+    view.rerender(<Landing />);
+    expect(runtime.switchToNewThread).toHaveBeenCalledTimes(2);
+    act(() => {
+      runtime.state.mainThreadId = "new";
+      runtime.emit();
+    });
+    await act(async () => finishOld());
+    expect(screen.getByText("waiting")).toBeTruthy();
+    expect(runtime.setText).not.toHaveBeenCalled();
+    await act(async () => finishNew());
+    expect(screen.getByText("ready")).toBeTruthy();
+    expect(runtime.setText).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a previous runtime's rejected switch after replacement", async () => {
+    let rejectOld!: (error: Error) => void;
+    runtime.switchToNewThread.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    );
+    const view = render(<Landing />);
+    runtime.aui = { ...runtime.aui };
+    view.rerender(<Landing />);
+    await waitFor(() => expect(screen.getByText("ready")).toBeTruthy());
+    await act(async () => rejectOld(new Error("previous runtime failed")));
+    expect(screen.getByText("ready")).toBeTruthy();
+    expect(runtime.switchToNewThread).toHaveBeenCalledTimes(2);
+  });
 });
