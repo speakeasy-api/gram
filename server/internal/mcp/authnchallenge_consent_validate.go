@@ -249,11 +249,11 @@ func (s *Service) probeRemoteSession(
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
-			// Nothing stored can be read, so it checks as not connected.
-			if candidate.SignInUnreadable() {
-				continue
-			}
-			if candidate.SessionUnavailable() {
+			if candidate.HeldWithoutToken() {
+				// Nothing stored can be read, so it checks as not connected.
+				if candidate.SignInUnreadable() {
+					continue
+				}
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}

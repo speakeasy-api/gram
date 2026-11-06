@@ -1234,6 +1234,8 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+	case errors.Is(err, remotesessions.ErrStoredSignInUnreadable):
+		err = memberSignInUnreadableError(member, "")
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		err = &metaMemberError{message: fmt.Sprintf("server %q's attached connection is no longer available; it must be attached again", member.slug)}
 	case err != nil:

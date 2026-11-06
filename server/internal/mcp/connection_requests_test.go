@@ -1178,8 +1178,8 @@ func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 			require.True(t, isError)
-			require.Contains(t, text, "can't use the user's saved sign-in anymore")
-			require.Contains(t, text, "to reconnect it")
+			require.Contains(t, text, `server "member" can't use its saved sign-in anymore. Ask the user to open `)
+			require.Contains(t, text, "to reconnect it, then retry")
 			require.NotContains(t, strings.ToLower(text), "retry shortly")
 			require.Zero(t, memberCalls.Load(), "never an anonymous call")
 
@@ -1201,4 +1201,54 @@ func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 			require.Zero(t, memberCalls.Load())
 		})
 	}
+}
+
+// overwriteMemberTokens replaces the fixture's stored pair; an empty plaintext stores ciphertext the key can't read.
+func overwriteMemberTokens(t *testing.T, ctx context.Context, f memberRefreshOutageFixture, access, refresh string, accessExpiresIn time.Duration) {
+	t.Helper()
+	encrypt := func(plain string) string {
+		if plain == "" {
+			return "not-ciphertext"
+		}
+		ciphertext, err := f.ti.enc.Encrypt([]byte(plain))
+		require.NoError(t, err)
+		return ciphertext
+	}
+	current, err := remotesessions_repo.New(f.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(f.ti.conn).UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: f.subject, RemoteSessionClientID: f.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: encrypt(access), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
+		RefreshTokenEncrypted: conv.ToPGText(encrypt(refresh)), Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+}
+
+// A gateway member whose access token can't be read is renewed during the call and dialed with the new token.
+func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	overwriteMemberTokens(t, ctx, f, "", "live-refresh", time.Hour)
+
+	_, _ = metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.EqualValues(t, 1, f.refreshes.Load())
+	require.Positive(t, f.memberCalls.Load())
+	require.Equal(t, "Bearer refreshed-token", f.upstream.Load())
+}
+
+// An expired access token with an unreadable refresh token never reaches the member without credentials.
+func TestUnreadableUpstreamRefreshTokenGatewayMemberAsksToReconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	overwriteMemberTokens(t, ctx, f, "stale-access", "", -time.Hour)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, `server "member" can't use its saved sign-in anymore`)
+	require.Zero(t, f.memberCalls.Load(), "never an anonymous call")
+	require.Zero(t, f.refreshes.Load(), "an unreadable refresh token is never sent")
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -134,6 +135,9 @@ func rejectSurvivingClientCredentialRejection(w http.ResponseWriter, p *proxy.Pr
 // whose credential could not be obtained, with the remedy its classification
 // names: retry an outage, or contact the administrator.
 func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		return oops.E(oops.CodeUnauthorized, err, "%s", remoteSessionReconnectDescription)
+	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return remoteSessionUnavailableError(w, err)
 	}
@@ -166,11 +170,10 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 
 // memberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
 func memberSignInUnreadableError(member metaMember, connectURL string) error {
-	where := "to reconnect it"
+	message := fmt.Sprintf("server %q can't use its saved sign-in anymore. Ask whoever connected it to reconnect it, then retry", member.slug)
 	if connectURL != "" {
-		where = "to open " + connectURL + " to reconnect it"
+		message = fmt.Sprintf("server %q can't use its saved sign-in anymore. Ask the user to open %s to reconnect it, then retry", member.slug, connectURL)
 	}
-	message := fmt.Sprintf("server %q can't use the user's saved sign-in anymore. Ask the user %s, then retry", member.slug, where)
 	return memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}
 }
 
@@ -204,6 +207,9 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 
 // withMemberConnectLink adds the member's connect page to a connection outage.
 func withMemberConnectLink(err error, member metaMember, connectURL string) error {
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable && connectURL != "" {
+		return memberSignInUnreadableError(member, connectURL)
+	}
 	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.session != nil && connectURL != "" {
 		return linkedMemberOutage(member, outage.session, connectURL)
 	}

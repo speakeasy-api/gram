@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,6 +27,10 @@ func (s *RefreshService) recordRefresh(
 	outcome remotesessionmetrics.RefreshOutcome,
 	err error,
 ) (standalone, step bool) {
+	// Nobody can act on an unreadable sign-in while its access token still serves or no person is present.
+	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || accessTokenLive(sess, time.Now())) {
+		return false, false
+	}
 	what, ok := refreshHappened(outcome, client, err)
 	if !ok {
 		return false, false

@@ -441,11 +441,10 @@ func TestServeConsentAction_VerifyUnfixableByRetryKeepsNextSteps(t *testing.T) {
 		ctx, fx := seedMetaValidationFixture(t, "verify-unreadable-"+uuid.NewString()[:8])
 		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-		// Token resolution reports a grant to replace: the notice names the card's own controls.
-		requireVerifyNotice(t, fx, fx.clientID, verifyReconnectNotice)
-		page := renderConsent(t, fx)
-		require.Contains(t, page, `value="disconnect"`)
-		require.NotContains(t, page, `data-connect-link`, "a connected card has no Reconnect button to point at")
+		// Nothing stored can be read, so the card is not connected and offers Reconnect, which rewrites the row.
+		requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
+		page := normalizeSpaces(renderConsent(t, fx))
+		require.Regexp(t, `data-connect-link > Reconnect`, page)
 	})
 }
 

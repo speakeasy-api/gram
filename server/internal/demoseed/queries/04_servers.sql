@@ -558,7 +558,7 @@ VALUES
 -- The client sits under Linear's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
--- Reserved example endpoints, an invalid ciphertext and no refresh token
+-- Reserved example endpoints, no stored token and no refresh token
 -- prevent this display fixture from becoming a usable upstream credential.
 -- name: ServersInsertAttachmentClient :exec
 INSERT INTO remote_session_clients
@@ -578,14 +578,14 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
+        '', now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
 -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
--- validation state. Inert like the session above: an invalid ciphertext and
--- no refresh token. grant_generation above 1 records re-authorizations.
+-- validation state. Inert like the session above: no stored token and no
+-- refresh token. grant_generation above 1 records re-authorizations.
 -- An empty status is the never-validated session (NULL status and
 -- last_validated_at).
 -- name: ServersInsertValidatedSession :exec
@@ -596,7 +596,7 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        '', now() + interval '7 days', false,
         ARRAY['read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),

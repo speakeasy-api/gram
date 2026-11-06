@@ -389,7 +389,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		if !upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			continue
 		}
-		if entry.SessionUnavailable() {
+		if entry.HeldWithoutToken() {
 			outage = entry
 			continue
 		}
@@ -397,7 +397,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		match = entry
 	}
 	switch {
-	case found == 0 && outage.SessionUnavailable():
+	case found == 0 && outage.HeldWithoutToken():
 		return none, outage.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {

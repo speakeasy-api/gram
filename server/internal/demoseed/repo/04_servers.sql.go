@@ -131,7 +131,7 @@ type ServersInsertAttachmentClientParams struct {
 // The client sits under Linear's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
-// Reserved example endpoints, an invalid ciphertext and no refresh token
+// Reserved example endpoints, no stored token and no refresh token
 // prevent this display fixture from becoming a usable upstream credential.
 func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg ServersInsertAttachmentClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAttachmentClient,
@@ -151,7 +151,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
+        '', now() + $5::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
@@ -2093,7 +2093,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        '', now() + interval '7 days', false,
         ARRAY['read'], $5::bigint,
         CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
         NULLIF($6::text, ''), now() - make_interval(days => $8::int),
@@ -2113,8 +2113,8 @@ type ServersInsertValidatedSessionParams struct {
 
 // Upstream sessions on Linear's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: an invalid ciphertext and
-// no refresh token. grant_generation above 1 records re-authorizations.
+// validation state. Inert like the session above: no stored token and no
+// refresh token. grant_generation above 1 records re-authorizations.
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {

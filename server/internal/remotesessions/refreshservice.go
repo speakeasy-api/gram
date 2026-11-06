@@ -910,11 +910,10 @@ func (s *RefreshService) refresh(
 
 	if current.UpdatedAt.Time.After(snapshotAt) {
 		if accessTokenLive(current, time.Now()) {
-			plain, err := s.enc.Decrypt(current.AccessTokenEncrypted)
-			if err != nil {
-				return zero, nil, nil, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
+			// A winner's token this key can't read is renewed below instead.
+			if plain, err := s.enc.Decrypt(current.AccessTokenEncrypted); err == nil {
+				return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
 			}
-			return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
 		}
 	}
 	if !hasRefreshToken(current) {

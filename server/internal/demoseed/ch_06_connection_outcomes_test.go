@@ -90,6 +90,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		"inbound_token/sign_in_revoked_by_admin",
 		"inbound_token/refreshed",
 		"mcp_request/invalid_remote_session",
+		"mcp_request/stored_sign_in_unreadable",
 		"mcp_request/remote_session_unavailable",
 		"provider_refresh/refreshed",
 		"provider_refresh/invalid_grant",

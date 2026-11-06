@@ -20,4 +20,7 @@ const (
 
 	// StoredTokenNeedsSignIn is an unreadable token nothing could replace, so the person signs in again.
 	StoredTokenNeedsSignIn StoredTokenOutcome = "needs_sign_in"
+
+	// StoredTokenAccessStillLive is an unreadable refresh token met while the access token still serves calls.
+	StoredTokenAccessStillLive StoredTokenOutcome = "access_still_live"
 )

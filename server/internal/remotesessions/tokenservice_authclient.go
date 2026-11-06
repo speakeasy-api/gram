@@ -158,7 +158,7 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, 
 	for _, row := range rows {
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
-	return remoteSessionStates(states), nil
+	return m.remoteSessionStates(states), nil
 }
 
 // attachedCaller reports whether the caller resolves through an agent

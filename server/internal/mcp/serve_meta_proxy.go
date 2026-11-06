@@ -74,7 +74,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if member.tunneledServerID.Valid {
 		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
 		if err != nil {
-			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() || entry.SignInUnreadable() {
+			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.HeldWithoutToken() {
 				return entry, metaMemberClientCredentialError(member, err)
 			}
 			return none, metaMemberClientCredentialError(member, err)
@@ -87,9 +87,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	var matched, outage remotesessions.UpstreamToken
 	found := 0
 	for issuerID, entry := range tokens {
-		if entry.SessionUnavailable() || entry.SignInUnreadable() {
+		if entry.HeldWithoutToken() {
 			// A grant from before resources were recorded still names its member by issuer.
-			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
+			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (entry.Resource == "" && member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
 				outage = entry
 			}
 			continue
@@ -101,7 +101,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
-		if outage.SessionUnavailable() || outage.SignInUnreadable() {
+		if outage.HeldWithoutToken() {
 			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
 		}
 		if member.remoteSessionIssuerID.Valid {
@@ -268,23 +268,23 @@ func memberCredentialLoadError(member metaMember, err error) error {
 	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code}
 }
 
-// chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
+// chainMetaMember chains a member with no routed credential or one held without a token, whose failure otherwise stands.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
-	if routed.SignInUnreadable() {
-		return routed, "", memberSignInUnreadableError(member, gate.memberReconnectURL(member))
-	}
-	outage := routed.SessionUnavailable()
-	if outage {
+	held := routed.HeldWithoutToken()
+	switch {
+	case routed.SignInUnreadable():
+		routeErr = memberSignInUnreadableError(member, gate.memberCallerURL(member))
+	case held:
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {
 			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
-	if (routeErr != nil && !outage) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
+	if (routeErr != nil && !held) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
 		return routed, routed.Token, routeErr
 	}
 	chained, err := gate.chainUpstream(ctx, member, resource)
-	if outage && chained == "" {
+	if held && chained == "" {
 		return routed, "", routeErr
 	}
 	var none remotesessions.UpstreamToken

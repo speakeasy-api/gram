@@ -11,7 +11,7 @@ import (
 
 const meterUpstreamRefresh = "gram.remote_session.upstream_refresh"
 
-const meterUnreadableStoredGrant = "gram.remote_session.stored_token_unreadable"
+const meterStoredTokenUnreadable = "gram.remote_session.stored_token_unreadable" //nolint:gosec // G101: a metric name, not a credential
 
 // Refresh holds the upstream-refresh instrument: an unsampled census of
 // refresh_token grant attempts against upstream identity providers, one count
@@ -41,12 +41,12 @@ func NewRefresh(logger *slog.Logger, meterProvider metric.MeterProvider) *Refres
 	}
 
 	unreadable, err := meter.Int64Counter(
-		meterUnreadableStoredGrant,
-		metric.WithDescription("Stored upstream tokens of Remote Sessions that could not be decrypted, by which token and whether a refresh replaced it."),
-		metric.WithUnit("{token}"),
+		meterStoredTokenUnreadable,
+		metric.WithDescription("Attempts to use a stored upstream token of a Remote Session that could not be decrypted, by which token and outcome. Counts attempts, not sessions: one unreadable row counts on every use."),
+		metric.WithUnit("{attempt}"),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUnreadableStoredGrant), attr.SlogError(err))
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterStoredTokenUnreadable), attr.SlogError(err))
 	}
 
 	return &Refresh{attempts: attempts, unreadable: unreadable}
@@ -67,14 +67,10 @@ func (m *Refresh) Record(ctx context.Context, issuerURL string, trigger RefreshT
 	))
 }
 
-// RecordStoredTokenUnreadable counts one stored token that could not be decrypted.
-func (m *Refresh) RecordStoredTokenUnreadable(ctx context.Context, token StoredToken, healed bool) {
+// RecordStoredTokenUnreadable counts one attempt to use a stored token that could not be decrypted.
+func (m *Refresh) RecordStoredTokenUnreadable(ctx context.Context, token StoredToken, outcome StoredTokenOutcome) {
 	if m == nil || m.unreadable == nil {
 		return
-	}
-	outcome := StoredTokenNeedsSignIn
-	if healed {
-		outcome = StoredTokenHealed
 	}
 	m.unreadable.Add(ctx, 1, metric.WithAttributes(attr.OAuthStoredToken(token), attr.Outcome(outcome)))
 }

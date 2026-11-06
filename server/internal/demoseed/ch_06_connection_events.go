@@ -85,6 +85,7 @@ var connectionEndings = []connectionEnding{
 // request, and a refresh. A served request has no row.
 var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeUsageLimitReached},
