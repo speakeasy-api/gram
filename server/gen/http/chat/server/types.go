@@ -5471,7 +5471,7 @@ func NewListSessionLinksGatewayErrorResponseBody(res *goa.ServiceError) *ListSes
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, agentID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, agentID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, pinnedFirst bool, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
@@ -5491,6 +5491,7 @@ func NewListChatsPayload(search *string, externalUserID *string, userID *string,
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.PinnedFirst = pinnedFirst
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

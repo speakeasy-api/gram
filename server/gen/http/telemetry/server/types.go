@@ -237,6 +237,9 @@ type GetProjectOverviewRequestBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, external_users) in the same response
+	IncludeUsage *bool `form:"include_usage,omitempty" json:"include_usage,omitempty" xml:"include_usage,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageRequestBody is the type of the "telemetry" service
@@ -1071,10 +1074,16 @@ type GetOrganizationGatewayUsageResponseBody struct {
 type GetProjectOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string `form:"metrics_mode" json:"metrics_mode" xml:"metrics_mode"`
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResultResponseBody `form:"usage_by_user,omitempty" json:"usage_by_user,omitempty" xml:"usage_by_user,omitempty"`
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
+	// Every external end user with activity in the period. Only set when
+	// include_usage is true and the project has no agent usage.
+	ExternalUsers []*UserSummaryResponseBody `form:"external_users,omitempty" json:"external_users,omitempty" xml:"external_users,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
@@ -8867,35 +8876,14 @@ type MetaMcpMemberUsageResponseBody struct {
 type ProjectOverviewSummaryResponseBody struct {
 	// Total number of chat sessions
 	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
-	// Number of resolved chat sessions
-	ResolvedChats int64 `form:"resolved_chats" json:"resolved_chats" xml:"resolved_chats"`
-	// Number of failed chat sessions
-	FailedChats int64 `form:"failed_chats" json:"failed_chats" xml:"failed_chats"`
 	// Total number of tool calls
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Number of failed tool calls
 	FailedToolCalls int64 `form:"failed_tool_calls" json:"failed_tool_calls" xml:"failed_tool_calls"`
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64 `form:"active_servers_count" json:"active_servers_count" xml:"active_servers_count"`
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64 `form:"active_users_count" json:"active_users_count" xml:"active_users_count"`
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUserResponseBody `form:"top_users" json:"top_users" xml:"top_users"`
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServerResponseBody `form:"top_servers" json:"top_servers" xml:"top_servers"`
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown" json:"llm_client_breakdown" xml:"llm_client_breakdown"`
-}
-
-// TopUserResponseBody is used to define fields on response body types.
-type TopUserResponseBody struct {
-	// User ID (internal or external depending on availability)
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
-	// Type of user ID
-	UserType string `form:"user_type" json:"user_type" xml:"user_type"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
 }
 
 // TopServerResponseBody is used to define fields on response body types.
@@ -8906,52 +8894,16 @@ type TopServerResponseBody struct {
 	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
 }
 
-// LLMClientUsageResponseBody is used to define fields on response body types.
-type LLMClientUsageResponseBody struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64 `form:"activity_count" json:"activity_count" xml:"activity_count"`
-}
-
-// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUsageBucketResponseBody struct {
-	// Bucket date (YYYY-MM-DD, UTC)
-	Date string `form:"date" json:"date" xml:"date"`
-	// Number of observed tool calls in this bucket
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-}
-
-// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerToolUsageRowResponseBody struct {
-	// The tool's name
-	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
-	// Number of observed calls to this tool
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-	// Number of observed calls that errored
-	FailureCount int `form:"failure_count" json:"failure_count" xml:"failure_count"`
-}
-
-// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUserUsageRowResponseBody struct {
-	// The calling user's email, when Shadow MCP could resolve one
-	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
-	// Number of observed calls from this user
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
-	// Time of the user's most recent observed call, ISO 8601
-	LastCalledAt string `form:"last_called_at" json:"last_called_at" xml:"last_called_at"`
-}
-
-// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerClientUsageRowResponseBody struct {
-	// The hook-reported client/agent surface
-	Client string `form:"client" json:"client" xml:"client"`
-	// Number of observed calls from this client
-	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+// QueryResultResponseBody is used to define fields on response body types.
+type QueryResultResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy string `form:"group_by" json:"group_by" xml:"group_by"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRowResponseBody `form:"table" json:"table" xml:"table"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeriesResponseBody `form:"timeseries" json:"timeseries" xml:"timeseries"`
 }
 
 // QueryRowResponseBody is used to define fields on response body types.
@@ -9013,6 +8965,46 @@ type QueryPointResponseBody struct {
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
 	// Aggregated measures for this bucket
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
+}
+
+// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUsageBucketResponseBody struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date string `form:"date" json:"date" xml:"date"`
+	// Number of observed tool calls in this bucket
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+}
+
+// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerToolUsageRowResponseBody struct {
+	// The tool's name
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Number of observed calls to this tool
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+	// Number of observed calls that errored
+	FailureCount int `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
+// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUserUsageRowResponseBody struct {
+	// The calling user's email, when Shadow MCP could resolve one
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Number of observed calls from this user
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
+	// Time of the user's most recent observed call, ISO 8601
+	LastCalledAt string `form:"last_called_at" json:"last_called_at" xml:"last_called_at"`
+}
+
+// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerClientUsageRowResponseBody struct {
+	// The hook-reported client/agent surface
+	Client string `form:"client" json:"client" xml:"client"`
+	// Number of observed calls from this client
+	CallCount int `form:"call_count" json:"call_count" xml:"call_count"`
 }
 
 // TumDetailsPointResponseBody is used to define fields on response body types.
@@ -10080,14 +10072,25 @@ func NewGetOrganizationGatewayUsageResponseBody(res *telemetry.GetMetaMcpServerU
 // NewGetProjectOverviewResponseBody builds the HTTP response body from the
 // result of the "getProjectOverview" endpoint of the "telemetry" service.
 func NewGetProjectOverviewResponseBody(res *telemetry.GetProjectOverviewResult) *GetProjectOverviewResponseBody {
-	body := &GetProjectOverviewResponseBody{
-		MetricsMode: res.MetricsMode,
-	}
+	body := &GetProjectOverviewResponseBody{}
 	if res.Summary != nil {
 		body.Summary = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Summary)
 	}
-	if res.Comparison != nil {
-		body.Comparison = marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(res.Comparison)
+	if res.UsageByUser != nil {
+		body.UsageByUser = marshalTelemetryQueryResultToQueryResultResponseBody(res.UsageByUser)
+	}
+	if res.UsageByAgent != nil {
+		body.UsageByAgent = marshalTelemetryQueryResultToQueryResultResponseBody(res.UsageByAgent)
+	}
+	if res.ExternalUsers != nil {
+		body.ExternalUsers = make([]*UserSummaryResponseBody, len(res.ExternalUsers))
+		for i, val := range res.ExternalUsers {
+			if val == nil {
+				body.ExternalUsers[i] = nil
+				continue
+			}
+			body.ExternalUsers[i] = marshalTelemetryUserSummaryToUserSummaryResponseBody(val)
+		}
 	}
 	return body
 }
@@ -16690,6 +16693,12 @@ func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyTok
 	v := &telemetry.GetProjectOverviewPayload{
 		From: *body.From,
 		To:   *body.To,
+	}
+	if body.IncludeUsage != nil {
+		v.IncludeUsage = *body.IncludeUsage
+	}
+	if body.IncludeUsage == nil {
+		v.IncludeUsage = false
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

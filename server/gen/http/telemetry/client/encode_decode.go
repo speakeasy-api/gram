@@ -9853,20 +9853,9 @@ func unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(v *Met
 func unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(v *ProjectOverviewSummaryResponseBody) *telemetry.ProjectOverviewSummary {
 	res := &telemetry.ProjectOverviewSummary{
 		TotalChats:         *v.TotalChats,
-		ResolvedChats:      *v.ResolvedChats,
-		FailedChats:        *v.FailedChats,
 		TotalToolCalls:     *v.TotalToolCalls,
 		FailedToolCalls:    *v.FailedToolCalls,
 		ActiveServersCount: *v.ActiveServersCount,
-		ActiveUsersCount:   *v.ActiveUsersCount,
-	}
-	res.TopUsers = make([]*telemetry.TopUser, len(v.TopUsers))
-	for i, val := range v.TopUsers {
-		if val == nil {
-			res.TopUsers[i] = nil
-			continue
-		}
-		res.TopUsers[i] = unmarshalTopUserResponseBodyToTelemetryTopUser(val)
 	}
 	res.TopServers = make([]*telemetry.TopServer, len(v.TopServers))
 	for i, val := range v.TopServers {
@@ -9875,26 +9864,6 @@ func unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummar
 			continue
 		}
 		res.TopServers[i] = unmarshalTopServerResponseBodyToTelemetryTopServer(val)
-	}
-	res.LlmClientBreakdown = make([]*telemetry.LLMClientUsage, len(v.LlmClientBreakdown))
-	for i, val := range v.LlmClientBreakdown {
-		if val == nil {
-			res.LlmClientBreakdown[i] = nil
-			continue
-		}
-		res.LlmClientBreakdown[i] = unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(val)
-	}
-
-	return res
-}
-
-// unmarshalTopUserResponseBodyToTelemetryTopUser builds a value of type
-// *telemetry.TopUser from a value of type *TopUserResponseBody.
-func unmarshalTopUserResponseBodyToTelemetryTopUser(v *TopUserResponseBody) *telemetry.TopUser {
-	res := &telemetry.TopUser{
-		UserID:        *v.UserID,
-		UserType:      *v.UserType,
-		ActivityCount: *v.ActivityCount,
 	}
 
 	return res
@@ -9911,14 +9880,102 @@ func unmarshalTopServerResponseBodyToTelemetryTopServer(v *TopServerResponseBody
 	return res
 }
 
-// unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage builds a value
-// of type *telemetry.LLMClientUsage from a value of type
-// *LLMClientUsageResponseBody.
-func unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(v *LLMClientUsageResponseBody) *telemetry.LLMClientUsage {
-	res := &telemetry.LLMClientUsage{
-		ClientName:    *v.ClientName,
-		ActivityCount: *v.ActivityCount,
+// unmarshalQueryResultResponseBodyToTelemetryQueryResult builds a value of
+// type *telemetry.QueryResult from a value of type *QueryResultResponseBody.
+func unmarshalQueryResultResponseBodyToTelemetryQueryResult(v *QueryResultResponseBody) *telemetry.QueryResult {
+	if v == nil {
+		return nil
 	}
+	res := &telemetry.QueryResult{
+		GroupBy:         *v.GroupBy,
+		IntervalSeconds: *v.IntervalSeconds,
+	}
+	res.Table = make([]*telemetry.QueryRow, len(v.Table))
+	for i, val := range v.Table {
+		if val == nil {
+			res.Table[i] = nil
+			continue
+		}
+		res.Table[i] = unmarshalQueryRowResponseBodyToTelemetryQueryRow(val)
+	}
+	res.Timeseries = make([]*telemetry.QuerySeries, len(v.Timeseries))
+	for i, val := range v.Timeseries {
+		if val == nil {
+			res.Timeseries[i] = nil
+			continue
+		}
+		res.Timeseries[i] = unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(val)
+	}
+
+	return res
+}
+
+// unmarshalQueryRowResponseBodyToTelemetryQueryRow builds a value of type
+// *telemetry.QueryRow from a value of type *QueryRowResponseBody.
+func unmarshalQueryRowResponseBodyToTelemetryQueryRow(v *QueryRowResponseBody) *telemetry.QueryRow {
+	res := &telemetry.QueryRow{
+		GroupValue: *v.GroupValue,
+	}
+	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
+	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+	for key, val := range v.DimensionValues {
+		tk := key
+		tv := make([]string, len(val))
+		for i, val := range val {
+			tv[i] = val
+		}
+		res.DimensionValues[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures builds a value of
+// type *telemetry.QueryMeasures from a value of type
+// *QueryMeasuresResponseBody.
+func unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v *QueryMeasuresResponseBody) *telemetry.QueryMeasures {
+	res := &telemetry.QueryMeasures{
+		TotalCost:                *v.TotalCost,
+		TotalInputTokens:         *v.TotalInputTokens,
+		TotalOutputTokens:        *v.TotalOutputTokens,
+		TotalTokens:              *v.TotalTokens,
+		CacheReadInputTokens:     *v.CacheReadInputTokens,
+		CacheCreationInputTokens: *v.CacheCreationInputTokens,
+		TotalToolCalls:           *v.TotalToolCalls,
+		TotalChats:               *v.TotalChats,
+		TotalWorkUnits:           *v.TotalWorkUnits,
+		ScoredCost:               *v.ScoredCost,
+		ScoredTokens:             *v.ScoredTokens,
+	}
+
+	return res
+}
+
+// unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries builds a value of
+// type *telemetry.QuerySeries from a value of type *QuerySeriesResponseBody.
+func unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(v *QuerySeriesResponseBody) *telemetry.QuerySeries {
+	res := &telemetry.QuerySeries{
+		GroupValue: *v.GroupValue,
+	}
+	res.Points = make([]*telemetry.QueryPoint, len(v.Points))
+	for i, val := range v.Points {
+		if val == nil {
+			res.Points[i] = nil
+			continue
+		}
+		res.Points[i] = unmarshalQueryPointResponseBodyToTelemetryQueryPoint(val)
+	}
+
+	return res
+}
+
+// unmarshalQueryPointResponseBodyToTelemetryQueryPoint builds a value of type
+// *telemetry.QueryPoint from a value of type *QueryPointResponseBody.
+func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseBody) *telemetry.QueryPoint {
+	res := &telemetry.QueryPoint{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+	}
+	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
 
 	return res
 }
@@ -10011,76 +10068,6 @@ func marshalQueryFilterRequestBodyToTelemetryQueryFilter(v *QueryFilterRequestBo
 	} else {
 		res.Values = []string{}
 	}
-
-	return res
-}
-
-// unmarshalQueryRowResponseBodyToTelemetryQueryRow builds a value of type
-// *telemetry.QueryRow from a value of type *QueryRowResponseBody.
-func unmarshalQueryRowResponseBodyToTelemetryQueryRow(v *QueryRowResponseBody) *telemetry.QueryRow {
-	res := &telemetry.QueryRow{
-		GroupValue: *v.GroupValue,
-	}
-	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
-	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
-	for key, val := range v.DimensionValues {
-		tk := key
-		tv := make([]string, len(val))
-		for i, val := range val {
-			tv[i] = val
-		}
-		res.DimensionValues[tk] = tv
-	}
-
-	return res
-}
-
-// unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures builds a value of
-// type *telemetry.QueryMeasures from a value of type
-// *QueryMeasuresResponseBody.
-func unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v *QueryMeasuresResponseBody) *telemetry.QueryMeasures {
-	res := &telemetry.QueryMeasures{
-		TotalCost:                *v.TotalCost,
-		TotalInputTokens:         *v.TotalInputTokens,
-		TotalOutputTokens:        *v.TotalOutputTokens,
-		TotalTokens:              *v.TotalTokens,
-		CacheReadInputTokens:     *v.CacheReadInputTokens,
-		CacheCreationInputTokens: *v.CacheCreationInputTokens,
-		TotalToolCalls:           *v.TotalToolCalls,
-		TotalChats:               *v.TotalChats,
-		TotalWorkUnits:           *v.TotalWorkUnits,
-		ScoredCost:               *v.ScoredCost,
-		ScoredTokens:             *v.ScoredTokens,
-	}
-
-	return res
-}
-
-// unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries builds a value of
-// type *telemetry.QuerySeries from a value of type *QuerySeriesResponseBody.
-func unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(v *QuerySeriesResponseBody) *telemetry.QuerySeries {
-	res := &telemetry.QuerySeries{
-		GroupValue: *v.GroupValue,
-	}
-	res.Points = make([]*telemetry.QueryPoint, len(v.Points))
-	for i, val := range v.Points {
-		if val == nil {
-			res.Points[i] = nil
-			continue
-		}
-		res.Points[i] = unmarshalQueryPointResponseBodyToTelemetryQueryPoint(val)
-	}
-
-	return res
-}
-
-// unmarshalQueryPointResponseBodyToTelemetryQueryPoint builds a value of type
-// *telemetry.QueryPoint from a value of type *QueryPointResponseBody.
-func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseBody) *telemetry.QueryPoint {
-	res := &telemetry.QueryPoint{
-		BucketTimeUnixNano: *v.BucketTimeUnixNano,
-	}
-	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
 
 	return res
 }

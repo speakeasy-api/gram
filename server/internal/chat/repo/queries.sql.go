@@ -3259,17 +3259,20 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
-        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-        CASE WHEN $17 = 'num_messages' AND $20 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
-        CASE WHEN $17 = 'num_messages' AND $20 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        -- pinned_first lists pinned chats ahead of the rest; NULL when off, so
+        -- it does not affect the order.
+        CASE WHEN $20::boolean THEN fc.pinned_at IS NOT NULL END DESC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $21 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $21 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $21 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $21 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
         fc.last_message_timestamp DESC,
         fc.id DESC
     ) AS page_position
   FROM filtered_chats fc
   ORDER BY page_position
-  LIMIT $22
-  OFFSET $21
+  LIMIT $23
+  OFFSET $22
 ),
 page_chats AS (
   SELECT
@@ -3400,6 +3403,7 @@ type ListChatsParams struct {
 	SortBy            interface{}
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
+	PinnedFirst       bool
 	SortOrder         interface{}
 	PageOffset        int32
 	PageLimit         int32
@@ -3457,6 +3461,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.SortBy,
 		arg.FromTime,
 		arg.ToTime,
+		arg.PinnedFirst,
 		arg.SortOrder,
 		arg.PageOffset,
 		arg.PageLimit,

@@ -377,6 +377,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		AccountType:       accountType,
 		SortBy:            payload.SortBy,
 		SortOrder:         payload.SortOrder,
+		PinnedFirst:       payload.PinnedFirst,
 		PageLimit:         conv.SafeInt32(payload.Limit),
 		PageOffset:        conv.SafeInt32(payload.Offset),
 	})
@@ -1320,7 +1321,7 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
-		MinRiskScore: -1, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
+		MinRiskScore: -1, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PinnedFirst: false, PageLimit: 1, PageOffset: 0,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat overview").LogError(ctx, s.logger)

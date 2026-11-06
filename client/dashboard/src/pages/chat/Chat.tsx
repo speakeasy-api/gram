@@ -629,10 +629,13 @@ function buildRecentEntries(
   return entries;
 }
 
-// Resolve the project's Project Assistant and list its conversations, filtered
-// by pinned state. Shared by the pinned and recents sections so the
-// assistant-resolution logic lives in one place.
-function useProjectAssistantChats(pinned: Pinned): {
+// Resolve the project's Project Assistant and list its conversations. Shared
+// by the pinned, recents, and compact sections so the assistant-resolution
+// logic lives in one place. Pass a pinned state to filter, or `pinnedFirst` to
+// list every chat with pinned ones ahead of the rest.
+function useProjectAssistantChats(
+  filter: { pinned: Pinned } | { pinnedFirst: true; limit: number },
+): {
   chats: ChatOverview[];
   loading: boolean;
 } {
@@ -650,10 +653,10 @@ function useProjectAssistantChats(pinned: Pinned): {
       // Mirror the Elements runtime request: hide onboarding/warmup threads
       // from the recents lists.
       excludeSourceKind: "setup",
-      pinned,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 50,
+      ...filter,
     },
     undefined,
     { enabled, throwOnError: false },
@@ -666,7 +669,7 @@ function useProjectAssistantChats(pinned: Pinned): {
 
 // Pinned conversations, shown above recents. Hidden entirely when none exist.
 function ChatHomePinned(): ReactElement | null {
-  const { chats, loading } = useProjectAssistantChats(Pinned.True);
+  const { chats, loading } = useProjectAssistantChats({ pinned: Pinned.True });
   if (loading || chats.length === 0) {
     return null;
   }
@@ -684,7 +687,9 @@ function ChatHomePinned(): ReactElement | null {
 
 function ChatHomeRecents(): ReactElement {
   // Exclude pinned chats — they live in the Pinned section above.
-  const { chats, loading } = useProjectAssistantChats(Pinned.False);
+  const { chats, loading } = useProjectAssistantChats({
+    pinned: Pinned.False,
+  });
   const [showAll, setShowAll] = useState(false);
 
   return (
@@ -717,16 +722,12 @@ const COMPACT_RECENTS_COUNT = 3;
 
 function ChatHomeCompactRecents(): ReactElement {
   const routes = useRoutes();
-  // Pinned chats take the slots first; recents fill whatever is left.
-  const { chats: pinnedChats, loading: pinnedLoading } =
-    useProjectAssistantChats(Pinned.True);
-  const { chats: recentChats, loading: recentLoading } =
-    useProjectAssistantChats(Pinned.False);
-  const loading = pinnedLoading || recentLoading;
-  const chats = [
-    ...pinnedChats.map((chat) => ({ chat, pinned: true })),
-    ...recentChats.map((chat) => ({ chat, pinned: false })),
-  ];
+  // One request: pinned chats take the slots first and recents fill whatever
+  // is left. The extra row only tells us whether to show "View more".
+  const { chats, loading } = useProjectAssistantChats({
+    pinnedFirst: true,
+    limit: COMPACT_RECENTS_COUNT + 1,
+  });
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
@@ -754,8 +755,12 @@ function ChatHomeCompactRecents(): ReactElement {
         </p>
       ) : (
         <div className="flex flex-col">
-          {chats.slice(0, COMPACT_RECENTS_COUNT).map(({ chat, pinned }) => (
-            <RecentRow key={chat.id} chat={chat} pinned={pinned} />
+          {chats.slice(0, COMPACT_RECENTS_COUNT).map((chat) => (
+            <RecentRow
+              key={chat.id}
+              chat={chat}
+              pinned={chat.pinned === true}
+            />
           ))}
         </div>
       )}

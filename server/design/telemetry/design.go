@@ -2281,6 +2281,9 @@ var GetProjectOverviewPayload = Type("GetProjectOverviewPayload", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
+	Attribute("include_usage", Boolean, "Also return the project home usage breakdowns (usage_by_user, usage_by_agent, external_users) in the same response", func() {
+		Default(false)
+	})
 
 	Required("from", "to")
 })
@@ -2289,12 +2292,11 @@ var GetProjectOverviewResult = Type("GetProjectOverviewResult", func() {
 	Description("Result of project overview query")
 
 	Attribute("summary", ProjectOverviewSummaryType, "Current period summary metrics")
-	Attribute("comparison", ProjectOverviewSummaryType, "Previous period summary metrics for trend calculation")
-	Attribute("metrics_mode", String, "Indicates whether metrics are session-based or tool-call-based", func() {
-		Enum("session", "tool_call")
-	})
+	Attribute("usage_by_user", QueryResult, "Agent usage grouped by user email, ranked by LLM tokens (top 100, no time series). Only set when include_usage is true and the caller has org:read.")
+	Attribute("usage_by_agent", QueryResult, "Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time series). Only set when include_usage is true and usage_by_user has agent usage.")
+	Attribute("external_users", ArrayOf(UserSummaryType), "Every external end user with activity in the period. Only set when include_usage is true and the project has no agent usage.")
 
-	Required("summary", "comparison", "metrics_mode")
+	Required("summary")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -2343,35 +2345,18 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 var ProjectOverviewSummaryType = Type("ProjectOverviewSummary", func() {
 	Description("Aggregated project-level summary metrics for a time period")
 
-	// Chat metrics
 	Attribute("total_chats", Int64, "Total number of chat sessions")
-	Attribute("resolved_chats", Int64, "Number of resolved chat sessions")
-	Attribute("failed_chats", Int64, "Number of failed chat sessions")
-
-	// Tool metrics
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
 	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
-
-	// Activity counts
 	Attribute("active_servers_count", Int64, "Number of MCP servers with at least one tool call in the time period")
-	Attribute("active_users_count", Int64, "Number of unique users with activity in the time period")
-
-	// Top lists
-	Attribute("top_users", ArrayOf(TopUserType), "Top 10 users by activity (# of messages or tool calls depending on metrics_mode)")
 	Attribute("top_servers", ArrayOf(TopServerType), "Top 10 MCP servers by tool call count")
-	Attribute("llm_client_breakdown", ArrayOf(LLMClientUsageType), "Breakdown of messages/activity by LLM client/agent")
 
 	Required(
 		"total_chats",
-		"resolved_chats",
-		"failed_chats",
 		"total_tool_calls",
 		"failed_tool_calls",
 		"active_servers_count",
-		"active_users_count",
-		"top_users",
 		"top_servers",
-		"llm_client_breakdown",
 	)
 })
 

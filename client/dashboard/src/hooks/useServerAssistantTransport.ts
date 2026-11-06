@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetManaged.js";
+import {
+  setAssistantsGetManagedData,
+  useAssistantsGetManaged,
+} from "@gram/client/react-query/assistantsGetManaged.js";
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -32,6 +37,45 @@ export interface UseServerAssistantTransportResult {
    * `assistant:read`, so once an admin provisions it the same viewer can chat.
    */
   needsAdmin: boolean;
+}
+
+// Several components call this hook at once (the dock plus each chat list).
+// Each instance would otherwise fire its own write-scoped ensure on the same
+// 404, so in-flight ensures are shared per query client and project.
+const inflightEnsures = new WeakMap<
+  QueryClient,
+  Map<string, Promise<Assistant>>
+>();
+
+function ensureManagedAssistantOnce(
+  queryClient: QueryClient,
+  projectSlug: string,
+  ensure: () => Promise<Assistant>,
+): Promise<Assistant> {
+  let byProject = inflightEnsures.get(queryClient);
+  if (!byProject) {
+    byProject = new Map();
+    inflightEnsures.set(queryClient, byProject);
+  }
+  const inflight = byProject.get(projectSlug);
+  if (inflight) return inflight;
+
+  const request = ensure()
+    .then((assistant) => {
+      // Seed the shared read so every instance, and every later mount, sees
+      // the assistant instead of the cached 404 that would re-fire ensure.
+      setAssistantsGetManagedData(
+        queryClient,
+        [{ gramSession: undefined, gramProject: projectSlug }],
+        assistant,
+      );
+      return assistant;
+    })
+    .finally(() => {
+      byProject.delete(projectSlug);
+    });
+  byProject.set(projectSlug, request);
+  return request;
 }
 
 interface UseServerAssistantTransportOptions {
@@ -104,8 +148,9 @@ export function useServerAssistantTransport(
   const is404 = isNotFoundError(getQuery.error);
   const isOtherError = !!getQuery.error && !is404;
 
+  const queryClient = useQueryClient();
   const ensure = useEnsureManagedAssistantMutation();
-  const ensureMutate = ensure.mutate;
+  const ensureMutateAsync = ensure.mutateAsync;
 
   const [provisionedId, setProvisionedId] = useState<string>("");
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -134,35 +179,42 @@ export function useServerAssistantTransport(
     // gramProject is explicit so the ensure targets the slug the hook was
     // called with, not whatever the SDK client's default header resolves to
     // — the active project may not be the same one (org-scoped routes).
-    ensureMutate(
-      { request: { gramProject: projectSlug } },
-      {
-        onSuccess: (assistant) => {
-          if (
-            slugAtRequest !== provisionedForSlugRef.current ||
-            generationAtRequest !== provisionGenerationRef.current
-          )
-            return;
-          setProvisionedId(assistant.id);
-        },
-        onError: () => {
-          if (
-            slugAtRequest !== provisionedForSlugRef.current ||
-            generationAtRequest !== provisionGenerationRef.current
-          )
-            return;
-          // Clear the latch so the next dep change (project switch, or a
-          // future caller wiring `enabled` to the sidebar toggle again) can
-          // re-fire ensure. Without this, a transient 500 or a 409 from the
-          // managed-name conflict would stick until full page reload.
-          provisionedForSlugRef.current = null;
-          setProvisionError(
-            "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
-          );
-        },
+    ensureManagedAssistantOnce(queryClient, projectSlug, () =>
+      ensureMutateAsync({ request: { gramProject: projectSlug } }),
+    ).then(
+      (assistant) => {
+        if (
+          slugAtRequest !== provisionedForSlugRef.current ||
+          generationAtRequest !== provisionGenerationRef.current
+        )
+          return;
+        setProvisionedId(assistant.id);
+      },
+      () => {
+        if (
+          slugAtRequest !== provisionedForSlugRef.current ||
+          generationAtRequest !== provisionGenerationRef.current
+        )
+          return;
+        // Clear the latch so the next dep change (project switch, or a
+        // future caller wiring `enabled` to the sidebar toggle again) can
+        // re-fire ensure. Without this, a transient 500 or a 409 from the
+        // managed-name conflict would stick until full page reload.
+        provisionedForSlugRef.current = null;
+        setProvisionError(
+          "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
+        );
       },
     );
-  }, [authorized, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
+  }, [
+    authorized,
+    projectSlug,
+    is404,
+    canCreate,
+    rbacLoading,
+    queryClient,
+    ensureMutateAsync,
+  ]);
 
   const assistantId = authorized
     ? fetchedId ||

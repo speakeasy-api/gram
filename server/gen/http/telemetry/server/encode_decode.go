@@ -9455,24 +9455,9 @@ func marshalTelemetryMetaMcpMemberUsageToMetaMcpMemberUsageResponseBody(v *telem
 func marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(v *telemetry.ProjectOverviewSummary) *ProjectOverviewSummaryResponseBody {
 	res := &ProjectOverviewSummaryResponseBody{
 		TotalChats:         v.TotalChats,
-		ResolvedChats:      v.ResolvedChats,
-		FailedChats:        v.FailedChats,
 		TotalToolCalls:     v.TotalToolCalls,
 		FailedToolCalls:    v.FailedToolCalls,
 		ActiveServersCount: v.ActiveServersCount,
-		ActiveUsersCount:   v.ActiveUsersCount,
-	}
-	if v.TopUsers != nil {
-		res.TopUsers = make([]*TopUserResponseBody, len(v.TopUsers))
-		for i, val := range v.TopUsers {
-			if val == nil {
-				res.TopUsers[i] = nil
-				continue
-			}
-			res.TopUsers[i] = marshalTelemetryTopUserToTopUserResponseBody(val)
-		}
-	} else {
-		res.TopUsers = []*TopUserResponseBody{}
 	}
 	if v.TopServers != nil {
 		res.TopServers = make([]*TopServerResponseBody, len(v.TopServers))
@@ -9485,30 +9470,6 @@ func marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody(
 		}
 	} else {
 		res.TopServers = []*TopServerResponseBody{}
-	}
-	if v.LlmClientBreakdown != nil {
-		res.LlmClientBreakdown = make([]*LLMClientUsageResponseBody, len(v.LlmClientBreakdown))
-		for i, val := range v.LlmClientBreakdown {
-			if val == nil {
-				res.LlmClientBreakdown[i] = nil
-				continue
-			}
-			res.LlmClientBreakdown[i] = marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(val)
-		}
-	} else {
-		res.LlmClientBreakdown = []*LLMClientUsageResponseBody{}
-	}
-
-	return res
-}
-
-// marshalTelemetryTopUserToTopUserResponseBody builds a value of type
-// *TopUserResponseBody from a value of type *telemetry.TopUser.
-func marshalTelemetryTopUserToTopUserResponseBody(v *telemetry.TopUser) *TopUserResponseBody {
-	res := &TopUserResponseBody{
-		UserID:        v.UserID,
-		UserType:      v.UserType,
-		ActivityCount: v.ActivityCount,
 	}
 
 	return res
@@ -9525,80 +9486,39 @@ func marshalTelemetryTopServerToTopServerResponseBody(v *telemetry.TopServer) *T
 	return res
 }
 
-// marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody builds a value of
-// type *LLMClientUsageResponseBody from a value of type
-// *telemetry.LLMClientUsage.
-func marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(v *telemetry.LLMClientUsage) *LLMClientUsageResponseBody {
-	res := &LLMClientUsageResponseBody{
-		ClientName:    v.ClientName,
-		ActivityCount: v.ActivityCount,
-	}
-
-	return res
-}
-
-// marshalTelemetryUnproxiedMcpServerUsageBucketToUnproxiedMcpServerUsageBucketResponseBody
-// builds a value of type *UnproxiedMcpServerUsageBucketResponseBody from a
-// value of type *telemetry.UnproxiedMcpServerUsageBucket.
-func marshalTelemetryUnproxiedMcpServerUsageBucketToUnproxiedMcpServerUsageBucketResponseBody(v *telemetry.UnproxiedMcpServerUsageBucket) *UnproxiedMcpServerUsageBucketResponseBody {
-	res := &UnproxiedMcpServerUsageBucketResponseBody{
-		Date:      v.Date,
-		CallCount: v.CallCount,
-	}
-
-	return res
-}
-
-// marshalTelemetryUnproxiedMcpServerToolUsageRowToUnproxiedMcpServerToolUsageRowResponseBody
-// builds a value of type *UnproxiedMcpServerToolUsageRowResponseBody from a
-// value of type *telemetry.UnproxiedMcpServerToolUsageRow.
-func marshalTelemetryUnproxiedMcpServerToolUsageRowToUnproxiedMcpServerToolUsageRowResponseBody(v *telemetry.UnproxiedMcpServerToolUsageRow) *UnproxiedMcpServerToolUsageRowResponseBody {
-	res := &UnproxiedMcpServerToolUsageRowResponseBody{
-		ToolName:     v.ToolName,
-		CallCount:    v.CallCount,
-		FailureCount: v.FailureCount,
-	}
-
-	return res
-}
-
-// marshalTelemetryUnproxiedMcpServerUserUsageRowToUnproxiedMcpServerUserUsageRowResponseBody
-// builds a value of type *UnproxiedMcpServerUserUsageRowResponseBody from a
-// value of type *telemetry.UnproxiedMcpServerUserUsageRow.
-func marshalTelemetryUnproxiedMcpServerUserUsageRowToUnproxiedMcpServerUserUsageRowResponseBody(v *telemetry.UnproxiedMcpServerUserUsageRow) *UnproxiedMcpServerUserUsageRowResponseBody {
-	res := &UnproxiedMcpServerUserUsageRowResponseBody{
-		UserEmail:    v.UserEmail,
-		CallCount:    v.CallCount,
-		LastCalledAt: v.LastCalledAt,
-	}
-
-	return res
-}
-
-// marshalTelemetryUnproxiedMcpServerClientUsageRowToUnproxiedMcpServerClientUsageRowResponseBody
-// builds a value of type *UnproxiedMcpServerClientUsageRowResponseBody from a
-// value of type *telemetry.UnproxiedMcpServerClientUsageRow.
-func marshalTelemetryUnproxiedMcpServerClientUsageRowToUnproxiedMcpServerClientUsageRowResponseBody(v *telemetry.UnproxiedMcpServerClientUsageRow) *UnproxiedMcpServerClientUsageRowResponseBody {
-	res := &UnproxiedMcpServerClientUsageRowResponseBody{
-		Client:    v.Client,
-		CallCount: v.CallCount,
-	}
-
-	return res
-}
-
-// unmarshalQueryFilterRequestBodyToTelemetryQueryFilter builds a value of type
-// *telemetry.QueryFilter from a value of type *QueryFilterRequestBody.
-func unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(v *QueryFilterRequestBody) *telemetry.QueryFilter {
+// marshalTelemetryQueryResultToQueryResultResponseBody builds a value of type
+// *QueryResultResponseBody from a value of type *telemetry.QueryResult.
+func marshalTelemetryQueryResultToQueryResultResponseBody(v *telemetry.QueryResult) *QueryResultResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &telemetry.QueryFilter{
-		Dimension: *v.Dimension,
+	res := &QueryResultResponseBody{
+		GroupBy:         v.GroupBy,
+		IntervalSeconds: v.IntervalSeconds,
 	}
-	res.Values = make([]string, len(v.Values))
-	for i, val := range v.Values {
-		res.Values[i] = val
+	if v.Table != nil {
+		res.Table = make([]*QueryRowResponseBody, len(v.Table))
+		for i, val := range v.Table {
+			if val == nil {
+				res.Table[i] = nil
+				continue
+			}
+			res.Table[i] = marshalTelemetryQueryRowToQueryRowResponseBody(val)
+		}
+	} else {
+		res.Table = []*QueryRowResponseBody{}
+	}
+	if v.Timeseries != nil {
+		res.Timeseries = make([]*QuerySeriesResponseBody, len(v.Timeseries))
+		for i, val := range v.Timeseries {
+			if val == nil {
+				res.Timeseries[i] = nil
+				continue
+			}
+			res.Timeseries[i] = marshalTelemetryQuerySeriesToQuerySeriesResponseBody(val)
+		}
+	} else {
+		res.Timeseries = []*QuerySeriesResponseBody{}
 	}
 
 	return res
@@ -9679,6 +9599,73 @@ func marshalTelemetryQueryPointToQueryPointResponseBody(v *telemetry.QueryPoint)
 	}
 	if v.Measures != nil {
 		res.Measures = marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v.Measures)
+	}
+
+	return res
+}
+
+// marshalTelemetryUnproxiedMcpServerUsageBucketToUnproxiedMcpServerUsageBucketResponseBody
+// builds a value of type *UnproxiedMcpServerUsageBucketResponseBody from a
+// value of type *telemetry.UnproxiedMcpServerUsageBucket.
+func marshalTelemetryUnproxiedMcpServerUsageBucketToUnproxiedMcpServerUsageBucketResponseBody(v *telemetry.UnproxiedMcpServerUsageBucket) *UnproxiedMcpServerUsageBucketResponseBody {
+	res := &UnproxiedMcpServerUsageBucketResponseBody{
+		Date:      v.Date,
+		CallCount: v.CallCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryUnproxiedMcpServerToolUsageRowToUnproxiedMcpServerToolUsageRowResponseBody
+// builds a value of type *UnproxiedMcpServerToolUsageRowResponseBody from a
+// value of type *telemetry.UnproxiedMcpServerToolUsageRow.
+func marshalTelemetryUnproxiedMcpServerToolUsageRowToUnproxiedMcpServerToolUsageRowResponseBody(v *telemetry.UnproxiedMcpServerToolUsageRow) *UnproxiedMcpServerToolUsageRowResponseBody {
+	res := &UnproxiedMcpServerToolUsageRowResponseBody{
+		ToolName:     v.ToolName,
+		CallCount:    v.CallCount,
+		FailureCount: v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryUnproxiedMcpServerUserUsageRowToUnproxiedMcpServerUserUsageRowResponseBody
+// builds a value of type *UnproxiedMcpServerUserUsageRowResponseBody from a
+// value of type *telemetry.UnproxiedMcpServerUserUsageRow.
+func marshalTelemetryUnproxiedMcpServerUserUsageRowToUnproxiedMcpServerUserUsageRowResponseBody(v *telemetry.UnproxiedMcpServerUserUsageRow) *UnproxiedMcpServerUserUsageRowResponseBody {
+	res := &UnproxiedMcpServerUserUsageRowResponseBody{
+		UserEmail:    v.UserEmail,
+		CallCount:    v.CallCount,
+		LastCalledAt: v.LastCalledAt,
+	}
+
+	return res
+}
+
+// marshalTelemetryUnproxiedMcpServerClientUsageRowToUnproxiedMcpServerClientUsageRowResponseBody
+// builds a value of type *UnproxiedMcpServerClientUsageRowResponseBody from a
+// value of type *telemetry.UnproxiedMcpServerClientUsageRow.
+func marshalTelemetryUnproxiedMcpServerClientUsageRowToUnproxiedMcpServerClientUsageRowResponseBody(v *telemetry.UnproxiedMcpServerClientUsageRow) *UnproxiedMcpServerClientUsageRowResponseBody {
+	res := &UnproxiedMcpServerClientUsageRowResponseBody{
+		Client:    v.Client,
+		CallCount: v.CallCount,
+	}
+
+	return res
+}
+
+// unmarshalQueryFilterRequestBodyToTelemetryQueryFilter builds a value of type
+// *telemetry.QueryFilter from a value of type *QueryFilterRequestBody.
+func unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(v *QueryFilterRequestBody) *telemetry.QueryFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.QueryFilter{
+		Dimension: *v.Dimension,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
 	}
 
 	return res

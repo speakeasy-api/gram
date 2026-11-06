@@ -491,6 +491,9 @@ type GetProjectOverviewPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, external_users) in the same response
+	IncludeUsage bool
 }
 
 // GetProjectOverviewResult is the result type of the telemetry service
@@ -498,10 +501,16 @@ type GetProjectOverviewPayload struct {
 type GetProjectOverviewResult struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummary
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummary
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResult
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResult
+	// Every external end user with activity in the period. Only set when
+	// include_usage is true and the project has no agent usage.
+	ExternalUsers []*UserSummary
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -1336,14 +1345,6 @@ type HooksUserSummary struct {
 	FailureRate float64
 }
 
-// Usage breakdown by LLM client/agent
-type LLMClientUsage struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
-}
-
 // ListAttributeKeysPayload is the payload type of the telemetry service
 // listAttributeKeys method.
 type ListAttributeKeysPayload struct {
@@ -1626,25 +1627,14 @@ type ObservabilitySummary struct {
 type ProjectOverviewSummary struct {
 	// Total number of chat sessions
 	TotalChats int64
-	// Number of resolved chat sessions
-	ResolvedChats int64
-	// Number of failed chat sessions
-	FailedChats int64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
 	FailedToolCalls int64
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUser
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServer
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsage
 }
 
 // Aggregated metrics
@@ -2637,16 +2627,6 @@ type TopServer struct {
 	ServerName string
 	// Total number of tool calls
 	ToolCallCount int64
-}
-
-// Top user by activity
-type TopUser struct {
-	// User ID (internal or external depending on availability)
-	UserID string
-	// Type of user ID
-	UserType string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
 }
 
 // Per-dimension billed token breakdown for the usage details table

@@ -68,6 +68,9 @@ var _ = Service("chat", func() {
 				Enum("asc", "desc")
 				Default("desc")
 			})
+			Attribute("pinned_first", Boolean, "List pinned chats before unpinned ones, then apply sort_by and sort_order within each group", func() {
+				Default(false)
+			})
 		})
 
 		Result(ListChatsResult)
@@ -92,6 +95,7 @@ var _ = Service("chat", func() {
 			Param("offset")
 			Param("sort_by")
 			Param("sort_order")
+			Param("pinned_first")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()

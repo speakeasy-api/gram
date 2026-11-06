@@ -237,6 +237,9 @@ type GetProjectOverviewRequestBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, external_users) in the same response
+	IncludeUsage bool `form:"include_usage" json:"include_usage" xml:"include_usage"`
 }
 
 // GetUnproxiedMcpServerUsageRequestBody is the type of the "telemetry" service
@@ -1071,10 +1074,16 @@ type GetOrganizationGatewayUsageResponseBody struct {
 type GetProjectOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummaryResponseBody `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode *string `form:"metrics_mode,omitempty" json:"metrics_mode,omitempty" xml:"metrics_mode,omitempty"`
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResultResponseBody `form:"usage_by_user,omitempty" json:"usage_by_user,omitempty" xml:"usage_by_user,omitempty"`
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
+	// Every external end user with activity in the period. Only set when
+	// include_usage is true and the project has no agent usage.
+	ExternalUsers []*UserSummaryResponseBody `form:"external_users,omitempty" json:"external_users,omitempty" xml:"external_users,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
@@ -8972,35 +8981,14 @@ type MetaMcpMemberUsageResponseBody struct {
 type ProjectOverviewSummaryResponseBody struct {
 	// Total number of chat sessions
 	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
-	// Number of resolved chat sessions
-	ResolvedChats *int64 `form:"resolved_chats,omitempty" json:"resolved_chats,omitempty" xml:"resolved_chats,omitempty"`
-	// Number of failed chat sessions
-	FailedChats *int64 `form:"failed_chats,omitempty" json:"failed_chats,omitempty" xml:"failed_chats,omitempty"`
 	// Total number of tool calls
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Number of failed tool calls
 	FailedToolCalls *int64 `form:"failed_tool_calls,omitempty" json:"failed_tool_calls,omitempty" xml:"failed_tool_calls,omitempty"`
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount *int64 `form:"active_servers_count,omitempty" json:"active_servers_count,omitempty" xml:"active_servers_count,omitempty"`
-	// Number of unique users with activity in the time period
-	ActiveUsersCount *int64 `form:"active_users_count,omitempty" json:"active_users_count,omitempty" xml:"active_users_count,omitempty"`
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUserResponseBody `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServerResponseBody `form:"top_servers,omitempty" json:"top_servers,omitempty" xml:"top_servers,omitempty"`
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown,omitempty" json:"llm_client_breakdown,omitempty" xml:"llm_client_breakdown,omitempty"`
-}
-
-// TopUserResponseBody is used to define fields on response body types.
-type TopUserResponseBody struct {
-	// User ID (internal or external depending on availability)
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Type of user ID
-	UserType *string `form:"user_type,omitempty" json:"user_type,omitempty" xml:"user_type,omitempty"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
 }
 
 // TopServerResponseBody is used to define fields on response body types.
@@ -9011,61 +8999,16 @@ type TopServerResponseBody struct {
 	ToolCallCount *int64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
 }
 
-// LLMClientUsageResponseBody is used to define fields on response body types.
-type LLMClientUsageResponseBody struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
-}
-
-// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUsageBucketResponseBody struct {
-	// Bucket date (YYYY-MM-DD, UTC)
-	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
-	// Number of observed tool calls in this bucket
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-}
-
-// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerToolUsageRowResponseBody struct {
-	// The tool's name
-	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	// Number of observed calls to this tool
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-	// Number of observed calls that errored
-	FailureCount *int `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-}
-
-// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUserUsageRowResponseBody struct {
-	// The calling user's email, when Shadow MCP could resolve one
-	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Number of observed calls from this user
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-	// Time of the user's most recent observed call, ISO 8601
-	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
-}
-
-// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerClientUsageRowResponseBody struct {
-	// The hook-reported client/agent surface
-	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
-	// Number of observed calls from this client
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-}
-
-// QueryFilterRequestBody is used to define fields on request body types.
-type QueryFilterRequestBody struct {
-	// Dimension to filter on
-	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
-	// Match if the dimension equals any of these values (IN semantics; for
-	// multi-valued dimensions like role/group, matches if any element is present).
-	Values []string `form:"values" json:"values" xml:"values"`
+// QueryResultResponseBody is used to define fields on response body types.
+type QueryResultResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRowResponseBody `form:"table,omitempty" json:"table,omitempty" xml:"table,omitempty"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
 // QueryRowResponseBody is used to define fields on response body types.
@@ -9127,6 +9070,55 @@ type QueryPointResponseBody struct {
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
 	// Aggregated measures for this bucket
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+}
+
+// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUsageBucketResponseBody struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
+	// Number of observed tool calls in this bucket
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+}
+
+// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerToolUsageRowResponseBody struct {
+	// The tool's name
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Number of observed calls to this tool
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+	// Number of observed calls that errored
+	FailureCount *int `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
+// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUserUsageRowResponseBody struct {
+	// The calling user's email, when Shadow MCP could resolve one
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Number of observed calls from this user
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+	// Time of the user's most recent observed call, ISO 8601
+	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
+}
+
+// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerClientUsageRowResponseBody struct {
+	// The hook-reported client/agent surface
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Number of observed calls from this client
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+}
+
+// QueryFilterRequestBody is used to define fields on request body types.
+type QueryFilterRequestBody struct {
+	// Dimension to filter on
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string `form:"values" json:"values" xml:"values"`
 }
 
 // TumDetailsPointResponseBody is used to define fields on response body types.
@@ -10023,8 +10015,15 @@ func NewGetOrganizationGatewayUsageRequestBody(p *telemetry.GetOrganizationGatew
 // payload of the "getProjectOverview" endpoint of the "telemetry" service.
 func NewGetProjectOverviewRequestBody(p *telemetry.GetProjectOverviewPayload) *GetProjectOverviewRequestBody {
 	body := &GetProjectOverviewRequestBody{
-		From: p.From,
-		To:   p.To,
+		From:         p.From,
+		To:           p.To,
+		IncludeUsage: p.IncludeUsage,
+	}
+	{
+		var zero bool
+		if body.IncludeUsage == zero {
+			body.IncludeUsage = false
+		}
 	}
 	return body
 }
@@ -13569,11 +13568,24 @@ func NewGetOrganizationGatewayUsageGatewayError(body *GetOrganizationGatewayUsag
 // NewGetProjectOverviewResultOK builds a "telemetry" service
 // "getProjectOverview" endpoint result from a HTTP "OK" response.
 func NewGetProjectOverviewResultOK(body *GetProjectOverviewResponseBody) *telemetry.GetProjectOverviewResult {
-	v := &telemetry.GetProjectOverviewResult{
-		MetricsMode: *body.MetricsMode,
-	}
+	v := &telemetry.GetProjectOverviewResult{}
 	v.Summary = unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(body.Summary)
-	v.Comparison = unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(body.Comparison)
+	if body.UsageByUser != nil {
+		v.UsageByUser = unmarshalQueryResultResponseBodyToTelemetryQueryResult(body.UsageByUser)
+	}
+	if body.UsageByAgent != nil {
+		v.UsageByAgent = unmarshalQueryResultResponseBodyToTelemetryQueryResult(body.UsageByAgent)
+	}
+	if body.ExternalUsers != nil {
+		v.ExternalUsers = make([]*telemetry.UserSummary, len(body.ExternalUsers))
+		for i, val := range body.ExternalUsers {
+			if val == nil {
+				v.ExternalUsers[i] = nil
+				continue
+			}
+			v.ExternalUsers[i] = unmarshalUserSummaryResponseBodyToTelemetryUserSummary(val)
+		}
+	}
 
 	return v
 }
@@ -18206,25 +18218,26 @@ func ValidateGetProjectOverviewResponseBody(body *GetProjectOverviewResponseBody
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
-	if body.Comparison == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("comparison", "body"))
-	}
-	if body.MetricsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("metrics_mode", "body"))
-	}
 	if body.Summary != nil {
 		if err2 := ValidateProjectOverviewSummaryResponseBody(body.Summary); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Comparison != nil {
-		if err2 := ValidateProjectOverviewSummaryResponseBody(body.Comparison); err2 != nil {
+	if body.UsageByUser != nil {
+		if err2 := ValidateQueryResultResponseBody(body.UsageByUser); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.MetricsMode != nil {
-		if !(*body.MetricsMode == "session" || *body.MetricsMode == "tool_call") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics_mode", *body.MetricsMode, []any{"session", "tool_call"}))
+	if body.UsageByAgent != nil {
+		if err2 := ValidateQueryResultResponseBody(body.UsageByAgent); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.ExternalUsers {
+		if e != nil {
+			if err2 := ValidateUserSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -28727,12 +28740,6 @@ func ValidateProjectOverviewSummaryResponseBody(body *ProjectOverviewSummaryResp
 	if body.TotalChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
 	}
-	if body.ResolvedChats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_chats", "body"))
-	}
-	if body.FailedChats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("failed_chats", "body"))
-	}
 	if body.TotalToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))
 	}
@@ -28742,57 +28749,14 @@ func ValidateProjectOverviewSummaryResponseBody(body *ProjectOverviewSummaryResp
 	if body.ActiveServersCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_servers_count", "body"))
 	}
-	if body.ActiveUsersCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_users_count", "body"))
-	}
-	if body.TopUsers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
-	}
 	if body.TopServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("top_servers", "body"))
-	}
-	if body.LlmClientBreakdown == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("llm_client_breakdown", "body"))
-	}
-	for _, e := range body.TopUsers {
-		if e != nil {
-			if err2 := ValidateTopUserResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	for _, e := range body.TopServers {
 		if e != nil {
 			if err2 := ValidateTopServerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	for _, e := range body.LlmClientBreakdown {
-		if e != nil {
-			if err2 := ValidateLLMClientUsageResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateTopUserResponseBody runs the validations defined on
-// TopUserResponseBody
-func ValidateTopUserResponseBody(body *TopUserResponseBody) (err error) {
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
-	if body.UserType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_type", "body"))
-	}
-	if body.ActivityCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
-	}
-	if body.UserType != nil {
-		if !(*body.UserType == "internal" || *body.UserType == "external") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", *body.UserType, []any{"internal", "external"}))
 		}
 	}
 	return
@@ -28810,86 +28774,34 @@ func ValidateTopServerResponseBody(body *TopServerResponseBody) (err error) {
 	return
 }
 
-// ValidateLLMClientUsageResponseBody runs the validations defined on
-// LLMClientUsageResponseBody
-func ValidateLLMClientUsageResponseBody(body *LLMClientUsageResponseBody) (err error) {
-	if body.ClientName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+// ValidateQueryResultResponseBody runs the validations defined on
+// QueryResultResponseBody
+func ValidateQueryResultResponseBody(body *QueryResultResponseBody) (err error) {
+	if body.GroupBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_by", "body"))
 	}
-	if body.ActivityCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
 	}
-	return
-}
-
-// ValidateUnproxiedMcpServerUsageBucketResponseBody runs the validations
-// defined on UnproxiedMcpServerUsageBucketResponseBody
-func ValidateUnproxiedMcpServerUsageBucketResponseBody(body *UnproxiedMcpServerUsageBucketResponseBody) (err error) {
-	if body.Date == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	if body.Table == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("table", "body"))
 	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	if body.Timeseries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeseries", "body"))
 	}
-	return
-}
-
-// ValidateUnproxiedMcpServerToolUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerToolUsageRowResponseBody
-func ValidateUnproxiedMcpServerToolUsageRowResponseBody(body *UnproxiedMcpServerToolUsageRowResponseBody) (err error) {
-	if body.ToolName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	for _, e := range body.Table {
+		if e != nil {
+			if err2 := ValidateQueryRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	if body.FailureCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
-	}
-	return
-}
-
-// ValidateUnproxiedMcpServerUserUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerUserUsageRowResponseBody
-func ValidateUnproxiedMcpServerUserUsageRowResponseBody(body *UnproxiedMcpServerUserUsageRowResponseBody) (err error) {
-	if body.UserEmail == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
-	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	if body.LastCalledAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("last_called_at", "body"))
-	}
-	if body.LastCalledAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called_at", *body.LastCalledAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateUnproxiedMcpServerClientUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerClientUsageRowResponseBody
-func ValidateUnproxiedMcpServerClientUsageRowResponseBody(body *UnproxiedMcpServerClientUsageRowResponseBody) (err error) {
-	if body.Client == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
-	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	return
-}
-
-// ValidateQueryFilterRequestBody runs the validations defined on
-// QueryFilterRequestBody
-func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
-	if body.Values == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
-	}
-	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "hostname" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "billing_mode" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "skill_version" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "hostname", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "skill_version", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
-	}
-	if len(body.Values) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
+	for _, e := range body.Timeseries {
+		if e != nil {
+			if err2 := ValidateQuerySeriesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -28985,6 +28897,78 @@ func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
 		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerUsageBucketResponseBody runs the validations
+// defined on UnproxiedMcpServerUsageBucketResponseBody
+func ValidateUnproxiedMcpServerUsageBucketResponseBody(body *UnproxiedMcpServerUsageBucketResponseBody) (err error) {
+	if body.Date == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerToolUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerToolUsageRowResponseBody
+func ValidateUnproxiedMcpServerToolUsageRowResponseBody(body *UnproxiedMcpServerToolUsageRowResponseBody) (err error) {
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerUserUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerUserUsageRowResponseBody
+func ValidateUnproxiedMcpServerUserUsageRowResponseBody(body *UnproxiedMcpServerUserUsageRowResponseBody) (err error) {
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	if body.LastCalledAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_called_at", "body"))
+	}
+	if body.LastCalledAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called_at", *body.LastCalledAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerClientUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerClientUsageRowResponseBody
+func ValidateUnproxiedMcpServerClientUsageRowResponseBody(body *UnproxiedMcpServerClientUsageRowResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	return
+}
+
+// ValidateQueryFilterRequestBody runs the validations defined on
+// QueryFilterRequestBody
+func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "hostname" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "billing_mode" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "skill_version" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "hostname", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "skill_version", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
+	}
+	if len(body.Values) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
 	}
 	return
 }

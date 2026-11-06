@@ -5,48 +5,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   ProjectOverviewSummary,
   ProjectOverviewSummary$inboundSchema,
 } from "./projectoverviewsummary.js";
-
-/**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export const MetricsMode = {
-  Session: "session",
-  ToolCall: "tool_call",
-} as const;
-/**
- * Indicates whether metrics are session-based or tool-call-based
- */
-export type MetricsMode = OpenEnum<typeof MetricsMode>;
+import { QueryResult, QueryResult$inboundSchema } from "./queryresult.js";
+import { UserSummary, UserSummary$inboundSchema } from "./usersummary.js";
 
 /**
  * Result of project overview query
  */
 export type GetProjectOverviewResult = {
   /**
-   * Aggregated project-level summary metrics for a time period
+   * Every external end user with activity in the period. Only set when include_usage is true and the project has no agent usage.
    */
-  comparison: ProjectOverviewSummary;
-  /**
-   * Indicates whether metrics are session-based or tool-call-based
-   */
-  metricsMode: MetricsMode;
+  externalUsers?: Array<UserSummary> | undefined;
   /**
    * Aggregated project-level summary metrics for a time period
    */
   summary: ProjectOverviewSummary;
+  /**
+   * Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.
+   */
+  usageByAgent?: QueryResult | undefined;
+  /**
+   * Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.
+   */
+  usageByUser?: QueryResult | undefined;
 };
-
-/** @internal */
-export const MetricsMode$inboundSchema: z.ZodMiniType<MetricsMode, unknown> =
-  openEnums.inboundSchema(MetricsMode);
 
 /** @internal */
 export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<
@@ -54,13 +42,16 @@ export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    comparison: ProjectOverviewSummary$inboundSchema,
-    metrics_mode: MetricsMode$inboundSchema,
+    external_users: z.optional(z.array(UserSummary$inboundSchema)),
     summary: ProjectOverviewSummary$inboundSchema,
+    usage_by_agent: z.optional(QueryResult$inboundSchema),
+    usage_by_user: z.optional(QueryResult$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "metrics_mode": "metricsMode",
+      "external_users": "externalUsers",
+      "usage_by_agent": "usageByAgent",
+      "usage_by_user": "usageByUser",
     });
   }),
 );

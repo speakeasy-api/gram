@@ -988,6 +988,9 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
+        -- pinned_first lists pinned chats ahead of the rest; NULL when off, so
+        -- it does not affect the order.
+        CASE WHEN @pinned_first::boolean THEN fc.pinned_at IS NOT NULL END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
         CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
