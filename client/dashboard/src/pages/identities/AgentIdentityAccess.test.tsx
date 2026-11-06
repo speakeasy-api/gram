@@ -132,7 +132,16 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
         },
       ],
     ]),
-    mcpServerMap: new Map(),
+    mcpServerMap: new Map([
+      [
+        "server_remote",
+        {
+          slug: "remote-server",
+          name: "Remote server",
+          projectId: "project_example",
+        },
+      ],
+    ]),
   }),
 }));
 const agent: ManagedAgent = {
@@ -242,6 +251,36 @@ describe("Agent profile permissions", () => {
     expect(mocks.list).toHaveBeenCalledWith({ agentId: agent.id }, undefined, {
       signal: expect.any(AbortSignal),
     });
+  });
+  it("names every server's project, whether or not its grant stores one", async () => {
+    // The setup flow stores a server with its project; the permission picker
+    // stores the server alone. Both rows read the same.
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_hosted",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_example",
+          projectId: "project_example",
+        },
+      },
+      {
+        id: "grant_remote",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_remote" },
+      },
+      {
+        id: "grant_unknown",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_gone" },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("Remote server")).toBeTruthy();
+    expect(screen.getAllByText("Project: Example project")).toHaveLength(2);
+    // A server the inventory does not know gets no project, not a bare id.
+    expect(screen.queryByText(/Project: server_gone/)).toBeNull();
   });
   it("shows an org permission as the whole organization unless narrowed to a project", async () => {
     mocks.list.mockResolvedValue([
