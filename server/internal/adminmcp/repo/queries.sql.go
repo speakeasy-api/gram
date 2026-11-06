@@ -149,6 +149,28 @@ func (q *Queries) CountWriteEventsFixture(ctx context.Context, arg CountWriteEve
 	return count, err
 }
 
+const extendStaffConnection = `-- name: ExtendStaffConnection :exec
+UPDATE admin_mcp_connections
+SET authorization_expires_at = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND active_generation = $3
+  AND revoked_at IS NULL
+`
+
+type ExtendStaffConnectionParams struct {
+	AuthorizationExpiresAt pgtype.Timestamptz
+	ID                     uuid.UUID
+	Generation             uuid.UUID
+}
+
+// Restarts the inactivity timeout on refresh. The generation is unchanged, so
+// pending write proposals stay bound to this connection.
+func (q *Queries) ExtendStaffConnection(ctx context.Context, arg ExtendStaffConnectionParams) error {
+	_, err := q.db.Exec(ctx, extendStaffConnection, arg.AuthorizationExpiresAt, arg.ID, arg.Generation)
+	return err
+}
+
 const getActiveStaffAccessSession = `-- name: GetActiveStaffAccessSession :one
 SELECT connection.subject_urn,
   client.client_id,

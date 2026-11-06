@@ -296,6 +296,16 @@ WHERE id = @id
   AND active_generation = @generation
   AND revoked_at IS NULL;
 
+-- name: ExtendStaffConnection :exec
+-- Restarts the inactivity timeout on refresh. The generation is unchanged, so
+-- pending write proposals stay bound to this connection.
+UPDATE admin_mcp_connections
+SET authorization_expires_at = @authorization_expires_at,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND active_generation = @generation
+  AND revoked_at IS NULL;
+
 -- name: RotateStaffSession :exec
 UPDATE admin_mcp_sessions
 SET rotated_at = @now,
