@@ -24,8 +24,12 @@ type CreateGcpKeyRequestBody struct {
 	// projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have
 	// purpose ENCRYPT_DECRYPT.
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
-	// Optional. The Speakeasy service-account email the customer granted
-	// roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. Not a secret.
+	// Optional. The Speakeasy principal, as reported by
+	// externalCredentials.getGcpSetupInfo, that the customer granted
+	// roles/iam.serviceAccountTokenCreator on the credential's service account.
+	// That service account, in the customer's project, is what holds
+	// roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never
+	// granted on the key directly. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -95,7 +99,9 @@ type CreateGcpKeyResponseBody struct {
 	// The external credential Speakeasy reaches the key with. Omitted for
 	// Speakeasy-managed keys.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The Speakeasy identity the customer granted on the key. Not a secret.
+	// The Speakeasy principal the customer granted
+	// roles/iam.serviceAccountTokenCreator on the credential's service account.
+	// Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 	// When the key was registered.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -2509,7 +2515,9 @@ type OrgEncryptionKeyResponseBody struct {
 	// The external credential Speakeasy reaches the key with. Omitted for
 	// Speakeasy-managed keys.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The Speakeasy identity the customer granted on the key. Not a secret.
+	// The Speakeasy principal the customer granted
+	// roles/iam.serviceAccountTokenCreator on the credential's service account.
+	// Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 	// When the key was registered.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`

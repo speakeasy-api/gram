@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateOrgEncryptionGcpKeyForm = {
   /**
-   * Optional. The Speakeasy service-account email the customer granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. Not a secret.
+   * Optional. The Speakeasy principal, as reported by externalCredentials.getGcpSetupInfo, that the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. That service account, in the customer's project, is what holds roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never granted on the key directly. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**
