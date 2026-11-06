@@ -170,6 +170,20 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
+	// Federated logins bind the browser themselves; every other sign-in binds
+	// it here so only this browser can use the consent page.
+	if federatedURL == nil {
+		if err := bindConsentBrowser(w, &challengeState); err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+		}
+		if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnexpected, err, "store bound authn challenge state").LogError(ctx, logger)
+		}
+	}
 	idpURL := federatedURL
 	if idpURL == nil {
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())

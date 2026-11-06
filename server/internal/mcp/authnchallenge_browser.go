@@ -18,7 +18,8 @@ import (
 
 // ChallengeBrowserBinding survives ID rotation and identity verification. The
 // two hosts have independent, host-only cookies; no browser proof travels in a URL.
-// Legacy non-federated challenges have no binding.
+// Non-federated challenges have no binding here; first-party ones are bound
+// through ConsentBrowserHash instead.
 type ChallengeBrowserBinding struct {
 	CookieID     string `json:"cookie_id"`
 	OriginHash   string `json:"origin_hash"`
@@ -41,6 +42,11 @@ func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callba
 	if state.Browser == nil {
 		if state.Federation != nil {
 			return errors.New("missing federated browser binding")
+		}
+		// First-party challenges minted before this binding carry no hash and
+		// expire within the challenge TTL. The stored state decides, never the request.
+		if !callback && state.FirstParty && state.ConsentBrowserHash != "" && !consentBrowserMatches(r, state, time.Now()) {
+			return errors.New("first-party browser binding failed")
 		}
 		return nil
 	}
