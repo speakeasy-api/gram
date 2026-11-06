@@ -419,6 +419,7 @@ const (
 
 	// issuerGateReasonRemoteSessionResolveFailed: the bearer token was
 	// accepted but resolving the upstream remote session failed with a 500.
+	// Only the connection row carries it; it is not counted as a rejection.
 	issuerGateReasonRemoteSessionResolveFailed = "remote_session_resolve_failed"
 )
 

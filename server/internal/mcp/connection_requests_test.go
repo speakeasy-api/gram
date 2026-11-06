@@ -881,7 +881,9 @@ func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 		"name":      "execute_tool",
 		"arguments": map[string]any{"name": member.slug + "--test_tool", "arguments": map[string]any{}},
 	})
-	_, _ = servePublicHTTP(t, t.Context(), ti, slug, body, "", nil)
+	resp, err := servePublicHTTP(t, t.Context(), ti, slug, body, "", nil)
+	require.NoError(t, err)
+	require.Contains(t, resp.Body.String(), `"code":-32603`)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 	require.Equal(t, member.serverID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1)
