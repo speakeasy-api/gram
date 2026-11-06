@@ -61,17 +61,21 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	t.Parallel()
 	_, client := newClient(t)
 
+	// Real-looking numbers: the client drops published test cards such as
+	// 4111111111111111 before returning findings.
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"My credit card is 4111111111111111",
-		"Card: 5500-0000-0000-0004",
-		"Bogus card 4111111111111112 not detected",
+		"My credit card is 4539578763621486",
+		"Card: 5534-1298-7600-4319",
+		"Bogus card 4539578763621487 not detected",
+		"Stripe test card 4242 4242 4242 4242 is dropped by the client",
 	}, nil, 0, nil)
 	require.NoError(t, err)
-	require.Len(t, results, 3)
+	require.Len(t, results, 4)
 
 	require.Contains(t, ruleIDs(results[0].Findings), "pii.credit_card")
 	require.Contains(t, ruleIDs(results[1].Findings), "pii.credit_card")
 	require.NotContains(t, ruleIDs(results[2].Findings), "pii.credit_card")
+	require.NotContains(t, ruleIDs(results[3].Findings), "pii.credit_card")
 }
 
 func TestMockServer_DetectsPhoneNumber(t *testing.T) {

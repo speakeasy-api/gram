@@ -83,10 +83,12 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 func TestPresidio_DetectsCreditCard(t *testing.T) {
 	t.Parallel()
 	client := newPresidioClient(t)
+	// Real-looking numbers: the client drops published test cards such as
+	// 4111111111111111 before returning findings.
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"My credit card number is 4111111111111111",
-		"Card: 5500-0000-0000-0004",
-		"Amex 371449635398431",
+		"My credit card number is 4539578763621486",
+		"Card: 5534-1298-7600-4319",
+		"Amex 371882450931763",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
@@ -126,7 +128,7 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	t.Parallel()
 	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
+		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4539578763621486. Call 555-123-4567.",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -245,7 +247,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	for i := range messages {
 		switch i % 4 {
 		case 0:
-			messages[i] = fmt.Sprintf("User %d email: user%d@company.com, card 4111111111111111", i, i)
+			messages[i] = fmt.Sprintf("User %d email: user%d@company.com, card 4539578763621486", i, i)
 		case 1:
 			messages[i] = fmt.Sprintf("Build %d passed. Deploy to production.", i)
 		case 2:
