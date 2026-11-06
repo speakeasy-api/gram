@@ -20,12 +20,12 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "catalog:",
-    "@tanstack/charts": "^0.18.0",
+    "@tanstack/charts": "^1.1.0",
     "@tanstack/react-form": "^1.33.5",
-    "@tanstack/react-hotkeys": "^0.10.0",
+    "@tanstack/react-hotkeys": "^0.17.0",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-router": "1.170.41",
-    "@tanstack/react-table": "9.2.4",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-table": "9.3.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -45,7 +45,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@tanstack/router-plugin": "1.168.42",
+    "@tanstack/router-plugin": "1.168.48",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.13.3",
