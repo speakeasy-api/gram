@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -9,7 +10,10 @@ import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { GatewayDispatchLink } from "@/components/observe/GatewayDispatchLink";
+import {
+  GatewayDispatchLink,
+  GatewayTargetLink,
+} from "@/components/observe/GatewayDispatchLink";
 import {
   FilterChip,
   type ObserveStatusFilterValue,
@@ -1904,7 +1908,7 @@ function LogsToolsTableContent({
         <div className="text-muted-foreground flex h-12 items-center justify-center gap-2 border-t">
           {isFetchingNextPage && (
             <>
-              <Icon name="loader-circle" className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
               <span className="text-eyebrow">Loading more</span>
             </>
           )}
@@ -2044,14 +2048,10 @@ function LogsToolsTraceRow({
                 >
                   {targetLabel}
                 </Link>
-              ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
-                <Link
-                  to={routes.mcp.gateway.overview.href(trace.targetId)}
-                  onClick={(event) => event.stopPropagation()}
-                  className="hover:text-foreground hover:underline"
-                >
+              ) : trace.targetType === "meta_mcp_server" ? (
+                <GatewayTargetLink trace={trace}>
                   {targetLabel}
-                </Link>
+                </GatewayTargetLink>
               ) : (
                 targetLabel
               )}

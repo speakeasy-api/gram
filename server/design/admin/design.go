@@ -228,10 +228,15 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminAuditLog = Type("AdminAuditLog", func() {
+	Extend(auditlogs.AuditLog)
+	Attribute("is_internal", Boolean, "Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.")
+})
+
 var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
 	Required("logs")
 
-	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("logs", ArrayOf(AdminAuditLog), "List of organization activity.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
@@ -1490,4 +1495,5 @@ var _ = Service("admin", func() {
 
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
+	mcpConnectBackfillMethods()
 })

@@ -1,8 +1,9 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 import { useAssetImageUploadHandler } from "@/components/useAssetImageUploadHandler";
 import { Asset } from "@gram/client/models/components/asset.js";
 import { Stack } from "@/components/ui/Stack";
-import { Loader2, UploadIcon } from "lucide-react";
+import { UploadIcon } from "lucide-react";
 import { useState } from "react";
 import { AssetImage } from "./asset-image";
 import { Text } from "@/components/ui/Text";
@@ -148,7 +149,7 @@ export function FullWidthUpload({
         >
           {isLoading ? (
             <Stack align={"center"} justify={"center"} gap={3}>
-              <Loader2 className="text-primary h-5 w-5 animate-spin" />
+              <Spinner className="text-primary mr-0 h-5 w-5" />
               <p className="text-card-foreground my-2 text-sm font-semibold">
                 Uploading and validating...
               </p>

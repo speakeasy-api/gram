@@ -140,7 +140,7 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 
 	ctx, cancel := context.WithTimeout(ctx, transcriptShipBudget)
 	defer cancel()
-	ctx = withHarnessInfo(ctx, base)
+	ctx = withHarnessInfo(ctx, base, r.cfg.InstallRoute)
 
 	upload := transcriptUpload{
 		SchemaVersion: transcriptSchemaV1,

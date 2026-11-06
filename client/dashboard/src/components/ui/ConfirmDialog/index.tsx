@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 
@@ -78,9 +79,9 @@ export function ConfirmDialog({
         {impact && (
           <div>
             {impact.isLoading ? (
-              <Text small muted>
-                Checking impact…
-              </Text>
+              <div role="status" aria-label="Checking impact">
+                <Skeleton className="h-5 w-3/4" />
+              </div>
             ) : (
               <>
                 <Text>{impact.summary}</Text>

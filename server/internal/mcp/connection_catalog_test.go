@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -340,7 +341,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	require.Zero(t, upstream.requests.Load(), "an ambiguous typed choice never reaches an upstream through legacy auth")
 }
 
-func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string) catalogConnection {
+func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {
 	t.Helper()
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuerID, client, gatewayID, slug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
@@ -351,6 +352,10 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 	if tools != nil {
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
+	}
+	if len(annotations) > 0 {
+		form.Set("tool_filtering", "on")
+		form["tool_annotations"] = annotations
 	}
 	// The approval arrives from the person's browser, which carries no
 	// Speakeasy request authentication; the challenge names the person.
@@ -813,9 +818,11 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 				response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), connection.token, nil)
 				require.NoError(t, err)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-				require.Zero(t, counted.loads.Load(), "protocol setup does not read the catalog")
+				// Initialize reads the record once to name only approved servers.
+				require.Equal(t, int32(1), counted.loads.Load(), "initialize reads the catalog once and ping not at all")
 				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
 			}
+			counted.loads.Store(0)
 			beforeDB := ti.conn.Stat().AcquireCount()
 			response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 			require.NoError(t, err)
@@ -931,6 +938,19 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 	require.NotContains(t, listed, `\"slug\":\"other\"`)
 	require.Contains(t, callGatewayTool(t, ti, slug, specific.token, "describe_server", map[string]any{"server": "other"}), "unknown server")
 	require.Contains(t, callGatewayTool(t, ti, slug, all.token, "list_servers", map[string]any{}), `\"slug\":\"other\"`)
+
+	instructions := func(token string) string {
+		response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodInitialize, map[string]any{"protocolVersion": mcpversions.Version20250326}), token, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var result struct {
+			Instructions string `json:"instructions"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, response)["result"], &result))
+		return result.Instructions
+	}
+	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+"\n\n"), "a connection names only the servers it approved")
+	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+"\n\n"))
 }
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {

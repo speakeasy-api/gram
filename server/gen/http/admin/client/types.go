@@ -564,11 +564,14 @@ type CreateOnboardingPlaybookRequestBody struct {
 // UpdateOnboardingPlaybookRequestBody is the type of the "admin" service
 // "updateOnboardingPlaybook" endpoint HTTP request body.
 type UpdateOnboardingPlaybookRequestBody struct {
-	PlaybookID  string   `form:"playbook_id" json:"playbook_id" xml:"playbook_id"`
-	Name        string   `form:"name" json:"name" xml:"name"`
-	Description *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	StepSlugs   []string `form:"step_slugs" json:"step_slugs" xml:"step_slugs"`
+	PlaybookID string `form:"playbook_id" json:"playbook_id" xml:"playbook_id"`
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Name           string   `form:"name" json:"name" xml:"name"`
+	Description    *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	IsDefault      *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	StepSlugs      []string `form:"step_slugs" json:"step_slugs" xml:"step_slugs"`
 }
 
 // DeleteOnboardingPlaybookRequestBody is the type of the "admin" service
@@ -645,6 +648,14 @@ type EnableUpstreamAuthEnforcementRequestBody struct {
 type DisableUpstreamAuthEnforcementRequestBody struct {
 	// The organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
+// BackfillMcpConnectGrantsRequestBody is the type of the "admin" service
+// "backfillMcpConnectGrants" endpoint HTTP request body.
+type BackfillMcpConnectGrantsRequestBody struct {
+	// Only copy grants created before this time. Set it to when read and write
+	// stopped implying connect, so grants written since are left alone.
+	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -1188,7 +1199,7 @@ type ListProjectMcpServersResponseBody struct {
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
 	// List of organization activity.
-	Logs []*AuditLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Logs []*AdminAuditLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2294,15 +2305,23 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2331,15 +2350,23 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2368,15 +2395,23 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2405,15 +2440,23 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -2942,6 +2985,19 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 type BackfillMcpAuthGrantsResponseBody struct {
 	// How many principals gained the mcp:auth grant.
 	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
+}
+
+// BackfillMcpConnectGrantsResponseBody is the type of the "admin" service
+// "backfillMcpConnectGrants" endpoint HTTP response body.
+type BackfillMcpConnectGrantsResponseBody struct {
+	// How many mcp:connect grants were written.
+	Inserted *int64 `form:"inserted,omitempty" json:"inserted,omitempty" xml:"inserted,omitempty"`
+	// How many existing temporary mcp:connect grants were extended to last as long
+	// as the access they mirror.
+	Extended *int64 `form:"extended,omitempty" json:"extended,omitempty" xml:"extended,omitempty"`
+	// How many mcp:connect grants provisioned by the default auth permission
+	// backfill became explicit grants.
+	TakenOver *int64 `form:"taken_over,omitempty" json:"taken_over,omitempty" xml:"taken_over,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -23062,6 +23118,196 @@ type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// BackfillMcpConnectGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpConnectGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpConnectGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpConnectGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsNotFoundResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "not_found" error.
+type BackfillMcpConnectGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsConflictResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "conflict" error.
+type BackfillMcpConnectGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsUnsupportedMediaResponseBody is the type of the
+// "admin" service "backfillMcpConnectGrants" endpoint HTTP response body for
+// the "unsupported_media" error.
+type BackfillMcpConnectGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsInvalidResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "invalid" error.
+type BackfillMcpConnectGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpConnectGrants" endpoint HTTP response body for
+// the "invariant_violation" error.
+type BackfillMcpConnectGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpConnectGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpConnectGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -23109,8 +23355,12 @@ type AdminMcpServerResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
-// AuditLogResponseBody is used to define fields on response body types.
-type AuditLogResponseBody struct {
+// AdminAuditLogResponseBody is used to define fields on response body types.
+type AdminAuditLogResponseBody struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool   `form:"is_internal,omitempty" json:"is_internal,omitempty" xml:"is_internal,omitempty"`
 	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
@@ -24050,15 +24300,23 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                *string                                          `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID    *string                                          `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID         *string                                          `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID       *string                                          `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	RemoteMcpServerID *string                                          `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         *string                                          `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	CurationRevision  *string                                          `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
@@ -24094,6 +24352,13 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionSetupGuideResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSetupGuideResponseBody struct {
+	Slug  *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
@@ -25247,10 +25512,11 @@ func NewCreateOnboardingPlaybookRequestBody(p *admin.CreateOnboardingPlaybookPay
 // payload of the "updateOnboardingPlaybook" endpoint of the "admin" service.
 func NewUpdateOnboardingPlaybookRequestBody(p *admin.UpdateOnboardingPlaybookPayload) *UpdateOnboardingPlaybookRequestBody {
 	body := &UpdateOnboardingPlaybookRequestBody{
-		PlaybookID:  p.PlaybookID,
-		Name:        p.Name,
-		Description: p.Description,
-		IsDefault:   p.IsDefault,
+		PlaybookID:     p.PlaybookID,
+		OrganizationID: p.OrganizationID,
+		Name:           p.Name,
+		Description:    p.Description,
+		IsDefault:      p.IsDefault,
 	}
 	if p.StepSlugs != nil {
 		body.StepSlugs = make([]string, len(p.StepSlugs))
@@ -25356,6 +25622,15 @@ func NewEnableUpstreamAuthEnforcementRequestBody(p *admin.EnableUpstreamAuthEnfo
 func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEnforcementPayload) *DisableUpstreamAuthEnforcementRequestBody {
 	body := &DisableUpstreamAuthEnforcementRequestBody{
 		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsRequestBody builds the HTTP request body from the
+// payload of the "backfillMcpConnectGrants" endpoint of the "admin" service.
+func NewBackfillMcpConnectGrantsRequestBody(p *admin.BackfillMcpConnectGrantsPayload) *BackfillMcpConnectGrantsRequestBody {
+	body := &BackfillMcpConnectGrantsRequestBody{
+		CreatedBefore: p.CreatedBefore,
 	}
 	return body
 }
@@ -28751,13 +29026,13 @@ func NewListOrganizationActivityAdminListOrganizationActivityResultOK(body *List
 	v := &admin.AdminListOrganizationActivityResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Logs = make([]*admin.AuditLog, len(body.Logs))
+	v.Logs = make([]*admin.AdminAuditLog, len(body.Logs))
 	for i, val := range body.Logs {
 		if val == nil {
 			v.Logs[i] = nil
 			continue
 		}
-		v.Logs[i] = unmarshalAuditLogResponseBodyToAdminAuditLog(val)
+		v.Logs[i] = unmarshalAdminAuditLogResponseBodyToAdminAdminAuditLog(val)
 	}
 
 	return v
@@ -37402,6 +37677,8 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37426,6 +37703,16 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37597,6 +37884,8 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37621,6 +37910,16 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37792,6 +38091,8 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37816,6 +38117,16 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -37987,6 +38298,8 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 		SourceName:             body.SourceName,
 		CreatedAt:              *body.CreatedAt,
 		CurationRevision:       *body.CurationRevision,
+		SetupGuidesVersion:     body.SetupGuidesVersion,
+		EndpointGuideSlug:      body.EndpointGuideSlug,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -38011,6 +38324,16 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+	if body.SetupGuides != nil {
+		v.SetupGuides = make([]*admin.AdminRegistryPromotionSetupGuide, len(body.SetupGuides))
+		for i, val := range body.SetupGuides {
+			if val == nil {
+				v.SetupGuides[i] = nil
+				continue
+			}
+			v.SetupGuides[i] = unmarshalAdminRegistryPromotionSetupGuideResponseBodyToAdminAdminRegistryPromotionSetupGuide(val)
+		}
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
@@ -44017,6 +44340,169 @@ func NewBackfillMcpAuthGrantsGatewayError(body *BackfillMcpAuthGrantsGatewayErro
 	return v
 }
 
+// NewBackfillMcpConnectGrantsAdminBackfillMCPConnectGrantsResultOK builds a
+// "admin" service "backfillMcpConnectGrants" endpoint result from a HTTP "OK"
+// response.
+func NewBackfillMcpConnectGrantsAdminBackfillMCPConnectGrantsResultOK(body *BackfillMcpConnectGrantsResponseBody) *admin.AdminBackfillMCPConnectGrantsResult {
+	v := &admin.AdminBackfillMCPConnectGrantsResult{
+		Inserted:  *body.Inserted,
+		Extended:  *body.Extended,
+		TakenOver: *body.TakenOver,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsUnauthorized builds a admin service
+// backfillMcpConnectGrants endpoint unauthorized error.
+func NewBackfillMcpConnectGrantsUnauthorized(body *BackfillMcpConnectGrantsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsForbidden builds a admin service
+// backfillMcpConnectGrants endpoint forbidden error.
+func NewBackfillMcpConnectGrantsForbidden(body *BackfillMcpConnectGrantsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsBadRequest builds a admin service
+// backfillMcpConnectGrants endpoint bad_request error.
+func NewBackfillMcpConnectGrantsBadRequest(body *BackfillMcpConnectGrantsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsNotFound builds a admin service
+// backfillMcpConnectGrants endpoint not_found error.
+func NewBackfillMcpConnectGrantsNotFound(body *BackfillMcpConnectGrantsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsConflict builds a admin service
+// backfillMcpConnectGrants endpoint conflict error.
+func NewBackfillMcpConnectGrantsConflict(body *BackfillMcpConnectGrantsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsUnsupportedMedia builds a admin service
+// backfillMcpConnectGrants endpoint unsupported_media error.
+func NewBackfillMcpConnectGrantsUnsupportedMedia(body *BackfillMcpConnectGrantsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsInvalid builds a admin service
+// backfillMcpConnectGrants endpoint invalid error.
+func NewBackfillMcpConnectGrantsInvalid(body *BackfillMcpConnectGrantsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsInvariantViolation builds a admin service
+// backfillMcpConnectGrants endpoint invariant_violation error.
+func NewBackfillMcpConnectGrantsInvariantViolation(body *BackfillMcpConnectGrantsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsUnexpected builds a admin service
+// backfillMcpConnectGrants endpoint unexpected error.
+func NewBackfillMcpConnectGrantsUnexpected(body *BackfillMcpConnectGrantsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpConnectGrantsGatewayError builds a admin service
+// backfillMcpConnectGrants endpoint gateway_error error.
+func NewBackfillMcpConnectGrantsGatewayError(body *BackfillMcpConnectGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -44459,7 +44945,7 @@ func ValidateListOrganizationActivityResponseBody(body *ListOrganizationActivity
 	}
 	for _, e := range body.Logs {
 		if e != nil {
-			if err2 := ValidateAuditLogResponseBody(e); err2 != nil {
+			if err2 := ValidateAdminAuditLogResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -46075,6 +46561,13 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -46164,6 +46657,13 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.SuggestedMetadata != nil {
 		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.AuthDiscovery != nil {
@@ -46257,6 +46757,13 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -46346,6 +46853,13 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	if body.SuggestedMetadata != nil {
 		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.AuthDiscovery != nil {
@@ -47279,6 +47793,21 @@ func ValidateDisableUpstreamAuthEnforcementResponseBody(body *DisableUpstreamAut
 func ValidateBackfillMcpAuthGrantsResponseBody(body *BackfillMcpAuthGrantsResponseBody) (err error) {
 	if body.Granted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("granted", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsResponseBody runs the validations defined on
+// BackfillMcpConnectGrantsResponseBody
+func ValidateBackfillMcpConnectGrantsResponseBody(body *BackfillMcpConnectGrantsResponseBody) (err error) {
+	if body.Inserted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inserted", "body"))
+	}
+	if body.Extended == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("extended", "body"))
+	}
+	if body.TakenOver == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("taken_over", "body"))
 	}
 	return
 }
@@ -73374,6 +73903,248 @@ func ValidateBackfillMcpAuthGrantsGatewayErrorResponseBody(body *BackfillMcpAuth
 	return
 }
 
+// ValidateBackfillMcpConnectGrantsUnauthorizedResponseBody runs the
+// validations defined on backfillMcpConnectGrants_unauthorized_response_body
+func ValidateBackfillMcpConnectGrantsUnauthorizedResponseBody(body *BackfillMcpConnectGrantsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsForbiddenResponseBody runs the validations
+// defined on backfillMcpConnectGrants_forbidden_response_body
+func ValidateBackfillMcpConnectGrantsForbiddenResponseBody(body *BackfillMcpConnectGrantsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsBadRequestResponseBody runs the validations
+// defined on backfillMcpConnectGrants_bad_request_response_body
+func ValidateBackfillMcpConnectGrantsBadRequestResponseBody(body *BackfillMcpConnectGrantsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsNotFoundResponseBody runs the validations
+// defined on backfillMcpConnectGrants_not_found_response_body
+func ValidateBackfillMcpConnectGrantsNotFoundResponseBody(body *BackfillMcpConnectGrantsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsConflictResponseBody runs the validations
+// defined on backfillMcpConnectGrants_conflict_response_body
+func ValidateBackfillMcpConnectGrantsConflictResponseBody(body *BackfillMcpConnectGrantsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsUnsupportedMediaResponseBody runs the
+// validations defined on
+// backfillMcpConnectGrants_unsupported_media_response_body
+func ValidateBackfillMcpConnectGrantsUnsupportedMediaResponseBody(body *BackfillMcpConnectGrantsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsInvalidResponseBody runs the validations
+// defined on backfillMcpConnectGrants_invalid_response_body
+func ValidateBackfillMcpConnectGrantsInvalidResponseBody(body *BackfillMcpConnectGrantsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsInvariantViolationResponseBody runs the
+// validations defined on
+// backfillMcpConnectGrants_invariant_violation_response_body
+func ValidateBackfillMcpConnectGrantsInvariantViolationResponseBody(body *BackfillMcpConnectGrantsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsUnexpectedResponseBody runs the validations
+// defined on backfillMcpConnectGrants_unexpected_response_body
+func ValidateBackfillMcpConnectGrantsUnexpectedResponseBody(body *BackfillMcpConnectGrantsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpConnectGrantsGatewayErrorResponseBody runs the
+// validations defined on backfillMcpConnectGrants_gateway_error_response_body
+func ValidateBackfillMcpConnectGrantsGatewayErrorResponseBody(body *BackfillMcpConnectGrantsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -73468,9 +74239,9 @@ func ValidateAdminMcpServerResponseBody(body *AdminMcpServerResponseBody) (err e
 	return
 }
 
-// ValidateAuditLogResponseBody runs the validations defined on
-// AuditLogResponseBody
-func ValidateAuditLogResponseBody(body *AuditLogResponseBody) (err error) {
+// ValidateAdminAuditLogResponseBody runs the validations defined on
+// AdminAuditLogResponseBody
+func ValidateAdminAuditLogResponseBody(body *AdminAuditLogResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -75028,6 +75799,13 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.SetupGuides {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionSetupGuideResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -75058,6 +75836,18 @@ func ValidateAdminRegistryPromotionSuggestionsResponseBody(body *AdminRegistryPr
 		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
 		}
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionSetupGuideResponseBody runs the validations
+// defined on AdminRegistryPromotionSetupGuideResponseBody
+func ValidateAdminRegistryPromotionSetupGuideResponseBody(body *AdminRegistryPromotionSetupGuideResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
 	return
 }

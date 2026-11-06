@@ -20,10 +20,14 @@ const mocks = vi.hoisted(() => ({
   createAgent: vi.fn(),
   createKey: vi.fn(),
   listKeys: vi.fn(),
+  // The agent's keys as its own pages read them; `undefined` while that read
+  // is pending or has failed. Not called while the read is disabled.
+  agentKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
   checkAuthGrant: vi.fn(),
-  authEnforced: false as boolean | undefined,
+  // Undefined while loading; "error" when the state could not be read.
+  authEnforced: false as boolean | undefined | "error",
   mcpServers: vi.fn(),
   // Holds the token endpoints in their loading state.
   tokenEndpointsPending: false,
@@ -76,7 +80,9 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
     data:
       mocks.authEnforced === undefined
         ? undefined
-        : { upstreamAuthEnforced: mocks.authEnforced },
+        : mocks.authEnforced === "error"
+          ? {}
+          : { upstreamAuthEnforced: mocks.authEnforced },
   }),
 }));
 
@@ -274,6 +280,19 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
     isPending: false,
     isError: false,
   }),
+}));
+vi.mock("@gram/client/react-query/listAPIKeys.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useListAPIKeys: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    const keys = options.enabled ? mocks.agentKeys(request) : undefined;
+    return keys === undefined
+      ? { data: undefined, isSuccess: false }
+      : { data: { keys }, isSuccess: true };
+  },
 }));
 // Only read to keep a prefilled name from colliding with one in use.
 vi.mock("@gram/client/react-query/agents.js", () => ({
@@ -500,6 +519,7 @@ beforeEach(() => {
   mocks.authEnforced = false;
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
   mocks.listKeys.mockResolvedValue({ keys: [] });
+  mocks.agentKeys.mockReturnValue([]);
   mocks.fetch.mockResolvedValue({
     ok: true,
     json: () => Promise.resolve({ code: "setup_code" }),
@@ -757,6 +777,19 @@ describe("Provisioning a new agent", () => {
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("creates nothing while the organization's upstream auth enforcement loads", async () => {
+    mocks.authEnforced = undefined;
+    fireEvent.click(await reachCredentialStep());
+
+    expect(
+      await screen.findByText(
+        "Checking how this organization's servers sign in. Try again in a moment.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    expect(mocks.attach).not.toHaveBeenCalled();
   });
 
   it("leaves the sign-in grant out where the organization does not require it", async () => {
@@ -1026,7 +1059,9 @@ describe("Federating a platform's own tokens", () => {
 
     expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
     expect(screen.queryByText(/could not be loaded/)).toBeNull();
-    expect(screen.queryByText(/Loading platforms/)).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Loading platforms" }),
+    ).toBeNull();
     const apiKey = screen.getByRole("radio", { name: /API key/ });
     expect(apiKey.getAttribute("data-disabled")).toBeNull();
     expect(
@@ -1058,7 +1093,9 @@ describe("Federating a platform's own tokens", () => {
     mocks.platformsStatus = "pending";
     await reachCredentialStep();
 
-    expect(screen.getByText("Loading platforms…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading platforms" }),
+    ).toBeTruthy();
     expect(screen.queryByText(/Coming soon/)).toBeNull();
   });
 
@@ -2178,7 +2215,13 @@ describe("Editing an agent that already exists", () => {
     updatedAt: new Date(),
   };
 
-  function editing(over: { grants?: unknown; withoutAuth?: boolean } = {}) {
+  function editing(
+    over: {
+      grants?: unknown;
+      withoutAuth?: boolean;
+      permissions?: { write: boolean; authorize: boolean };
+    } = {},
+  ) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -2187,7 +2230,14 @@ describe("Editing an agent that already exists", () => {
       <MemoryRouter>
         <QueryClientProvider client={client}>
           <CredentialsWizard
-            agent={agent}
+            agent={
+              over.permissions
+                ? ({
+                    ...(agent as object),
+                    permissions: over.permissions,
+                  } as never)
+                : agent
+            }
             editing
             grants={
               [
@@ -2281,6 +2331,23 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("holds an edit's save until the organization's upstream auth enforcement loads", async () => {
+    mocks.authEnforced = undefined;
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    const save = await authenticationSave();
+    expect(
+      await screen.findByText(
+        "Checking how this organization's servers sign in…",
+      ),
+    ).toBeTruthy();
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(save);
+    expect(mocks.attach).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
   it("gives no sign-in grant to an edited agent that reaches no server", async () => {
     mocks.authEnforced = true;
     mocks.checkAuthGrant.mockResolvedValue({
@@ -2334,6 +2401,103 @@ describe("Editing an agent that already exists", () => {
     const credential = screen.getByRole("button", { name: /Agent sign-in/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
+  });
+
+  it("says an agent whose key is in use is already connected", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_one",
+        createdAt: new Date(Date.now() - 86_400_000),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        lastAccessedAt: new Date(Date.now() - 5 * 60_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent is already connected. Its key was last used 5m ago.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Issue another key" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This agent needs a key before it can be connected."),
+    ).toBeNull();
+  });
+
+  it("says an agent with an unused key is not yet connected", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_one",
+        createdAt: new Date(Date.now() - 86_400_000),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText("This agent already has a key."),
+    ).toBeTruthy();
+  });
+
+  it("asks for a key once the agent is confirmed to have none", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent needs a key before it can be connected.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.agentKeys).toHaveBeenCalledWith({ agentId: "agent_one" });
+  });
+
+  it("claims neither state while the agent's keys are loading or failed", async () => {
+    mocks.agentKeys.mockReturnValue(undefined);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "A key that already exists cannot be shown here.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not read the keys of an agent the caller may not authorize", async () => {
+    editing({ permissions: { write: true, authorize: false } });
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "A key that already exists cannot be shown here.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.agentKeys).not.toHaveBeenCalled();
+  });
+
+  it("still asks for a key when the agent's only key has expired", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_old",
+        createdAt: new Date(Date.now() - 100 * 86_400_000),
+        expiresAt: new Date(Date.now() - 86_400_000),
+        lastAccessedAt: new Date(Date.now() - 2 * 86_400_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent needs a key before it can be connected.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
   });
 
   it("checks the servers the agent already reaches", async () => {
@@ -3721,6 +3885,51 @@ describe("Servers that sign in as a person", () => {
       expect.anything(),
     );
     expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("attaches only the server's own sign-in when the enforcement state cannot be read", async () => {
+    mocks.authEnforced = "error";
+    // The organization-wide issuer also lists another server's sign-in,
+    // which the creator happens to have connected.
+    mocks.sessionClients.mockResolvedValue([
+      { id: "client_linear", credentialOwner: "subject" },
+      { id: "client_other", credentialOwner: "subject" },
+    ]);
+    mocks.sessions.mockResolvedValue([
+      mine,
+      { ...mine, id: "session_other", remoteSessionClientId: "client_other" },
+    ]);
+    mocks.serverAuth.mockResolvedValue({
+      status: "configured",
+      clients: [
+        {
+          id: "auth_linear",
+          clientType: "remote_session",
+          enabled: true,
+          personal: true,
+          remoteSessionClientId: "client_linear",
+        },
+      ],
+    });
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).toHaveBeenCalledTimes(1);
+    expect(mocks.attach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachBindingRequestBody: expect.objectContaining({
+          remoteSessionId: "session_mine",
+        }),
+      }),
+      undefined,
+      expect.anything(),
+    );
   });
 
   it("keeps Continue locked when a server's auth cannot be read", async () => {

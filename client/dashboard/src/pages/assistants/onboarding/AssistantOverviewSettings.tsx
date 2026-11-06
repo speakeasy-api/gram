@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { ModelSelect } from "@/components/model-select";
@@ -13,7 +14,6 @@ import { UpdateAssistantForm } from "@gram/client/models/components/updateassist
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
@@ -153,7 +153,7 @@ export function AssistantOverviewSettings({
           disabled={update.isPending}
         >
           {update.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Spinner className="mr-0 h-3 w-3" label="Saving" />
           ) : (
             "Save"
           )}

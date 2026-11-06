@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -46,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -601,6 +603,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 
 			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
 			if err != nil {
@@ -754,6 +757,8 @@ func newWorkerCommand() *cli.Command {
 			// unfurls is not needed here.
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
+			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
+			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 
 			platformSigner, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
 			if err != nil {
@@ -799,6 +804,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
+			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 			assistantsCore.SetFeatureProvider(featureFlags)
 			// Turns this worker runs relay the connection links the MCP service
 			// issues on the dashboard origin, as the server's turns do.
@@ -901,6 +907,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                   remoteSessionsCache,
 				IssuerMetadataRefresher:        issuerMetadataRefresher,
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
+				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
@@ -936,6 +943,13 @@ func newWorkerCommand() *cli.Command {
 				}
 				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
+				}
+				// Bound draining, then cancel outstanding I/O and join the writer
+				// before After closes ClickHouse.
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+				defer cancelDrain()
+				if ferr := connectionRecorder.ShutdownAndWait(drainCtx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending connection attempts", attr.SlogError(ferr))
 				}
 			}()
 

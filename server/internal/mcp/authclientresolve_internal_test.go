@@ -152,8 +152,9 @@ func TestDecideAuthClient(t *testing.T) {
 			require.Equal(t, tc.reason, res.reason)
 			oauthBacked := res.clientType == authClientTypeRemoteSession || res.clientType == authClientTypeServiceAccount
 			mappedFallback := res.outcome == authClientLegacy && (res.reason == authClientReasonHeadersStale || res.reason == authClientReasonLegacyMayChain)
-			// A mapped fallback keeps its validated registration for the permit.
-			if oauthBacked && (res.outcome == authClientResolved || mappedFallback) {
+			// A mapped fallback keeps its validated registration for the permit,
+			// and identity chaining serves through an EMA client's registration.
+			if (oauthBacked && (res.outcome == authClientResolved || mappedFallback)) || res.reason == authClientReasonEMA {
 				require.Equal(t, validUUID(registrationID), res.choice.clientID)
 				require.Equal(t, validUUID(issuerID), res.choice.remoteSessionIssuerID)
 			} else {
@@ -195,47 +196,13 @@ func TestWithoutDeniedSources(t *testing.T) {
 	require.Len(t, kept, 1, "a stored Authorization value is the client's own credential")
 }
 
-func TestRefreshDecision(t *testing.T) {
+func TestRefreshIsUndecidedBeforeEnforcement(t *testing.T) {
 	t.Parallel()
 
-	resolved := func(clientType string) authClientResolution {
-		res := gapResolution("")
-		res.outcome = authClientResolved
-		res.clientType = clientType
-		return res
-	}
-	noAuth := gapResolution("")
-	noAuth.outcome = authClientNoAuth
-	legacy := gapResolution(authClientReasonUnmapped)
-	legacy.outcome = authClientLegacy
-	noAccess := gapResolution(authClientReasonNotPermitted)
-	noAccess.outcome = authClientNoAccess
-
-	cases := []struct {
-		name               string
-		res                authClientResolution
-		reconnect, decided bool
-	}{
-		{"a gap reconnects", gapResolution(authClientReasonClientDisabled), true, true},
-		{"no-auth refreshes", noAuth, false, true},
-		{"a static credential refreshes", resolved(authClientTypeStaticCredential), false, true},
-		{"a pass-through refreshes", resolved(authClientTypePassThrough), false, true},
-		{"a personal connection is left to the upstream client choice", resolved(authClientTypeRemoteSession), false, false},
-		{"a choice served the old way is left to it", legacy, false, false},
-		{"a refusal is not a reconnect", noAccess, false, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			reconnect, decided := refreshDecision(tc.res)
-			require.Equal(t, tc.reconnect, reconnect)
-			require.Equal(t, tc.decided, decided)
-		})
-	}
-
-	reconnect, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
+	reconnect, chain, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
+	require.False(t, chain.clientID.Valid)
 	require.False(t, decided, "without the flag the upstream client choice decides")
 }
 
@@ -830,6 +797,8 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, "Authorization", headers[0].Name)
 		require.Equal(t, "Bearer static-secret", headers[0].StaticValue)
 		require.True(t, headers[0].IsRequired)
+		require.True(t, headers[0].IsSecret)
+		require.False(t, headers[1].IsSecret)
 		require.Equal(t, "X-Caller-Tenant", headers[1].ValueFromRequestHeader)
 
 		other, err := f.service.loadAuthClientHeaders(ctx, "org_"+uuid.NewString(), []uuid.UUID{id})
@@ -1147,7 +1116,7 @@ func TestResolveAccessTokensServesAnAuthClientWithoutTheSignInLink(t *testing.T)
 
 // Under enforcement the resolved registration's stored grant decides a
 // refresh, whichever sign-in it was consented through; a failed check is
-// undecided, and the refresh then fails open.
+// decided as no reconnect, so the refresh fails open.
 func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	t.Parallel()
 
@@ -1175,10 +1144,11 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: serverSignIn, McpServerID: validUUID(f.serverID)}
 
 	subject := urn.NewUserSubject("user_refresh")
-	reconnect, decided, err := f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
+	reconnect, chain, decided, err := f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
 	require.NoError(t, err)
 	require.True(t, decided)
 	require.True(t, reconnect, "no stored grant needs a reconnect")
+	require.False(t, chain.clientID.Valid, "a client the resolver serves itself never chains")
 
 	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
 	require.NoError(t, err)
@@ -1191,17 +1161,18 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 		Scopes:                []string{},
 	})
 	require.NoError(t, err)
-	reconnect, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
+	reconnect, _, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
 	require.NoError(t, err)
 	require.True(t, decided)
 	require.False(t, reconnect, "a live grant from another sign-in refreshes")
 
 	// A workload subject without workload authentication fails the check.
 	workload := urn.NewWorkloadSubject(uuid.New(), "run")
-	_, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, workload, "jti")
+	reconnect, _, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, workload, "jti")
 	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
-	require.False(t, decided)
-	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti"), "a failed check fails open")
+	require.True(t, decided, "the upstream client choice never decides for an enforcing organization")
+	require.False(t, reconnect)
+	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti").reconnect(), "a failed check fails open")
 }
 
 func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {

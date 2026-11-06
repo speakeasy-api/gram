@@ -21,6 +21,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { invalidateIssuers } from "./invalidateIssuers";
 import { changesIssuerUrl, describeMismatch } from "./issuerDisplay";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
  * Consolidates one Speakeasy authorization server into another: its clients,
@@ -101,9 +102,9 @@ export function ConsolidateIssuerDialog({
             Consolidate into
           </Label>
           {candidatesLoading ? (
-            <Text small muted>
-              Loading authorization servers…
-            </Text>
+            <div role="status" aria-label="Loading authorization servers">
+              <Skeleton className="h-9 w-full" />
+            </div>
           ) : onRetryCandidates ? (
             <Stack direction="horizontal" align="center" gap={3}>
               <Text small className="text-destructive">
@@ -251,9 +252,10 @@ function ConsolidateImpact({
   }
   if (isLoading || !preflight) {
     return (
-      <Text small muted>
-        Checking what changes…
-      </Text>
+      <Skeleton label="Checking what changes">
+        <div className="h-4 w-64" />
+        <div className="h-4 w-48" />
+      </Skeleton>
     );
   }
 

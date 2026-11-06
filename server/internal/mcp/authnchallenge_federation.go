@@ -357,11 +357,14 @@ func federatedCallbackURL(callback string) (*url.URL, error) {
 
 // Never retain arbitrary upstream error strings: they may contain credentials.
 func federatedFailure(cause error) (oops.Code, error) {
+	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
+		if errors.Is(cause, remotesessions.ErrFederatedSigning) {
+			return oops.CodeUnavailable, errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning)
+		}
+		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
+	}
 	if errors.Is(cause, remotesessions.ErrFederatedSigning) {
 		return oops.CodeUnexpected, remotesessions.ErrFederatedSigning
-	}
-	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
-		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
 	}
 	if errors.Is(cause, remotesessions.ErrFederatedConfiguration) {
 		return oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration

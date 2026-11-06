@@ -84,7 +84,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
-		Title:       "What to Fix on an MCP Server",
+		Title:       "Find What to Fix on an MCP Server",
 		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{

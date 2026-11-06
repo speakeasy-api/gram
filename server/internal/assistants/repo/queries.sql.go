@@ -2170,6 +2170,12 @@ WHERE r.state = $1
       AND a.project_id = r.project_id
       AND a.deleted IS TRUE
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = r.project_id
+      AND p.deleted IS TRUE
+  )
 ORDER BY r.updated_at ASC
 `
 
@@ -2188,8 +2194,8 @@ type ListActiveAssistantRuntimesRow struct {
 // Returns live v2 runtime rows that carry backend metadata for runtime
 // reconciliation sweeps. Only `active` rows qualify: `starting` rows are
 // mid-boot, while expiring/stopped rows are already being torn down or await
-// re-admission. Rows orphaned by a deleted assistant belong to the
-// deleted-assistant janitor and are excluded here.
+// re-admission. Rows orphaned by a deleted assistant or project belong to the
+// inactivity janitor and are excluded here so maintenance cannot delay collection.
 func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
 	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
@@ -2802,6 +2808,12 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
             AND a.project_id = r.project_id
             AND a.deleted IS TRUE
         )
+        OR EXISTS (
+          SELECT 1
+          FROM projects p
+          WHERE p.id = r.project_id
+            AND p.deleted IS TRUE
+        )
       )
       AND NOT EXISTS (
         SELECT 1
@@ -2847,13 +2859,13 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 }
 
 // Returns runtime rows that still carry backend metadata and are safe to
-// collect, in two cases:
+// collect, in three cases:
 //  1. Orphans: finalized (soft-deleted or ended; the state value is ignored
 //     since a tombstone can carry any state, e.g. one stamped by a racing
-//     turn) or under a soft-deleted assistant, whose owning assistant has had
-//     no runtime activity since @inactive_before — i.e. Stop/Reap never
-//     completed. A live row under a live assistant is never an orphan: an
-//     idle runtime keeps its VM until the assistant is deleted.
+//     turn) or under a soft-deleted assistant or project, whose owning
+//     assistant has had no runtime activity since @inactive_before — i.e.
+//     Stop/Reap never completed. A live row under a live assistant and project
+//     is never an orphan: inactivity alone does not discard its workspace.
 //  2. Superseded backend: a row on a backend the process no longer targets
 //     (backend <> @target_backend), parked at @stopped_state after its warm
 //     window. Collecting it frees the deprecated backend's resources so the
@@ -5332,11 +5344,14 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 }
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, $6::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id
 `
 
 type UpsertAssistantChatParams struct {
@@ -5345,6 +5360,7 @@ type UpsertAssistantChatParams struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	Title          pgtype.Text
+	SessionSurface pgtype.Text
 }
 
 // user_id is the conversation owner — stamped on first insert so reads can
@@ -5354,6 +5370,12 @@ type UpsertAssistantChatParams struct {
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the
 // legitimate owner.
+//
+// session_surface is the server-derived product surface for sources that the
+// inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+// the same assistants runtime as every other assistant). It is stamped from the
+// persisted thread source kind, never from a request header, and an existing
+// value is kept.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
@@ -5361,6 +5383,7 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.OrganizationID,
 		arg.UserID,
 		arg.Title,
+		arg.SessionSurface,
 	)
 	return err
 }

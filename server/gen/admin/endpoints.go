@@ -122,6 +122,7 @@ type Endpoints struct {
 	EnableUpstreamAuthEnforcement           goa.Endpoint
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
+	BackfillMcpConnectGrants                goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -252,6 +253,7 @@ func NewEndpoints(s Service) *Endpoints {
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
+		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -362,6 +364,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
+	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2745,5 +2748,28 @@ func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.BackfillMcpAuthGrants(ctx, p)
+	}
+}
+
+// NewBackfillMcpConnectGrantsEndpoint returns an endpoint function that calls
+// the method "backfillMcpConnectGrants" of service "admin".
+func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpConnectGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpConnectGrants(ctx, p)
 	}
 }

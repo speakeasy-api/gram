@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -119,22 +120,24 @@ func TestGetServerIdentityImpactProjectIssuer(t *testing.T) {
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-next", "", false, []string{"none"})
 	bindServerIdentityClient(t, ctx, ti, "impact-current-client", currentProviderID, userIssuerID, false)
 
+	// A change made from one server leaves a directly Remote MCP-backed sibling
+	// alone; only a plain attach still changes what the issuer derives for it.
 	cases := []struct {
 		name       string
 		change     string
 		providerID *uuid.UUID
-		want       string
+		want       map[string]string
 	}{
-		{name: "another provider repoints", change: "replace", providerID: &nextProviderID, want: "repoint"},
-		{name: "a new provider repoints", change: "replace", providerID: nil, want: "repoint"},
-		{name: "same provider swaps the client", change: "replace", providerID: &currentProviderID, want: "resignin"},
-		{name: "attaching a second provider clears", change: "attach", providerID: &nextProviderID, want: "clear"},
-		{name: "detach clears", change: "detach", providerID: nil, want: "clear"},
+		{name: "another provider is added alongside", change: "replace", providerID: &nextProviderID, want: map[string]string{}},
+		{name: "a new provider is added alongside", change: "replace", providerID: nil, want: map[string]string{}},
+		{name: "the same provider reuses its client", change: "replace", providerID: &currentProviderID, want: map[string]string{}},
+		{name: "attaching a second provider clears", change: "attach", providerID: &nextProviderID, want: map[string]string{siblingID.String(): "clear"}},
+		{name: "detaching from a server leaves another server's client", change: "detach", providerID: nil, want: map[string]string{}},
 	}
 	for _, tc := range cases {
 		result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, tc.change, tc.providerID, nil))
 		require.NoError(t, err, tc.name)
-		require.Equal(t, map[string]string{siblingID.String(): tc.want}, impactsByServer(result), tc.name)
+		require.Equal(t, tc.want, impactsByServer(result), tc.name)
 		require.Zero(t, result.HiddenServerCount, tc.name)
 	}
 
@@ -175,13 +178,17 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-next", "", false, []string{"none"})
 	bindServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, userIssuerID, false)
 
-	// A project-owned client is invisible to other projects, so replacing it
-	// leaves their upstream alone.
+	// A change made from one server leaves its siblings alone, here and in other
+	// projects.
 	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "repoint"}, impactsByServer(result))
+	require.Empty(t, impactsByServer(result))
 
-	require.NotContains(t, impactsByServer(result), otherServerID.String())
+	// Made without a target, the same change reaches the project's servers, and
+	// a project-owned client is invisible to other projects.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, nil, "replace", &nextProviderID, nil))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{siblingID.String(): "repoint", targetID.String(): "repoint"}, impactsByServer(result))
 	for _, server := range result.Servers {
 		require.Equal(t, "mcp_server", server.Kind)
 		require.Equal(t, projectID.String(), server.ProjectID)
@@ -245,13 +252,24 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-deleted-sibling", userIssuerID)
 	liveProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-live", "", false, []string{"none"})
 	deletedProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-gone", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, userIssuerID, false)
-	bindServerIdentityClient(t, ctx, ti, "impact-deleted-gone-client", deletedProviderID, userIssuerID, false)
+	liveClientID := bindServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, userIssuerID, false)
+	goneClientID := bindServerIdentityClient(t, ctx, ti, "impact-deleted-gone-client", deletedProviderID, userIssuerID, false)
+	for _, clientID := range []uuid.UUID{liveClientID, goneClientID} {
+		associated, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID:        activeOrganizationID(t, ctx),
+			RemoteSessionClientID: clientID,
+			McpServerID:           targetID,
+			ProjectID:             projectID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), associated)
+	}
 	_, err := repo.New(ti.conn).DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{ID: deletedProviderID, ProjectID: conv.ToNullUUID(projectID)})
 	require.NoError(t, err)
 
 	// The commit still sees the deleted provider's bound client, and so does
-	// the preview: two other providers make the replacement ambiguous.
+	// the preview: this server's own clients of two other providers make the
+	// replacement ambiguous.
 	var requests atomic.Int64
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -292,18 +310,29 @@ func TestGetServerIdentityImpactListsGateways(t *testing.T) {
 		providerID *uuid.UUID
 		want       map[string]string
 	}{
-		{change: "replace", providerID: &nextProviderID, want: map[string]string{gatewayID.String(): "client_removed"}},
-		{change: "detach", providerID: nil, want: map[string]string{gatewayID.String(): "client_removed"}},
+		// A gateway reads the issuer's bindings, so a change made from one server
+		// leaves its client bound.
+		{change: "replace", providerID: &nextProviderID, want: map[string]string{}},
+		{change: "detach", providerID: nil, want: map[string]string{}},
 		{change: "attach", providerID: &nextProviderID, want: map[string]string{}},
 	} {
 		result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, tc.change, tc.providerID, nil))
 		require.NoError(t, err, tc.change)
 		require.Equal(t, tc.want, impactsByServer(result), tc.change)
-		for _, server := range result.Servers {
-			require.Equal(t, "gateway", server.Kind)
-			require.Nil(t, server.Slug)
-			require.Equal(t, "impact-gateway", conv.PtrValOr(server.Name, ""))
+	}
+
+	// Detaching from the issuer itself does remove the gateway's client.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, nil, "detach", nil, nil))
+	require.NoError(t, err)
+	impacts := impactsByServer(result)
+	require.Equal(t, "client_removed", impacts[gatewayID.String()])
+	for _, server := range result.Servers {
+		if server.ID != gatewayID.String() {
+			continue
 		}
+		require.Equal(t, "gateway", server.Kind)
+		require.Nil(t, server.Slug)
+		require.Equal(t, "impact-gateway", conv.PtrValOr(server.Name, ""))
 	}
 }
 

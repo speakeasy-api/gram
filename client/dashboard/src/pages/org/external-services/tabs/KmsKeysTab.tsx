@@ -3,6 +3,7 @@ import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
@@ -41,7 +42,7 @@ export function KmsKeysTab({
   }
 
   if (isLoading) {
-    return <Text muted>Loading…</Text>;
+    return <SkeletonTable label="Loading KMS keys" />;
   }
 
   if (keys.length === 0) {

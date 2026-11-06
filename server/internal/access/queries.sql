@@ -19,6 +19,13 @@ WHERE organization_id = @organization_id
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope;
 
+-- name: LockRolePrincipalGrants :exec
+-- Serializes grant writes for one role principal in an organization until the
+-- transaction ends. Role edits and the assistant-role-grants backfill both take
+-- it, so a backfill cannot recheck a role, lose a race with a revocation, and
+-- then write grants back.
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || @organization_id::text || ':' || @principal_urn::text, 0));
+
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
@@ -2064,3 +2071,29 @@ WHERE id = @id
 -- Test fixture: a digest of the whole stored row, so a test can prove it was
 -- not touched without reading any credential value.
 SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = @id;
+-- name: ListManagedAssistantAgentIDs :many
+-- The requested agents that are currently bound to a project's managed
+-- assistant. Only these agents may hold organization-wide read policy; every
+-- other agent has org:read filtered out of its runtime policy.
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = @organization_id
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY(@agent_ids::uuid[]);

@@ -1731,6 +1731,9 @@ func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.En
 		if p.ClientID != nil {
 			values.Add("client_id", *p.ClientID)
 		}
+		if p.ReplaceClient != nil {
+			values.Add("replace_client", fmt.Sprintf("%v", *p.ReplaceClient))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3595,6 +3598,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		ForwardClientName:               *v.ForwardClientName,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,
 		CredentialOwner:                 *v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,

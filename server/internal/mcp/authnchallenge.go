@@ -1049,6 +1049,11 @@ type issuerGateAuthentication struct {
 	// directWorkloadHandoff is enabled only by direct proxy dispatch.
 	directWorkloadHandoff bool
 
+	// ownClientsOnly limits a caller with no chosen client to the clients of
+	// the proxied server being served, rather than every client the issuer
+	// binds, which may belong to other servers sharing it.
+	ownClientsOnly bool
+
 	// chosenClient narrows upstream resolution to the one client the
 	// credential chose for the endpoint's server; invalid resolves every
 	// client the issuer binds unless chosenNoAuth is set.
@@ -1078,11 +1083,22 @@ type issuerGateAuthentication struct {
 	// unattached agent key's permit was decided for, typed or handed back.
 	authorizerOwner string
 
+	// skippedUpstreams says why partial resolution left a client out; nil off a gateway.
+	skippedUpstreams *remotesessions.SkippedClients
+
+	// request is the caller's request, read only if a row is written.
+	request *http.Request
+
 	// agentKeyClients, when not nil, are the only clients an agent key
 	// without a credential choice is served by on a direct endpoint: the
 	// server's own clients, each with the connection its permit was decided
 	// for.
 	agentKeyClients []agentKeyClient
+
+	// checkedRegistration reports that chosenClient is a registration the
+	// typed resolver checked against the endpoint's server for a client it
+	// does not serve itself, which authorizes it without a sign-in link.
+	checkedRegistration bool
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1103,6 +1119,7 @@ type issuerGateAuthentication struct {
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
@@ -1194,6 +1211,7 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		s.recordGateRejection(ctx, r, endpoint, authToken, reason, valErr)
 		if issuerGateCheckUnavailable(ctx, valErr) {
 			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
 		}
@@ -1211,6 +1229,10 @@ func (s *Service) authenticateIssuerGate(
 	}
 	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.CodeNoServerAccess, r,
+				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
+		}
 		return ctx, nil, nil, err
 	}
 
@@ -1223,13 +1245,17 @@ func (s *Service) authenticateIssuerGate(
 
 		refreshableUserSession: refreshableUserSession,
 		directWorkloadHandoff:  false,
+		ownClientsOnly:         false,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
+		skippedUpstreams:       nil,
+		request:                r,
 		agentKeyClients:        nil,
+		checkedRegistration:    false,
 	}, toolSelection, nil
 }
 
@@ -1251,6 +1277,9 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// all-or-nothing ErrNoValidToken challenge below stays for direct
 	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
 	if endpoint.MetaMcpServerID.Valid {
+		if authentication.skippedUpstreams == nil {
+			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
+		}
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
@@ -1276,37 +1305,37 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		// The credential's chosen client is no longer bound to its issuer, the
 		// same unusable choice the selection read reports.
-		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession, err)
 		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
 		// the client is told to retry the same request instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable, resolveFailureHappened(err), err)
 		return remoteSessionUnavailableError(w, err)
 	case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		// No authorization the caller performs supplies a self client's
 		// credential, so a challenge would only loop the client through
 		// reauthorization. Name the administrator instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured, err)
 		return clientCredentialMisconfiguredError(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
 		// can repair it instead.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured, mcpconnectionattempts.CodeCredentialMisconfigured, err)
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		// A turn acting for a person cannot reauthorize on their behalf; the
 		// person gets a link to connect their own account instead.
-		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
@@ -1349,7 +1378,7 @@ func setOutageRetryAfter(w http.ResponseWriter) {
 // bearer token was accepted but whose upstream remote session was not. The
 // response itself is byte-identical to other rejections of the same status,
 // so this line is what tells them apart in production.
-func (s *Service) recordRemoteSessionRejection(ctx context.Context, authentication *issuerGateAuthentication, message, reason string) {
+func (s *Service) recordRemoteSessionRejection(ctx context.Context, authentication *issuerGateAuthentication, message, reason string, code mcpconnectionattempts.Code, causes ...error) {
 	endpoint := authentication.endpoint
 	endpoint.LogWith(s.logger).WarnContext(ctx, message,
 		attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
@@ -1359,6 +1388,13 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogUserSessionSubjectKind(string(authentication.subject.Kind)),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+	// Only a fresh, admitted standalone refresh row replaces this gate row.
+	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+		return
+	}
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
+		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
+		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1371,7 +1407,10 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 // subject can reauthorize can follow that path. Every other caller keeps the
 // challenge with no error code, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
-// strand it.
+// strand it. This controls the MCP challenge only. Under auth-client
+// enforcement, an explicit refresh is still refused when its chosen upstream
+// grant is unusable, including an agent session on a compatibility registration.
+// Its connection owner must repair the grant; a new session cannot bypass it.
 func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
 	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {
@@ -1408,10 +1447,11 @@ func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizati
 func (s *Service) ApplyIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
-	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, authToken, baseURL, endpoint)
 	if err != nil {
 		return ctx, nil, nil, err
 	}
@@ -1563,14 +1603,20 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 	return mcpconnectionattempts.AttemptAt(id, a.CreatedAt, connectionScope(endpoint, app))
 }
 
+// gatewayScope files a gateway's rows; an organization gateway has no project.
+func gatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
+	if projectID == uuid.Nil {
+		return mcpconnectionattempts.OrganizationGatewayScope(organizationID, gatewayID, app)
+	}
+	return mcpconnectionattempts.GatewayScope(organizationID, projectID, gatewayID, app)
+}
+
 // connectionScope is what stays the same on every step of a connection attempt
 // to this endpoint.
 func connectionScope(endpoint *ResolvedMcpEndpoint, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
 	switch {
-	case endpoint.IsOrganizationGateway() && endpoint.ProjectID == uuid.Nil:
-		return mcpconnectionattempts.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
-	case endpoint.MetaMcpServerID.Valid:
-		return mcpconnectionattempts.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
+	case endpoint.MetaMcpServerID.Valid, endpoint.IsOrganizationGateway() && endpoint.ProjectID == uuid.Nil:
+		return gatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.McpServerID.Valid:
 		return mcpconnectionattempts.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
 	default:

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -2214,6 +2215,67 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 	require.Equal(t, server.URL+"/jwks", merged["jwks_uri"])
 	require.Equal(t, []any{"read", "write"}, merged["scopes_supported"], "the first document's value wins in the raw union too")
 	require.Equal(t, []string{}, discovered.IntrospectionEndpointAuthMethodsSupported, "an omitted array is captured as empty, never nil")
+}
+
+// RFC 9207 iss support comes only from the primary document: the callback
+// rejects a response without iss when it is on, so a second document cannot
+// turn it on or off.
+func TestDiscoverIssuerMetadata_IssSupportComesOnlyFromPrimaryDocument(t *testing.T) {
+	t.Parallel()
+
+	const flag = oauthwire.MetadataAuthorizationResponseIssParameterSupported
+	cases := []struct {
+		name       string
+		oauth      *bool
+		openID     *bool
+		noOAuthDoc bool
+		want       bool
+		wantMember bool
+	}{
+		{name: "oauth omits and openid true", oauth: nil, openID: new(true), want: false, wantMember: false},
+		{name: "oauth true and openid omits", oauth: new(true), openID: nil, want: true, wantMember: true},
+		{name: "oauth false and openid true", oauth: new(false), openID: new(true), want: false, wantMember: true},
+		{name: "oauth true and openid false", oauth: new(true), openID: new(false), want: true, wantMember: true},
+		{name: "openid is the only document", noOAuthDoc: true, openID: new(true), want: true, wantMember: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := metadataServerOptions{
+				mutateOAuth: func(doc map[string]any) {
+					if tc.oauth != nil {
+						doc[flag] = *tc.oauth
+					}
+				},
+				mutateOIDC: func(doc map[string]any) {
+					if tc.openID != nil {
+						doc[flag] = *tc.openID
+					}
+				},
+			}
+			if tc.noOAuthDoc {
+				opts.oauthStatus = &atomic.Int32{}
+				opts.oauthStatus.Store(http.StatusNotFound)
+			}
+			server := metadataServer(t, opts)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
+			require.NoError(t, err)
+
+			discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, discovered.AuthorizationResponseIssParameterSupported)
+
+			var merged map[string]any
+			require.NoError(t, json.Unmarshal(discovered.Metadata, &merged))
+			if tc.wantMember {
+				require.Equal(t, tc.want, merged[flag], "the stored document agrees with the typed field")
+			} else {
+				require.NotContains(t, merged, flag)
+			}
+			require.Contains(t, merged, "jwks_uri", "the rest of the OpenID document still merges")
+		})
+	}
 }
 
 // A member the sanitizer blanks is reported, so an operator can tell a

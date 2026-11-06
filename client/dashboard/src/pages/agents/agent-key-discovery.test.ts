@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { Agents } from "@gram/client/sdk/agents.js";
 import { HTTPClient } from "@gram/client/lib/http.js";

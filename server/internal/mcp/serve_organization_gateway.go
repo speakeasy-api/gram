@@ -404,10 +404,10 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 // so a member whose provider is not connected degrades on its own. A stored
 // gateway uses it too, for its hosted members, so the issuer's clients
 // resolve only when one needs them.
-func (s *Service) newOrganizationGatewayTokens(endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) *projectTokenCache {
+func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 			}
@@ -447,7 +447,9 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 //
 // Where typed auth client resolution is enforced, the registrations its
 // servers offer through typed auth clients are listed whether or not the
-// sign-in links them. Direct proxied servers offer only these registrations.
+// sign-in links them. Direct proxied servers and a gateway's proxied members
+// offer only these registrations; a gateway keeps its sign-in's clients for
+// the hosted members that use them.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	return clients, err
@@ -659,9 +661,14 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 		}
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
+	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+		TypedOffers:           typedOffers,
 		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {

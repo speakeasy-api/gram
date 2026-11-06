@@ -3,7 +3,6 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
-import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import {
   catalogServerInstallState,
   liveCatalogExternalMcp,
@@ -18,35 +17,20 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 
 interface ServerMeta {
-  "com.pulsemcp/server"?: {
-    visitorsEstimateMostRecentWeek?: number;
-    visitorsEstimateLastFourWeeks?: number;
-    visitorsEstimateTotal?: number;
-    isOfficial?: boolean;
-  };
-  "com.pulsemcp/server-version"?: {
-    source?: string;
+  [namespace: string]: unknown;
+  "io.modelcontextprotocol.registry/official"?: {
     status?: string;
     publishedAt?: string;
     updatedAt?: string;
-    isLatest?: boolean;
-    // The catalog list response strips per-tool definitions from the meta blob
-    // to stay small; only the lightweight auth info is kept. Full tools come
-    // from getServerDetails (see `tools` below, populated by enrichment).
-    "remotes[0]"?: {
-      authOptions?: {
-        type?: string;
-      }[];
-    };
+  };
+  /** Backend-owned publication time for native catalog records. */
+  "com.speakeasy.ai/registry"?: {
+    publishedAt?: string;
   };
 }
 
-// The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
-// optional and populated client-side by enrichment (getServerDetails) for the
-// add/release flow that needs per-tool URNs.
-export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
-  meta: ServerMeta;
-  tools?: ExternalMCPTool[];
+export type CatalogServer = Omit<ExternalMCPServerEntry, "meta"> & {
+  meta?: ServerMeta;
 };
 
 // The catalog is small and the backend returns the full list in a single
@@ -55,6 +39,7 @@ export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
 // forwarded so callers that only need a specific server (e.g. the detail page)
 // can narrow the response.
 type CatalogQueryOptions = {
+  projectSlug?: string;
   enabled?: boolean;
   throwOnError?: boolean;
 };
@@ -74,7 +59,8 @@ function useListMCPCatalogImpl(
   options?: CatalogQueryOptions,
 ) {
   const client = useSdkClient();
-  const projectSlug = useProjectSlugForRequests();
+  const currentProjectSlug = useProjectSlugForRequests();
+  const projectSlug = options?.projectSlug ?? currentProjectSlug;
 
   return useQuery({
     queryKey: queryKeyListMCPCatalog({
@@ -119,10 +105,8 @@ export function useListMCPCatalog(
  * leaves the state "unknown" instead of claiming the server is not added.
  */
 export function useCatalogInstallations(projectSlug?: string): {
-  installState: (server: PulseMCPServer) => CatalogInstallState;
-  liveExternalMcp: (
-    server: PulseMCPServer,
-  ) => DeploymentExternalMCP | undefined;
+  installState: (server: CatalogServer) => CatalogInstallState;
+  liveExternalMcp: (server: CatalogServer) => DeploymentExternalMCP | undefined;
 } {
   const routeProject = useProjectSlugForRequests();
   const gramProject = projectSlug || routeProject;
@@ -203,12 +187,12 @@ export function useCatalogInstallations(projectSlug?: string): {
   );
 
   const installState = useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       catalogServerInstallState(server, evidence, externalMcps ?? [], ready),
     [evidence, externalMcps, ready],
   );
   const liveExternalMcp = useCallback(
-    (server: PulseMCPServer) => {
+    (server: CatalogServer) => {
       if (!ready.servers || !ready.deployment) return undefined;
       return liveCatalogExternalMcp(
         server,

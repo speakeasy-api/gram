@@ -178,7 +178,7 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 		Raw:  nil,
 	}
 	if len(base.Raw) > 0 {
-		payload.Raw = scrubRawPayload(base.Raw)
+		payload.Raw = scrubRawPayload(base.Raw, base.Provider)
 	}
 	if isEmptyData(data) {
 		payload.Data = nil
@@ -192,8 +192,9 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 // data.mcp alone would leave the same values in the echo. It runs on every
 // event like the bash senders' scrub did. Payloads that need no rewrite are
 // returned verbatim; a rewritten payload is re-encoded, so its key order and
-// whitespace may normalize while all other values stay intact.
-func scrubRawPayload(raw json.RawMessage) json.RawMessage {
+// whitespace may normalize while all other values stay intact. The OpenClaw
+// shim's mcpServers list is dropped.
+func scrubRawPayload(raw json.RawMessage, provider agenthooks.Provider) json.RawMessage {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return raw
@@ -223,6 +224,13 @@ func scrubRawPayload(raw json.RawMessage) json.RawMessage {
 		redactField(key, redactURL)
 	}
 	redactField("command", redactCommand)
+	// The OpenClaw shim lists every configured MCP server on each tool frame.
+	// data.mcp already carries the one the call reached, so the echo does not
+	// repeat the whole list. Other providers' payloads keep the field.
+	if _, ok := obj[openclawMCPServersField]; ok && provider == agenthooks.ProviderOpenClaw {
+		delete(obj, openclawMCPServersField)
+		changed = true
+	}
 	if !changed {
 		return raw
 	}
@@ -259,18 +267,22 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 	}
 	data.ToolCall = tc
 
-	if tool.MCP != nil {
+	mcp := tool.MCP
+	if mcp == nil && base.Provider == agenthooks.ProviderOpenClaw {
+		mcp = openclawResolveMCPCall(base, tool.Name, output, errOut)
+	}
+	if mcp != nil {
 		m := &components.HookMCPData{
-			ServerName:     optStr(tool.MCP.Server),
+			ServerName:     optStr(mcp.Server),
 			ServerIdentity: nil,
-			URL:            optStr(redactURL(tool.MCP.URL)),
-			Command:        optStr(redactCommand(tool.MCP.Command)),
+			URL:            optStr(redactURL(mcp.URL)),
+			Command:        optStr(redactCommand(mcp.Command)),
 			ResultJSON:     nil,
 		}
 		if m.URL == nil && m.Command != nil {
 			m.ServerIdentity = m.Command
 		} else {
-			m.ServerIdentity = optStr(tool.MCP.Server)
+			m.ServerIdentity = optStr(mcp.Server)
 		}
 		if len(output) > 0 {
 			m.ResultJSON = new(string(output))
@@ -279,6 +291,40 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 	}
 
 	return eventType
+}
+
+// openClawMCPCall recovers the MCP identity of an OpenClaw tool call from its
+// after_tool_call result. OpenClaw names MCP tools <server>__<tool> rather
+// than mcp__<server>__<tool>, so the tool name cannot be decoded without
+// guessing, but OpenClaw's MCP bridge stamps details.mcpServer and
+// details.mcpTool on every MCP tool result and native tools never carry them.
+// The pre-call event has only the tool name and params, so it carries no
+// marker. Results are tried in order and the first one naming a server wins;
+// nil means the result names no MCP server.
+func openClawMCPCall(results ...json.RawMessage) *agenthooks.MCPCall {
+	for _, raw := range results {
+		var result struct {
+			Details struct {
+				MCPServer string `json:"mcpServer"`
+				MCPTool   string `json:"mcpTool"`
+			} `json:"details"`
+		}
+		if json.Unmarshal(raw, &result) != nil {
+			continue
+		}
+		server := strings.TrimSpace(result.Details.MCPServer)
+		if server == "" {
+			continue
+		}
+		return &agenthooks.MCPCall{
+			Server:     server,
+			Tool:       strings.TrimSpace(result.Details.MCPTool),
+			URL:        "",
+			Command:    "",
+			FromConfig: false,
+		}
+	}
+	return nil
 }
 
 // applyModelResponse lifts the assistant message text and token usage a

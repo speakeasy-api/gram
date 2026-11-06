@@ -1,15 +1,13 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertCircle,
-  Check,
-  Loader2,
-  Server as ServerIcon,
-} from "lucide-react";
+import { AlertCircle, Check, Server as ServerIcon } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
 import { supportsAutomaticOAuth } from "@/pages/catalog/hooks/serverMetadata";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   filterToHttpRemotes,
   normalizeRemoteUrl,
@@ -56,7 +54,7 @@ interface DistributeServersStepProps {
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
-function serverKey(server: PulseMCPServer): string {
+function serverKey(server: CatalogServer): string {
   return `${server.registryId}-${server.registrySpecifier}`;
 }
 
@@ -111,7 +109,7 @@ export function DistributeServersStep({
   const [drawerStep, setDrawerStep] = useState<DrawerStep>("adding");
   const [drawerError, setDrawerError] = useState<string | null>(null);
   // Servers handed to the release workflow once the user hits Distribute.
-  const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
+  const [serversToDeploy, setServersToDeploy] = useState<CatalogServer[]>([]);
   // Slug of the Default plugin found/created during this run — captured so
   // the install-instructions step below can address it precisely.
   const [distributedPluginSlug, setDistributedPluginSlug] = useState<
@@ -173,7 +171,7 @@ export function DistributeServersStep({
   ]);
 
   const isDistributed = useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       (server.remotes ?? []).some((remote) =>
         distributedUrls.has(normalizeRemoteUrl(remote.url)),
       ),
@@ -184,7 +182,7 @@ export function DistributeServersStep({
   const catalogInitialLoadFailed = catalogLoadFailed && !catalogHasData;
   const catalogRefetchFailed = catalogLoadFailed && catalogHasData;
   const servers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
   // Onboarding offers advertised automatic OAuth setup; installation still
@@ -449,8 +447,14 @@ export function DistributeServersStep({
               )}
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                <div
+                  role="status"
+                  aria-label="Loading MCP servers"
+                  className="mt-3 grid grid-cols-2 gap-3"
+                >
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <Skeleton key={i} className="h-[118px] w-full" />
+                  ))}
                 </div>
               ) : catalogInitialLoadFailed ? (
                 <CatalogErrorBanner
@@ -487,16 +491,14 @@ export function DistributeServersStep({
                             : "border-border bg-card hover:border-foreground/30",
                         )}
                       >
-                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-white">
-                          {server.iconUrl ? (
-                            <img
-                              src={server.iconUrl}
-                              alt=""
-                              className="h-6 w-6"
-                            />
-                          ) : (
-                            <ServerIcon className="h-5 w-5 text-neutral-600" />
-                          )}
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden bg-card">
+                          <CatalogLogo
+                            server={server}
+                            className="h-6 w-6"
+                            fallback={
+                              <ServerIcon className="h-5 w-5 text-neutral-600" />
+                            }
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <span className="text-foreground block truncate text-sm font-medium">
@@ -621,7 +623,7 @@ export function DistributeServersStep({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 py-12">
-                    <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+                    <Spinner className="text-muted-foreground mr-0 h-8 w-8" />
                     <p className="text-muted-foreground text-sm">
                       Adding to your Default plugin…
                     </p>

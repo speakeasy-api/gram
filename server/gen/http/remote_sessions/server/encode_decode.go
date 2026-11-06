@@ -1627,6 +1627,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 			change              string
 			providerID          *string
 			clientID            *string
+			replaceClient       *bool
 			sessionToken        *string
 			apikeyToken         *string
 			projectSlugInput    *string
@@ -1666,6 +1667,16 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if clientID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
 		}
+		{
+			replaceClientRaw := qp.Get("replace_client")
+			if replaceClientRaw != "" {
+				v, err2 := strconv.ParseBool(replaceClientRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replace_client", replaceClientRaw, "boolean"))
+				}
+				replaceClient = &v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1681,7 +1692,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, replaceClient, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3389,6 +3400,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		ForwardClientName:               v.ForwardClientName,
 		LegacyCallbackURL:               v.LegacyCallbackURL,
 		CredentialOwner:                 v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,

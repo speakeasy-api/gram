@@ -232,7 +232,7 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		token := r.Header.Get(constants.ChatSessionsTokenHeader)
 		authorizedCtx, err = s.chatSessions.Authorize(ctx, token)
 		if err != nil {
-			return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
+			return authorizedCtx, nil, "", err
 		}
 		keySlot = billing.ModelUsageSourceElements
 	}
@@ -3729,7 +3729,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 		case "claude-code":
 			return true
 		case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-			"claude", "claude-chat-web", "assistants", "playground":
+			"claude", "claude-chat-web", "assistants", "speakeasy-slack", "playground":
 			return false
 		default:
 			return true
@@ -3742,7 +3742,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 	case "claude-code", "claude-code-desktop", "cowork", "litellm":
 		return true
 	case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-		"claude", "claude-chat-web", "assistants", "playground":
+		"claude", "claude-chat-web", "assistants", "speakeasy-slack", "playground":
 		return false
 	default:
 		return true

@@ -24,12 +24,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -95,23 +98,37 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return nil, fmt.Errorf("load organization gateway issuer: %w", err)
 	}
 
+	// Platform MCP holds no gateway connection to record credential choices
+	// on. Once the organization enforces, each member is decided by what it
+	// offers the caller; before that it routes through its project's clients.
+	mode, err := s.authClientMode(ctx, organization.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load upstream auth enforcement: %w", err)
+	}
+	var choices *memberChoices
+	if mode == feature.AuthClientResolverEnforced {
+		choices = s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
+	}
+
 	connectRoot, connectURL := "", ""
 	if root, err := resolved.RootURL(requestorigin.BaseURL(ctx, s.serverURL.String())); err != nil {
 		logger.WarnContext(ctx, "build gateway connect url", attr.SlogError(err))
 	} else {
 		connectRoot, connectURL = root, root+"/connect/first-party"
 	}
+	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
+		fromRequest:         mcpconnectionattempts.FromRequest(nil),
+		skippedUpstreams:    skipped,
+		request:             nil,
 		projectID:           uuid.Nil,
 		metaServerID:        metaServer.ID,
 		agentID:             uuid.Nil,
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID)),
-		// Credential choices belong to one gateway connection; Platform MCP
-		// holds none, so each member routes through its project's clients.
-		memberChoices:       nil,
+		projectTokens:       s.newOrganizationGatewayTokens(nil, resolved, urn.NewUserSubject(userID), skipped),
+		memberChoices:       choices,
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,

@@ -22547,6 +22547,219 @@ func EncodeBackfillMcpAuthGrantsError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeBackfillMcpConnectGrantsResponse returns an encoder for responses
+// returned by the admin backfillMcpConnectGrants endpoint.
+func EncodeBackfillMcpConnectGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminBackfillMCPConnectGrantsResult)
+		enc := encoder(ctx, w)
+		body := NewBackfillMcpConnectGrantsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeBackfillMcpConnectGrantsRequest returns a decoder for requests sent to
+// the admin backfillMcpConnectGrants endpoint.
+func DecodeBackfillMcpConnectGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.BackfillMcpConnectGrantsPayload, error) {
+	return func(r *http.Request) (*admin.BackfillMcpConnectGrantsPayload, error) {
+		var payload *admin.BackfillMcpConnectGrantsPayload
+		var (
+			body BackfillMcpConnectGrantsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateBackfillMcpConnectGrantsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewBackfillMcpConnectGrantsPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeBackfillMcpConnectGrantsError returns an encoder for errors returned
+// by the backfillMcpConnectGrants admin endpoint.
+func EncodeBackfillMcpConnectGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpConnectGrantsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody
 // builds a value of type *AdminOrganizationMemberResponseBody from a value of
 // type *admin.AdminOrganizationMember.
@@ -22593,10 +22806,11 @@ func marshalAdminAdminMcpServerToAdminMcpServerResponseBody(v *admin.AdminMcpSer
 	return res
 }
 
-// marshalAdminAuditLogToAuditLogResponseBody builds a value of type
-// *AuditLogResponseBody from a value of type *admin.AuditLog.
-func marshalAdminAuditLogToAuditLogResponseBody(v *admin.AuditLog) *AuditLogResponseBody {
-	res := &AuditLogResponseBody{
+// marshalAdminAdminAuditLogToAdminAuditLogResponseBody builds a value of type
+// *AdminAuditLogResponseBody from a value of type *admin.AdminAuditLog.
+func marshalAdminAdminAuditLogToAdminAuditLogResponseBody(v *admin.AdminAuditLog) *AdminAuditLogResponseBody {
+	res := &AdminAuditLogResponseBody{
+		IsInternal:         v.IsInternal,
 		ID:                 v.ID,
 		ProjectID:          v.ProjectID,
 		ProjectSlug:        v.ProjectSlug,
@@ -23803,6 +24017,8 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 		SourceName:             v.SourceName,
 		CreatedAt:              v.CreatedAt,
 		CurationRevision:       v.CurationRevision,
+		SetupGuidesVersion:     v.SetupGuidesVersion,
+		EndpointGuideSlug:      v.EndpointGuideSlug,
 		SourceRevision:         v.SourceRevision,
 		Eligible:               v.Eligible,
 		CanOverrideEligibility: v.CanOverrideEligibility,
@@ -23828,6 +24044,16 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v.SuggestedMetadata)
 	}
+	if v.SetupGuides != nil {
+		res.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(v.SetupGuides))
+		for i, val := range v.SetupGuides {
+			if val == nil {
+				res.SetupGuides[i] = nil
+				continue
+			}
+			res.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
+	}
 	if v.AuthDiscovery != nil {
 		res.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v.AuthDiscovery)
 	}
@@ -23850,6 +24076,21 @@ func marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSugges
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody
+// builds a value of type *AdminRegistryPromotionSetupGuideResponseBody from a
+// value of type *admin.AdminRegistryPromotionSetupGuide.
+func marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(v *admin.AdminRegistryPromotionSetupGuide) *AdminRegistryPromotionSetupGuideResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminRegistryPromotionSetupGuideResponseBody{
+		Slug:  v.Slug,
+		Title: v.Title,
 	}
 
 	return res

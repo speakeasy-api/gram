@@ -78,7 +78,10 @@ import {
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
-import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+import {
+  invalidateAllListAPIKeys,
+  useListAPIKeys,
+} from "@gram/client/react-query/listAPIKeys.js";
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
@@ -133,6 +136,9 @@ type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
+
+// The session cookie authenticates the dashboard; the header is a placeholder.
+const keysSecurity = { sessionHeaderGramSession: "" };
 
 // Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
 // them without mcp:auth, and nothing here can choose auth clients yet, so it is
@@ -387,6 +393,33 @@ export function CredentialsWizard({
   // is delivered. Every step is a destination because none of them creates
   // anything until the key is issued.
   const existing = agent !== undefined;
+  // An agent opened again usually has a working key already. The install
+  // step cannot show it, but must not read as if the agent were unconnected.
+  // Same options and permission gate as the agent's own pages, so all of them
+  // read one cached list and none sends a request it would be refused.
+  const agentKeys = useListAPIKeys({ agentId: agent?.id ?? "" }, keysSecurity, {
+    queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
+    enabled: existing && agent.permissions.authorize,
+    retry: false,
+    throwOnError: false,
+  });
+  // `null` only once a read confirms there is no live key; `undefined` while
+  // the list is not read, loading or failed, so the step claims neither. A
+  // disabled query still reports a list cached before authorize was lost.
+  const existingKey = useMemo(() => {
+    if (!existing) return null;
+    if (!agent.permissions.authorize || !agentKeys.isSuccess) return undefined;
+    const now = Date.now();
+    const live = agentKeys.data.keys.filter(
+      (key) => !key.expiresAt || key.expiresAt.getTime() > now,
+    );
+    if (live.length === 0) return null;
+    const lastUsedAt = live
+      .map((key) => key.lastAccessedAt)
+      .filter((at): at is Date => at !== undefined)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    return { lastUsedAt };
+  }, [existing, agent, agentKeys.isSuccess, agentKeys.data]);
 
   // Opened for a named platform: the credential is settled and the agent is
   // named after what will be signing in, so the flow starts at the servers —
@@ -853,6 +886,14 @@ export function CredentialsWizard({
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
+  // Which registrations a connection is assigned through depends on whether
+  // the organization enforces upstream auth, so nothing is written until that
+  // is known. An unreadable answer assigns through each server's own
+  // credentials, which never attach another server's sign-in.
+  const enforcementPending = enforcement === "loading";
+  const enforcementPendingNote =
+    "Checking how this organization's servers sign in…";
+  const typedConnections = enforcement !== "legacy";
   // Where the organization enforces mcp:auth, an agent without it cannot sign
   // in to any upstream, so a refused grant stops the flow before anything is
   // written. Elsewhere sign-in does not need it yet, so the grant is left out
@@ -1041,6 +1082,11 @@ export function CredentialsWizard({
         "Your permissions are still loading. Try again in a moment.",
       );
     }
+    if (enforcementPending) {
+      throw new Error(
+        "Checking how this organization's servers sign in. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -1129,7 +1175,7 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving || authPending) return;
+    if (!reconciled || saving || authPending || enforcementPending) return;
     if (authStop) {
       setError(authStop);
       return;
@@ -1357,6 +1403,7 @@ export function CredentialsWizard({
         allServers ? listedServers : selected.map((entry) => entry.server),
         undefined,
         true,
+        typedConnections,
       );
       if (missing.length)
         toast.warning(
@@ -1412,6 +1459,7 @@ export function CredentialsWizard({
           reach,
           signal,
           allServers,
+          typedConnections,
         );
         if (missing.length)
           toast.warning(
@@ -2021,6 +2069,7 @@ export function CredentialsWizard({
             onIssue={() => void provision()}
             issuing={provisioning || minting}
             secret={secret}
+            existingKey={existingKey}
             gatewayURL={gatewayURL}
             serverCount={allServers ? "all" : selected.length}
           />
@@ -2079,6 +2128,7 @@ export function CredentialsWizard({
                 "Renaming an agent is recorded in the organization audit log.")
               : (authStop ??
                 (authPending ? authPendingNote : null) ??
+                (enforcementPending ? enforcementPendingNote : null) ??
                 refusedChoice ??
                 (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
@@ -2101,7 +2151,8 @@ export function CredentialsWizard({
                   !reconciled ||
                   refusedChoice !== null ||
                   authStop !== null ||
-                  authPending
+                  authPending ||
+                  enforcementPending
                 }
                 onClick={() => void save()}
               >

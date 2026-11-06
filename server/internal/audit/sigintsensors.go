@@ -40,6 +40,7 @@ func (l *Logger) LogSigintSensorCreate(ctx context.Context, dbtx repo.DBTX, even
 		return fmt.Errorf("marshal sensor creation snapshot: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -89,6 +90,7 @@ func (l *Logger) LogSigintSensorUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -133,6 +135,7 @@ func (l *Logger) LogSigintSensorDelete(ctx context.Context, dbtx repo.DBTX, even
 		return fmt.Errorf("marshal sensor deletion snapshot: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

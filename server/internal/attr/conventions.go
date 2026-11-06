@@ -568,9 +568,10 @@ const (
 	// — the ones Speakeasy emits across DCR registration, /authorize, /token, and
 	// /revoke, and the ones an upstream authorization server answers Speakeasy
 	// with (IdP and remote-login callbacks, token refresh).
-	OAuthErrorKey            = attribute.Key("gram.oauth.error")
-	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
-	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
+	OAuthErrorKey               = attribute.Key("gram.oauth.error")
+	OAuthForwardedClientNameKey = attribute.Key("gram.oauth.forwarded_client_name")
+	OAuthErrorDescriptionKey    = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey       = attribute.Key("gram.oauth.failure_reason")
 	// OAuthFlowIDKey is the stable correlation identifier for a single
 	// user-facing OAuth flow. Minted once at /authorize and threaded through
 	// every handler in the flow (idp_callback, consent, token) so the whole
@@ -583,6 +584,9 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthResponseIssuerKey is the RFC 9207 iss value an authorization server returned on its redirect. It is untrusted input, so callers truncate it.
+	OAuthResponseIssuerKey = attribute.Key("gram.oauth.response_issuer")
 
 	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
 	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
@@ -934,6 +938,15 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// HookDeviceInstallRouteKey is the install route the binary reports, from
+	// speakeasy.json or SPEAKEASY_AI_HOOKS_INSTALL_ROUTE. Known routes are
+	// marketplace, download, agent_install, hooks_install and dogfood; the
+	// value is free-form. Installs that predate it don't report one.
+	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// HookEndpointGenerationKey records which generation of hook endpoint
+	// and sender produced a row (see the HookEndpointGeneration* values), so
+	// traffic on retired endpoints can be found and moved to a supported one.
+	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -2468,6 +2481,9 @@ func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
 
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+func SlogOAuthForwardedClientName(v bool) slog.Attr {
+	return slog.Bool(string(OAuthForwardedClientNameKey), v)
+}
 
 func OAuthFlowID(v string) attribute.KeyValue { return OAuthFlowIDKey.String(v) }
 func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthFlowIDKey), v) }
@@ -2537,6 +2553,11 @@ func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGr
 
 func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
 func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
+
+func OAuthResponseIssuer(v string) attribute.KeyValue { return OAuthResponseIssuerKey.String(v) }
+func SlogOAuthResponseIssuer(v string) slog.Attr {
+	return slog.String(string(OAuthResponseIssuerKey), v)
+}
 
 func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 	return OAuthPresentedAuthMethodKey.String(v)

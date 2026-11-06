@@ -388,6 +388,8 @@ The dashboard follows an editorial, print-like design language. The load-bearing
 
 Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
 
+Vitest defaults to happy-dom. Put `// @vitest-environment node` on the first line of a test whose assertions do not need the DOM, browser storage, `location`, or other browser behavior. Leave component tests and browser-behavior tests on happy-dom. Do not add a browser shim, weaken an assertion, or change production code so a file can run in Node.
+
 | Need                | Dashboard                           | Whole workspace                                 |
 | ------------------- | ----------------------------------- | ----------------------------------------------- |
 | Package lint gate   | `aube run -F dashboard lint`        | `aube run lint`                                 |

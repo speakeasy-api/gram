@@ -34,6 +34,7 @@ trackedFiles:
   src/core.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
+  src/funcs/adminBackfillMcpConnectGrants.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -151,7 +152,9 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
+  src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
@@ -231,6 +234,7 @@ trackedFiles:
   src/models/components/adminregistrypromotionauthdiscovery.ts: {}
   src/models/components/adminregistrypromotioncandidate.ts: {}
   src/models/components/adminregistrypromotioncandidates.ts: {}
+  src/models/components/adminregistrypromotionsetupguide.ts: {}
   src/models/components/adminregistrypromotionsuggestions.ts: {}
   src/models/components/adminregistrysummary.ts: {}
   src/models/components/adminsession.ts: {}
@@ -257,7 +261,7 @@ trackedFiles:
   src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
-  src/models/components/auditlog.ts: {}
+  src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
@@ -385,6 +389,7 @@ trackedFiles:
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
+  src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -587,6 +592,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminBackfillMcpConnectGrants:
+    speakeasy-default-admin-backfill-mcp-connect-grants:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"extended": 131344, "inserted": 368827, "taken_over": 395451}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminBulkUpdateAccountType:
     speakeasy-default-admin-bulk-update-account-type:
       requestBody:
@@ -1330,7 +1346,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
+          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "is_internal": false, "subject_id": "<id>", "subject_type": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

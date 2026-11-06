@@ -3163,7 +3163,7 @@ func BuildUpdateOnboardingPlaybookPayload(adminUpdateOnboardingPlaybookBody stri
 	{
 		err = json.Unmarshal([]byte(adminUpdateOnboardingPlaybookBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.StepSlugs == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("step_slugs", "body"))
@@ -3179,10 +3179,11 @@ func BuildUpdateOnboardingPlaybookPayload(adminUpdateOnboardingPlaybookBody stri
 		}
 	}
 	v := &admin.UpdateOnboardingPlaybookPayload{
-		PlaybookID:  body.PlaybookID,
-		Name:        body.Name,
-		Description: body.Description,
-		IsDefault:   body.IsDefault,
+		PlaybookID:     body.PlaybookID,
+		OrganizationID: body.OrganizationID,
+		Name:           body.Name,
+		Description:    body.Description,
+		IsDefault:      body.IsDefault,
 	}
 	if body.StepSlugs != nil {
 		v.StepSlugs = make([]string, len(body.StepSlugs))
@@ -3616,6 +3617,31 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 		}
 	}
 	v := &admin.BackfillMcpAuthGrantsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBackfillMcpConnectGrantsPayload builds the payload for the admin
+// backfillMcpConnectGrants endpoint from CLI flags.
+func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody string, adminBackfillMcpConnectGrantsAdminSessionToken string) (*admin.BackfillMcpConnectGrantsPayload, error) {
+	var err error
+	var body BackfillMcpConnectGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBackfillMcpConnectGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"created_before\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBackfillMcpConnectGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillMcpConnectGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillMcpConnectGrantsPayload{
+		CreatedBefore: body.CreatedBefore,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

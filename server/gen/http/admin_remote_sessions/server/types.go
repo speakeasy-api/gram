@@ -673,6 +673,10 @@ type CreateGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -755,6 +759,10 @@ type GetGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -829,6 +837,10 @@ type UpdateGlobalClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -4199,6 +4211,10 @@ type RemoteSessionClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -4659,6 +4675,7 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
@@ -4729,6 +4746,7 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
@@ -4778,6 +4796,7 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,

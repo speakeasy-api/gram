@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // Provider exposes only binding and policy facts, never registration secrets.
@@ -61,6 +63,8 @@ type Dependencies struct {
 	LoadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	RefreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
 
+	// Connections records renewal outcomes; nil records nothing.
+	Connections *mcpconnectionattempts.Recorder
 	// RefreshPaused reports that the provider recently rejected the client itself.
 	RefreshPaused func(context.Context, Provider) bool
 }
@@ -82,6 +86,8 @@ const (
 // RefreshError carries a classified outcome only, never upstream payloads.
 type RefreshError struct {
 	Kind RefreshFailure
+	// SigningFailure changes outcome ownership, never retry or claim semantics.
+	SigningFailure bool
 
 	// RetryAfter is how long the provider asked to wait, zero when it didn't say.
 	RetryAfter time.Duration

@@ -221,6 +221,15 @@ WHERE organization_id = @organization_id
   AND id = @grant_id
 RETURNING id, scope, selectors, created_at, updated_at;
 
+-- name: DeleteAgentPrincipalGrants :exec
+-- Removes every grant naming a deleted agent: its own policy and the server
+-- rules that name it. A deleted agent can never act again, so these decide
+-- nothing, and leaving them makes audience saves resend a principal that no
+-- longer validates.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = concat('agent:', @agent_id::uuid);
+
 -- name: ListManagedAgents :many
 -- Keyset paginated on the same (LOWER(name), id) tuple it orders by, so a page
 -- boundary is a position in that ordering rather than an offset: inserts and

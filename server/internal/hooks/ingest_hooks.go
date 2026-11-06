@@ -1140,7 +1140,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	teeRows := cloneHookTelemetryRows(rows)
 	if s.telemetryLogger != nil {
 		for _, row := range rows {
-			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+			s.logHookTelemetry(ctx, authCtx, &metadata, payload, row.timestamp, row.toolName, row.attrs)
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
@@ -1376,12 +1376,10 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -1475,16 +1473,17 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	return attrs
 }
 
-func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, payload *gen.IngestPayload, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
 	// Device details the speakeasy-hooks binary reported, so rows can be
 	// counted per client version. A spool replay's headers describe the binary
 	// draining the spool, which after an upgrade is not the one that captured
-	// the event, so replayed rows stay unstamped rather than miscounted.
+	// the event, so replayed rows don't take them.
 	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
 		for key, value := range middleware.HookDeviceAttributes(ctx) {
 			attrs[key] = value
 		}
 	}
+	stampIngestClientVersion(ctx, payload, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -2222,6 +2221,85 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 		return "Skill"
 	}
 	return canonicalToolName(payload)
+}
+
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
 }
 
 func canonicalToolCallID(payload *gen.IngestPayload) string {

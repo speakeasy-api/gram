@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";

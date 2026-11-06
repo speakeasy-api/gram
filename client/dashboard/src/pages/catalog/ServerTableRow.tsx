@@ -1,18 +1,16 @@
-import { catalogLogoClassName } from "./logo";
-import { cn } from "@/lib/utils";
-import { ToolCollectionBadge } from "@/components/tool-collection-badge";
+import { resolveCatalogLogo } from "./logo";
+import { useIsDarkTheme } from "@/lib/theme";
+import { CatalogLogo } from "./CatalogLogo";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
-import { useMemo } from "react";
 import type { CatalogInstallState } from "./catalogInstall";
-import type { PulseMCPServer } from "./hooks";
-import { parseServerMetadata } from "./hooks/serverMetadata";
+import type { CatalogServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
 import { CatalogInstallButton } from "./ServerCard";
 
 interface ServerTableRowProps {
-  server: PulseMCPServer;
+  server: CatalogServer;
   detailHref: string;
   /** Unknown while install lookups are loading or failed, so the row does not flash Add. */
   installState: CatalogInstallState;
@@ -26,16 +24,8 @@ export function ServerTableRow({
   installState,
   onAdd,
 }: ServerTableRowProps): JSX.Element {
-  const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
-
-  // The catalog list carries a precomputed tool count, not the tool defs.
-  const toolCount = server.toolCount;
-
-  // Remote-only servers (auth-gated proxies like GitHub, Make) can't enumerate
-  // tools until a user authenticates, so the "No Tools" badge would be
-  // misleading. Hide it for them.
-  const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
+  const theme = useIsDarkTheme() ? "dark" : "light";
 
   return (
     <DotRow
@@ -44,14 +34,11 @@ export function ServerTableRow({
       iconRailClassName="bg-surface-secondary-default"
       iconTileClassName="bg-card dark:bg-card"
       icon={
-        server.iconUrl ? (
-          <img
-            src={server.iconUrl}
+        resolveCatalogLogo(server, theme).src ? (
+          <CatalogLogo
+            server={server}
             alt={displayName}
-            className={cn(
-              "h-6 w-6 object-contain",
-              catalogLogoClassName(server.registrySpecifier),
-            )}
+            className="h-6 w-6 object-contain"
           />
         ) : undefined
       }
@@ -72,11 +59,6 @@ export function ServerTableRow({
               <Badge.Text>Added</Badge.Text>
             </Badge>
           )}
-          {metadata.visitorsMonth === 0 && (
-            <Badge variant="neutral">
-              <Badge.Text>New</Badge.Text>
-            </Badge>
-          )}
           <ManualSetupBadge server={server} />
         </div>
       </td>
@@ -93,14 +75,6 @@ export function ServerTableRow({
         <Text small muted className="block truncate">
           {server.description}
         </Text>
-      </td>
-
-      {/* Tools */}
-      <td className="px-3 py-3">
-        <ToolCollectionBadge
-          count={toolCount}
-          emptyLabel={isRemoteOnly ? null : undefined}
-        />
       </td>
 
       {/* Add — sits above the row's stretched link overlay so it stays

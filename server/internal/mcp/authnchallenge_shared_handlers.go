@@ -135,7 +135,10 @@ func (s *Service) HandleSharedRegister(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	return s.serveRegister(w, r, issuer.logger, issuer.authorizationServer.issuerID)
+	// A shared authorization server names no server, so a refusal has no row to land on.
+	return s.serveRegister(w, r, issuer.logger, issuer.authorizationServer.issuerID, func(ctx context.Context, code string) {
+		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "register_"+code)
+	})
 }
 
 // HandleSharedRevoke serves RFC 7009 token revocation on a shared
@@ -238,8 +241,7 @@ func (s *Service) HandleSharedConsent(w http.ResponseWriter, r *http.Request) er
 	}
 	stateID := r.URL.Query().Get("state")
 	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
-		if err := r.ParseForm(); err != nil {
+		if err := parseConsentForm(w, r); err != nil {
 			return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, issuer.logger)
 		}
 		stateID = r.PostForm.Get("state")

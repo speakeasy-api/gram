@@ -8,8 +8,10 @@
 //   - Redeem takes no session or API-key auth: knowledge of the code_verifier
 //     matching the stored challenge IS the credential. The code is single-use,
 //     consumed atomically via GETDEL on lookup, so a replayed/expired/unknown
-//     code or a PKCE mismatch fails closed with 401. On success it mints a
-//     per-user `agent_user` API key and returns the raw key exactly once.
+//     code or a PKCE mismatch fails closed with 401. On success it mints the
+//     requested key and returns the raw key exactly once: a per-user
+//     project-scoped `agent_user` key for the device agent, or an org-wide
+//     `producer` key for the Speakeasy CLI.
 package cliauth
 
 import (
@@ -34,15 +36,18 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/cli_auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/cli_auth/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -57,6 +62,11 @@ const (
 
 	// pkceMethodS256 is the only PKCE challenge method this flow accepts.
 	pkceMethodS256 = "S256"
+
+	// keyScopeAgentUser and keyScopeProducer are the key_scope values authorize
+	// accepts. They name the API key scope redeem mints.
+	keyScopeAgentUser = "agent_user"
+	keyScopeProducer  = "producer"
 )
 
 // codeRecord is the JSON payload stored in Redis against a one-time code. It
@@ -78,6 +88,8 @@ type Service struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	auth        *auth.Auth
+	authz       *authz.Engine
+	audit       *audit.Logger
 	sessions    *sessions.Manager
 	pkce        *oauth.PKCEService
 	redis       *redis.Client
@@ -93,7 +105,8 @@ var (
 
 // NewService wires the cliAuth service. It reuses the shared session manager
 // (for the Authorize session Auther), authz engine, Redis client (the SAME one
-// the session/cache layer uses), and the DB pool. env selects the API-key
+// the session/cache layer uses), the audit logger (producer keys are audited
+// like keys.create), and the DB pool. env selects the API-key
 // prefix (gram_local_ / gram_test_ / gram_live_) for the key redeem mints.
 func NewService(
 	logger *slog.Logger,
@@ -101,6 +114,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
 	redisClient *redis.Client,
 	env string,
 ) *Service {
@@ -110,6 +124,8 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		authz:       authzEngine,
+		audit:       auditLogger,
 		sessions:    sessionManager,
 		pkce:        oauth.NewPKCEService(logger),
 		redis:       redisClient,
@@ -188,6 +204,11 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
 	}
 
+	scopes, err := s.keyScopes(ctx, authCtx.ActiveOrganizationID, payload.KeyScope)
+	if err != nil {
+		return nil, err
+	}
+
 	if payload.CodeChallengeMethod != pkceMethodS256 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported code_challenge_method: only S256 is supported").LogError(ctx, s.logger)
 	}
@@ -211,7 +232,7 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		ProjectID:           project.ID.String(),
 		ProjectSlug:         project.Slug,
 		UserEmail:           *authCtx.Email,
-		Scopes:              []string{auth.APIKeyScopeAgentUser.String()},
+		Scopes:              scopes,
 		CodeChallenge:       payload.CodeChallenge,
 		CodeChallengeMethod: pkceMethodS256,
 	}
@@ -303,6 +324,23 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 	}, nil
 }
 
+// keyScopes returns the API key scopes a code for keyScope will mint. A
+// producer key is an org-wide CLI credential, so it takes org:admin exactly as
+// creating one through keys.create does.
+func (s *Service) keyScopes(ctx context.Context, orgID, keyScope string) ([]string, error) {
+	switch keyScope {
+	case "", keyScopeAgentUser:
+		return []string{auth.APIKeyScopeAgentUser.String()}, nil
+	case keyScopeProducer:
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: orgID, Dimensions: nil}); err != nil {
+			return nil, err
+		}
+		return []string{auth.APIKeyScopeProducer.String()}, nil
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported key_scope").LogError(ctx, s.logger)
+	}
+}
+
 // resolveProject returns the named project (validated against the org) or, when
 // no slug is given, the org's default (lowest-id) project.
 func (s *Service) resolveProject(ctx context.Context, orgID string, slug *string) (*projectsrepo.Project, error) {
@@ -332,8 +370,8 @@ func (s *Service) resolveProject(ctx context.Context, orgID string, slug *string
 	return &projects[0], nil
 }
 
-// mintKey assembles and persists a per-user API key via the low-level keys
-// repo, returning the raw key (which is only ever seen here). Mirrors the
+// mintKey assembles and persists the API key a redeemed code grants,
+// returning the raw key (which is only ever seen here). Mirrors the
 // key-assembly in keys.CreateKey: prefix + random token, sha256 hash stored,
 // prefix + token[:5] as the display prefix.
 func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid.UUID) (string, error) {
@@ -348,6 +386,13 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("hash api key: %w", err)
 	}
 
+	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
+	// is used directly here — no default, so an unexpectedly empty scope set
+	// surfaces as an integrity failure upstream rather than a silently broken key.
+	if slices.Equal(record.Scopes, []string{auth.APIKeyScopeProducer.String()}) {
+		return fullKey, s.createProducerKey(ctx, record, s.keyPrefix+token[:5], keyHash)
+	}
+
 	// Unique per-enrollment key name (timestamp + fresh entropy, never
 	// secret-derived — see auth.DeviceAgentKeyName). API keys are not treated as
 	// singletons: each enrollment mints its own uniquely-named key, so a user's
@@ -359,9 +404,6 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("generate device-agent key name: %w", err)
 	}
 
-	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
-	// is used directly here — no default, so an unexpectedly empty scope set
-	// surfaces as an integrity failure upstream rather than a silently broken key.
 	if _, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  record.OrgID,
 		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
@@ -375,6 +417,68 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 	}
 
 	return fullKey, nil
+}
+
+// createProducerKey stores the Speakeasy CLI's producer key. It matches what
+// keys.CreateKey stores for the same request from the dashboard: an
+// organization-wide key with no policy grants, recorded in the audit log under
+// the user who authorized the code.
+func (s *Service) createProducerKey(ctx context.Context, record codeRecord, displayPrefix, keyHash string) error {
+	keyName, err := cliKeyName()
+	if err != nil {
+		return err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin api key transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	createdKey, err := s.keysRepo.WithTx(dbtx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  record.OrgID,
+		ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CreatedByUserID: record.UserID,
+		Name:            keyName,
+		KeyPrefix:       displayPrefix,
+		KeyHash:         keyHash,
+		Scopes:          record.Scopes,
+	})
+	if err != nil {
+		return fmt.Errorf("create api key: %w", err)
+	}
+
+	email := record.UserEmail
+	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+		OrganizationID:   record.OrgID,
+		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, record.UserID),
+		ActorDisplayName: &email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          keyName,
+		Scopes:           record.Scopes,
+		AgentCredential:  nil,
+		PolicyGrants:     nil,
+	}); err != nil {
+		return fmt.Errorf("log api key creation: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit api key: %w", err)
+	}
+	return nil
+}
+
+// cliKeyName names a CLI producer key the way the dashboard always has
+// ("CLI Key (Generated) - <time>"), with fresh entropy so two logins in the
+// same second cannot collide on the (organization_id, name) unique index.
+func cliKeyName() (string, error) {
+	var suffix [3]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", fmt.Errorf("generate cli key name suffix: %w", err)
+	}
+	return fmt.Sprintf("CLI Key (Generated) - %s-%s", time.Now().UTC().Format("20060102-150405"), hex.EncodeToString(suffix[:])), nil
 }
 
 // generateOpaqueToken returns a 64-char hex string from 32 crypto-random bytes.

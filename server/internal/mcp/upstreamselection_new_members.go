@@ -116,7 +116,7 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 				break
 			}
 		}
-		choice, resolution, ok, err := service.newMemberChoice(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, member)
+		choice, resolution, ok, err := service.newMemberChoice(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, consentAuthServer{id: member.serverID, projectID: member.projectID})
 		if err != nil {
 			logger.ErrorContext(ctx, "decide new gateway member choice", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 			continue
@@ -128,17 +128,18 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 	return decided
 }
 
-// newMemberChoice decides a new member's choice when nobody has to pick: no
-// upstream authentication when the member needs none, or the one client the
+// newMemberChoice decides a server's choice when nobody has to pick: no
+// upstream authentication when the server needs none, or the one client the
 // subject may use that is ready without any action, a personal connection
-// counting once it is live. With several such clients, or one needing a
-// connection or an identity-provider check, the person chooses by
+// counting once it is live. An identity-provider fallback on that same
+// registration is not a second choice. With several independent clients, or
+// one needing a connection or an identity-provider check, the person chooses by
 // reconnecting, so nothing is decided. authClientID is invalid for no-auth,
 // and resolution is set only when it names a client.
-func (s *Service) newMemberChoice(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, member metaMember) (authClientID uuid.NullUUID, resolution authClientResolution, decided bool, err error) {
+func (s *Service) newMemberChoice(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, member consentAuthServer) (authClientID uuid.NullUUID, resolution authClientResolution, decided bool, err error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	unresolved := gapResolution("")
-	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{member.serverID}})
+	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{member.id}})
 	if err != nil {
 		return none, unresolved, false, fmt.Errorf("list member auth clients: %w", err)
 	}
@@ -161,13 +162,15 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 	represented := subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAgent
 	var ready []uuid.UUID
 	var readyResolution authClientResolution
+	var readyPersonalRegistration uuid.NullUUID
+	var identityProviderRegistrations []uuid.NullUUID
 	for _, row := range offered {
 		clientType := row.ClientType.String
 		personal := clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA
 		if personal && !represented {
 			continue
 		}
-		res, err := s.resolveAuthClientChoiceForConsent(ctx, organizationID, member.serverID, member.projectID, row.AuthClientID.UUID, subject)
+		res, err := s.resolveAuthClientChoiceForConsent(ctx, organizationID, member.id, member.projectID, row.AuthClientID.UUID, subject)
 		if err != nil {
 			return none, unresolved, false, err
 		}
@@ -175,26 +178,45 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		case res.outcome == authClientNoAccess, res.outcome == authClientGap:
 			continue
 		case clientType == authz.AuthClientTypeEMA:
-			// Whether the identity provider can sign the person in is only
-			// known by trying, so it is the person's choice to make.
-			return none, unresolved, false, nil
+			// Defer until every personal connection has been checked: a
+			// fallback on a live personal registration needs no new choice.
+			identityProviderRegistrations = append(identityProviderRegistrations, row.RemoteSessionClientID)
+			continue
 		case clientType == authz.AuthClientTypeRemoteSession:
-			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			req := remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
-				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false,
-			})
+				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
+			}
+			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
 			if err != nil {
 				return none, unresolved, false, fmt.Errorf("check member connection: %w", err)
+			}
+			// An agent key with no usable attachment is served by its validated
+			// authorizer's own connection.
+			if reconnect && res.authorizerOwner != "" {
+				req.Subject = urn.NewUserSubject(res.authorizerOwner)
+				reconnect, err = s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
+				if err != nil {
+					return none, unresolved, false, fmt.Errorf("check authorizer connection: %w", err)
+				}
 			}
 			if reconnect {
 				return none, unresolved, false, nil
 			}
+			readyPersonalRegistration = row.RemoteSessionClientID
 		}
 		ready = append(ready, row.AuthClientID.UUID)
 		readyResolution = res
 	}
 	if len(ready) != 1 {
 		return none, unresolved, false, nil
+	}
+	for _, registration := range identityProviderRegistrations {
+		if !registration.Valid || registration != readyPersonalRegistration {
+			// A separate identity-provider registration still requires a
+			// choice and a provider check; it cannot be inferred as ready.
+			return none, unresolved, false, nil
+		}
 	}
 	return uuid.NullUUID{UUID: ready[0], Valid: true}, readyResolution, true, nil
 }
