@@ -76,7 +76,7 @@
     "monaco-editor": "^0.57.0",
     "motion": "^13.2.0",
     "nuqs": "^2.9.0",
-    "posthog-js": "^1.411.0",
+    "posthog-js": "^1.442.1",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-chartjs-2": "^5.3.1",
