@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { STALE_PENDING_TOOL_CALL_MS } from "@/lib/toolCallStatus";
 import { getToolLogStatusConfig } from "./toolLogStatus";
 
 const now = Date.UTC(2026, 10, 6, 12, 0, 0);
 const startedAgo = (ms: number) => String(BigInt(now - ms) * 1_000_000n);
+// The contract, stated apart from the implementation's constant: a call with
+// no result reads Pending for ten minutes.
+const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 describe("getToolLogStatusConfig", () => {
   it("labels a recent hook call with no result Pending", () => {
@@ -14,11 +16,22 @@ describe("getToolLogStatusConfig", () => {
     expect(status?.label).toBe("Pending");
   });
 
-  it("labels a hook call with no result for a long time Unknown, never Success", () => {
+  it("still labels a hook call with no result Pending just before ten minutes", () => {
     const status = getToolLogStatusConfig(
       {
         hookStatus: "pending",
-        startTimeUnixNano: startedAgo(STALE_PENDING_TOOL_CALL_MS),
+        startTimeUnixNano: startedAgo(TEN_MINUTES_MS - 1000),
+      },
+      now,
+    );
+    expect(status?.label).toBe("Pending");
+  });
+
+  it("labels a hook call with no result for ten minutes Unknown, never Success", () => {
+    const status = getToolLogStatusConfig(
+      {
+        hookStatus: "pending",
+        startTimeUnixNano: startedAgo(TEN_MINUTES_MS),
       },
       now,
     );
