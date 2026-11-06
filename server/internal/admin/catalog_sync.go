@@ -24,10 +24,11 @@ type CatalogSource interface {
 	Fetch(context.Context) (mcpregistry.CatalogBundle, error)
 }
 
-// CatalogSyncHandler is an internal staff-only initial catch-up operation. Future
-// preview/refresh callers reuse the source/import services rather than accepting
-// writable target configuration. It is deliberately not an Admin MCP write tool.
-func (s *Service) CatalogSyncHandler(environment string, source CatalogSource, store *mcpregistry.CatalogAssetStore) http.Handler {
+// CatalogSyncHandler is an internal staff-only additive catch-up operation.
+// Startup supplies a configured source identity to record trustworthy baselines;
+// legacy callers without one retain additive-only import semantics. It is
+// deliberately not an Admin MCP write tool.
+func (s *Service) CatalogSyncHandler(environment string, source CatalogSource, store *mcpregistry.CatalogAssetStore, sourceIdentity ...string) http.Handler {
 	handler := oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		if r.Method != http.MethodPost {
 			return oops.C(oops.CodeBadRequest)
@@ -63,14 +64,18 @@ func (s *Service) CatalogSyncHandler(environment string, source CatalogSource, s
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		actor, _, _ := adminActor(ctx)
-		bundle, err := source.Fetch(ctx)
-		if err != nil {
-			s.logger.WarnContext(ctx, "catalog source retrieval failed", attr.SlogAuditAction("catalog.sync"), attr.SlogAuthorizationActorID(actor.String()))
-			return oops.E(oops.CodeUnexpected, err, "retrieve production catalog")
-		}
 		destinationAssets := *store
 		destinationAssets.Operator = staff.Email
-		result, err := mcpregistry.NewCatalogImporter(s.registry, environment, &destinationAssets).Import(ctx, bundle)
+		var result mcpregistry.CatalogImportResult
+		if len(sourceIdentity) == 1 && sourceIdentity[0] != "" {
+			result, err = mcpregistry.NewCatalogRefresher(s.registry, environment, sourceIdentity[0], source, &destinationAssets).Import(ctx, staff.OIDCSubject)
+		} else {
+			var bundle mcpregistry.CatalogBundle
+			bundle, err = source.Fetch(ctx)
+			if err == nil {
+				result, err = mcpregistry.NewCatalogImporter(s.registry, environment, &destinationAssets).Import(ctx, bundle)
+			}
+		}
 		if err != nil {
 			s.logger.WarnContext(ctx, "catalog sync failed", attr.SlogAuditAction("catalog.sync"), attr.SlogAuthorizationActorID(actor.String()))
 			return s.registryError(ctx, err)

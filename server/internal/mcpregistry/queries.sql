@@ -244,3 +244,60 @@ FROM mcp_registry_entries WHERE published;
 -- Never wait while holding the mapping advisory lock: a composed writer may
 -- already hold ROW EXCLUSIVE before requesting that advisory lock.
 LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+
+-- Global registry coordination is intentionally not project scoped.
+-- name: RefreshLockPlans :exec
+SELECT pg_advisory_xact_lock(724169283419205::bigint);
+
+-- name: RefreshLoadState :one
+SELECT state FROM mcp_catalog_refresh_state WHERE source_identity = @source_identity;
+
+-- name: RefreshSaveState :exec
+INSERT INTO mcp_catalog_refresh_state (source_identity, state)
+VALUES (@source_identity, @state)
+ON CONFLICT (source_identity) DO UPDATE
+SET state = EXCLUDED.state, updated_at = clock_timestamp();
+
+-- name: RefreshPrunePlans :exec
+DELETE FROM mcp_catalog_refresh_plans
+WHERE (receipt IS NULL AND expires_at <= clock_timestamp())
+OR id IN (
+    SELECT id FROM mcp_catalog_refresh_plans
+    WHERE receipt IS NOT NULL
+    ORDER BY updated_at DESC, id DESC
+    OFFSET 128
+);
+
+-- name: RefreshSavePlan :execrows
+INSERT INTO mcp_catalog_refresh_plans (id, source_identity, owner, expires_at, data)
+SELECT @id, @source_identity, @owner, @expires_at, @data
+WHERE (SELECT count(*) FROM mcp_catalog_refresh_plans WHERE receipt IS NULL) < 32;
+
+-- name: RefreshLoadPlan :one
+SELECT data, receipt, expires_at FROM mcp_catalog_refresh_plans
+WHERE id = @id AND source_identity = @source_identity AND owner = @owner;
+
+-- name: RefreshSaveReceipt :execrows
+UPDATE mcp_catalog_refresh_plans
+SET receipt = @receipt, data = '{}'::jsonb, updated_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: RefreshCatalogSnapshot :many
+SELECT * FROM mcp_registry_entries
+ORDER BY data #>> '{server,name}', id
+LIMIT 10001;
+
+-- name: RefreshCatalogSize :one
+SELECT count(*)::bigint AS entry_count,
+    COALESCE(sum(octet_length(data::text)), 0)::bigint AS data_bytes
+FROM mcp_registry_entries;
+
+-- name: LockCatalogRefresh :exec
+LOCK TABLE mcp_registry_entries IN EXCLUSIVE MODE NOWAIT;
+
+-- name: RefreshListPlanOwnersFixture :many
+-- Test fixture: assert verified staff ownership on persisted bootstrap receipts.
+SELECT owner, (receipt IS NOT NULL)::boolean AS committed
+FROM mcp_catalog_refresh_plans
+WHERE source_identity = @source_identity
+ORDER BY created_at, id;

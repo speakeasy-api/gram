@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 
@@ -11,6 +12,15 @@ import (
 	"github.com/urfave/cli/v2"
 	goahttp "goa.design/goa/v3/http"
 )
+
+// catalogSourceIdentity binds baselines to the configured authenticated source
+// without exposing its internal address or audience in plans and receipts.
+func catalogSourceIdentity(sourceURL, audience string) string {
+	if sourceURL == "" || audience == "" {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(sourceURL+"\n"+audience)))
+}
 
 func catalogSyncFlags() []cli.Flag {
 	return []cli.Flag{
@@ -53,7 +63,9 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 	}
 	// Always register the authenticated destination guard, including production.
 	// A disabled source does not prevent normal local Admin startup without ADC.
-	mux.Handle(http.MethodPost, admin.CatalogSyncPath, service.CatalogSyncHandler(environment, source, store).ServeHTTP)
+	sourceIdentity := catalogSourceIdentity(sourceURL, audience)
+	mux.Handle(http.MethodPost, admin.CatalogSyncPath, service.CatalogSyncHandler(environment, source, store, sourceIdentity).ServeHTTP)
+	mux.Handle(http.MethodPost, admin.CatalogRefreshPath, service.CatalogRefreshHandler(environment, sourceIdentity, source, store).ServeHTTP)
 	exportAudience, subjects := c.String("catalog-export-audience"), c.StringSlice("catalog-export-subjects")
 	if exportAudience != "" || len(subjects) > 0 {
 		if environment != "prod" {
