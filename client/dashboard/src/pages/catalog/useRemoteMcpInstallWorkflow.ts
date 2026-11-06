@@ -310,7 +310,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     identityMode: config.identityMode,
     agentAuthorization: config.agentAuthorization,
     githubApp: config.githubApp,
-    serviceAccountClient: config.serviceAccountClient,
+    serviceAccountClient: config.githubApp ? null : config.serviceAccountClient,
   }));
 }
 

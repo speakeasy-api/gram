@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  gitHubAppIdentityUnavailable,
   McpServerCardStatus,
   RemoteIdentitySummary,
   SidebarUrlRow,
@@ -114,6 +115,19 @@ describe("RemoteIdentitySummary", () => {
         name: "What do these identity modes mean?",
       }),
     ).toBeDefined();
+  });
+
+  it("treats a disabled App as unavailable rather than an absent identity eligible for probing", () => {
+    const unavailable = gitHubAppIdentityUnavailable({ enabled: false }, true);
+    expect(unavailable).toBe(true);
+    renderSummary({ mode: "none", unavailable });
+    expect(screen.getByText("Identity unavailable")).toBeDefined();
+    expect(
+      screen.queryByRole("link", { name: /Manual|Service Account/ }),
+    ).toBeNull();
+    expect(gitHubAppIdentityUnavailable({ enabled: true }, true)).toBe(false);
+    expect(gitHubAppIdentityUnavailable(undefined, true)).toBe(false);
+    expect(gitHubAppIdentityUnavailable(undefined, false)).toBe(true);
   });
 
   it("keeps the problem out of the rail until hovered", () => {

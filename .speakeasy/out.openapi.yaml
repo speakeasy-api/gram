@@ -89974,7 +89974,7 @@ components:
           description: GitHub instance origin, including HTTPS.
           default: https://github.com
           format: uri
-          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$
+          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]+)?/?$
           maxLength: 2048
         mcp_server_id:
           type: string
@@ -89993,7 +89993,7 @@ components:
           type: string
           description: Explicit HTTPS MCP origin allowed to receive the token.
           format: uri
-          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$
+          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]+)?/?$
           maxLength: 2048
       required:
         - mcp_server_id
@@ -96812,13 +96812,13 @@ components:
           type: string
           description: GitHub instance origin.
           format: uri
-          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$
+          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]+)?/?$
           maxLength: 2048
         upstream_origin:
           type: string
           description: Only this MCP origin may receive installation tokens.
           format: uri
-          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$
+          pattern: ^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]+)?/?$
           maxLength: 2048
       required:
         - instance_url

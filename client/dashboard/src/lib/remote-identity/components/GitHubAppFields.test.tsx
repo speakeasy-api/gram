@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GitHubAppFields } from "./GitHubAppFields";
 import { gitHubAppReady, newGitHubAppDraft } from "../model/githubApp";
+
+afterEach(cleanup);
 
 describe("GitHub App configuration", () => {
   it("defaults to GitHub.com and requires all credentials", () => {
@@ -44,6 +46,24 @@ describe("GitHub App configuration", () => {
         privateKey: "-----BEGIN PRIVATE KEY-----",
       }),
     ).toBe(false);
+  });
+  it("only warns about replacing existing identity in edit mode", () => {
+    const { rerender } = render(
+      <GitHubAppFields
+        value={newGitHubAppDraft()}
+        onChange={vi.fn()}
+        replacingIdentity={false}
+      />,
+    );
+    expect(
+      screen.queryByText(/existing connections must reconnect/),
+    ).toBeNull();
+    rerender(
+      <GitHubAppFields value={newGitHubAppDraft()} onChange={vi.fn()} />,
+    );
+    expect(
+      screen.getByText(/existing connections must reconnect/),
+    ).toBeDefined();
   });
   it("has accessible enterprise and private key fields", () => {
     const onChange =

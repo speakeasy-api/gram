@@ -9,6 +9,7 @@ export async function invalidateAuthClientQueries(
   queryClient: QueryClient,
 ): Promise<void> {
   await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["launcher-auth-clients"] }),
     invalidateAllMcpServerAuthentication(queryClient),
     invalidateAllAuthClients(queryClient),
     invalidateAllAuthClient(queryClient),

@@ -20,6 +20,7 @@ func TestAPIBase(t *testing.T) {
 		{"", "https://api.github.com"}, {"https://github.com/", "https://api.github.com"},
 		{"https://GITHUB.COM", "https://api.github.com"},
 		{"https://github.com:443", "https://api.github.com"},
+		{"https://github.com:0443", "https://api.github.com"},
 		{"https://git.example.com", "https://git.example.com/api/v3"},
 		{"https://git.example.com:8443/", "https://git.example.com:8443/api/v3"},
 		{"https://[fe80::1%25eth0]:8443/", "https://[fe80::1%25eth0]:8443/api/v3"},
@@ -31,7 +32,7 @@ func TestAPIBase(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
-	for _, raw := range []string{"http://github.com", "https://user:secret@github.com", "https://github.com/api/v3", "https://github.com?", "https://github.com?q=1", "https://github.com/#frag", "//github.com", "https:///", "https://github.com/%2f"} {
+	for _, raw := range []string{"https://github.com:", "http://github.com", "https://user:secret@github.com", "https://github.com/api/v3", "https://github.com?", "https://github.com?q=1", "https://github.com/#frag", "//github.com", "https:///", "https://github.com/%2f"} {
 		t.Run(raw, func(t *testing.T) { _, err := APIBase(raw); require.Error(t, err) })
 	}
 }

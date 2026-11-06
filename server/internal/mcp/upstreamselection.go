@@ -279,6 +279,9 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		if handled || err != nil {
 			return choice, true, err
 		}
+		if githubRequired {
+			return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+		}
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
 	switch mode {
@@ -556,14 +559,17 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
 	}
 	memberErrors := make(map[uuid.UUID]error)
+	permits := make(map[uuid.UUID]authClientPermitRequest)
 	var headerIDs []uuid.UUID
 	if err == nil {
 		for id, res := range resolved {
-			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
+			permit := authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
 				UserSessionIssuerID: c.selector.userSessionIssuerID, ConnectionOwner: "",
-			}, res, nil)
+			}
+			permits[id] = permit
+			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, permit, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
 			if prepareErr == nil && prepared.outcome == authClientResolved && !prepared.tunneled {
@@ -593,7 +599,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 						memberErr = clientHeaders.err
 						if memberErr == nil {
 							if res.githubApp {
-								res, memberErr = c.selector.service.prepareGitHubApp(ctx, c.selector.organizationID, member.serverID, res, clientHeaders.headers)
+								res, memberErr = c.selector.service.prepareGitHubApp(ctx, permits[member.serverID], res, clientHeaders.headers)
 							} else {
 								res = applyAuthClientHeaders(res, clientHeaders.headers)
 							}

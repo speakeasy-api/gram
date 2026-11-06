@@ -173,8 +173,12 @@ export function RemoteMcpIdentitySectionBody({
     !rbacLoading && hasScope("org:read"),
   );
   const canManageGitHub = !rbacLoading && hasScope("org:admin");
+  const githubLookupUnavailable = rbacLoading || !hasScope("org:read");
   const identityQueryError =
-    headersQuery.isError || clientsError || githubDraft.error;
+    headersQuery.isError ||
+    clientsError ||
+    githubDraft.error ||
+    githubLookupUnavailable;
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
@@ -213,9 +217,14 @@ export function RemoteMcpIdentitySectionBody({
   const headerDrafts = useHeaderDrafts({
     remoteMcpServerId,
     identity: {
-      mode: selectedMode,
-      managed: managedAuthorizationHeader(selectedMode, headers),
-      isError: !!identityQueryError,
+      // Without organization access, ordinary headers remain editable but
+      // Authorization stays managed: the hidden identity must not be replaced.
+      mode: githubLookupUnavailable ? "agent" : selectedMode,
+      managed: managedAuthorizationHeader(
+        githubLookupUnavailable ? "agent" : selectedMode,
+        headers,
+      ),
+      isError: headersQuery.isError || clientsError || githubDraft.error,
     },
     readOnly: headersReadOnly,
     suggestions: headerSuggestions,
@@ -341,7 +350,8 @@ export function RemoteMcpIdentitySectionBody({
   // Picking a card only changes the draft. Nothing is written, removed or
   // confirmed until Save — the panel has one commit point and this is it.
   const handleModeChange = (next: string) => {
-    if (identityReadOnly || passThroughAuthorization) return;
+    if (identityReadOnly || !identityResolved || passThroughAuthorization)
+      return;
     setSelectedMode(next as IdentityMode);
   };
 
@@ -525,7 +535,9 @@ export function RemoteMcpIdentitySectionBody({
       userSwitchBlocked ||
       userEditIncomplete ||
       staticSwitchBlocked ||
-      oauthSwitchBlocked
+      oauthSwitchBlocked ||
+      (leavingGitHub && !canManageGitHub) ||
+      (!identityResolved && !githubLookupUnavailable)
     )
       return;
     setConfirmOpen(false);
@@ -534,13 +546,14 @@ export function RemoteMcpIdentitySectionBody({
     let draftReset = false;
     let replacedGitHub = false;
     try {
-      if (githubSelected) {
+      // Only custom headers can be committed while the identity is unknown.
+      if (!githubLookupUnavailable && githubSelected) {
         if (githubDraft.canSave) {
           if (!canManageGitHub || !(await githubDraft.save())) return;
           await deleteStaticCredential();
           setFormatPick(null);
         } else if (!githubDraft.bound) return;
-      } else {
+      } else if (!githubLookupUnavailable) {
         // Binding a service account client replaces the user clients in the
         // same commit, so they are only detached here when nothing is bound.
         if (leavingUser && !oauthFormat) await detachUserIdentity();
@@ -677,6 +690,7 @@ export function RemoteMcpIdentitySectionBody({
     headerDrafts.isDirty && headerDrafts.validationError !== null;
   const headersReason = headersBlocked && headerDrafts.reportErrors;
   const canSave =
+    (!leavingGitHub || canManageGitHub) &&
     (!githubSelected ||
       (githubDraft.canSave ? canManageGitHub : !!githubDraft.bound)) &&
     !headersBlocked &&
@@ -792,7 +806,12 @@ export function RemoteMcpIdentitySectionBody({
                     orientation="horizontal"
                     showIndicator={false}
                     value={selectedMode}
-                    disabled={identityReadOnly || scopeDisabled || saving}
+                    disabled={
+                      identityReadOnly ||
+                      !identityResolved ||
+                      scopeDisabled ||
+                      saving
+                    }
                     onValueChange={handleModeChange}
                     className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
                   >
@@ -995,7 +1014,7 @@ export function RemoteMcpIdentitySectionBody({
           </Collapsible>
         </div>
 
-        {identityResolved &&
+        {(identityResolved || githubLookupUnavailable) &&
         (selectedMode !== "none" || destructive || headerDrafts.isDirty) ? (
           <SettingsSection.Footer>
             {headersReason ? (

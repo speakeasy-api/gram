@@ -22,16 +22,22 @@ func (s *Service) serverRequiresGitHubApp(ctx context.Context, organizationID st
 	return present, nil
 }
 
-func (s *Service) prepareGitHubApp(ctx context.Context, organizationID string, serverID uuid.UUID, res authClientResolution, headers []proxy.ConfiguredHeader) (authClientResolution, error) {
+func (s *Service) prepareGitHubApp(ctx context.Context, permit authClientPermitRequest, res authClientResolution, headers []proxy.ConfiguredHeader) (authClientResolution, error) {
 	if s.githubApps == nil {
 		return res, fmt.Errorf("GitHub App provider is unavailable")
 	}
-	token, err := s.githubApps.Credential(ctx, organizationID, res.clientID, serverID)
+	if err := s.authorizeGitHubApp(ctx, permit, res); err != nil {
+		return res, err
+	}
+	token, err := s.githubApps.Credential(ctx, permit.OrganizationID, res.clientID, permit.ServerID)
 	if err != nil {
 		return res, fmt.Errorf("resolve GitHub App credential: %w", err)
 	}
 	res.githubCredential = &token
 	res.githubRenew = func(ctx context.Context) (string, bool, error) {
+		if err := s.authorizeGitHubApp(ctx, permit, res); err != nil {
+			return "", false, err
+		}
 		forgotten, err := token.Forget(ctx)
 		if err != nil {
 			return "", false, fmt.Errorf("invalidate GitHub App credential: %w", err)
@@ -39,7 +45,7 @@ func (s *Service) prepareGitHubApp(ctx context.Context, organizationID string, s
 		if !forgotten {
 			return "", false, nil
 		}
-		next, err := s.githubApps.Credential(ctx, organizationID, res.clientID, serverID)
+		next, err := s.githubApps.Credential(ctx, permit.OrganizationID, res.clientID, permit.ServerID)
 		if err != nil {
 			return "", false, fmt.Errorf("renew GitHub App credential: %w", err)
 		}
@@ -89,4 +95,17 @@ func (s *Service) rejectLegacyGitHubMembers(ctx context.Context, organizationID 
 
 func githubSelectionMissing(res *authClientResolution) bool {
 	return res == nil || (res.outcome == authClientLegacy && res.clientID == uuid.Nil)
+}
+
+// authorizeGitHubApp repeats the mandatory decision on renewal: the caller's
+// grants may have changed since the original upstream request was prepared.
+func (s *Service) authorizeGitHubApp(ctx context.Context, permit authClientPermitRequest, res authClientResolution) error {
+	checked, err := s.checkAuthClientPermission(ctx, permit, res, nil)
+	if err != nil {
+		return fmt.Errorf("authorize GitHub App credential: %w", err)
+	}
+	if checked.outcome != authClientResolved {
+		return fmt.Errorf("GitHub App credential is no longer authorized")
+	}
+	return nil
 }

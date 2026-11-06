@@ -47,6 +47,8 @@ type fixtureDB struct {
 	config   repo.McpAuthClientGithubApp
 	target   string
 	disabled bool
+	detached bool
+	replaced bool
 }
 
 func (*fixtureDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
@@ -56,7 +58,7 @@ func (*fixtureDB) Query(context.Context, string, ...any) (pgx.Rows, error) { pan
 func (d *fixtureDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
 	c := d.config
 	if strings.Contains(sql, "GetGitHubAppCredential") {
-		if d.disabled || args[0] != c.AuthClientID || args[1] != c.OrganizationID {
+		if d.disabled || d.detached || d.replaced || args[0] != c.AuthClientID || args[1] != c.OrganizationID || args[2] != d.serverID {
 			return fixtureRow{err: pgx.ErrNoRows}
 		}
 		return fixtureRow{values: []any{c.AuthClientID, c.OrganizationID, c.ClientType, c.InstanceUrl, c.AppID, c.InstallationID, c.PrivateKeyEncrypted, c.UpstreamOrigin, c.CredentialVersion, c.CreatedAt, c.UpdatedAt}}
@@ -105,6 +107,29 @@ func TestCredentialLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 	require.EqualValues(t, 1, calls.Load())
+	// A previously minted credential must not be returned from the shared
+	// cache or renewed after its binding is retired, even at the same origin.
+	for _, state := range []string{"detached", "replaced", "disabled"} {
+		t.Run(state, func(t *testing.T) {
+			db.detached = state == "detached"
+			db.replaced = state == "replaced"
+			db.disabled = state == "disabled"
+			_, err := get()
+			require.Error(t, err, "cached credentials require a live binding")
+			require.EqualValues(t, 1, calls.Load())
+			now = now.Add(31 * time.Second)
+			old, ok := provider.tokens.Get(db.config.OrganizationID + ":" + db.config.AuthClientID.String() + ":" + db.config.CredentialVersion.String())
+			if ok {
+				forgotten, err := old.Forget(t.Context())
+				require.NoError(t, err)
+				require.True(t, forgotten)
+			}
+			_, err = get()
+			require.Error(t, err, "renewal must not mint the old identity")
+			require.EqualValues(t, 1, calls.Load())
+			db.detached, db.replaced, db.disabled = false, false, false
+		})
+	}
 	db.config.CredentialVersion = uuid.New()
 	rotated, err := get()
 	require.NoError(t, err)

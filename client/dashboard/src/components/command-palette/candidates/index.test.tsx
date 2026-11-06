@@ -1777,12 +1777,12 @@ describe("useLauncherCandidates", () => {
         .map((call) => call.resourceId);
     expect(against("hasAnyScope", ["org:admin"])).toEqual(["org-acme"]);
     expect(against("hasScope", ["org:admin"])).toContain("org-acme");
-    // People, plugins, and service accounts gate on org readership.
+    // People and plugins accept either scope; auth clients require org:read.
     expect(against("hasAnyScope", ["org:read", "org:admin"])).toEqual([
       "org-acme",
       "org-acme",
-      "org-acme",
     ]);
+    expect(against("hasScope", ["org:read"])).toContain("org-acme");
     expect(against("hasScope", ["project:read"])).toEqual(["project-default"]);
   });
 
@@ -1865,4 +1865,20 @@ it("registers service-account discovery with organization-read permission", asyn
     }),
   );
   expect(useAuthClientCandidates).toHaveBeenLastCalledWith({ enabled: true });
+});
+
+it("does not query auth clients for organization-admin permission alone", async () => {
+  const { useAuthClientCandidates } = await import("./useAuthClientCandidates");
+  mocks.scopes = ["org:admin"];
+  mocks.inProject = true;
+  renderHook(() =>
+    useLauncherCandidates({
+      enabled: true,
+      inProject: true,
+      recentsUserId: null,
+      orgSlug: "fixture",
+      projectSlug: "default",
+    }),
+  );
+  expect(useAuthClientCandidates).toHaveBeenLastCalledWith({ enabled: false });
 });

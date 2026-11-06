@@ -110,6 +110,14 @@ function remoteIdentityLabel(mode: IdentityMode): string {
   }
 }
 
+/** An unreadable or disabled binding is not an anonymous server to probe. */
+export function gitHubAppIdentityUnavailable(
+  bound: { enabled: boolean } | undefined,
+  canRead: boolean,
+): boolean {
+  return !canRead || (!!bound && !bound.enabled);
+}
+
 export function RemoteIdentitySummary({
   mode,
   passThroughAuthorization,
@@ -406,12 +414,19 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
-    !!githubApp.bound,
+    !!githubApp.bound?.enabled,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError || githubApp.error;
+    isRemoteSessionClientsError ||
+    isRemoteHeadersError ||
+    githubApp.error ||
+    (!!mcpServer?.remoteMcpServerId &&
+      gitHubAppIdentityUnavailable(
+        githubApp.bound,
+        !rbacLoading && hasScope("org:read"),
+      ));
   // Only worth probing when nothing is configured: that is the one state where
   // the upstream's answer changes what the pill should say.
   const identityProbeStatus = useUpstreamProbe(

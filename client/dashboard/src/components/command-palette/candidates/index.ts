@@ -107,8 +107,7 @@ export function useLauncherCandidates({
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
   const authClients = useAuthClientCandidates({
-    enabled:
-      projectEnabled && hasAnyScope(["org:read", "org:admin"], organization.id),
+    enabled: projectEnabled && hasScope("org:read", organization.id),
   });
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,

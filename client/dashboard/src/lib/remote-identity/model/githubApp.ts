@@ -14,6 +14,12 @@ export function newGitHubAppDraft(): GitHubAppDraft {
   };
 }
 
+function validGitHubId(value: string): boolean {
+  return (
+    /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n
+  );
+}
+
 export function gitHubAppReady(draft: GitHubAppDraft): boolean {
   let validOrigin = false;
   try {
@@ -33,8 +39,9 @@ export function gitHubAppReady(draft: GitHubAppDraft): boolean {
   }
   return (
     validOrigin &&
-    /^[1-9][0-9]*$/.test(draft.appId) &&
-    /^[1-9][0-9]*$/.test(draft.installationId) &&
+    validGitHubId(draft.appId) &&
+    validGitHubId(draft.installationId) &&
+    new TextEncoder().encode(draft.privateKey).length <= 32768 &&
     /-----BEGIN (RSA )?PRIVATE KEY-----/.test(draft.privateKey)
   );
 }
@@ -47,6 +54,7 @@ export function isGitHubMcpUrl(raw: string | undefined): boolean {
       url.protocol === "https:" &&
       !url.username &&
       !url.password &&
+      !url.port &&
       ["api.githubcopilot.com", "github.com", "api.github.com"].includes(
         url.hostname,
       )

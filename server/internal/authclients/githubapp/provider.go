@@ -65,10 +65,11 @@ func (p *Provider) Verify(ctx context.Context, instance string, appID, installat
 
 // Credential checks live tenant, client, and destination state before every
 // cache lookup. Disabling a client or rotating its key cannot reuse cached material.
-// Callers must authorize mcp:auth and validate the server attachment first.
+// The live server attachment is checked with the credential. Callers must
+// authorize mcp:auth before requesting or renewing a credential.
 func (p *Provider) Credential(ctx context.Context, organizationID string, clientID, serverID uuid.UUID) (Credential, error) {
 	var none Credential
-	config, err := p.queries.GetGitHubAppCredential(ctx, repo.GetGitHubAppCredentialParams{AuthClientID: clientID, OrganizationID: organizationID})
+	config, err := p.queries.GetGitHubAppCredential(ctx, repo.GetGitHubAppCredentialParams{AuthClientID: clientID, OrganizationID: organizationID, McpServerID: serverID})
 	if err != nil {
 		return none, fmt.Errorf("load GitHub App credential: %w", err)
 	}

@@ -144,6 +144,7 @@ export function CreationIdentityChoice({
       ) : null}
       {value === "agent" && showGitHubApp && githubApp && onGitHubAppChange ? (
         <GitHubAppFields
+          replacingIdentity={false}
           value={githubApp}
           onChange={onGitHubAppChange}
           disabled={!canConfigureGitHub}

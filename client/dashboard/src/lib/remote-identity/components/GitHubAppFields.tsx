@@ -9,10 +9,12 @@ export function GitHubAppFields({
   value,
   onChange,
   disabled = false,
+  replacingIdentity = true,
 }: {
   value: GitHubAppDraft;
   onChange: (value: GitHubAppDraft) => void;
   disabled?: boolean;
+  replacingIdentity?: boolean;
 }): JSX.Element {
   const id = useId();
   return (
@@ -20,8 +22,9 @@ export function GitHubAppFields({
       <Text small muted className="block">
         Install your GitHub App on the repositories it needs, then provide its
         credentials. Speakeasy renews installation tokens automatically. No
-        OAuth authorization server is needed. Saving replaces this server’s
-        upstream identity; existing connections must reconnect.
+        OAuth authorization server is needed.
+        {replacingIdentity &&
+          " Saving replaces this server’s upstream identity; existing connections must reconnect."}
       </Text>
       {(
         [

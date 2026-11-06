@@ -355,8 +355,9 @@ open their effective assignments; the dropdown always offers compact member sear
     Workspace Identity provider, and the Session length / Client access controls
     in Sessions. Slack shows **Service Account** with the inert demo
     Authorization credential managed under Identity. GitHub offers a disabled
-    **GitHub App (demo — disabled)** service account, with no OAuth provider or
-    static Authorization header. Under Identity, select **Service Account →
+    **GitHub App (demo — disabled)** service account alongside an enabled shared
+    static credential with an inert Authorization header; no OAuth provider is
+    configured. Under Identity, select **Service Account →
     GitHub App** and verify the non-secret demo fields and empty private-key
     input; do not enable or attempt to use the placeholder credential. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with

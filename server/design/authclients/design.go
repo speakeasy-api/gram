@@ -126,7 +126,7 @@ var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 // githubAppOrigin keeps request and response origin constraints in sync.
 func githubAppOrigin() {
 	Format(FormatURI)
-	Pattern(`^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]*)?/?$`)
+	Pattern(`^[hH][tT][tT][pP][sS]://(\[[^\[\]/?#@\s]+\]|[^:/?#@\[\]\s]+)(:[0-9]+)?/?$`)
 	MaxLength(2048)
 }
 

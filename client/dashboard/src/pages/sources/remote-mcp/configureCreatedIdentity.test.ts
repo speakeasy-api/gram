@@ -86,8 +86,19 @@ describe("configureCreatedRemoteMcpIdentity", () => {
       {
         configureGitHubAppAuthClientRequestBody: expect.objectContaining({
           ...githubApp,
+          name: "Example service account",
           mcpServerId: mcpServer().id,
           upstreamOrigin: new URL(remoteServer().url).origin,
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mocks.updateServer).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: mcpServer().id,
+          visibility: "private",
         }),
       },
       undefined,
@@ -97,6 +108,59 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.discover).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
   });
+
+  it("prefers the displayed GitHub App over a stale OAuth service account", async () => {
+    mocks.configureGitHub.mockResolvedValue({ id: "app-client" });
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "agent",
+      githubApp: {
+        instanceUrl: "https://github.com",
+        appId: "123",
+        installationId: "456",
+        privateKey: "TEST_PEM",
+      },
+      serviceAccountClient: {
+        format: "signing-key",
+        issuerId: "issuer-1",
+        issuerName: "Old issuer",
+        clientRowId: "old-client",
+      },
+    });
+    expect(result.status).toBe("configured");
+    expect(mocks.configureGitHub).toHaveBeenCalledOnce();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it.each(["x".repeat(200), "🚀".repeat(100)])(
+    "bounds a derived service-account name to 100 UTF-8 bytes",
+    async (name) => {
+      mocks.configureGitHub.mockResolvedValue({ id: "app-client" });
+      const result = await configureCreatedRemoteMcpIdentity({
+        client,
+        remoteMcpServer: remoteServer(),
+        mcpServer: { ...mcpServer(), name },
+        identityMode: "agent",
+        githubApp: {
+          instanceUrl: "https://github.com",
+          appId: "123",
+          installationId: "456",
+          privateKey: "TEST_PEM",
+        },
+      });
+      expect(result.status).toBe("configured");
+      const sentName =
+        mocks.configureGitHub.mock.calls[0]![0]
+          .configureGitHubAppAuthClientRequestBody.name;
+      expect(new TextEncoder().encode(sentName).length).toBeLessThanOrEqual(
+        100,
+      );
+      expect(sentName.endsWith(" service account")).toBe(true);
+      expect(sentName).not.toContain("�");
+    },
+  );
 
   it("distinguishes a configured GitHub App from enablement failure", async () => {
     mocks.configureGitHub.mockResolvedValue({ id: "app-client" });

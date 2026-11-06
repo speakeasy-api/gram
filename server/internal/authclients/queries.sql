@@ -209,6 +209,14 @@ JOIN mcp_auth_clients ac ON ac.id = g.auth_client_id AND ac.organization_id = g.
 WHERE g.auth_client_id = @auth_client_id AND g.organization_id = @organization_id
   AND ac.client_type = 'service_account' AND ac.remote_session_client_id IS NULL
   AND ac.enabled AND NOT ac.deleted
+  AND EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_servers m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND NOT m.deleted
+    JOIN projects p ON p.id = m.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+    WHERE a.auth_client_id = ac.id AND a.organization_id = ac.organization_id
+      AND a.mcp_server_id = @mcp_server_id AND NOT a.deleted
+      AND (ac.project_id IS NULL OR ac.project_id = a.project_id)
+  )
   AND (ac.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = ac.project_id AND p.organization_id = ac.organization_id AND NOT p.deleted));
 
 -- name: GetGitHubAppConfiguration :one
