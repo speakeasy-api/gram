@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
@@ -57,7 +56,7 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 
 	slug := "skills-" + uuid.NewString()[:8]
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
+	setSkillsOverMCP(t, ti, authCtx.ActiveOrganizationID, true)
 
 	return &skillsFixture{
 		authCtx:        authCtx,
@@ -227,7 +226,7 @@ func TestServePublic_Skills_InitializeOmitsExtensionWhenFlagOff(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.organizationID, false)
+	setSkillsOverMCP(t, ti, f.organizationID, false)
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -595,7 +594,7 @@ func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	servedSkill(t, ctx, ti, f, "gated-skill")
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.organizationID, false)
+	setSkillsOverMCP(t, ti, f.organizationID, false)
 	uri := f.uri("gated-skill")
 
 	for _, method := range []string{mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet} {

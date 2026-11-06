@@ -8,10 +8,8 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useRoutes } from "@/routes";
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
@@ -34,13 +32,14 @@ import {
   sortSkillLinks,
 } from "./skill-links";
 import { SkillPickerDialog, type SkillPickerResult } from "./SkillPickerDialog";
+import { useSkillsOverMcpStatus } from "./use-skills-over-mcp";
 
 /**
  * The route behind a Skills tab on an MCP server or gateway page. The tab only
  * exists while skills over MCP is on for the organization; a direct link with
- * the flag off lands on `fallbackHref` instead of an empty page. The flag is
- * decided before the scope so a reader without skill access is redirected,
- * not walled, while it is off.
+ * the skills_over_mcp product feature off lands on `fallbackHref` instead of
+ * an empty page. The feature is decided before the scope so a reader without
+ * skill access is redirected, not walled, while it is off.
  */
 export function SkillsOverMcpTabRoute({
   fallbackHref,
@@ -50,8 +49,8 @@ export function SkillsOverMcpTabRoute({
   children: ReactNode;
 }): JSX.Element {
   const project = useProject();
-  const flag = useFeatureFlag(FEATURE_FLAGS.skillsOverMcp);
-  switch (flag.status) {
+  const skillsOverMcp = useSkillsOverMcpStatus();
+  switch (skillsOverMcp.status) {
     case "enabled":
       return (
         <RequireScope
@@ -66,7 +65,6 @@ export function SkillsOverMcpTabRoute({
     case "loading":
       return <SkeletonTable />;
     case "disabled":
-    case "missing":
     case "error":
       return <Navigate to={fallbackHref} replace />;
   }

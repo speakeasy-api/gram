@@ -1,5 +1,5 @@
 // Asserts the platform toolset serves the embedded reviewed skills over the
-// Skills extension (SEP-2640) behind the skills-over-mcp flag: the handshake
+// Skills extension (SEP-2640) behind the skills_over_mcp product feature: the handshake
 // advertises the extension, the listing is exactly the embedded set with
 // verifying digests, reads return the embedded bytes without recording an
 // activation, and with the flag off the surface is unchanged.
@@ -22,7 +22,6 @@ import (
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -53,7 +52,7 @@ func newPlatformSkillsFixture(t *testing.T, ctx context.Context, ti *testInstanc
 		AssistantID: managedID,
 	})
 	require.NoError(t, err)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
+	setSkillsOverMCP(t, ti, authCtx.ActiveOrganizationID, true)
 
 	return &platformSkillsFixture{
 		authCtx: authCtx,
@@ -112,7 +111,7 @@ func TestServePlatformToolset_Skills_InitializeOmitsExtensionWhenFlagOff(t *test
 
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
+	setSkillsOverMCP(t, ti, f.authCtx.ActiveOrganizationID, false)
 
 	w, err := servePlatformHTTP(t, ti, f.slug, makeInitializeBody(), f.token)
 	require.NoError(t, err)
@@ -282,7 +281,7 @@ func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T)
 
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
+	setSkillsOverMCP(t, ti, f.authCtx.ActiveOrganizationID, false)
 	grantProjectLogRead(t, ti, f.authCtx)
 	name := slices.Sorted(maps.Keys(embeddedPlatformSkills(t)))[0]
 	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)

@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -71,7 +70,7 @@ func TestServePublic_GatewaySkills_InitializeAdvertisesExtensionWhenFlagOn(t *te
 	require.NoError(t, err)
 	requireSkillsCapability(t, requireRPCResult(t, w)["capabilities"])
 
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, g.organizationID, false)
+	setSkillsOverMCP(t, ti, g.organizationID, false)
 	w, err = servePublicHTTP(t, ctx, ti, g.gatewaySlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	var capabilities map[string]json.RawMessage
@@ -161,7 +160,7 @@ func TestServePublic_GatewaySkills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	g := newGatewaySkillsFixture(t, ctx, ti, newSkillsFixture(t, ctx, ti))
 	servedSkillOn(t, ctx, ti, g.skillsFixture, "member-skill", g.memberID)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, g.organizationID, false)
+	setSkillsOverMCP(t, ti, g.organizationID, false)
 	uri := g.uri("member-skill")
 
 	for _, method := range []string{mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet} {

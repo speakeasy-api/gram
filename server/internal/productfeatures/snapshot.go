@@ -31,6 +31,7 @@ type ProductFeaturesSnapshot struct {
 	SignalsIntelligenceEnabled              bool
 	OrganizationGatewayDisabled             bool
 	CodeModeEnabled                         bool
+	SkillsOverMcpEnabled                    bool
 	DeviceAgent                             bool
 }
 
@@ -112,6 +113,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		SignalsIntelligenceEnabled:              isEnabled(FeatureSignalsIntelligence),
 		OrganizationGatewayDisabled:             isEnabled(FeatureOrganizationGatewayDisabled),
 		CodeModeEnabled:                         isEnabled(FeatureCodeMode),
+		SkillsOverMcpEnabled:                    isEnabled(FeatureSkillsOverMCP),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

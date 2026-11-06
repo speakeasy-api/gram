@@ -1,6 +1,6 @@
 // Skills over MCP on gateways: a stored gateway and the organization gateway
 // serve the skills linked to them plus the skills linked to every member
-// server the caller reaches through them, behind the skills-over-mcp flag.
+// server the caller reaches through them, behind the skills_over_mcp product feature.
 
 package mcp
 

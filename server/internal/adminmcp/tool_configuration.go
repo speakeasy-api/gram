@@ -37,6 +37,7 @@ type OrganizationFeatures struct {
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
 	OrganizationGatewayDisabled          bool   `json:"organization_gateway_disabled"`
 	CodeModeEnabled                      bool   `json:"code_mode_enabled"`
+	SkillsOverMCPEnabled                 bool   `json:"skills_over_mcp_enabled"`
 }
 
 type OrganizationChatAnalysisSettings struct {
@@ -81,6 +82,7 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			NetworkIngressEnabled:                features.NetworkIngressEnabled,
 			OrganizationGatewayDisabled:          features.OrganizationGatewayDisabled,
 			CodeModeEnabled:                      features.CodeModeEnabled,
+			SkillsOverMCPEnabled:                 features.SkillsOverMcpEnabled,
 		}, nil
 	})
 

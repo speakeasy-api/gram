@@ -135,7 +135,11 @@ type testInstance struct {
 	features *feature.InMemory
 
 	// productFeatures writes organization entitlements such as Code Mode.
-	productFeatures  *productfeatures.Client
+	productFeatures *productfeatures.Client
+	// skillsOverMCP answers the skills_over_mcp product feature for this
+	// instance only. Every test shares one mock organization and one Redis
+	// keyspace, so a cached entitlement would leak between parallel tests.
+	skillsOverMCP    *skillsOverMCPSwitch
 	efficacySignaler *background.ThrottledSignaler
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
@@ -626,6 +630,13 @@ func buildTestMCPService(
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	skillsSwitch := &skillsOverMCPSwitch{}
+	featureCheck := func(ctx context.Context, organizationID string, feature string) bool {
+		if feature == string(productfeatures.FeatureSkillsOverMCP) {
+			return skillsSwitch.enabled(organizationID)
+		}
+		return featClient.PlatformFeatureCheck(ctx, organizationID, feature)
+	}
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
@@ -721,7 +732,7 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -750,6 +761,7 @@ func buildTestMCPService(
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
 		productFeatures:      featClient,
+		skillsOverMCP:        skillsSwitch,
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
@@ -1026,4 +1038,21 @@ func setCodeModeEntitlement(t *testing.T, ctx context.Context, ti *testInstance,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCodeMode, enabled))
+}
+
+// skillsOverMCPSwitch is a per-test-instance skills_over_mcp entitlement.
+type skillsOverMCPSwitch struct {
+	orgs sync.Map
+}
+
+func (s *skillsOverMCPSwitch) enabled(organizationID string) bool {
+	v, ok := s.orgs.Load(organizationID)
+	return ok && v.(bool) //nolint:forcetypeassert // only bools are stored
+}
+
+// setSkillsOverMCP turns the staff-managed skills_over_mcp product feature on
+// or off for an organization on this test instance.
+func setSkillsOverMCP(t *testing.T, ti *testInstance, organizationID string, enabled bool) {
+	t.Helper()
+	ti.skillsOverMCP.orgs.Store(organizationID, enabled)
 }
