@@ -191,7 +191,13 @@ func newDemoSeedCommand() *cli.Command {
 			now := time.Now()
 			for daysAgo := 1; daysAgo <= demoseed.ConnectionAttemptDays; daysAgo++ {
 				day := dailyoutcomes.StartOfDay(now.AddDate(0, 0, -daysAgo))
-				if _, err := outcomes.BuildDay(ctx, day, now); err != nil && !errors.Is(err, dailyoutcomes.ErrDayOpen) {
+				_, err := outcomes.BuildDay(ctx, day, now)
+				switch {
+				case err == nil, errors.Is(err, dailyoutcomes.ErrDayOpen):
+				case errors.Is(err, dailyoutcomes.ErrStagedMismatch), errors.Is(err, dailyoutcomes.ErrStoredMismatch):
+					// The local worker is building the same day; its build wins.
+					logger.WarnContext(ctx, "local connection outcomes day built concurrently", attr.SlogError(err))
+				default:
 					return fmt.Errorf("build local connection outcomes: %w", err)
 				}
 			}

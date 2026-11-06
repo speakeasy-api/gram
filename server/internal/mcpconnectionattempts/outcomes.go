@@ -1,13 +1,10 @@
 package mcpconnectionattempts
 
 import (
-	"cmp"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // These are the read-time rules for how an attempt ended and what fixed a failure.
@@ -19,10 +16,7 @@ const (
 	// browser sign-in can stay live about 60 minutes.
 	AttemptLiveWindow = 60 * time.Minute
 
-	// FixLookahead is how long after a failed attempt a success by the same person,
-	// app and server still counts as fixing it. Seven days covers a failure on a
-	// Friday that an admin fixes the next week, and stays well inside the 30-day raw
-	// retention so a day can be rebuilt with its whole lookahead.
+	// FixLookahead is how long a later success can still fix a failure: a Friday failure fixed the next week.
 	FixLookahead = 7 * 24 * time.Hour
 )
 
@@ -207,109 +201,4 @@ func (s AttemptSummary) End(now time.Time) Ending {
 // NeedsFix reports whether an ending is a failure that a later success can fix.
 func (e Ending) NeedsFix() bool {
 	return e.Outcome == OutcomeFailed || e.Outcome == OutcomeBlocked
-}
-
-// FixedBy is what fixed a failed attempt.
-type FixedBy string
-
-const (
-	FixedByNothing      FixedBy = ""
-	FixedByAdminChange  FixedBy = "admin_change"
-	FixedBySystemChange FixedBy = "system_change"
-	FixedByReconnect    FixedBy = "reconnect"
-	FixedByRetry        FixedBy = "retry"
-)
-
-// sameTarget reports whether two attempts share person, app and server.
-func sameTarget(a, b AttemptSummary) bool {
-	return a.OrganizationID == b.OrganizationID && a.SubjectURN == b.SubjectURN && a.AppKey == b.AppKey && a.ServerID == b.ServerID
-}
-
-// NextSuccess finds the earliest connected attempt by the same person, app and server
-// that started after the failure, within FixLookahead. now decides how each candidate
-// ended. A failure with no person has nothing to pair with.
-func NextSuccess(failure AttemptSummary, candidates []AttemptSummary, now time.Time) (AttemptSummary, bool) {
-	var best AttemptSummary
-	found := false
-	if failure.SubjectURN == "" {
-		return best, false
-	}
-	limit := failure.StartedAt.Add(FixLookahead)
-	for _, c := range candidates {
-		if c.AttemptID == failure.AttemptID || !sameTarget(failure, c) {
-			continue
-		}
-		if !c.StartedAt.After(failure.StartedAt) || !c.StartedAt.Before(limit) {
-			continue
-		}
-		if c.End(now).Outcome != OutcomeConnected {
-			continue
-		}
-		if !found || cmp.Or(c.StartedAt.Compare(best.StartedAt), slices.Compare(c.AttemptID[:], best.AttemptID[:])) < 0 {
-			best, found = c, true
-		}
-	}
-	return best, found
-}
-
-// Change is one audit entry on something an attempt touched.
-type Change struct {
-	// SubjectID is the audited server, gateway, auth client, issuer or remote session client.
-	SubjectID string
-
-	// ByAdmin says an admin made the change, by hand or with an API key, not Speakeasy.
-	ByAdmin bool
-
-	// At is when the change was made.
-	At time.Time
-}
-
-// IsAdminActor reports whether an audit actor is an admin: a person, or an API key an
-// admin's script or Terraform uses. Older background writers audit as user:system,
-// which is Speakeasy, as are system and agent actors.
-func IsAdminActor(actorType, actorID string) bool {
-	switch actorType {
-	case string(urn.PrincipalTypeUser):
-		return actorID != "system"
-	case string(urn.PrincipalTypeAPIKey):
-		return true
-	default:
-		return false
-	}
-}
-
-// FixTargets is everything a change could have fixed between failure and success.
-func FixTargets(failure, success AttemptSummary) []string {
-	ids := slices.Concat(failure.Touched, success.Touched)
-	slices.Sort(ids)
-	return slices.Compact(ids)
-}
-
-// FixedByOf names what fixed a failure, given how it ended, the success that followed
-// and the audit changes in its organization. Only changes after the failing row and
-// before the success count. An admin's change wins over Speakeasy's, a change wins
-// over signing in again, and anything else is a plain retry.
-func FixedByOf(failure AttemptSummary, failed Ending, success AttemptSummary, changes []Change) FixedBy {
-	targets := FixTargets(failure, success)
-	system := false
-	for _, c := range changes {
-		if _, ok := slices.BinarySearch(targets, c.SubjectID); !ok {
-			continue
-		}
-		if !c.At.After(failed.At) || !c.At.Before(success.StartedAt) {
-			continue
-		}
-		if c.ByAdmin {
-			return FixedByAdminChange
-		}
-		system = true
-	}
-	switch {
-	case system:
-		return FixedBySystemChange
-	case success.SignedIn:
-		return FixedByReconnect
-	default:
-		return FixedByRetry
-	}
 }

@@ -26,12 +26,16 @@ func NewMCPConnectionOutcomesDaily(logger *slog.Logger, meterProvider metric.Met
 
 // PlanMCPConnectionOutcomeDaysArgs carries the workflow's clock.
 type PlanMCPConnectionOutcomeDaysArgs struct {
+	// Now is the workflow's time.
 	Now time.Time
 }
 
 // BuildMCPConnectionOutcomesDayArgs names the day to build and the workflow's clock.
 type BuildMCPConnectionOutcomesDayArgs struct {
+	// Day is the UTC day to build.
 	Day time.Time
+
+	// Now is the workflow's time.
 	Now time.Time
 }
 

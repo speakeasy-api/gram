@@ -28,7 +28,8 @@ const (
 	daysAgoPlanOld     = 15
 	daysAgoEmpty       = 10
 	daysAgoMismatch    = 9
-	daysAgoSQLAgrees   = 8
+	daysAgoCrossOrg    = 19
+	daysAgoPrivacy     = 8
 	daysAgoPlanDemo    = 6
 	daysAgoPlanMissing = 4
 	daysAgoPlanRecent  = 3
@@ -111,14 +112,14 @@ func (f *fixture) insertStored(table string, day time.Time, key string, attempts
 	require.NoError(f.t, batch.Send())
 }
 
-func (f *fixture) audit(subjectID, actorType, actorID string, at time.Time) {
+func (f *fixture) audit(org, subjectID, actorType, actorID string, internal bool, at time.Time) {
 	f.t.Helper()
 	q := auditrepo.New(f.db)
 	inserted, err := q.InsertAuditLog(f.t.Context(), auditrepo.InsertAuditLogParams{
-		OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: actorID, ActorType: actorType,
+		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: actorID, ActorType: actorType,
 		ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""), Action: "mcp-server:update",
 		SubjectID: subjectID, SubjectType: "mcp_server", SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""),
-		BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil, ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), IsInternal: false,
+		BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil, ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), IsInternal: internal,
 	})
 	require.NoError(f.t, err)
 	require.NoError(f.t, q.UpdateAuditLogCreatedAtForTesting(f.t.Context(), auditrepo.UpdateAuditLogCreatedAtForTestingParams{
@@ -169,14 +170,15 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	result := f.build(day)
 	require.True(t, result.Swapped)
 	require.Equal(t, map[string]uint64{
-		"|claude.ai|claude_code|inbound_token|connected||":                        1,
-		"|claude.ai||inbound_token|connected||":                                   1,
-		"|claude.ai||provider_sign_in|declined|provider_denied|":                  1,
-		"other|claude.ai||provider_sign_in|failed|provider_oauth_invalid_client|": 1,
-		"accounts.google.com|claude.ai||inbound_authorize|abandoned||":            1,
-		"|other||inbound_token|connected||":                                       1,
-		"|dcr||mcp_request|failed|invalid_bearer_token|":                          5,
-		"|claude.ai||discovery_member|blocked|needs_sign_in|":                     1,
+		// One organization, so the vendor names fold into other.
+		"|other|claude_code|inbound_token|connected||":                        1,
+		"|other||inbound_token|connected||":                                   1,
+		"|other||provider_sign_in|declined|provider_denied|":                  1,
+		"other|other||provider_sign_in|failed|provider_oauth_invalid_client|": 1,
+		"other|other||inbound_authorize|abandoned||":                          1,
+		"|other_metadata_url||inbound_token|connected||":                      1,
+		"|dcr||mcp_request|failed|invalid_bearer_token|":                      5,
+		"|other||discovery_member|blocked|needs_sign_in|":                     1,
 	}, f.stored(mainTable, day))
 	require.Empty(t, f.stored(stagingTable, day), "staging is cleared after the swap")
 }
@@ -202,33 +204,35 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 		return append(rows, f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, person))
 	}
 
-	retry, reconnect, admin, system, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	retry, reconnect, admin, system, staff, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	at := day.Add(time.Hour)
 	systemFailure := fail(system, at)
 	systemFailure.AuthClientID = "auth-client-" + uuid.NewString()
 
 	rows := []mcpconnectionattempts.Row{
-		fail(retry, at), fail(reconnect, at), fail(admin, at), systemFailure, fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
+		fail(retry, at), fail(reconnect, at), fail(admin, at), systemFailure, fail(staff, at), fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
 	}
 	rows = append(rows, succeed(retry, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(reconnect, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(admin, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(system, at.Add(time.Hour), true)...)
+	rows = append(rows, succeed(staff, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(lookahead, at.Add(3*24*time.Hour), false)...)
 	rows = append(rows, succeed(tooLate, at.Add(mcpconnectionattempts.FixLookahead+time.Hour), false)...)
 	f.write(rows...)
 
-	f.audit(admin.String(), "user", "user_admin", at.Add(30*time.Minute))
-	f.audit(systemFailure.AuthClientID, "user", "system", at.Add(30*time.Minute))
-	f.audit(retry.String(), "user", "user_admin", at.Add(-time.Hour))
+	f.audit(f.org, admin.String(), "api_key", "key_admin", false, at.Add(30*time.Minute))
+	f.audit(f.org, systemFailure.AuthClientID, "user", "system", false, at.Add(30*time.Minute))
+	f.audit(f.org, staff.String(), "user", "user_staff", true, at.Add(30*time.Minute))
+	f.audit(f.org, retry.String(), "user", "user_admin", false, at.Add(-time.Hour))
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                             4,
+		"|dcr||inbound_token|connected||":                             5,
 		"|dcr||mcp_request|failed|invalid_bearer_token|retry":         2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|reconnect":     1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  1,
-		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 1,
+		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":              2,
 	}, f.stored(mainTable, day))
 }
@@ -261,7 +265,7 @@ func TestBuildDayRerunGivesTheSameResult(t *testing.T) {
 	rows, err := f.b.outcomes(t.Context(), day, f.now)
 	require.NoError(t, err)
 	for _, row := range rows {
-		f.insertStored(stagingTable, day, strings.Join([]string{row.Provider, row.App, row.ClientFamily, row.Step, row.Outcome, row.Reason, string(row.FixedBy)}, "|"), row.Attempts)
+		f.insertStored(stagingTable, day, strings.Join([]string{row.Provider, row.App, row.ClientFamily, row.Step, row.Outcome, row.Reason, row.FixedBy}, "|"), row.Attempts)
 	}
 	f.build(day)
 	require.Equal(t, first, f.stored(mainTable, day))
@@ -285,7 +289,7 @@ func TestPublishAbortsWithoutSwappingOnACountMismatch(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoMismatch)
 	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
-	rows := []Row{{Provider: "", App: "dcr", ClientFamily: "", Step: "inbound_token", Outcome: "connected", Reason: "", FixedBy: mcpconnectionattempts.FixedByNothing, Attempts: 7}}
+	rows := []DayRow{{Provider: "", App: "dcr", ClientFamily: "", Step: "inbound_token", Outcome: "connected", Reason: "", FixedBy: "", Attempts: 7}}
 
 	want := totalsOf(rows)
 	want.rows++
@@ -301,90 +305,6 @@ func TestBuildDayRefusesADayThatIsStillOpen(t *testing.T) {
 	yesterday := f.today.AddDate(0, 0, -1)
 	_, err := f.b.BuildDay(t.Context(), yesterday, yesterday.Add(24*time.Hour+DayCloseDelay-time.Second))
 	require.ErrorIs(t, err, ErrDayOpen)
-}
-
-// TestSQLAgreesWithSummarize checks the ClickHouse reduction against the Go reference.
-func TestSQLAgreesWithSummarize(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	day := f.day(daysAgoSQLAgrees)
-	server, member := uuid.New(), uuid.New()
-	subject := urn.NewUserSubject("user-" + uuid.NewString())
-	person := mcpconnectionattempts.Subject(&subject)
-	app := mcpconnectionattempts.AppOf(catalogApp)
-
-	var rows []mcpconnectionattempts.Row
-	add := func(r mcpconnectionattempts.Row) { rows = append(rows, r) }
-
-	a1 := f.attempt(server, app, day.Add(time.Hour))
-	first := f.row(a1, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, 0)
-	first.ClientFamily = mcpconnectionattempts.FamilyBrowser
-	add(first)
-	signIn := f.row(a1, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, person, mcpconnectionattempts.Provider("https://accounts.google.com"))
-	signIn.RemoteSessionIssuerID, signIn.RemoteSessionClientID = "issuer-1", "remote-client-1"
-	add(signIn)
-	final := f.row(a1, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Minute, person)
-	final.ClientFamily, final.AuthClientID, final.UserSessionIssuerID = mcpconnectionattempts.FamilyCodexCLI, "auth-client-1", "user-issuer-1"
-	add(final)
-	add(f.row(a1, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, 3*time.Minute, mcpconnectionattempts.Member(member)))
-
-	a2 := f.attempt(server, app, day.Add(2*time.Hour))
-	add(f.row(a2, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, 0))
-	add(f.row(a2, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRateLimited, false, time.Minute, person))
-
-	a3 := f.attempt(server, mcpconnectionattempts.AppDCR, day.Add(3*time.Hour))
-	once := f.row(a3, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, 0, person)
-	once.Repeats = 9
-	add(once)
-
-	// A gateway whose members sign in to different providers, two of them at the same time.
-	gateway := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(4*time.Hour), mcpconnectionattempts.GatewayScope(f.org, uuid.New(), uuid.New(), app))
-	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, 2*time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://slack.com")))
-	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://mcp.linear.app")))
-	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultListed, false, time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://github.com")))
-	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete, true, 3*time.Minute))
-	add(f.row(gateway, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, 3*time.Minute))
-
-	// Two people, and two clients at the same time.
-	other := urn.NewUserSubject("user-" + uuid.NewString())
-	twoPeople := f.attempt(server, app, day.Add(5*time.Hour))
-	later := f.row(twoPeople, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch, false, 2*time.Minute, mcpconnectionattempts.Subject(&other))
-	later.ClientFamily = mcpconnectionattempts.FamilyCursor
-	earlier := f.row(twoPeople, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, person)
-	earlier.ClientFamily = mcpconnectionattempts.FamilyZed
-	tied := f.row(twoPeople, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, mcpconnectionattempts.Subject(&other))
-	tied.ClientFamily = mcpconnectionattempts.FamilyClaudeCode
-	add(later)
-	add(earlier)
-	add(tied)
-	f.write(rows...)
-
-	byAttempt := map[uuid.UUID][]mcpconnectionattempts.Row{}
-	for _, r := range rows {
-		byAttempt[r.AttemptID] = append(byAttempt[r.AttemptID], r)
-	}
-
-	var fromSQL []mcpconnectionattempts.AttemptSummary
-	require.NoError(t, f.b.scanAttempts(t.Context(), attemptsQuery, func(s mcpconnectionattempts.AttemptSummary) {
-		if s.OrganizationID == f.org {
-			fromSQL = append(fromSQL, s)
-		}
-	}, day.UnixNano(), day.Add(day24h).UnixNano(), excludedOrganizations()))
-	require.Len(t, fromSQL, len(byAttempt))
-	for _, got := range fromSQL {
-		want := mcpconnectionattempts.Summarize(byAttempt[got.AttemptID])
-		got.StartedAt, want.StartedAt = got.StartedAt.UTC(), want.StartedAt.UTC()
-		got.LastAt, want.LastAt = got.LastAt.UTC(), want.LastAt.UTC()
-		got.FinalAt, want.FinalAt = got.FinalAt.UTC(), want.FinalAt.UTC()
-		if !got.HasFinal {
-			got.FinalAt = time.Time{}
-		}
-		if len(got.Touched) == 0 {
-			got.Touched = nil
-		}
-		require.Equal(t, want, got, "attempt %s", got.AttemptID)
-		require.Equal(t, want.End(f.now), got.End(f.now))
-	}
 }
 
 func TestDaysToBuild(t *testing.T) {
@@ -417,4 +337,57 @@ func TestDaysToBuild(t *testing.T) {
 	days, err = limited.DaysToBuild(t.Context(), f.now)
 	require.NoError(t, err)
 	require.NotContains(t, days, missing, "nothing before the backfill start")
+}
+
+func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoPrivacy)
+	write := func(org, provider, appURL string) {
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(appURL)))
+		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, mcpconnectionattempts.Provider(provider)))
+	}
+	for range minOrgsPerLabel {
+		write("org-"+uuid.NewString(), "https://accounts.google.com", catalogApp)
+	}
+	write(f.org, "https://github.com", "https://zed.dev/oauth/client-metadata.json")
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"accounts.google.com|claude.ai||inbound_token|connected||": uint64(minOrgsPerLabel),
+		"other|other||inbound_token|connected||":                   1,
+	}, f.stored(mainTable, day))
+}
+
+func TestBuildDayPairsOnlyWithinTheOrganization(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoCrossOrg)
+	otherOrg := "org-" + uuid.NewString()
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	person := mcpconnectionattempts.Subject(&subject)
+	at := day.Add(time.Hour)
+	inOrg := func(org string, server uuid.UUID, started time.Time, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened) mcpconnectionattempts.Row {
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), started, mcpconnectionattempts.ServerScope(org, uuid.New(), server, mcpconnectionattempts.AppDCR))
+		return f.row(a, step, what, true, 0, person)
+	}
+
+	// Same person and server id succeed only in another organization.
+	alone, shared := uuid.New(), uuid.New()
+	f.write(
+		inOrg(f.org, alone, at, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken),
+		inOrg(otherOrg, alone, at.Add(time.Hour), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued),
+		// Another organization's admin changes a server with the same id between this failure and its success.
+		inOrg(f.org, shared, at, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken),
+		inOrg(f.org, shared, at.Add(time.Hour), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued),
+	)
+	f.audit(otherOrg, shared.String(), "user", "user_other_admin", false, at.Add(30*time.Minute))
+	f.audit(otherOrg, alone.String(), "user", "user_other_admin", false, at.Add(30*time.Minute))
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"|dcr||inbound_token|connected||":                     2,
+		"|dcr||mcp_request|failed|invalid_bearer_token|":      1,
+		"|dcr||mcp_request|failed|invalid_bearer_token|retry": 1,
+	}, f.stored(mainTable, day))
 }

@@ -14,6 +14,9 @@ const (
 	OutcomeAbandoned Outcome = "abandoned"
 )
 
+// allOutcomes are every Outcome.
+var allOutcomes = []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined, OutcomeAbandoned}
+
 // WhoFixes is the party that has to act, not necessarily the one that caused it.
 type WhoFixes string
 
@@ -66,6 +69,13 @@ var (
 	StepDiscoveryListing = Step{"discovery_listing"}
 	StepDiscoveryMember  = Step{"discovery_member"}
 )
+
+// allSteps are every Step.
+var allSteps = []Step{
+	StepInboundAuthorize, StepInboundSignIn, StepInboundConsent, StepInboundToken, StepProviderSignIn,
+	StepProviderToken, StepProviderRefresh, StepSignInRenewal, StepUpstreamEMA, StepMCPRequest,
+	StepDiscoveryListing, StepDiscoveryMember,
+}
 
 // Happened is what a call site says about a step: a success Result, or a Code
 // for anything else. Only this package implements it.

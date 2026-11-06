@@ -120,7 +120,8 @@ func TestNextSuccessTakesTheEarliestWithinTheWindow(t *testing.T) {
 
 	next, ok := mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{later, before, failedAgain, otherServer, early}, outcomeStart.Add(48*time.Hour))
 	require.True(t, ok)
-	require.Equal(t, early.AttemptID, next.AttemptID)
+	require.Equal(t, early.AttemptID, next.Success.AttemptID)
+	require.Equal(t, failure.End(outcomeStart.Add(48*time.Hour)), next.Failed)
 
 	tooLate := fixSummary(outcomeStart.Add(mcpconnectionattempts.FixLookahead), mcpconnectionattempts.OutcomeConnected)
 	_, ok = mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{tooLate}, outcomeStart.Add(30*24*time.Hour))
@@ -132,7 +133,7 @@ func TestNextSuccessTakesTheEarliestWithinTheWindow(t *testing.T) {
 	require.False(t, ok, "a failure with no person cannot be paired")
 }
 
-func TestFixedByOf(t *testing.T) {
+func TestFixFixedBy(t *testing.T) {
 	t.Parallel()
 	failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeFailed, "auth-client-fix")
 	success := fixSummary(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected)
@@ -158,18 +159,21 @@ func TestFixedByOf(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), tc.success, tc.changes))
+			fix := mcpconnectionattempts.Fix{Failure: failure, Failed: failure.End(outcomeStart), Success: tc.success}
+			require.Equal(t, tc.want, fix.FixedBy(tc.changes))
 		})
 	}
 }
 
 func TestIsAdminActor(t *testing.T) {
 	t.Parallel()
-	require.True(t, mcpconnectionattempts.IsAdminActor("user", "user_123"))
-	require.True(t, mcpconnectionattempts.IsAdminActor("api_key", "key_1"), "an admin's script or Terraform")
-	require.False(t, mcpconnectionattempts.IsAdminActor("user", "system"), "older background writers")
-	require.False(t, mcpconnectionattempts.IsAdminActor("system", "workos-role-sync"))
-	require.False(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1"))
+	require.True(t, mcpconnectionattempts.IsAdminActor("user", "user_123", false))
+	require.True(t, mcpconnectionattempts.IsAdminActor("api_key", "key_1", false), "an admin's script or Terraform")
+	require.False(t, mcpconnectionattempts.IsAdminActor("user", "user_staff", true), "Speakeasy staff")
+	require.False(t, mcpconnectionattempts.IsAdminActor("user", "system", false), "older background writers")
+	require.False(t, mcpconnectionattempts.IsAdminActor("system", "workos-role-sync", false))
+	require.False(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1", false))
+	require.False(t, mcpconnectionattempts.IsAdminActor("workload", "workload_1", false))
 }
 
 func TestFixedByCountsOnlyChangesAfterTheFailingRow(t *testing.T) {
@@ -177,10 +181,12 @@ func TestFixedByCountsOnlyChangesAfterTheFailingRow(t *testing.T) {
 	failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeFailed)
 	failure.FinalAt = outcomeStart.Add(20 * time.Minute)
 	success := fixSummary(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected)
+	fix, ok := mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{success}, outcomeStart)
+	require.True(t, ok)
 	duringAttempt := []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(10 * time.Minute)}}
-	require.Equal(t, mcpconnectionattempts.FixedByRetry, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), success, duringAttempt))
+	require.Equal(t, mcpconnectionattempts.FixedByRetry, fix.FixedBy(duringAttempt))
 	afterFailing := []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(30 * time.Minute)}}
-	require.Equal(t, mcpconnectionattempts.FixedByAdminChange, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), success, afterFailing))
+	require.Equal(t, mcpconnectionattempts.FixedByAdminChange, fix.FixedBy(afterFailing))
 }
 
 func TestLabelsSendUnknownValuesToOther(t *testing.T) {
@@ -195,9 +201,57 @@ func TestLabelsSendUnknownValuesToOther(t *testing.T) {
 	require.Equal(t, "claude.ai", mcpconnectionattempts.AppLabel(catalogApp))
 	require.Equal(t, "dcr", mcpconnectionattempts.AppLabel(mcpconnectionattempts.AppDCR.String()))
 	customerApp := mcpconnectionattempts.AppOf("https://agents.acme.example/oauth/client.json").String()
-	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.AppLabel(customerApp), "a customer-run metadata URL")
+	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), mcpconnectionattempts.AppLabel(customerApp), "a customer-run metadata URL keeps no host")
 	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.AppLabel("agents.acme.example"), "a host that is not in the catalog")
 
 	require.Equal(t, mcpconnectionattempts.FamilyCursor, mcpconnectionattempts.ClientFamilyLabel(mcpconnectionattempts.FamilyCursor))
 	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.ClientFamilyLabel("acme-agent"))
+
+	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.StepLabel("acme_step"))
+	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.OutcomeLabel(""))
+	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.ReasonLabel("acme said no"))
+	require.Empty(t, mcpconnectionattempts.ReasonLabel(""))
+	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.FixedByLabel("acme_fix"))
+}
+
+func TestLabelsKeepEveryValueTheWriterProduces(t *testing.T) {
+	t.Parallel()
+	for _, family := range []string{
+		mcpconnectionattempts.FamilyCodexCLI, mcpconnectionattempts.FamilyClaudeCode, mcpconnectionattempts.FamilyClaudeAI,
+		mcpconnectionattempts.FamilyOpenAIConnector, mcpconnectionattempts.FamilyCursor, mcpconnectionattempts.FamilyVSCode,
+		mcpconnectionattempts.FamilyPerplexity, mcpconnectionattempts.FamilyScript, mcpconnectionattempts.FamilyBrowser,
+		mcpconnectionattempts.FamilyOther, mcpconnectionattempts.FamilyCopilot, mcpconnectionattempts.FamilyZed,
+		mcpconnectionattempts.FamilyKiro, mcpconnectionattempts.FamilyReplit, mcpconnectionattempts.FamilyNotion,
+	} {
+		require.Equal(t, family, mcpconnectionattempts.ClientFamilyLabel(family))
+	}
+	for _, app := range []mcpconnectionattempts.App{
+		mcpconnectionattempts.AppDCR, mcpconnectionattempts.AppFirstParty, mcpconnectionattempts.AppUnverified,
+		mcpconnectionattempts.AppWorkload, mcpconnectionattempts.AppCodeMode, mcpconnectionattempts.AppRecoveryLink,
+		mcpconnectionattempts.AppBackground, mcpconnectionattempts.AppOtherMetadataURL,
+	} {
+		require.Equal(t, app.String(), mcpconnectionattempts.AppLabel(app.String()))
+		require.True(t, mcpconnectionattempts.IsAppKind(app.String()))
+	}
+	for _, step := range []mcpconnectionattempts.Step{
+		mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.StepInboundConsent,
+		mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.StepProviderToken,
+		mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.StepUpstreamEMA,
+		mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.StepDiscoveryMember,
+	} {
+		require.Equal(t, step.String(), mcpconnectionattempts.StepLabel(step.String()))
+	}
+	for _, outcome := range []mcpconnectionattempts.Outcome{
+		mcpconnectionattempts.OutcomeConnected, mcpconnectionattempts.OutcomeFailed, mcpconnectionattempts.OutcomeBlocked,
+		mcpconnectionattempts.OutcomeDeclined, mcpconnectionattempts.OutcomeAbandoned,
+	} {
+		require.Equal(t, string(outcome), mcpconnectionattempts.OutcomeLabel(string(outcome)))
+	}
+	for _, fix := range []mcpconnectionattempts.FixedBy{
+		mcpconnectionattempts.FixedByNothing, mcpconnectionattempts.FixedByAdminChange, mcpconnectionattempts.FixedBySystemChange,
+		mcpconnectionattempts.FixedByReconnect, mcpconnectionattempts.FixedByRetry,
+	} {
+		require.Equal(t, string(fix), mcpconnectionattempts.FixedByLabel(fix))
+	}
+	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn.String(), mcpconnectionattempts.ReasonLabel(mcpconnectionattempts.CodeNeedsSignIn.String()))
 }

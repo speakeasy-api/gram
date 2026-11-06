@@ -312,7 +312,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditActorsOnSubjects = `-- name: ListAuditActorsOnSubjects :many
-SELECT subject_id, actor_type, actor_id, created_at
+SELECT subject_id, actor_type, actor_id, is_internal, created_at
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_id = ANY($2::text[])
@@ -328,10 +328,11 @@ type ListAuditActorsOnSubjectsParams struct {
 }
 
 type ListAuditActorsOnSubjectsRow struct {
-	SubjectID string
-	ActorType string
-	ActorID   string
-	CreatedAt pgtype.Timestamptz
+	SubjectID  string
+	ActorType  string
+	ActorID    string
+	IsInternal bool
+	CreatedAt  pgtype.Timestamptz
 }
 
 // Who changed any of these subjects in an organization within a time range.
@@ -353,6 +354,7 @@ func (q *Queries) ListAuditActorsOnSubjects(ctx context.Context, arg ListAuditAc
 			&i.SubjectID,
 			&i.ActorType,
 			&i.ActorID,
+			&i.IsInternal,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

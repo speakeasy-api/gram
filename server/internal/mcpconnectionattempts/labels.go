@@ -1,6 +1,10 @@
 package mcpconnectionattempts
 
-import "github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+import (
+	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+)
 
 // LabelOther stands in for any provider, app or client that is not on a fixed list.
 const LabelOther = "other"
@@ -47,15 +51,9 @@ var knownProviderHosts = map[string]struct{}{
 	"app.getgram.ai":            {},
 }
 
-// knownAppKinds are the app_key values that name a kind of app, not an app.
-var knownAppKinds = map[string]struct{}{
-	AppDCR.key:          {},
-	AppFirstParty.key:   {},
-	AppUnverified.key:   {},
-	AppWorkload.key:     {},
-	AppCodeMode.key:     {},
-	AppRecoveryLink.key: {},
-	AppBackground.key:   {},
+// IsAppKind reports whether an app_key names a kind of app rather than an app.
+func IsAppKind(appKey string) bool {
+	return slices.Contains(appKinds, App{appKey})
 }
 
 // catalogAppHosts are the hosts of every client metadata document in the client catalog,
@@ -70,12 +68,6 @@ func buildCatalogAppHosts() map[string]struct{} {
 		}
 	}
 	return hosts
-}
-
-var knownClientFamilies = map[string]struct{}{
-	FamilyCodexCLI: {}, FamilyClaudeCode: {}, FamilyClaudeAI: {}, FamilyOpenAIConnector: {},
-	FamilyCursor: {}, FamilyVSCode: {}, FamilyPerplexity: {}, FamilyScript: {}, FamilyBrowser: {},
-	FamilyOther: {}, FamilyCopilot: {}, FamilyZed: {}, FamilyKiro: {}, FamilyReplit: {}, FamilyNotion: {},
 }
 
 // ProviderLabel keeps a provider host only when it is a known vendor's shared host.
@@ -95,22 +87,57 @@ func AppLabel(appKey string) string {
 	if appKey == "" {
 		return ""
 	}
-	if _, ok := knownAppKinds[appKey]; ok {
-		return appKey
-	}
-	if _, ok := catalogAppHosts[appKey]; ok {
+	if _, ok := catalogAppHosts[appKey]; ok || IsAppKind(appKey) {
 		return appKey
 	}
 	return LabelOther
 }
 
-// ClientFamilyLabel keeps a client family only when it is on the fixed list.
+// ClientFamilyLabel keeps a client family only when the writer can produce it.
+// Empty stays empty: no client made the request.
 func ClientFamilyLabel(family string) string {
-	if family == "" {
+	if family == "" || family == FamilyOther {
+		return family
+	}
+	for _, candidate := range clientFamilies {
+		if candidate.family == family {
+			return family
+		}
+	}
+	return LabelOther
+}
+
+// StepLabel keeps a step only when it is a known Step.
+func StepLabel(step string) string {
+	if slices.Contains(allSteps, Step{step}) {
+		return step
+	}
+	return LabelOther
+}
+
+// OutcomeLabel keeps an outcome only when it is a known Outcome.
+func OutcomeLabel(outcome string) string {
+	if slices.Contains(allOutcomes, Outcome(outcome)) {
+		return outcome
+	}
+	return LabelOther
+}
+
+// ReasonLabel keeps a reason only when it is a catalog code. Empty stays empty: nothing went wrong.
+func ReasonLabel(reason string) string {
+	if reason == "" {
 		return ""
 	}
-	if _, ok := knownClientFamilies[family]; ok {
-		return family
+	if _, ok := MeaningOf(reason); ok {
+		return reason
+	}
+	return LabelOther
+}
+
+// FixedByLabel keeps a fixed_by only when it is a known FixedBy.
+func FixedByLabel(fix FixedBy) string {
+	if slices.Contains(fixedByValues, fix) {
+		return string(fix)
 	}
 	return LabelOther
 }

@@ -51,6 +51,7 @@ const (
 
 // MCPConnectionOutcomesDayParams names the UTC day to build.
 type MCPConnectionOutcomesDayParams struct {
+	// Day is the UTC day to build.
 	Day time.Time
 }
 
