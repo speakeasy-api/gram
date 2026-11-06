@@ -193,18 +193,26 @@ it("queries agent actions without using its owner's identity", () => {
     { throwOnError: false },
   );
 });
-it("reads failed and allowed checks apart, without hook ingestion, and keeps the agent in the handoff", () => {
+it("reads failed checks, server connections and other checks apart, without hook ingestion, and keeps the agent in the handoff", () => {
   render(
     <MemoryRouter>
       <AgentIdentityChallenges agent={agent} />
     </MemoryRouter>,
   );
-  for (const outcome of ["deny", "allow"]) {
+  const slices = [
+    { outcome: "deny", excludeScopes: ["org:hooks_ingest"] },
+    {
+      outcome: "allow",
+      scope: "mcp:connect",
+      excludeScopes: ["org:hooks_ingest"],
+    },
+    { outcome: "allow", excludeScopes: ["org:hooks_ingest", "mcp:connect"] },
+  ];
+  for (const slice of slices) {
     expect(mocks.challenges).toHaveBeenCalledWith(
       expect.objectContaining({
         principalUrn: "agent:agent_example",
-        outcome,
-        excludeScopes: ["org:hooks_ingest"],
+        ...slice,
         from,
         to,
       }),
@@ -216,34 +224,54 @@ it("reads failed and allowed checks apart, without hook ingestion, and keeps the
     "identity=agent%3Aagent_example",
   );
 });
-it("lists failed checks first, grouped by scope and resource, with when they last happened", () => {
+it("lists failed checks first, then the servers the agent reached by name, then other checks", () => {
   const at = (minute: number) =>
     new Date(`2026-01-07T10:${String(minute).padStart(2, "0")}:00Z`);
-  const row = (outcome: string, resourceId: string, minute: number) => ({
-    id: `${outcome}-${resourceId}-${minute}`,
-    scope: "mcp:connect",
+  const row = (
+    outcome: string,
+    scope: string,
+    resourceId: string,
+    minute: number,
+  ) => ({
+    id: `${outcome}-${scope}-${resourceId}-${minute}`,
+    scope,
     resourceKind: "mcp",
     resourceId,
     outcome,
     timestamp: at(minute),
   });
-  mocks.challenges.mockImplementation(({ outcome }: { outcome: string }) =>
-    outcome === "deny"
-      ? {
+  mocks.challenges.mockImplementation(
+    ({ outcome, scope }: { outcome: string; scope?: string }) => {
+      if (outcome === "deny") {
+        return {
           data: {
             challenges: [
-              row("deny", "server_linear", 9),
-              row("deny", "server_linear", 4),
+              row("deny", "mcp:connect", "server_linear", 9),
+              row("deny", "mcp:connect", "server_linear", 4),
             ],
             total: 2,
           },
-        }
-      : {
+        };
+      }
+      if (scope === "mcp:connect") {
+        return {
           data: {
-            challenges: [row("allow", "server_support", 8)],
-            total: 1,
+            challenges: [
+              row("allow", "mcp:connect", "server_ops", 8),
+              row("allow", "mcp:connect", "server_ops", 7),
+              row("allow", "mcp:connect", "server_ops", 6),
+            ],
+            total: 3,
           },
+        };
+      }
+      return {
+        data: {
+          challenges: [row("allow", "mcp:auth", "client_one", 5)],
+          total: 1,
         },
+      };
+    },
   );
   render(
     <MemoryRouter>
@@ -251,16 +279,26 @@ it("lists failed checks first, grouped by scope and resource, with when they las
     </MemoryRouter>,
   );
   const failedHeading = screen.getByRole("heading", { name: "Failed" });
-  const allowedHeading = screen.getByRole("heading", { name: "Allowed" });
+  const serversHeading = screen.getByRole("heading", { name: "MCP servers" });
+  const otherHeading = screen.getByRole("heading", {
+    name: "Other allowed checks",
+  });
   expect(
-    failedHeading.compareDocumentPosition(allowedHeading) &
+    failedHeading.compareDocumentPosition(serversHeading) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    serversHeading.compareDocumentPosition(otherHeading) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(screen.getByText(/Denied 2 times/)).toBeTruthy();
-  expect(screen.getByText(/Allowed once/)).toBeTruthy();
+  // A server the org lists is named; one it does not keeps its id.
+  expect(screen.getByText("Acme Ops")).toBeTruthy();
+  expect(screen.getByText(/Allowed 3 times/)).toBeTruthy();
   expect(screen.getByText(/mcp server_linear/)).toBeTruthy();
+  expect(screen.getByText(/Allowed once/)).toBeTruthy();
   expect(
-    screen.getByText(/2 failed and 1 allowed checks in this period/),
+    screen.getByText(/2 failed and 4 allowed checks in this period/),
   ).toBeTruthy();
 });
 it("says when the agent had no failed checks in the period", () => {
@@ -289,7 +327,9 @@ it("says a slice could not be loaded rather than that it had no checks", () => {
     screen.queryByText("No failed checks for this agent in this period."),
   ).toBeNull();
   expect(
-    screen.getByText("No allowed checks for this agent in this period."),
+    screen.getByText(
+      "No MCP server connections for this agent in this period.",
+    ),
   ).toBeTruthy();
 });
 it("shows failed authorization reads as an error rather than no checks", () => {
