@@ -350,6 +350,46 @@ describe("ChatLogsTable", () => {
     expect(screen.getByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeTruthy();
   });
 
+  it("attributes Project Assistant to Slack invokers rather than its chat owner", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat-slack"),
+            userId: "gram-user-1",
+            assistantId: "assistant-1",
+            assistantName: "Project Assistant",
+            assistantAgentId: "agent-1",
+            participants: [
+              {
+                provider: "slack",
+                providerTeamId: "T_EXAMPLE",
+                providerUserId: "U_INVOKER",
+                userId: "invoking-user",
+                displayName: "Invoking Person",
+              },
+            ],
+          },
+        ]}
+        onDeleteChat={() => {}}
+        onSelectChat={() => {}}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Project Assistant/ }),
+    ).toBeTruthy();
+    expect(screen.getByText("on behalf of")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Invoking Person" })
+        .getAttribute("href"),
+    ).toContain(encodeURIComponent("user:invoking-user"));
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
+  });
+
   it("names every participant and counts the ones past the fifth face", () => {
     renderTable(
       <ChatLogsTable

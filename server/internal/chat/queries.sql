@@ -2293,3 +2293,35 @@ SELECT pg_advisory_lock(@lock_key::bigint);
 
 -- name: ReleaseToolCallSummaryLock :exec
 SELECT pg_advisory_unlock(@lock_key::bigint);
+
+-- name: ListAssistantSlackParticipants :many
+-- Invokers are durable event senders, not assistant owners or Slack history
+-- included as context. Callers pass only chat IDs already authorized for reads.
+WITH senders AS (
+ SELECT DISTINCT c.id AS chat_id, c.organization_id,
+   e.normalized_payload_json->>'team_id' AS team_id,
+   e.normalized_payload_json->>'user_id' AS sender_id
+ FROM chats c
+ JOIN assistant_threads t ON t.chat_id = c.id AND t.project_id = c.project_id AND t.deleted IS FALSE
+ JOIN assistants a ON a.id = t.assistant_id AND a.project_id = c.project_id
+   AND a.organization_id = c.organization_id AND a.deleted IS FALSE
+ JOIN assistant_thread_events e ON e.assistant_thread_id = t.id
+   AND e.assistant_id = a.id AND e.project_id = c.project_id AND e.deleted IS FALSE
+ WHERE c.project_id = @project_id AND c.id = ANY(@chat_ids::uuid[]) AND c.deleted IS FALSE
+   AND (CASE WHEN e.normalized_payload_json ? '_gram_source_kind'
+     THEN e.normalized_payload_json->>'_gram_source_kind' ELSE t.source_kind END) IN ('slack', 'speakeasy_slack')
+   AND jsonb_typeof(e.normalized_payload_json->'team_id') = 'string'
+   AND jsonb_typeof(e.normalized_payload_json->'user_id') = 'string'
+   AND e.normalized_payload_json->>'team_id' <> ''
+   AND e.normalized_payload_json->>'user_id' <> ''
+)
+SELECT s.chat_id, 'slack'::text AS provider, s.sender_id::text AS provider_user_id,
+ s.team_id::text AS provider_team_id, u.id AS user_id,
+ COALESCE(NULLIF(d.display_name, ''), NULLIF(u.display_name, ''), s.sender_id)::text AS display_name
+FROM senders s
+LEFT JOIN slack_directory_memberships d ON d.organization_id = s.organization_id
+ AND d.slack_team_id = s.team_id AND d.slack_user_id = s.sender_id
+LEFT JOIN slack_identity_mappings m ON m.organization_id = d.organization_id
+ AND m.slack_team_id = d.slack_team_id AND m.slack_user_id = d.slack_user_id AND m.revoked_at IS NULL
+LEFT JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+ORDER BY s.chat_id, s.team_id, s.sender_id;

@@ -7,12 +7,13 @@ import {
 } from "@/lib/chat-owner";
 import type { IdentityRef } from "@/lib/identity-urn";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { ChatParticipant } from "@gram/client/models/components/chatparticipant.js";
+import { Fragment } from "react";
 import type { JSX } from "react";
 
 /**
- * Renders a chat session's owner. When the owner can't be resolved to a known
- * identity (the raw provider user ID or "anonymous" is shown), the label gets
- * a tooltip explaining why.
+ * Names the people a hosted Slack session acted for, or the session owner
+ * otherwise. Unresolved owners get a tooltip explaining the fallback label.
  */
 export function ChatOwnerLabel({
   members,
@@ -21,10 +22,38 @@ export function ChatOwnerLabel({
   accountEmail,
 }: {
   members: AccessMember[] | undefined;
-  chat: { userId?: string; externalUserId?: string };
+  chat: {
+    userId?: string;
+    externalUserId?: string;
+    assistantName?: string;
+    participants?: ChatParticipant[];
+  };
   currentUser: { id: string; email: string };
   accountEmail?: string;
 }): JSX.Element {
+  // A hosted assistant's owner controls access, but its Slack participants
+  // identify the people it acted for. Never substitute the creator for them.
+  if (chat.assistantName && chat.participants?.length) {
+    return (
+      <>
+        {chat.participants.map((participant, index) => (
+          <Fragment
+            key={`${participant.provider}:${participant.providerTeamId ?? ""}:${participant.providerUserId}`}
+          >
+            {index > 0 && ", "}
+            <IdentityLink
+              identifier={
+                participant.userId ? { userId: participant.userId } : null
+              }
+            >
+              {participant.displayName || participant.providerUserId}
+            </IdentityLink>
+          </Fragment>
+        ))}
+      </>
+    );
+  }
+
   const owner = chatOwnerDisplay(members, chat, currentUser, accountEmail);
   // The label names whichever member the chat matched, and the match can come
   // through the reported agent id rather than the chat's own user id — a stale

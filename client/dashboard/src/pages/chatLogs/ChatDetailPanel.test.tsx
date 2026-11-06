@@ -115,7 +115,7 @@ vi.mock("@gram/client/react-query/summarizeChat.js", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => false,
-    hasAnyScope: () => false,
+    hasAnyScope: (scopes: string[]) => scopes.includes("org:read"),
     hasAllScopes: () => false,
     isLoading: false,
     grants: [],
@@ -329,6 +329,46 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
     expect(userTurnName()).toBe("Ada Lovelace");
+  });
+
+  it("attributes a hosted Slack assistant to its invoking sender, not its owner", () => {
+    renderPanel(
+      makeChat({
+        assistantId: "assistant-1",
+        assistantName: "Project Assistant",
+        assistantAgentId: "agent-1",
+        userId: "gram-user-1",
+        participants: [
+          {
+            provider: "slack",
+            providerTeamId: "T_EXAMPLE",
+            providerUserId: "U_INVOKER",
+            userId: "invoking-user",
+            displayName: "Invoking Person",
+          },
+          {
+            provider: "slack",
+            providerTeamId: "T_EXAMPLE",
+            providerUserId: "U_UNMAPPED",
+          },
+        ],
+      }),
+    );
+
+    expectAgentLink("Project Assistant");
+    expect(screen.getByText("on behalf of")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Invoking Person" })
+        .getAttribute("href"),
+    ).toContain(encodeURIComponent("user:invoking-user"));
+    expect(screen.getByText("U_UNMAPPED")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "U_UNMAPPED" })).toBeNull();
+
+    const details = openSessionDetails();
+    expect(within(details).getByText("Invoking Person")).toBeTruthy();
+    expect(within(details).getByText("U_UNMAPPED")).toBeTruthy();
+    expect(within(details).queryByText("Ada Lovelace")).toBeNull();
   });
 
   it("keeps a person's own session naming them", () => {

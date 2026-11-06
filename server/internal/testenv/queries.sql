@@ -2601,3 +2601,34 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: SetSlackParticipantAssistantCreatorFixture :exec
+UPDATE assistants SET created_by_user_id = @user_id WHERE id = @id AND project_id = @project_id;
+
+-- name: ClearSlackParticipantHistoricalMappingFixture :exec
+UPDATE chat_message_participants SET user_id = NULL, display_name = 'Historical name'
+WHERE message_id = @message_id AND project_id = @project_id;
+
+-- name: SetSlackParticipantThreadSourceFixture :exec
+UPDATE assistant_threads SET source_kind = @source_kind WHERE id = @id AND project_id = @project_id;
+
+-- name: StampSlackParticipantEventSourceFixture :exec
+UPDATE assistant_thread_events
+SET normalized_payload_json = normalized_payload_json || '{"_gram_source_kind":"speakeasy_slack"}'::jsonb
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetSlackParticipantEventDeletedFixture :exec
+UPDATE assistant_thread_events SET deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetSlackParticipantThreadDeletedFixture :exec
+UPDATE assistant_threads SET deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetSlackParticipantAssistantDeletedFixture :exec
+UPDATE assistants SET deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetSlackParticipantChatDeletedFixture :exec
+UPDATE chats SET deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = @id AND project_id = @project_id;

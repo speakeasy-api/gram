@@ -77,15 +77,53 @@ func (s *Service) chatParticipants(ctx context.Context, projectID uuid.UUID, ids
 	}
 	byChat := make(map[string][]*gen.ChatParticipant)
 	byMessage := make(map[string][]*gen.ChatParticipant)
-	seen := make(map[string]bool)
+	seen := make(map[string]*gen.ChatParticipant)
 	for _, row := range rows {
 		participant := &gen.ChatParticipant{Provider: row.Provider, ProviderUserID: row.ProviderUserID, ProviderTeamID: conv.FromPGText[string](row.ProviderTeamID), UserID: conv.FromPGText[string](row.UserID), DisplayName: conv.FromPGText[string](row.DisplayName)}
 		chatID := row.ChatID.UUID.String()
-		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID.String + ":" + row.ProviderUserID + ":" + row.UserID.String
-		if !seen[key] {
+		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID.String + ":" + row.ProviderUserID
+		if seen[key] == nil {
 			byChat[chatID] = append(byChat[chatID], participant)
-			seen[key] = true
+			seen[key] = participant
 		}
+	}
+	// Event senders describe hosted Slack invocations without changing ownership
+	// or assigning context/history senders to individual messages.
+	invokers, err := s.repo.ListAssistantSlackParticipants(ctx, repo.ListAssistantSlackParticipantsParams{ProjectID: projectID, ChatIds: ids})
+	if err != nil {
+		return nil, nil, fmt.Errorf("load assistant Slack participants: %w", err)
+	}
+	// A teamless snapshot can be folded into an event sender only when that
+	// sender occurs in exactly one workspace in this chat. Directory ambiguity
+	// alone must not produce a second face, or guess between event identities.
+	invokerCounts := make(map[string]int)
+	for _, row := range invokers {
+		invokerCounts[row.ChatID.String()+":"+row.Provider+":"+row.ProviderUserID]++
+	}
+	for chatID, participants := range byChat {
+		kept := participants[:0]
+		for _, participant := range participants {
+			key := chatID + ":" + participant.Provider + ":" + participant.ProviderUserID
+			if conv.PtrValOr(participant.ProviderTeamID, "") == "" && invokerCounts[key] == 1 {
+				continue
+			}
+			kept = append(kept, participant)
+		}
+		byChat[chatID] = kept
+	}
+	for _, row := range invokers {
+		chatID := row.ChatID.String()
+		key := chatID + ":" + row.Provider + ":" + row.ProviderTeamID + ":" + row.ProviderUserID
+		participant := seen[key]
+		if participant == nil {
+			participant = &gen.ChatParticipant{Provider: row.Provider, ProviderUserID: row.ProviderUserID, ProviderTeamID: &row.ProviderTeamID, UserID: nil, DisplayName: nil}
+			byChat[chatID] = append(byChat[chatID], participant)
+			seen[key] = participant
+		}
+		// Rollups show the current identity resolution. Message participants are
+		// loaded separately below and retain their historical attribution.
+		participant.UserID = conv.FromPGText[string](row.UserID)
+		participant.DisplayName = &row.DisplayName
 	}
 	if len(messageIDs) == 0 {
 		return byChat, byMessage, nil

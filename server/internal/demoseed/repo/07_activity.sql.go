@@ -94,6 +94,41 @@ func (q *Queries) ActivityInsertAnthropicInferenceConfig(ctx context.Context, ar
 	return err
 }
 
+const activityInsertAssistantSlackInvocation = `-- name: ActivityInsertAssistantSlackInvocation :exec
+INSERT INTO assistant_thread_events (
+  id, assistant_thread_id, assistant_id, project_id, event_id, correlation_id,
+  status, normalized_payload_json, source_payload_json, processed_at
+)
+SELECT $1::uuid, t.id, t.assistant_id, t.project_id, $2::text, t.correlation_id,
+  'processed', jsonb_build_object('_gram_source_kind', 'speakeasy_slack',
+    'team_id', m.slack_team_id, 'user_id', m.slack_user_id, 'text', 'Summarize project activity.'),
+  '{}'::jsonb, now() - interval '38 minutes'
+FROM assistant_threads t
+JOIN projects p ON p.id = t.project_id
+JOIN slack_directory_memberships m ON m.organization_id = p.organization_id AND m.id = $3::uuid
+WHERE t.project_id = $4::uuid AND t.id = $5::uuid
+`
+
+type ActivityInsertAssistantSlackInvocationParams struct {
+	ID           uuid.UUID
+	EventID      string
+	MembershipID uuid.UUID
+	ProjectID    uuid.UUID
+	ThreadID     uuid.UUID
+}
+
+// Use an existing synthetic directory member, distinct from the chat owner.
+func (q *Queries) ActivityInsertAssistantSlackInvocation(ctx context.Context, arg ActivityInsertAssistantSlackInvocationParams) error {
+	_, err := q.db.Exec(ctx, activityInsertAssistantSlackInvocation,
+		arg.ID,
+		arg.EventID,
+		arg.MembershipID,
+		arg.ProjectID,
+		arg.ThreadID,
+	)
+	return err
+}
+
 const activityInsertAssistantThread = `-- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
 VALUES ($1, $2, $3, $4, $5, $6, now() - interval '38 minutes')
