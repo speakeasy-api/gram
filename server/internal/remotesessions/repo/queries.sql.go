@@ -3297,6 +3297,9 @@ type GetActiveRemoteSessionByIDParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
+// Internal reload of a previously tenant/owner-authorized source snapshot, not
+// a credential discovery query. Exact ID, subject and registration prevent
+// adopting a sibling grant after refresh; provenance is not fresh authority.
 func (q *Queries) GetActiveRemoteSessionByID(ctx context.Context, arg GetActiveRemoteSessionByIDParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getActiveRemoteSessionByID, arg.ID, arg.SubjectUrn, arg.RemoteSessionClientID)
 	var i RemoteSession

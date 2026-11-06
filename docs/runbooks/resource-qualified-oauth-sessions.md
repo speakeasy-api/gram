@@ -51,16 +51,23 @@ the index migration while old writers still use
    Until the index migration, a second resource connection is temporarily refused
    without changing the first resource's usable grant. Same-resource reconsent,
    refresh and revocation continue to work.
-2. Confirm every old application and worker writer is gone. Confirm target-aware
-   consent/status consumers use the resource-qualified interfaces. This is an
-   explicit operational gate, not something migration tooling can infer.
-3. Apply the separately reviewed index migrations in order: first create the
+2. Verify the deployed compatibility revision and confirm every old application
+   and worker writer is gone. This is an explicit operational gate, not
+   something migration tooling can infer. Keep dependent resource-specific
+   presentation/features out of this compatibility release.
+3. Promote the separately reviewed migration-only release, excluding dependent
+   features. Apply its index migrations in order: first create the
    resource-qualified `NULLS NOT DISTINCT` indexes over the routing identity
    (`rtrim(resource, '/')`), with `WHERE deleted IS FALSE`, while retaining the old
    indexes, then remove the old indexes only after the new indexes are valid.
    This avoids an interval with no grant uniqueness enforcement. NULL legacy
    resources remain unique. Both resources can then retain independent grants.
-4. Validate authorization, original/fresh/refreshed callers, resource-bound refresh,
+4. Verify actual production migration completion and a healthy compatibility
+   application before promoting dependent resource-specific consent/status
+   features in a separate release. Those consumers must use the qualified
+   interfaces, including existing Platform MCP status readers. Do not bundle
+   the compatibility, migration, and dependent feature waves into one release.
+5. Validate authorization, original/fresh/refreshed callers, resource-bound refresh,
    and revocation against both resources. Never weaken audience checks or replace
    this final simultaneous-resource contract with permanent early refusal.
 

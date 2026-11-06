@@ -1708,6 +1708,9 @@ WHERE id = @id
 RETURNING *;
 
 -- name: GetActiveRemoteSessionByID :one
+-- Internal reload of a previously tenant/owner-authorized source snapshot, not
+-- a credential discovery query. Exact ID, subject and registration prevent
+-- adopting a sibling grant after refresh; provenance is not fresh authority.
 SELECT * FROM remote_sessions
 WHERE id = @id AND subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
