@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Page } from "@/components/page-layout";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { RequireScope } from "@/components/require-scope";
@@ -967,12 +968,10 @@ export function TriggersPanel(): JSX.Element {
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
-            </Stack>
+            <SkeletonTable
+              label="Loading triggers"
+              columns={["1fr", "2fr", "1fr", "0.8fr", "1fr"]}
+            />
           ) : triggers.length === 0 ? (
             <TriggersEmptyState onCreate={openCreate} projectId={project.id} />
           ) : (

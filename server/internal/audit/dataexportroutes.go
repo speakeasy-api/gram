@@ -41,6 +41,7 @@ type LogDataExportRouteCreateEvent struct {
 func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteCreateEvent) error {
 	action := ActionDataExportRouteCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -108,6 +109,7 @@ func (l *Logger) logDataExportRouteChange(ctx context.Context, dbtx repo.DBTX, a
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -146,6 +148,7 @@ type LogDataExportRouteDeleteEvent struct {
 func (l *Logger) LogDataExportRouteDelete(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteDeleteEvent) error {
 	action := ActionDataExportRouteDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

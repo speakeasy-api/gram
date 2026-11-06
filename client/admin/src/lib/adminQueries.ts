@@ -37,7 +37,7 @@ import {
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
-import { organizationActivityQuery } from "@/lib/gramAdminClient";
+import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -100,7 +100,9 @@ export function invalidateOrganizationActivity(
   organizationID: string,
 ): void {
   void qc.invalidateQueries({
-    queryKey: organizationActivityQuery(organizationID).queryKey,
+    queryKey: queryKeyAdminListOrganizationActivityInfinite({
+      organizationId: organizationID,
+    }),
     exact: true,
   });
 }

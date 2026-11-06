@@ -50,7 +50,7 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		state.Consent = "approved"
 		if err := b.service.validateCatalogMember(ctx, gate, member); err != nil {
 			state.Consent = "unknown"
-			if _, consent := errors.AsType[catalogConsentError](err); consent {
+			if needsNewConsent(err) {
 				state.Consent = "required"
 			}
 		} else {
@@ -61,6 +61,14 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 				}
 			}
 		}
+	}
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
+		if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); !reconnect {
+			state.Consent = "unknown"
+			state.Instructions = message
+			return state
+		}
+		state.Consent = "required"
 	}
 	if gate.catalogRecoveryOnly || (member.authClient != nil && member.authClient.outcome == authClientGap) {
 		state.Consent = "required"
@@ -80,6 +88,9 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	member, ok := findMetaMember(members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
+	}
+	if err := b.connectRefusal(ctx, gate, member); err != nil {
+		return nil, err
 	}
 	if !codeConnectAvailable(gate) {
 		return nil, codemode.ErrToolUnavailable
@@ -105,12 +116,13 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	ticket := AuthnChallengeState{ //nolint:exhaustruct // The entry ticket carries only routing and identity binding; browser login supplies consent state.
 		ID: uuid.NewString(), UserSessionIssuerID: gate.userSessionIssuerID,
 		Endpoint: ref, CreatedAt: now, FirstParty: true,
-		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, ReviewReady: false},
+		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, CatalogCanceled: false, ReviewReady: false},
 	}
 	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached &&
 		member.backend == metaMemberBackendProxied {
 		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
 			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
+			// The browser has not started an attempt yet; a fallback is not a failed sign-in.
 			needsConsent = true
 		}
 	}
@@ -132,7 +144,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		instructions = "Open authorization_url to connect this service, then review and approve the refreshed gateway tools. Then start a fresh execution and check access; do not replay an earlier program."
 	} else if needsConsent {
 		reason = "consent_required"
-		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your MCP client and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
+		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your AI app and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
 	}
 	action := &codemode.ConnectionAction{Server: server, Status: "authorization_required", Reason: reason, AuthorizationURL: link.String(), ExpiresAt: &expires, ClientReconnectRequired: needsConsent && ticket.CodeReconnect.CatalogID == uuid.Nil, Instructions: instructions}
 	if b.connections.actions == nil {
@@ -140,6 +152,18 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	}
 	b.connections.actions[server] = action
 	return action, nil
+}
+
+// connectRefusal stops a sign-in link for a stale choice that consent can't replace.
+func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
+		return nil
+	}
+	message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+	if reconnect {
+		return nil
+	}
+	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
 }
 
 // codeConnectAvailable reports whether Connect can mint a link bound to the
@@ -180,6 +204,35 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 	return states, nil
 }
 
+// connectionRouteFailure names the state of a member that could not be routed.
+func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
+	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		if outage.session == nil {
+			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
+		}
+		retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(outage.session)) + "."
+		switch remotesessions.OutageKindOf(outage.session) {
+		case remotesessions.RefreshOutageTunnel:
+			return "unreachable", "This server can't renew its sign-in right now. " + retry + " If it keeps happening, ask your administrator to check that the server and its sign-in provider are running."
+		case remotesessions.RefreshOutageProvider:
+			if canConnect {
+				return "unreachable", "This server's provider isn't available right now. " + retry + " If it keeps happening, call tools.connect(server=...) to reconnect."
+			}
+			return "unreachable", "This server's provider isn't available right now. " + retry + " If it keeps happening, ask your administrator."
+		case remotesessions.RefreshOutageNone:
+		}
+		return "unreachable", "This server can't renew its sign-in right now. " + retry + " If it keeps happening, ask your administrator to contact Speakeasy support."
+	}
+	_, needsSignIn := errors.AsType[memberCredentialError](err)
+	if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
+		if !canConnect {
+			return "reauth_required", "This server needs a sign-in, which can't be started from here. Ask your administrator."
+		}
+		return "reauth_required", "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
+	}
+	return "unknown", "Connection verification could not complete; try again later."
+}
+
 func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateContext, members []metaMember, server string) *codemode.ConnectionState {
 	member, ok := findMetaMember(members, server)
 	if !ok {
@@ -211,14 +264,14 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {
-		_, needsSignIn := errors.AsType[memberCredentialError](err)
-		if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
-			state.Authentication = "reauth_required"
-			state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
-		} else {
+		if needsNewConsent(err) {
 			state.Authentication = "unknown"
-			state.Instructions = "Connection verification could not complete; try again later."
+			if state.Consent == "required" {
+				state.Authentication = "reauth_required"
+			}
+			return state
 		}
+		state.Authentication, state.Instructions = connectionRouteFailure(err, codeConnectAvailable(gate))
 		return state
 	}
 	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)

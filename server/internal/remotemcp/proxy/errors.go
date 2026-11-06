@@ -30,6 +30,10 @@ var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc 
 // supported") rather than a generic decode failure.
 var ErrBatchRequest = errors.New("batch requests are not supported")
 
+// ErrUpstreamTimedOut marks a forwarded call the proxy's own phase timer gave up on. Its chain
+// otherwise reads as context.Canceled.
+var ErrUpstreamTimedOut = errors.New("upstream timed out")
+
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
 // error. timedOut is true when the failure was caused by the proxy's own
 // phase-1 timer firing (vs. a parent-context cancellation from the user
@@ -42,7 +46,7 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 		// request itself, so this is not logged as a failure here.
 		return fmt.Errorf("forward request: %w", errShutdownInterrupt)
 	case timedOut:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
+		return oops.E(oops.CodeGatewayError, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err), "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):
 		// Backstop in case any transport-level deadline (e.g.
 		// TLSHandshakeTimeout) fires before our phase timer.

@@ -853,6 +853,14 @@ export function CredentialsWizard({
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
+  // Which registrations a connection is assigned through depends on whether
+  // the organization enforces upstream auth, so nothing is written until that
+  // is known. An unreadable answer assigns through each server's own
+  // credentials, which never attach another server's sign-in.
+  const enforcementPending = enforcement === "loading";
+  const enforcementPendingNote =
+    "Checking how this organization's servers sign in…";
+  const typedConnections = enforcement !== "legacy";
   // Where the organization enforces mcp:auth, an agent without it cannot sign
   // in to any upstream, so a refused grant stops the flow before anything is
   // written. Elsewhere sign-in does not need it yet, so the grant is left out
@@ -1041,6 +1049,11 @@ export function CredentialsWizard({
         "Your permissions are still loading. Try again in a moment.",
       );
     }
+    if (enforcementPending) {
+      throw new Error(
+        "Checking how this organization's servers sign in. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -1129,7 +1142,7 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving || authPending) return;
+    if (!reconciled || saving || authPending || enforcementPending) return;
     if (authStop) {
       setError(authStop);
       return;
@@ -1357,6 +1370,7 @@ export function CredentialsWizard({
         allServers ? listedServers : selected.map((entry) => entry.server),
         undefined,
         true,
+        typedConnections,
       );
       if (missing.length)
         toast.warning(
@@ -1412,6 +1426,7 @@ export function CredentialsWizard({
           reach,
           signal,
           allServers,
+          typedConnections,
         );
         if (missing.length)
           toast.warning(
@@ -2079,6 +2094,7 @@ export function CredentialsWizard({
                 "Renaming an agent is recorded in the organization audit log.")
               : (authStop ??
                 (authPending ? authPendingNote : null) ??
+                (enforcementPending ? enforcementPendingNote : null) ??
                 refusedChoice ??
                 (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
@@ -2101,7 +2117,8 @@ export function CredentialsWizard({
                   !reconciled ||
                   refusedChoice !== null ||
                   authStop !== null ||
-                  authPending
+                  authPending ||
+                  enforcementPending
                 }
                 onClick={() => void save()}
               >

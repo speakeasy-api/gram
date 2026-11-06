@@ -22,8 +22,8 @@ import { useRemoteMcpToolConnection } from "./useRemoteMcpToolConnection";
 import { type ToolMetadataByName } from "@/hooks/useToolMetadata";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { PlugZap } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Link } from "react-router";
@@ -192,6 +192,7 @@ function RemoteMcpToolsSectionInner({
     connect,
     sync,
     isSyncing,
+    canWrite,
   } = useRemoteMcpToolConnection({
     mcpUrl,
     mcpServerId,
@@ -210,9 +211,13 @@ function RemoteMcpToolsSectionInner({
   const loading = isResolvingUrl || connectionLoading;
   const tracksMetadata = !!remoteMcpServerId;
 
+  // Sync is for admins correcting an existing record. An empty record fills in
+  // as soon as the server's tools are listed, so there is nothing to offer yet.
+  const canOfferSync =
+    tracksMetadata && canWrite && Object.keys(metadataByTool).length > 0;
   const drift = useMemo(
-    () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
-    [tracksMetadata, tools, metadataByTool],
+    () => (canOfferSync && tools ? computeDrift(tools, metadataByTool) : []),
+    [canOfferSync, tools, metadataByTool],
   );
 
   return (
@@ -220,7 +225,6 @@ function RemoteMcpToolsSectionInner({
       {!loading && drift.length > 0 ? (
         <ToolMetadataDriftPanel
           drift={drift}
-          mcpServerId={mcpServerId}
           onSync={sync}
           isSyncing={isSyncing}
         />
@@ -325,21 +329,51 @@ function RemoteMcpToolsList({
       ? (toolEntries.find(([name]) => name === selectedName) ?? null)
       : null;
 
+  const available = toolEntries.filter(([, tool]) => !tool.unavailable);
+  const unavailable = toolEntries.filter(([, tool]) => tool.unavailable);
+
+  const renderRows = (entries: Array<[string, ProxiedMcpTool]>) => (
+    <div className="border-neutral-softest w-full overflow-hidden border">
+      {entries.map(([name, tool]) => (
+        <RemoteToolRow
+          key={name}
+          name={name}
+          description={tool.description}
+          annotations={tool.annotations}
+          stored={metadataByTool[name]}
+          selected={name === selectedName}
+          onSelect={() => setSelectedName(name)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden border">
-        {toolEntries.map(([name, tool]) => (
-          <RemoteToolRow
-            key={name}
-            name={name}
-            description={tool.description}
-            annotations={tool.annotations}
-            stored={metadataByTool[name]}
-            selected={name === selectedName}
-            onSelect={() => setSelectedName(name)}
-          />
-        ))}
-      </div>
+      {unavailable.length === 0 ? (
+        renderRows(available)
+      ) : (
+        <div className="flex flex-col gap-8">
+          {available.length > 0 ? (
+            <div>
+              <h4 className="text-eyebrow mb-2">
+                Available ({available.length})
+              </h4>
+              {renderRows(available)}
+            </div>
+          ) : null}
+          <div>
+            <h4 className="text-eyebrow mb-2">
+              Not available ({unavailable.length})
+            </h4>
+            <Text muted small className="mb-2">
+              Your access or this server&apos;s policy doesn&apos;t allow these
+              tools.
+            </Text>
+            {renderRows(unavailable)}
+          </div>
+        </div>
+      )}
 
       <Sheet
         open={selected !== null}
@@ -566,27 +600,26 @@ function ToolRowSkeleton(): JSX.Element {
 }
 
 /**
- * The needs-connect state: a centered card prompting the user to connect
- * upstream before tools can be listed. Connecting opens the first-party connect
- * page; returning focus re-attempts the listing.
+ * The needs-connect state. Connecting opens the first-party connect page;
+ * returning focus re-attempts the listing, which saves any tools new to the
+ * project whoever is connecting, so the copy says so.
  */
 function RemoteMcpToolsConnectPrompt({
   onConnect,
 }: {
-  onConnect?: () => void;
+  onConnect: () => void;
 }): JSX.Element {
   return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 border px-6 py-12 text-center">
-      <PlugZap className="text-muted-foreground/70 size-8" />
-      <Text muted small>
-        Connect to this MCP to view the tools.
-      </Text>
-      {onConnect ? (
+    <InlineEmptyState
+      icon="plug-zap"
+      heading="Sign in to load this server's tools"
+      description="Connect your own account. Speakeasy then saves the server's tool list for this project, so roles can use it."
+      action={
         <Button variant="secondary" onClick={onConnect}>
-          <Button.Text>Connect</Button.Text>
+          <Button.Text>Connect account</Button.Text>
         </Button>
-      ) : null}
-    </div>
+      }
+    />
   );
 }
 

@@ -64,17 +64,25 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
-	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
-	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
-	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
-	sourceKindCron      = bgtriggers.DefinitionSlugCron
-	sourceKindWake      = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack = bgtriggers.DefinitionSlugSlack
+	// sourceKindSpeakeasySlack carries mentions of, and direct messages to,
+	// the Speakeasy Slack app, routed to the project's managed assistant.
+	sourceKindSpeakeasySlack = bgtriggers.DefinitionSlugSpeakeasySlack
+	sourceKindMSTeams        = bgtriggers.DefinitionSlugMSTeams
+	sourceKindLinear         = bgtriggers.DefinitionSlugLinear
+	sourceKindGithub         = bgtriggers.DefinitionSlugGithub
+	sourceKindCron           = bgtriggers.DefinitionSlugCron
+	sourceKindWake           = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard      = bgtriggers.DefinitionSlugDashboard
 	// sourceKindWarmup marks the event-less thread that eager-boots the
 	// runtime at assistant creation. It has no source adapter — adapters are
 	// only consulted while processing events, and this thread never has any.
 	sourceKindWarmup = "warmup"
+
+	// SessionSurfaceSpeakeasySlack is the chat session surface for turns from
+	// the built-in Speakeasy Slack app, so session lists can tell them apart
+	// from ordinary assistant chats that share the assistants inference source.
+	SessionSurfaceSpeakeasySlack = "speakeasy-slack"
 	// sourceKindSetup marks a client-driven setup/onboarding chat linked to an
 	// assistant by the /chat/completions handler (see chat.linkSetupAssistantThread).
 	// Like warmup it carries no source adapter and enqueues no runtime events, so
@@ -471,6 +479,7 @@ type ServiceCore struct {
 	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
+	speakeasySlack    SpeakeasySlackTokens
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -531,6 +540,7 @@ func NewServiceCore(
 		assetSigningKey:             "",
 		envLoader:                   nil,
 		slackImages:                 nil,
+		speakeasySlack:              nil,
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
@@ -1366,6 +1376,122 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
 
+// errEnvironmentBindingForbidden rejects binding an environment the caller
+// cannot read: its values reach every tool on the bound server.
+var errEnvironmentBindingForbidden = errors.New("binding an environment to an assistant server requires environment:read on it")
+
+type environmentBinding struct {
+	serverID      uuid.UUID
+	environmentID uuid.UUID
+}
+
+// readableEnvironments returns which of the payload's environments the caller
+// can read. It authorizes before any assistant locks are taken.
+func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) (func(environmentID uuid.UUID) bool, error) {
+	slugs := make([]string, 0, len(toolsets)+len(mcpServers))
+	addSlug := func(slug *string) {
+		if slug != nil && *slug != "" && !slices.Contains(slugs, *slug) {
+			slugs = append(slugs, *slug)
+		}
+	}
+	for _, ref := range toolsets {
+		if ref != nil {
+			addSlug(ref.EnvironmentSlug)
+		}
+	}
+	for _, ref := range mcpServers {
+		if ref != nil {
+			addSlug(ref.EnvironmentSlug)
+		}
+	}
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := assistantrepo.New(s.db).ResolveEnvironmentsForWrite(ctx, assistantrepo.ResolveEnvironmentsForWriteParams{ProjectID: projectID, Slugs: slugs})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant environments: %w", err)
+	}
+	checks := make([]authz.Check, 0, len(rows)+1)
+	for _, row := range rows {
+		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, row.ID.String(), projectID.String()))
+	}
+	// An unknown slug reports not-found only to callers who can read the project's environments.
+	unresolved := len(rows) < len(slugs)
+	if unresolved {
+		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+	}
+	readable, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("authorize assistant environments: %w", err)
+	}
+	canRead := idSetPredicate(readable)
+	if unresolved && !canRead(projectID) {
+		return nil, errEnvironmentBindingForbidden
+	}
+	return canRead, nil
+}
+
+// idSetPredicate reports membership in ids, ignoring any that are not UUIDs.
+func idSetPredicate(ids []string) func(uuid.UUID) bool {
+	allowed := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		if parsed, err := uuid.Parse(id); err == nil {
+			allowed[parsed] = struct{}{}
+		}
+	}
+	return func(id uuid.UUID) bool {
+		_, ok := allowed[id]
+		return ok
+	}
+}
+
+// requireReadableEnvironmentBindings requires every environment this write
+// binds to a server to be in canBindEnvironment, except bindings the assistant
+// already has. assistantID is uuid.Nil for a new assistant.
+func requireReadableEnvironmentBindings(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, toolsets []resolvedToolsetInsert, servers []resolvedMcpServerInsert, canBindEnvironment func(environmentID uuid.UUID) bool) error {
+	requested := make([]environmentBinding, 0, len(toolsets)+len(servers))
+	for _, ref := range toolsets {
+		if ref.EnvironmentID.Valid {
+			requested = append(requested, environmentBinding{serverID: ref.ToolsetID, environmentID: ref.EnvironmentID.UUID})
+		}
+	}
+	for _, ref := range servers {
+		if ref.EnvironmentID.Valid {
+			requested = append(requested, environmentBinding{serverID: ref.MCPServerID, environmentID: ref.EnvironmentID.UUID})
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
+
+	existing := map[environmentBinding]struct{}{}
+	if assistantID != uuid.Nil {
+		rows, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
+			AssistantIds: []uuid.UUID{assistantID},
+			ProjectID:    projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("load assistant environment bindings: %w", err)
+		}
+		for _, row := range rows {
+			if row.EnvironmentID.Valid {
+				existing[environmentBinding{serverID: row.McpServerID, environmentID: row.EnvironmentID.UUID}] = struct{}{}
+			}
+		}
+	}
+
+	for _, binding := range requested {
+		if _, ok := existing[binding]; ok {
+			continue
+		}
+		if canBindEnvironment == nil || !canBindEnvironment(binding.environmentID) {
+			return fmt.Errorf("environment %s: %w", binding.environmentID, errEnvironmentBindingForbidden)
+		}
+	}
+	return nil
+}
+
 // errMCPEnableUnavailable rejects attaching a toolset whose hosted server cannot be re-enabled as it is configured.
 var errMCPEnableUnavailable = errors.New("the toolset's hosted MCP server cannot be enabled as configured: it needs an address, and private network access needs an online network ingress")
 
@@ -1577,6 +1703,7 @@ func (s *ServiceCore) CreateAssistant(
 	status string,
 	provisionIdentity bool,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
+	canBindEnvironment func(environmentID uuid.UUID) bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1628,6 +1755,9 @@ func (s *ServiceCore) CreateAssistant(
 	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
 	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved))
 	if err != nil {
+		return assistantRecord{}, err
+	}
+	if err := requireReadableEnvironmentBindings(ctx, tx, projectID, uuid.Nil, resolved, resolvedMcpServers, canBindEnvironment); err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
@@ -1746,6 +1876,7 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
+	canBindEnvironment func(environmentID uuid.UUID) bool,
 	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
 	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
@@ -1848,6 +1979,9 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
+		if err := requireReadableEnvironmentBindings(ctx, tx, projectID, record.ID, resolved, resolvedMcpServers, canBindEnvironment); err != nil {
+			return assistantRecord{}, err
+		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
 		}
@@ -2030,10 +2164,10 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 
 // ReapInactiveAssistantRuntimesParams configures one janitor sweep.
 type ReapInactiveAssistantRuntimesParams struct {
-	// InactivityThreshold is the minimum quiet period before an assistant's
-	// runtime rows become candidates for collection. The query compares
-	// against r.updated_at across all of an assistant's rows so a normal
-	// cold-warm-cold cycle keeps the assistant out of the candidate set.
+	// InactivityThreshold is the minimum assistant-wide quiet period for
+	// orphan collection. The query compares r.updated_at across all of an
+	// assistant's rows so a normal cold-warm-cold cycle delays orphan cleanup.
+	// Superseded-backend and retired Kit candidates bypass this threshold.
 	InactivityThreshold time.Duration
 	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
 	// activity duration bounded under Temporal's StartToCloseTimeout.
@@ -2045,10 +2179,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
 // runtime rows that are finalized (soft-deleted or ended) or belong to a
-// soft-deleted assistant, whose owning assistant has had no recorded
+// soft-deleted assistant or project, whose owning assistant has had no recorded
 // activity within InactivityThreshold, and tears down the backend resources
-// their Stop/Reap left behind. A live row under a live assistant is never a
-// candidate: an idle runtime keeps its VM until the assistant is deleted.
+// their Stop/Reap left behind. A live row under a live assistant and project is
+// never an orphan candidate: inactivity alone does not discard its workspace.
+// The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
@@ -2459,6 +2594,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		SessionSurface: conv.ToPGTextEmpty(assistantChatSessionSurface(sourceKind)),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
@@ -2612,7 +2748,7 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourcePayloadJSON = wrapped
 	}
 	switch task.DefinitionSlug {
-	case sourceKindSlack:
+	case sourceKindSlack, sourceKindSpeakeasySlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -2629,7 +2765,7 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+		return task.DefinitionSlug, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindMSTeams:
 		var event msteamsEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -2919,8 +3055,9 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		OrganizationID: assistant.OrganizationID,
 		// Warmup turns have no user either, so the creator owns them for the
 		// same reason external-source turns do.
-		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
-		Title:  conv.ToPGText(chat.DefaultChatTitle),
+		UserID:         conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		SessionSurface: conv.ToPGTextEmpty(assistantChatSessionSurface(sourceKindWarmup)),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -3414,10 +3551,18 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
+		senderLine, err := s.speakeasySenderContextLine(ctx, thread, identity)
+		if err != nil {
+			return nil, err
+		}
+		prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
+		if err != nil {
+			return nil, err
+		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
-		case sourceKindSlack:
+		case sourceKindSlack, sourceKindSpeakeasySlack:
 			inputParts = s.slackTurnImageParts(ctx, thread, event)
 		case sourceKindDashboard:
 			inputParts = s.dashboardTurnAttachmentParts(ctx, assistant.ProjectID, event)
@@ -3520,6 +3665,13 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
 			} else {
 				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			}
+			routed, err := s.speakeasySlackRouted(ctx, assistant)
+			if err != nil {
+				return nil, err
+			}
+			if routed {
+				platformSlugs = append(platformSlugs, platformtools.SpeakeasySlackPlatformToolsetSlug)
 			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):

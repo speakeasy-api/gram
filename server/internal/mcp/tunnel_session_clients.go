@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +36,18 @@ const (
 	// tunnelClientStoreTimeout bounds each Redis call. Attribution is best
 	// effort and must never hold up an MCP request.
 	tunnelClientStoreTimeout = 250 * time.Millisecond
+
+	// rowClientReadPause stops the connection writer reading after a failed
+	// read, so a Redis outage can't hold up its inserts one row at a time.
+	rowClientReadPause = 30 * time.Second
 )
+
+// rememberedClient is what one replica keeps about a session.
+type rememberedClient struct {
+	family  string
+	name    string
+	version string
+}
 
 type tunnelClientCacheKey struct {
 	projectID uuid.UUID
@@ -53,14 +67,69 @@ type tunnelClientCacheKey struct {
 // cannot outrun it.
 type tunnelClientFamilies struct {
 	store sessionClientInfoStore
-	cache *expirable.LRU[tunnelClientCacheKey, string]
+	cache *expirable.LRU[tunnelClientCacheKey, rememberedClient]
+
+	// rowReadsPausedUntil is unix milliseconds. Only reads for connection rows check it.
+	rowReadsPausedUntil atomic.Int64
+}
+
+func tunnelClientKey(projectID uuid.UUID, scope, sessionID string) tunnelClientCacheKey {
+	return tunnelClientCacheKey{projectID: projectID, scope: scope, session: sha256.Sum256([]byte(sessionID))}
 }
 
 func newTunnelClientFamilies(store sessionClientInfoStore) *tunnelClientFamilies {
 	return &tunnelClientFamilies{
-		store: store,
-		cache: expirable.NewLRU[tunnelClientCacheKey, string](tunnelClientCacheSize, nil, tunnelClientCacheTTL),
+		store:               store,
+		cache:               expirable.NewLRU[tunnelClientCacheKey, rememberedClient](tunnelClientCacheSize, nil, tunnelClientCacheTTL),
+		rowReadsPausedUntil: atomic.Int64{},
 	}
+}
+
+// remembered returns a session's client from memory, else from Redis. A miss is
+// remembered and a failed read is not.
+func (c *tunnelClientFamilies) remembered(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (rememberedClient, error) {
+	key := tunnelClientKey(projectID, scope, sessionID)
+	if client, ok := c.cache.Get(key); ok {
+		return client, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, tunnelClientStoreTimeout)
+	defer cancel()
+	info, err := c.store.Load(ctx, projectID, scope, sessionID, time.Now().UnixMilli())
+	switch {
+	case errors.Is(err, sessionclientinfo.ErrNotFound):
+		// No Redis, an evicted record, a session opened before this was
+		// recorded, or a client that reported neither a name nor a protocol
+		// version.
+	case err != nil:
+		message := "failed to load mcp session client info"
+		if strings.HasPrefix(scope, tunnelClientInfoScopePrefix) {
+			message = "failed to load tunneled mcp session client info"
+		}
+		logger.WarnContext(ctx, message, attr.SlogError(err))
+		return rememberedClient{family: "", name: "", version: ""}, fmt.Errorf("load session client info: %w", err)
+	}
+	client := rememberedClient{family: reportedClientFamily(info.Name), name: info.Name, version: info.Version}
+	c.cache.Add(key, client)
+	return client, nil
+}
+
+// forRow reads a session's client for a connection row. It runs on the
+// connection writer, which has no request to outlive.
+func (c *tunnelClientFamilies) forRow(logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (name, version string) {
+	key := tunnelClientKey(projectID, scope, sessionID)
+	if client, ok := c.cache.Get(key); ok {
+		return client.name, client.version
+	}
+	if time.Now().UnixMilli() < c.rowReadsPausedUntil.Load() {
+		return "", ""
+	}
+	client, err := c.remembered(context.Background(), logger, projectID, scope, sessionID)
+	if err != nil {
+		c.rowReadsPausedUntil.Store(time.Now().Add(rowClientReadPause).UnixMilli())
+		return "", ""
+	}
+	return client.name, client.version
 }
 
 // forServer scopes session records to one tunneled MCP server, since session
@@ -83,10 +152,6 @@ type tunnelSessionClients struct {
 	scope     string
 }
 
-func (s *tunnelSessionClients) key(sessionID string) tunnelClientCacheKey {
-	return tunnelClientCacheKey{projectID: s.projectID, scope: s.scope, session: sha256.Sum256([]byte(sessionID))}
-}
-
 func (s *tunnelSessionClients) RecordInitialize(ctx context.Context, sessionID string, params *mcp.InitializeParams) {
 	if params == nil {
 		return
@@ -103,31 +168,17 @@ func (s *tunnelSessionClients) RecordInitialize(ctx context.Context, sessionID s
 		sessionID:       sessionID,
 		clientInfoScope: s.scope,
 	}, name, version, params.ProtocolVersion)
-	s.families.cache.Add(s.key(sessionID), reportedClientFamily(name))
+	key := tunnelClientKey(s.projectID, s.scope, sessionID)
+	s.families.cache.Add(key, rememberedClient{family: reportedClientFamily(name), name: mcprequests.SanitizeClientInfoField(name), version: mcprequests.SanitizeClientInfoField(version)})
 }
 
 func (s *tunnelSessionClients) ClientFamily(ctx context.Context, sessionID string) string {
-	key := s.key(sessionID)
-	if family, ok := s.families.cache.Get(key); ok {
-		return family
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, tunnelClientStoreTimeout)
-	defer cancel()
-	info, err := s.families.store.Load(ctx, s.projectID, s.scope, sessionID, time.Now().UnixMilli())
-	switch {
-	case errors.Is(err, sessionclientinfo.ErrNotFound):
-		// No Redis, an evicted record, a session opened before this was
-		// recorded, or a client that reported neither a name nor a protocol
-		// version.
-	case err != nil:
-		// Not cached, so the next request retries.
-		s.logger.WarnContext(ctx, "failed to load tunneled mcp session client info", attr.SlogError(err))
+	client, err := s.families.remembered(ctx, s.logger, s.projectID, s.scope, sessionID)
+	if err != nil {
+		// Not remembered, so the next request retries.
 		return ""
 	}
-	family := reportedClientFamily(info.Name)
-	s.families.cache.Add(key, family)
-	return family
+	return client.family
 }
 
 // reportedClientFamily classifies a reported clientInfo.name, or returns ""

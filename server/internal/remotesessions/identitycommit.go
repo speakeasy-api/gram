@@ -1274,6 +1274,7 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 		return repo.RemoteSessionClient{}, err
 	}
 	client, err := tx.q.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
+		ForwardClientName:     false,
 		ID:                    id,
 		ProjectID:             conv.ToNullUUID(c.plan.Scope.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
@@ -1312,6 +1313,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		clientIDIssuedAt = credentials.IssuedAt
 	}
 	client, err := tx.q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       conv.ToNullUUID(c.plan.Scope.ProjectID),
 		OrganizationID:                  conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
 		RemoteSessionIssuerID:           c.provider.ID,

@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -525,6 +527,40 @@ func TestAdminRemoteSessions_UpdateGlobalClient(t *testing.T) {
 		Audience:                nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// Global clients serve every org, so no org or project update can opt one into
+// forwarding the client name.
+func TestAdminRemoteSessions_GlobalClientCannotForwardClientName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "forward-name-global-host"))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-forward-name-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	require.False(t, created.ForwardClientName)
+
+	on := true
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: created.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.False(t, stored.ForwardClientName)
 }
 
 func TestAdminRemoteSessions_UpdateGlobalClient_NotFound(t *testing.T) {

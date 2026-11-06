@@ -53,6 +53,15 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,
@@ -386,8 +395,8 @@ describe("plugin detail permission boundary", () => {
 
   it("does not mount either query tree until grants are loaded", () => {
     state.loading = true;
-    const { container } = render(<PluginDetail />);
-    expect(container.innerHTML).toBe("");
+    render(<PluginDetail />);
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
     expect(adminQuery).not.toHaveBeenCalled();
   });
   it("mounts admin detail but not assignment queries for org readers", () => {

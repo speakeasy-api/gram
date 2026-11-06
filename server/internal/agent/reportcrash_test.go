@@ -22,7 +22,7 @@ func crashReport(id string) *gen.AgentCrashReport {
 		Component:       "runtime",
 		OccurredAt:      "2026-10-27T12:00:00Z",
 		Count:           1,
-		Build:           &gen.AgentCrashBuild{Binary: "speakeasyd", Version: "0.42.0", Channel: nil, Os: nil, Arch: nil},
+		Build:           &gen.AgentCrashBuild{Binary: "speakeasyd", Version: "0.42.0", Channel: nil, Os: nil, Arch: nil, OsVersion: nil},
 		Message:         new("fatal error: concurrent map writes"),
 		PanicType:       nil,
 		Stack:           []*gen.AgentCrashFrame{{Function: "runtime.throw", File: new("runtime/panic.go"), Line: nil}},

@@ -251,6 +251,26 @@ func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPol
 	return i, err
 }
 
+const deleteAgentPrincipalGrants = `-- name: DeleteAgentPrincipalGrants :exec
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+`
+
+type DeleteAgentPrincipalGrantsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+// Removes every grant naming a deleted agent: its own policy and the server
+// rules that name it. A deleted agent can never act again, so these decide
+// nothing, and leaving them makes audience saves resend a principal that no
+// longer validates.
+func (q *Queries) DeleteAgentPrincipalGrants(ctx context.Context, arg DeleteAgentPrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, deleteAgentPrincipalGrants, arg.OrganizationID, arg.AgentID)
+	return err
+}
+
 const deleteConnectionBlock = `-- name: DeleteConnectionBlock :one
 DELETE FROM agent_connection_blocks
 WHERE organization_id = $1
@@ -760,6 +780,51 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentNamesIncludingDeleted = `-- name: ListAgentNamesIncludingDeleted :many
+SELECT id, name, deleted, owner_user_id, owner_reassignment_required_at
+FROM agents
+WHERE organization_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListAgentNamesIncludingDeletedRow struct {
+	ID                          uuid.UUID
+	Name                        string
+	Deleted                     bool
+	OwnerUserID                 string
+	OwnerReassignmentRequiredAt pgtype.Timestamptz
+}
+
+// Reads every agent's name in an organization, deleted agents included, for
+// labelling records written while they existed. The deleted flag lets a
+// label link to the agent only while it exists, and the owner columns let the
+// caller apply the agent visibility rule before showing the name.
+func (q *Queries) ListAgentNamesIncludingDeleted(ctx context.Context, organizationID string) ([]ListAgentNamesIncludingDeletedRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNamesIncludingDeleted, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesIncludingDeletedRow
+	for rows.Next() {
+		var i ListAgentNamesIncludingDeletedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Deleted,
+			&i.OwnerUserID,
+			&i.OwnerReassignmentRequiredAt,
 		); err != nil {
 			return nil, err
 		}

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -133,7 +134,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{attachedSession: checked}}
 				choices := &memberChoices{enforced: true, byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return s.resolveChosenMemberTokens(ctx, endpoint, urn.NewAgentSubject(agent), true, member)
+					return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), true, member)
 				}}
 				// Simulate replacing the attachment after permission checked its
 				// exact session, but before the credential lookup reads it.
@@ -219,7 +220,7 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 			session := uuid.New()
 			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
-			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}
+			source := &agentMemberOutageTokens{fakeUpstreamTokens: &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}}
 			f.service.upstreamTokens = source
 			agentID := uuid.New()
 			ctx := admittedAgentContext(t, f.orgID, agentID)
@@ -242,8 +243,26 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			} else {
 				require.Equal(t, urn.NewUserSubject("user_owner"), source.subjects[0], "the authorizer's own connection serves")
 			}
+			source.clientErr = remotesessions.ErrRemoteSessionUnavailable
+			_, err = f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok, "agent outage must reach request recorder: %v", err)
+			require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+			_, unavailable := errors.AsType[memberUnavailableError](err)
+			require.True(t, unavailable)
+
 		})
 	}
+}
+
+// agentMemberOutageTokens injects outages into both token lookup paths.
+// Enforced members use the typed lookup rather than the legacy sign-in lookup.
+type agentMemberOutageTokens struct {
+	*fakeUpstreamTokens
+}
+
+func (f *agentMemberOutageTokens) ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
 }
 
 // A handback to the upstream client choice reads the connection the permit
@@ -266,7 +285,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{authorizerOwner: owner}}
-				_, err := s.resolveChosenMemberTokens(t.Context(), endpoint, agent, true, member)
+				_, err := s.resolveChosenMemberTokens(t.Context(), remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
 				require.NoError(t, err)
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent, chosenClient: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authorizerOwner: owner}
 				if typed {

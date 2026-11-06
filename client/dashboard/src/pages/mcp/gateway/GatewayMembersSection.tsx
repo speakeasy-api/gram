@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { RequireScope } from "@/components/require-scope";
@@ -43,7 +44,6 @@ import {
   Code,
   FileCode,
   Globe,
-  Loader2,
   Plus,
   Server,
   Trash2,
@@ -645,7 +645,7 @@ export function GatewayMembersSection({
             >
               {mutating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Remove server</Button.Text>

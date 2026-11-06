@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
@@ -41,7 +42,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
   getSelectableMembers,
@@ -61,7 +62,9 @@ import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
   isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
 } from "./types";
+import { resourceKindForScope } from "@/hooks/useRBAC";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
@@ -157,6 +160,68 @@ interface CreateRoleDialogProps {
   hideAssignments?: boolean;
   /** Pre-fills the name of a new role, such as the group it is created for. */
   defaultName?: string;
+  /**
+   * Pre-selects allow grants on a new role, such as the one permission an
+   * access request asked for.
+   */
+  defaultScopes?: Scope[];
+  /**
+   * The resource the default scopes were asked for. The pre-filled rules are
+   * limited to it, so the new role grants no more than the request.
+   */
+  defaultResource?: { resourceId?: string; projectId?: string };
+}
+
+/**
+ * The selectors that limit a pre-filled grant to the requested resource, in
+ * the shape the rule editor reads: the resource by its id, or a project-wide
+ * rule for the kinds that narrow by project. Null means unrestricted, which
+ * is all a kind without resources of its own can be.
+ */
+function requestedSelectors(
+  scope: Scope,
+  resource: CreateRoleDialogProps["defaultResource"],
+): Selector[] | null {
+  const kind = resourceKindForScope(scope);
+  if (
+    !resource ||
+    !isKnownResourceType(kind) ||
+    isUnrestrictedResourceType(kind)
+  )
+    return null;
+  if (resource.resourceId) {
+    return [{ resourceKind: kind, resourceId: resource.resourceId }];
+  }
+  if (!resource.projectId) return null;
+  if (kind === "mcp" || isProjectFilteredResourceType(kind)) {
+    return [
+      { resourceKind: kind, resourceId: "*", projectId: resource.projectId },
+    ];
+  }
+  if (isProjectSelectableResourceType(kind)) {
+    return [{ resourceKind: kind, resourceId: resource.projectId }];
+  }
+  return null;
+}
+
+function grantsFor(
+  scopes: Scope[],
+  resource: CreateRoleDialogProps["defaultResource"],
+): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = Object.create(null);
+  for (const scope of scopes) {
+    result[scope] = {
+      scope,
+      rules: [
+        {
+          id: crypto.randomUUID(),
+          effect: "allow",
+          selectors: requestedSelectors(scope, resource),
+        },
+      ],
+    };
+  }
+  return result;
 }
 
 export function CreateRoleDialog({
@@ -168,6 +233,8 @@ export function CreateRoleDialog({
   presentation = "sheet",
   hideAssignments = false,
   defaultName = "",
+  defaultScopes,
+  defaultResource,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -175,7 +242,9 @@ export function CreateRoleDialog({
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
-  const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
+  const [grants, setGrants] = useState<Record<string, RoleGrant>>(() =>
+    grantsFor(defaultScopes ?? [], defaultResource),
+  );
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
@@ -1129,7 +1198,7 @@ export function CreateRoleDialog({
             <Button onClick={handleSubmit} disabled={saveDisabled}>
               {isMutating && (
                 <Button.LeftIcon>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>

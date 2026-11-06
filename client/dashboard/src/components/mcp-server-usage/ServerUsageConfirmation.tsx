@@ -2,6 +2,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { connectionActivityLabel } from "@/lib/connection-state";
 import { getInitials } from "@/lib/initials";
@@ -58,9 +59,9 @@ function ServerUsageImpactPanel({
     return null;
   } else if (impact.isFetching && !impact.data) {
     body = (
-      <Text small muted>
-        Checking who uses this server…
-      </Text>
+      <div role="status" aria-label="Checking who uses this server">
+        <Skeleton className="h-10 w-full" />
+      </div>
     );
   } else if (impact.isError || !impact.data) {
     body = (

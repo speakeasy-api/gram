@@ -388,6 +388,8 @@ WITH selected AS (
      AND c.deleted IS FALSE
     WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
       AND link.deleted IS FALSE
+      -- Explicit no-auth proposals must not borrow a client's header coverage.
+      AND NOT $8::boolean
       AND (
         -- A named client is the only candidate, whatever its type.
         ($7::uuid IS NOT NULL
@@ -641,6 +643,7 @@ type GetAuthClientSelectionParams struct {
 	OrganizationID         string
 	ProposedRegistrationID uuid.NullUUID
 	ProposedAuthClientID   uuid.NullUUID
+	ProposedNoAuth         bool
 }
 
 type GetAuthClientSelectionRow struct {
@@ -690,6 +693,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		arg.OrganizationID,
 		arg.ProposedRegistrationID,
 		arg.ProposedAuthClientID,
+		arg.ProposedNoAuth,
 	)
 	if err != nil {
 		return nil, err

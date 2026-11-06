@@ -177,6 +177,31 @@ Read this map as "if a handler requires the key scope, any scope in the value li
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
+#### Scope catalogue
+
+What a person reads about a scope lives in one place, `server/internal/authz/catalog.go`, beside the tables that define its semantics. `access.listScopes` projects the catalogue, so every entry carries:
+
+- `label`: the short name shown instead of the slug (`log:read` is "View tool logs").
+- `description`: what a holder can do and, where it matters, what the scope does not include.
+- `category`: how the dashboard groups the scope. It differs from `resource_type` where one resource kind carries several permission families: `plugin:write` and `log:read` are checked against a project, but a role editor lists them under plugins and tool logs, not under projects.
+- `sensitive` and `sensitivity`: whether granting the scope deserves a warning, and why. The set is a product decision: `chat:read` and `chat:write` (`conversations`, other members' transcripts), `log:read` (`tool_logs`, every member's tool arguments, results and prompt text), and `org:admin` (`destructive_admin`, removes members and rewrites every role). Secrets and credentials are deliberately not in it. A scope that includes a sensitive scope is itself sensitive, so a broader grant never loses the warning.
+- `sub_scopes`: the scopes a grant of this one also satisfies, from `scopeExpansions`.
+
+`TestScopeCatalog_CoversEveryRegisteredScope` fails when a scope is added without an entry, and `TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum` fails when the catalogue emits a category or reason the Goa design does not declare; generated clients would otherwise reject the whole `listScopes` response. Dashboard copy for a permission comes from these fields; the client keeps no list of its own.
+
+#### Tasks
+
+A task usually needs more than one scope, and a person who is refused one of them is better told "this is part of setting up an agent, which also needs `environment:read`" than shown a slug. `server/internal/authz/tasks.go` lists those tasks by hand: a slug, a label, and every scope the task needs end to end. `access.listScopes` serves the list as `tasks`, and the dashboard uses it in the access-restricted page and in the grant dialog. `TestTasks_StayInsideTheCatalogue` keeps every listed scope catalogued, user-visible and not already implied by another scope in the same task. The handlers that call `Require` are the source of truth for what a task needs; update the list when a flow starts or stops enforcing a scope.
+
+#### Explaining a 403
+
+The body of a refused request stays the generic `forbidden` error. The detail travels in two response headers added by `middleware.DenialHeaders` when the authz engine refused a scope and the handler answered 403:
+
+- `Gram-Required-Scope`: the scope slug the check lacked, such as `log:read`.
+- `Gram-Required-Resource-Kind`: the kind of resource it was checked against, such as `project` or `mcp`.
+
+Only the slug and the kind leave the server; the resource id and the caller's grants do not. A handler may probe a scope, swallow the refusal and continue, so the engine records the most recent denial and the middleware only reads it on a 403. The dashboard maps the slug to the catalogue (`client/dashboard/src/lib/denial.ts`) so a failed mutation says which permission is needed and where, and an access request email names the permission with its catalogue label and description.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
@@ -635,7 +660,7 @@ mcp:connect
 skill:read
 ```
 
-`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled. Repeated provisioning intentionally does not restore customized or removed system-role grants. Disabling Skills does not remove grants. Most Observe pages remain `org:admin`-only, while the Identities roster uses the member role's default `project:read` grant; members also receive `org:read`, which opens identity detail pages.
+`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Selecting an environment so its values reach code the caller can run also requires `environment:read` on that environment, not just `project:write`: direct tool invocation with `environment_slug` (`/rpc/instances.invoke/tool`), linking an environment to a source or toolset (and removing that link), a toolset's `default_environment_slug`, an MCP server's `environment_id`, and an assistant's per-server environment all go through `environments.ResolveReadableEnvironment` or the same check. Updating a toolset's `default_environment_slug`, an MCP server's `environment_id`, or an assistant's per-server environment to the environment already bound there needs no new grant; source and toolset environment links are re-checked on every write. A new toolset only autofills the `default` environment, and a cloned toolset only keeps its source's default environment, when the caller can read it. Legacy API keys skip RBAC and keep their existing access. Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled. Repeated provisioning intentionally does not restore customized or removed system-role grants. Disabling Skills does not remove grants. Most Observe pages remain `org:admin`-only, while the Identities roster uses the member role's default `project:read` grant; members also receive `org:read`, which opens identity detail pages.
 
 `plugin:write` is a separate project-selected capability for plugin CRUD, skill and MCP references, and publishing. It does not imply `skill:write`, `mcp:write`, or any read scope; skill authoring permissions and defaults are unchanged. Skill distribution additionally requires `skill:read` for the referenced skill. Full plugin reads retain `org:read` (and normal project admission); minimal skill distribution discovery retains `skill:read`. Audience assignments and marketplace settings remain `org:admin`-only. Admin defaults include `plugin:write`; existing `org:admin` grants remain an explicit alternative, without rewriting customized roles. `plugin:blocked_write` excludes plugin mutations even when an admin alternative is available. Members do not receive plugin write access by default.
 
@@ -653,7 +678,7 @@ Assistant checks follow the MCP pattern: the check names the assistant and carri
 
 The first covers every assistant in the organization, the second every assistant in one project (including creating new ones there), and the third exactly one assistant. A grant naming one assistant cannot create assistants or see its siblings. Attaching a toolset or MCP server to an assistant (on create or update) additionally requires `mcp:connect` on each attached server, so an assistant grant cannot widen what the assistant reaches beyond what the caller can connect to. The same selectors are valid in agent policy grants: `assistant:read` and `assistant:write` are agent-runtime-safe from runtime scope registry version 3, so an agent can hold `assistant:write` restricted to its own assistant. The role editor offers the organization-wide and per-project shapes; grants naming one assistant are created through the API and kept as stored.
 
-Admin defaults include `assistant:read` and `assistant:write`; Member defaults include `assistant:read`. Organizations whose system-role grants were seeded before these scopes existed have no stored rows for them, so `authz.LoadGrants` supplies the unrestricted defaults for the built-in Admin and Member role principals at load time.
+Admin defaults include `assistant:read` and `assistant:write`; Member defaults include `assistant:read`. `authz.LoadGrants` returns exactly the stored grants and never synthesizes defaults, so removing every assistant grant from a built-in role revokes assistant access for its members. Organizations whose system-role grants were seeded before these scopes existed need the one-time `assistant-role-grants` operator backfill (`server/cmd/tools/migrations/ASSISTANT_ROLE_GRANTS_BACKFILL.md`) applied with or before the deploy; until it runs, their built-in roles have no assistant access. The backfill skips any role whose audit history shows an assistant grant change.
 
 System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 

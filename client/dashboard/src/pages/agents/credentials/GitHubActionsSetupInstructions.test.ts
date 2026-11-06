@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -387,19 +388,25 @@ describe("workflowYaml", () => {
   });
 
   // The job grants id-token: write, so every step can mint its OIDC token: no
-  // action or CLI may come from a branch or tag that could move. speakeasyd is
-  // the deliberate exception: the device agent action installs the latest
-  // stable release unless the step sets version, so a job picks up a fix
-  // without its workflow being edited, and it checks every download, pinned
-  // or not, against the stable release manifest in the same bucket. That
-  // catches a download corrupted or tampered with in transit, not a
+  // other action or CLI may come from a branch or tag that could move.
+  // Speakeasy's own device agent action follows its minor tag, so the
+  // workflow does not change with every release of the action. speakeasyd is
+  // the other deliberate exception: the device agent action installs the
+  // latest stable release unless the step sets version, so a job picks up a
+  // fix without its workflow being edited, and it checks every download,
+  // pinned or not, against the stable release manifest in the same bucket.
+  // That catches a download corrupted or tampered with in transit, not a
   // compromised bucket.
-  it("pins every action and CLI", () => {
+  it("pins every action but the device agent action, and every CLI", () => {
     for (const yaml of variants) {
       const used = yaml.match(/uses: \S+/g) ?? [];
       expect(used.length).toBeGreaterThan(0);
       for (const step of used) {
-        expect(step).toMatch(/@[0-9a-f]{40}$/);
+        if (step.startsWith("uses: speakeasy-api/device-agent-action@")) {
+          expect(step).toBe("uses: speakeasy-api/device-agent-action@v0.1");
+        } else {
+          expect(step).toMatch(/@[0-9a-f]{40}$/);
+        }
       }
       const installed = yaml.match(/npm install -g \S+/g) ?? [];
       expect(installed).toHaveLength(1);
@@ -555,8 +562,10 @@ describe("workflowYaml", () => {
 
   it("installs speakeasyd with the device agent action alone", () => {
     for (const yaml of variants) {
-      expect(yaml).toContain(
-        "uses: speakeasy-api/device-agent-action@596e9f8598bf2896e6dda3c45eb098313b671962 # main",
+      // The action's minor tag, which its release workflow moves to each
+      // 0.1.x release, so the snippet does not change with every release.
+      expect(yaml).toMatch(
+        /^ {8}uses: speakeasy-api\/device-agent-action@v0\.1$/m,
       );
       // The only checkout is the repository's own, and nothing builds
       // speakeasyd before the action installs a release.

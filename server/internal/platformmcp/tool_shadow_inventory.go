@@ -26,7 +26,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 	})
 	addTool(reg, &mcp.Tool{
 		Name:        "get_shadow_mcp_review",
-		Title:       "Get Shadow MCP Review",
+		Title:       "Get a Shadow MCP Server's Review",
 		Description: "Inspect the closed, privacy-safe evidence and review state for one opaque Shadow MCP target from list_shadow_mcp_inventory. Returns aggregate declarations, gaps, advisory counts, and research coverage only; never raw target values, requesters, evidence documents, findings text, citations, or research traces.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetShadowMCPReviewInput) (*mcp.CallToolResult, GetShadowMCPReviewOutput, error) {
@@ -39,7 +39,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 func registerUnavailableShadowInventoryTools(reg *Registrar) {
 	for _, tool := range []struct{ name, title, description string }{
 		{"list_shadow_mcp_inventory", "List Shadow MCP Inventory", "List privacy-safe Shadow MCP inventory. This is not switched on for your organization yet."},
-		{"get_shadow_mcp_review", "Get Shadow MCP Review", "Inspect one privacy-safe Shadow MCP review. This is not switched on for your organization yet."},
+		{"get_shadow_mcp_review", "Get a Shadow MCP Server's Review", "Inspect one privacy-safe Shadow MCP review. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("shadow_mcp_inventory"))
 	}

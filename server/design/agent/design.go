@@ -143,6 +143,41 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
 	})
 
+	Method("getClaudeObservabilityPlugin", func() {
+		Description("Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.")
+
+		// agent_user admits the org install key too (agent implies agent_user);
+		// the handler refuses it, since minting and revoking a member's key
+		// must be bound to that member's own credential.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/agent.getClaudeObservabilityPlugin")
+			security.ByKeyHeader()
+			Response(StatusOK, func() {
+				ContentType("application/zip")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "getAgentClaudeObservabilityPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "getClaudeObservabilityPlugin")
+	})
+
 	Method("hideMcpServer", func() {
 		Description("Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.")
 
@@ -822,6 +857,9 @@ var AgentCrashBuildModel = Type("AgentCrashBuild", func() {
 	})
 	Attribute("arch", String, func() {
 		MaxLength(16)
+	})
+	Attribute("os_version", String, "OS release, e.g. 15.4 on macOS or the kernel release on Linux.", func() {
+		MaxLength(64)
 	})
 })
 

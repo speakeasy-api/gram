@@ -190,6 +190,39 @@ func TestCandidateInspectionOmitsAutomaticClientRegistrationForAnonymous(t *test
 	require.Empty(t, inspection.SetupCategory)
 }
 
+// A remote that listed no tools reports a known-empty set, while one that
+// requires sign-in leaves its tools unknown rather than reporting zero.
+func TestCandidateInspectionReportsToolEvidenceOnlyWhenListed(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		inspection DirectRemoteInspection
+		present    bool
+	}{
+		{name: "listed none", inspection: directRemoteInspection("https://remote.example.test/mcp", []string{}, "anonymous", "not_advertised", false), present: true},
+		{name: "requires sign-in", inspection: directRemoteInspection("https://remote.example.test/mcp", nil, "authentication_required", "available_dcr", true)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			registrar := newRegistrar(newTestMCPServer())
+			registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: test.inspection}, &testRegistrationGate{enabled: true}, allowBudget())
+			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+			require.NoError(t, err)
+
+			raw, err := json.Marshal(result)
+			require.NoError(t, err)
+			if test.present {
+				require.Contains(t, string(raw), `"tool_names":[]`)
+				require.Contains(t, string(raw), `"tool_count":0`)
+			} else {
+				require.NotContains(t, string(raw), `"tool_names"`)
+				require.NotContains(t, string(raw), `"tool_count"`)
+			}
+		})
+	}
+}
+
 func fmtDirectRemoteInspectionError() error {
 	return errors.New("unsafe network detail that must not reach the caller")
 }
@@ -236,8 +269,11 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 				require.Equal(t, "available_dcr", inspection.OAuthDiscovery)
 				require.Equal(t, AutomaticClientRegistrationDCR, inspection.AutomaticClientRegistration)
 				require.True(t, inspection.RequiresDashboardSetup)
+				require.Nil(t, inspection.ToolNames)
+				require.Nil(t, inspection.ToolCount)
 			} else {
 				require.Equal(t, []string{"example"}, inspection.ToolNames)
+				require.Equal(t, new(1), inspection.ToolCount)
 			}
 		})
 	}
@@ -253,7 +289,7 @@ func TestCatalogCandidateOmitsUnknownToolCountAndExplainsSignIn(t *testing.T) {
 	require.NotContains(t, string(raw), "tool_count")
 	require.Contains(t, string(raw), `"auth_setup":"manual"`)
 
-	raw, err = json.Marshal(CatalogCandidate{ToolCount: 3})
+	raw, err = json.Marshal(CatalogCandidate{ToolCount: new(3)})
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"tool_count":3`)
 

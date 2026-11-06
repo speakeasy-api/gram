@@ -212,4 +212,23 @@ describe("readiness summary", () => {
     );
     expect(screen.getByText(text)).toBeTruthy();
   });
+
+  it.each([false, null] as const)(
+    "does not count an optional check of %s as a step",
+    (ready) => {
+      render(
+        <MemoryRouter>
+          <McpServerReadinessBar
+            checks={[
+              configured,
+              { ...configured, key: "plugin", ready, optional: true },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(
+        screen.getByText("This MCP server is ready to be used."),
+      ).toBeTruthy();
+    },
+  );
 });

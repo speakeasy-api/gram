@@ -111,12 +111,13 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  const linkedQuery = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
-  );
-  // Enforcing organizations also attach registrations to the server as
-  // credentials, without linking them to its sign-in.
+  // Enforcing organizations attach registrations to the server as
+  // credentials, and those decide which one a call signs in through. The
+  // issuer can be shared across the organization and binds one registration,
+  // which may belong to another server, so it is read only where it still
+  // routes calls: without enforcement, or while the server's credentials do
+  // not record the upstream yet (setup is incomplete, or a per-person
+  // credential names no registration).
   const upstreamAuth = useUpstreamAuthEnforcement();
   const enforced = upstreamAuth === "enforced";
   const credentialsQuery = useMcpServerAuthentication(
@@ -124,13 +125,32 @@ export function IdentityChainingSection({
     undefined,
     { enabled: enforced, throwOnError: false },
   );
+  const credentials = enforced ? credentialsQuery.data : undefined;
+  const unresolved =
+    !!credentials &&
+    (credentials.status === "setup_incomplete" ||
+      credentials.clients.some(
+        (client) =>
+          client.enabled &&
+          PER_PERSON_CREDENTIALS.has(client.clientType) &&
+          !client.remoteSessionClientId,
+      ));
+  // Whether the issuer's registrations count. When they do not, a failed or
+  // pending earlier read of them neither blocks nor holds the section.
+  const linkedUsed =
+    !!userSessionIssuerId &&
+    upstreamAuth !== "loading" &&
+    (!enforced || unresolved || credentialsQuery.isError);
+  const linkedQuery = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    { enabled: linkedUsed },
+  );
   const credentialRegistrationIds = new Set(
-    (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap(
-      (client) =>
-        client.remoteSessionClientId &&
-        PER_PERSON_CREDENTIALS.has(client.clientType)
-          ? [client.remoteSessionClientId]
-          : [],
+    (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap((client) =>
+      client.remoteSessionClientId &&
+      PER_PERSON_CREDENTIALS.has(client.clientType)
+        ? [client.remoteSessionClientId]
+        : [],
     ),
   );
   const registrationsQuery = useAllRemoteSessionClients(
@@ -139,12 +159,13 @@ export function IdentityChainingSection({
       enabled: !!userSessionIssuerId && credentialRegistrationIds.size > 0,
     },
   );
+  const linked = linkedUsed ? linkedQuery.items : [];
   const clients = [
-    ...linkedQuery.items,
+    ...linked,
     ...registrationsQuery.items.filter(
       (client) =>
         credentialRegistrationIds.has(client.id) &&
-        !linkedQuery.items.some((linked) => linked.id === client.id),
+        !linked.some((other) => other.id === client.id),
     ),
   ];
   const sourceQuery = useGetRemoteMcpServer(
@@ -211,7 +232,7 @@ export function IdentityChainingSection({
   const failed =
     issuerQuery.isError ||
     sourceQuery.isError ||
-    linkedQuery.isError ||
+    (linkedUsed && linkedQuery.isError) ||
     registrationsQuery.isError ||
     (enforced && credentialsQuery.isError) ||
     // Only when Speakeasy's issuer decides whether anyone can vouch.
@@ -220,7 +241,7 @@ export function IdentityChainingSection({
     !failed &&
     (issuerQuery.isLoading ||
       sourceQuery.isLoading ||
-      linkedQuery.isLoading ||
+      (linkedUsed && linkedQuery.isLoading) ||
       registrationsQuery.isLoading ||
       upstreamAuth === "loading" ||
       (enforced && credentialsQuery.isLoading) ||
@@ -271,7 +292,7 @@ export function IdentityChainingSection({
               onClick={() => {
                 void issuerQuery.refetch();
                 void sourceQuery.refetch();
-                linkedQuery.refetch();
+                if (linkedUsed) linkedQuery.refetch();
                 registrationsQuery.refetch();
                 if (credentialsQuery.isError) void credentialsQuery.refetch();
                 if (speakeasyIssuer.isError) void speakeasyIssuer.refetch();

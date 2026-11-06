@@ -231,6 +231,28 @@ func TestUpdateClient(t *testing.T) {
 	require.Nil(t, recleared.Audience)
 }
 
+func TestUpdateClient_ForwardClientName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-forward-name-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-forward-name-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-forward-name-client")
+
+	on, off := true, false
+	updated, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, ForwardClientName: &on})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName)
+
+	updated, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID})
+	require.NoError(t, err)
+	require.True(t, updated.ForwardClientName, "omitted leaves it unchanged")
+
+	updated, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: clientID, ForwardClientName: &off})
+	require.NoError(t, err)
+	require.False(t, updated.ForwardClientName)
+}
+
 func TestUpdateClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 

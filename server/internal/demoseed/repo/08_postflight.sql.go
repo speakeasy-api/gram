@@ -164,8 +164,8 @@ const postflightCountDeviceAgentStateReports = `-- name: PostflightCountDeviceAg
 SELECT count(*) FROM device_agent_state_reports WHERE organization_id = $1::text
 `
 
-// State reports: two attested machines (one only its agent lists) and one
-// enforcing an older policy. Without them every active device reads
+// State reports: three attested machines (one only its agent lists, one a
+// Windows desktop that reports no serial) and one enforcing an older policy. Without them every active device reads
 // unreported.
 func (q *Queries) PostflightCountDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountDeviceAgentStateReports, orgID)
@@ -750,6 +750,19 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountKillswitchVersions, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountMCPReviews = `-- name: PostflightCountMCPReviews :one
+SELECT count(*) FROM mcp_approval_requests
+WHERE organization_id = $1::text AND deleted IS FALSE AND status = 'requested'
+`
+
+// The MCP reviews queue needs its one seeded request awaiting a decision.
+func (q *Queries) PostflightCountMCPReviews(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPReviews, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

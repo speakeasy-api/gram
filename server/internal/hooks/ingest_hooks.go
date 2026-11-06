@@ -1328,10 +1328,11 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
+	// Only tool events carry a tool name. Prompt, lifecycle, and other
+	// non-tool rows keep gram.tool.name empty (gram.hook.event still names
+	// the event), because tool-call analytics count hook rows by a non-empty
+	// tool name.
 	toolName := canonicalTelemetryToolName(payload)
-	if toolName == "" {
-		toolName = hookEventName
-	}
 
 	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
@@ -1375,12 +1376,10 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -2223,6 +2222,85 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 	return canonicalToolName(payload)
 }
 
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
+}
+
 func canonicalToolCallID(payload *gen.IngestPayload) string {
 	if tool := canonicalToolCallData(payload); tool != nil {
 		return strings.TrimSpace(conv.PtrValOr(tool.ID, ""))
@@ -2316,8 +2394,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
-// Apart from a channel label the result is a stand-in that title generation
-// later replaces.
+// Apart from a channel label or a cron job name the result is a stand-in that
+// title generation later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2333,6 +2411,9 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 				title = "Claude Tag coordination"
 			}
 		}
+	}
+	if cronTitle, ok := chat.CronJobTitle(title); ok {
+		return cronTitle
 	}
 	return chat.DerivedTitle(title)
 }

@@ -70,6 +70,7 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		Subject:             permit.Subject,
 		RegistrationID:      permit.RegistrationID.UUID,
 		SkipUnusable:        false,
+		Attribution:         remotesessions.RefreshAttribution{},
 	})
 	switch {
 	case errors.Is(err, remotesessions.ErrInvalidAuthorizationRequest):
@@ -129,7 +130,7 @@ func handbackSubject(subject urn.SessionSubject, authorizerOwner string) urn.Ses
 // upstreamTokenSource resolves a caller's upstream tokens for serving.
 type upstreamTokenSource interface {
 	ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error)
-	ResolveClientAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error)
+	ResolveClientAccessTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 }
 
 func (s *Service) upstreamTokenSource() upstreamTokenSource {
