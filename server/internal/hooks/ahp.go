@@ -171,9 +171,30 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				reply.Effects = []*ahp.ContextCompactAfterEffect{{ContextCompactAfterModifyEffect: ahp.Some(ahpReplaceSummary())}}
 				return reply, nil
 			},
-			// Lifecycle notifications are not authoritative user input.
-			TurnStart: func(context.Context, ahpserver.InterceptContext[ahp.TurnStartEvent, ahp.TurnStartCapabilities]) (ahpserver.TurnStartReply, error) {
+			TurnStart: func(ctx context.Context, c ahpserver.InterceptContext[ahp.TurnStartEvent, ahp.TurnStartCapabilities]) (ahpserver.TurnStartReply, error) {
 				var reply ahpserver.TurnStartReply
+				prompt := ahpTurnStartPrompt(c.Event)
+				if prompt == nil {
+					return reply, nil
+				}
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.TurnStartCapabilitiesEffectsValueItemDeny)
+				attachments, err := s.ahpPromptAttachments(ctx, prompt)
+				if err != nil {
+					if canDeny && errors.Is(err, errAHPEvidenceSize) {
+						reply.Effects = []*ahp.TurnStartEffect{{DenyEffect: ahp.Some(ahpDeny(err.Error()))}}
+						return reply, nil
+					}
+					return reply, err
+				}
+				payload := ahpUserMessageInboundPayload(prompt, attachments)
+				if payload == nil {
+					return reply, nil
+				}
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.TurnStartEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
 				return reply, nil
 			},
 		},
@@ -211,6 +232,22 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			ToolBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolBeforeEvent]) error {
 				_, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event), true)
+				return err
+			},
+			TurnStart: func(ctx context.Context, c ahpserver.ObserveContext[ahp.TurnStartEvent]) error {
+				prompt := ahpTurnStartPrompt(c.Event)
+				if prompt == nil {
+					return nil
+				}
+				attachments, err := s.ahpPromptAttachments(ctx, prompt)
+				if err != nil {
+					return err
+				}
+				payload := ahpUserMessageInboundPayload(prompt, attachments)
+				if payload == nil {
+					return nil
+				}
+				_, err = s.ingestAHP(ctx, payload, true)
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
@@ -482,9 +519,51 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 	return payload
 }
 
-// Only inbound user envelopes own prompt policy and transcript capture.
-// Resolved attachments ride along as prompt attachments, so they persist
-// through the same path as transcript-derived hook attachments.
+// ahpTurnStartPrompt projects admitted user items into the shared inbound prompt
+// pipeline, preserving the original event type and identity. Continuations and
+// hooks may carry prior user context, not a newly submitted prompt. External
+// initiators can submit user messages too; trigger describes cause, not role.
+func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
+	if e == nil || (e.Trigger != ahp.TurnStartEventTriggerUser && e.Trigger != ahp.TurnStartEventTriggerExternal) {
+		return nil
+	}
+	prompt := &ahp.UserMessageInboundEvent{ //nolint:exhaustruct // internal prompt view, not a wire event
+		Source: e.Source, Harness: e.Harness, ID: e.ID, Time: e.Time,
+		Type: ahp.UserMessageInboundEventType(e.Type), Session: e.Session,
+		Turn:    ahp.Some(ahp.UserMessageInboundEventTurn{ID: e.Turn.ID}),
+		Message: ahp.UserMessageInboundEventMessage{},
+	}
+	for _, item := range e.Items {
+		if item == nil || item.Role != ahp.ModelVisibleItemRoleUser {
+			continue
+		}
+		var parts []*ahp.ContentItem
+		for _, part := range item.Parts {
+			if part == nil {
+				continue
+			}
+			if part.TextBodyPart.Present && part.TextBodyPart.Value != nil {
+				body := part.TextBodyPart.Value
+				if body.Category.Present && body.Category.Value != "text" {
+					continue
+				}
+			}
+			if part.AttachmentBodyPart.Present && part.AttachmentBodyPart.Value != nil {
+				body := part.AttachmentBodyPart.Value
+				if body.Category.Present && body.Category.Value != "text" {
+					continue
+				}
+			}
+			parts = append(parts, part)
+		}
+		prompt.Message.Messages = append(prompt.Message.Messages, ahp.UserMessageInboundEventMessageMessagesItem{ //nolint:exhaustruct // only prompt identity and content are consumed
+			ID: item.ID, Role: "user", Parts: parts,
+		})
+	}
+	return prompt
+}
+
+// Resolved attachments use the same persistence path as transcript-derived hook attachments.
 func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent, attachments []*gen.HookPromptAttachmentEntry) *gen.IngestPayload {
 	var texts []string
 	for _, message := range e.Message.Messages {
