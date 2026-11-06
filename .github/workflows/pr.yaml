@@ -2201,6 +2201,9 @@ jobs:
   client-test:
     name: client-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Temporary GRW-391 measurement: attempts 1/2 and 3/4 are isolated cold/warm pairs.
+    env:
+      DEBUG: vitest:cache:fs
     needs: [changes]
     if: |
       !cancelled() &&
@@ -2243,8 +2246,9 @@ jobs:
       - name: Vitest cache key
         id: vitest-cache-key
         env:
+          BENCHMARK_NAMESPACE: grw391-bench-${{ github.run_id }}-${{ (github.run_attempt == 1 || github.run_attempt == 2) && 'pair1' || 'pair2' }}
           CONFIG_HASH: ${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig*.json', 'client/*/package.json', 'client/*/tsconfig*.json', 'client/*/vitest.config.*', 'client/*/vite.config.*', 'client/dashboard/dev-slot-plugin.ts') }}
-        run: echo "prefix=vitest-modules-blacksmith-v1-${RUNNER_OS}-${RUNNER_ARCH}-$(node --version)-${CONFIG_HASH}-" >> "$GITHUB_OUTPUT"
+        run: echo "prefix=${BENCHMARK_NAMESPACE}-vitest-modules-blacksmith-v1-${RUNNER_OS}-${RUNNER_ARCH}-$(node --version)-${CONFIG_HASH}-" >> "$GITHUB_OUTPUT"
 
       - name: Restore Vitest module cache
         id: vitest-cache
@@ -2254,6 +2258,17 @@ jobs:
           path: node_modules/.vitest-cache
           key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
           restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+
+      - name: Inspect restored Vitest metadata
+        env:
+          CACHE_HIT: ${{ steps.vitest-cache.outputs.cache-hit }}
+        run: |
+          if [ "$CACHE_HIT" = true ]; then
+            test -f node_modules/.vitest-cache/_metadata.json
+            sha256sum node_modules/.vitest-cache/_metadata.json
+          else
+            test ! -e node_modules/.vitest-cache/_metadata.json
+          fi
 
       - name: Test
         run: aube run test
