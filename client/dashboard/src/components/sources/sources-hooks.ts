@@ -14,18 +14,6 @@ import {
   type ExternalMcpOAuthConfigStatus,
 } from "./external-mcp-oauth";
 
-export const useCatalogIconMap = (): Map<string, string> => {
-  const { data: catalogData } = useListMCPCatalog();
-  return useMemo(() => {
-    if (!catalogData?.servers) {
-      return new Map<string, string>();
-    }
-    return new Map(
-      catalogData.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
-    );
-  }, [catalogData]);
-};
-
 const useCatalogAuthMap = (enabled = true): Map<string, CatalogAuthType> => {
   const { data: catalogData } = useListMCPCatalog(undefined, undefined, {
     enabled,

@@ -7,7 +7,11 @@ import {
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
 
-const mocks = vi.hoisted(() => ({ audit: vi.fn(), challenges: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  audit: vi.fn(),
+  challenges: vi.fn(),
+  maps: vi.fn(),
+}));
 const from = new Date("2026-01-01T00:00:00Z");
 const to = new Date("2026-01-08T00:00:00Z");
 vi.mock("./useIdentityQueries", () => ({
@@ -22,6 +26,19 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/components/auditlogs/audit-principals", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useAuditPrincipals: () => ({ agents: new Map(), users: new Map() }),
+}));
+// Server and project names for grant changes come from the org inventories.
+vi.mock("@/pages/access/useResourceLinkMaps", () => ({
+  useResourceLinkMaps: (...args: unknown[]) => {
+    mocks.maps(...args);
+    return {
+      projectMap: new Map(),
+      toolsetMap: new Map([
+        ["server_ops", { slug: "acme-ops", name: "Acme Ops", projectId: "p" }],
+      ]),
+      mcpServerMap: new Map(),
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/auditLogs.js", () => ({
   useAuditLogs: (...args: unknown[]) => mocks.audit(...args),
@@ -72,6 +89,82 @@ it("names each change in words rather than its audit action", async () => {
   expect(
     (await screen.findAllByText("agent:policy_grant_create")).length,
   ).toBeGreaterThan(0);
+});
+it("says which server a grant change touched and which connection was granted", () => {
+  mocks.audit.mockReturnValue({
+    data: {
+      result: {
+        logs: [
+          {
+            id: "log_server",
+            action: "agent:policy_grant_create",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+            afterSnapshot: {
+              scope: "mcp:connect",
+              selector: { resource_kind: "mcp", resource_id: "server_ops" },
+            },
+          },
+          {
+            id: "log_connection",
+            action: "agent:connection_attach",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+            metadata: { upstream_account: "owner@example.com" },
+          },
+        ],
+      },
+    },
+  });
+  render(<AgentIdentityAudit agent={agent} subject />);
+  expect(screen.getByText(/mcp:connect · Acme Ops/)).toBeTruthy();
+  expect(screen.getByText("Granted their connection to agent")).toBeTruthy();
+  expect(screen.getByText(/Signs in as owner@example.com/)).toBeTruthy();
+});
+it("loads server names for a connection block so it names the server", () => {
+  mocks.audit.mockReturnValue({
+    data: {
+      result: {
+        logs: [
+          {
+            id: "log_block",
+            action: "agent:connection_block_create",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+            afterSnapshot: {
+              scope: "mcp:connect",
+              selector: { resource_kind: "mcp", resource_id: "server_ops" },
+            },
+          },
+        ],
+      },
+    },
+  });
+  render(<AgentIdentityAudit agent={agent} subject />);
+  expect(mocks.maps).toHaveBeenLastCalledWith(true);
+  expect(screen.getByText(/mcp:connect · Acme Ops/)).toBeTruthy();
+});
+it("skips the server and project lists when no listed change names one", () => {
+  mocks.audit.mockReturnValue({
+    data: {
+      result: {
+        logs: [
+          {
+            id: "log_rename",
+            action: "agent:rename",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+          },
+        ],
+      },
+    },
+  });
+  render(<AgentIdentityAudit agent={agent} subject />);
+  expect(mocks.maps).toHaveBeenLastCalledWith(false);
 });
 it("shows a change with no words of its own as its audit code", () => {
   mocks.audit.mockReturnValue({

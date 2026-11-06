@@ -24,6 +24,7 @@ import { remoteSessionClientDisplayName } from "@/pages/remote-identity-provider
 import { useRoutes } from "@/routes";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
+import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
 import {
   authGrantParts,
   authGrantRank,
@@ -405,6 +406,16 @@ export function AgentIdentityPermissions({
                             {narrowing}
                           </Text>
                         )}
+                        {/* A server the agent signs in to with a person's
+                            own connection is used on that person's behalf. */}
+                        {grant.scope === "mcp:connect" &&
+                          selector.resourceKind === "mcp" &&
+                          selector.resourceId !== ANY_RESOURCE && (
+                            <GrantOnBehalfOf
+                              agentId={agent.id}
+                              resourceId={selector.resourceId}
+                            />
+                          )}
                       </div>
                     </li>
                   );
