@@ -254,7 +254,7 @@ func (s *Service) firstPartyIDPAuthorizationURL(ctx context.Context, endpoint *R
 		Prompt:          prompt,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("build IDP authorization URL: %w", err)
+		return nil, fmt.Errorf("identity resolver: %w", err)
 	}
 	return idpURL, nil
 }
