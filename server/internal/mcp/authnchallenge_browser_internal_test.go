@@ -385,3 +385,44 @@ func TestFirstPartyConsentMCPRejectsAnotherBrowser(t *testing.T) {
 		})
 	}
 }
+
+// An organization-owned client's callback is on the organization's platform
+// host, not the IdP callback host, so the upstream sign-in passes the bind and
+// confirm hop: bind on the organization host, confirm where the callback
+// cookie is, then the callback checks the organization host's cookie.
+func TestFirstPartyRemoteLoginThroughOrganizationHost(t *testing.T) {
+	t.Parallel()
+	s := browserTestService(t)
+	parent, _, callbackCookie := firstPartyReviewState(t, s, "https://gram.example")
+	parent.CodeReconnect = nil // No DB: a code connection would resolve its members.
+	require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+	orgHost, err := url.Parse("https://acme.platform.example")
+	require.NoError(t, err)
+	var minted remotesessions.ParentChallenge
+	target, hop, err := s.startRemoteLogin(t.Context(), parent, orgHost, remotesessions.ParentChallenge{ID: parent.ID}, func(p remotesessions.ParentChallenge) (string, error) {
+		minted = p
+		return "https://upstream.example/authorize", nil
+	})
+	require.NoError(t, err)
+	require.True(t, hop)
+	platform := func(base string, req *http.Request) *http.Request {
+		return req.WithContext(requestorigin.WithContext(req.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: base}))
+	}
+	bound := httptest.NewRecorder()
+	require.NoError(t, s.HandleRemoteLoginBind(bound, platform("https://acme.platform.example", httptest.NewRequest(http.MethodGet, target, nil))), "organization hosts are platform hosts, which serve the bind stop")
+	orgCookies := bound.Result().Cookies()
+	require.Len(t, orgCookies, 1)
+	confirm := platform("https://gram.example", httptest.NewRequest(http.MethodGet, bound.Header().Get("Location"), nil))
+	require.True(t, strings.HasPrefix(confirm.URL.String(), "https://gram.example"+remoteLoginBindPath))
+	confirm.AddCookie(callbackCookie)
+	confirmed := httptest.NewRecorder()
+	require.NoError(t, s.HandleRemoteLoginBind(confirmed, confirm))
+	require.Equal(t, "https://upstream.example/authorize", confirmed.Header().Get("Location"))
+
+	remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID, BrowserCookieID: minted.BrowserCookieID, BrowserHash: minted.BrowserHash}
+	require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
+	callback := platform("https://acme.platform.example", httptest.NewRequest(http.MethodGet, "https://acme.platform.example/mcp/remote_login_callback?state="+remote.ID+"&code=code", nil))
+	require.ErrorContains(t, s.validateRemoteLoginBrowser(callback), "invalid remote login browser binding")
+	callback.AddCookie(orgCookies[0])
+	require.NoError(t, s.validateRemoteLoginBrowser(callback))
+}
