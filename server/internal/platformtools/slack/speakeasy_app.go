@@ -67,8 +67,21 @@ func (t *speakeasyAppTool) Call(ctx context.Context, env toolconfig.ToolCallEnv,
 	systemEnv.Set(slackBotTokenEnvVar, token)
 	env.SystemEnv = systemEnv
 	env.UserConfig = toolconfig.NewCaseInsensitiveEnv()
-	if err := t.inner.Call(ctx, env, payload, wr); err != nil {
+	if err := callWithoutConfigAdvice(ctx, t.inner, env, payload, wr); err != nil {
 		return fmt.Errorf("%s: %w", t.inner.Descriptor().Name, err)
+	}
+	return nil
+}
+
+// callWithoutConfigAdvice runs tool with a token the caller supplied. The
+// advice Call gives about the server's environment does not apply to it.
+func callWithoutConfigAdvice(ctx context.Context, tool core.PlatformToolExecutor, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	call := tool.Call
+	if inner, ok := tool.(*slackTool); ok {
+		call = inner.call
+	}
+	if err := call(ctx, env, payload, wr); err != nil {
+		return fmt.Errorf("call slack tool: %w", err)
 	}
 	return nil
 }

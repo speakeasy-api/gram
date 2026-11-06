@@ -134,12 +134,16 @@ func (c *Client) CallWithToken(ctx context.Context, method string, payload map[s
 		return nil, newStatusError(method, resp.StatusCode, bodyBytes)
 	}
 
-	var envelope ResponseEnvelope
+	var envelope struct {
+		ResponseEnvelope
+		// Needed is the scope a missing_scope refusal asks for.
+		Needed string `json:"needed,omitempty"`
+	}
 	if err := json.Unmarshal(bodyBytes, &envelope); err != nil {
 		return nil, fmt.Errorf("decode slack response for %s: %w", method, err)
 	}
 	if !envelope.Ok {
-		return nil, newEnvelopeError(method, resp.StatusCode, envelope)
+		return nil, newEnvelopeError(method, resp.StatusCode, envelope.ResponseEnvelope, envelope.Needed)
 	}
 
 	return bodyBytes, nil
@@ -167,10 +171,22 @@ func TokenFromEnv(kind TokenKind, env *toolconfig.CaseInsensitiveEnv) (string, e
 			return value, nil
 		}
 	}
-	if kind == TokenRequireUser {
-		return "", fmt.Errorf("slack user token not configured: expected %s or %s with search:read scope", UserTokenEnvVar, TokenEnvVar)
+	return "", &TokenNotConfiguredError{Kind: kind, Variables: candidates}
+}
+
+// TokenNotConfiguredError reports that the environment holds none of the
+// variables a Slack token is read from. Variables lists them in the order they
+// are tried.
+type TokenNotConfiguredError struct {
+	Kind      TokenKind
+	Variables []string
+}
+
+func (e *TokenNotConfiguredError) Error() string {
+	if e.Kind == TokenRequireUser {
+		return fmt.Sprintf("slack user token not configured: expected %s or %s with search:read scope", UserTokenEnvVar, TokenEnvVar)
 	}
-	return "", fmt.Errorf("slack token not configured: expected %s, %s, or %s", BotTokenEnvVar, UserTokenEnvVar, TokenEnvVar)
+	return fmt.Sprintf("slack token not configured: expected %s, %s, or %s", BotTokenEnvVar, UserTokenEnvVar, TokenEnvVar)
 }
 
 func errorDetails(resp ResponseEnvelope) string {
