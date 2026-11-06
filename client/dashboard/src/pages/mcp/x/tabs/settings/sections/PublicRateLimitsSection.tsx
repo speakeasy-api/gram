@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -9,7 +10,6 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -257,7 +257,7 @@ function PublicRateLimits({
             >
               {update.isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>

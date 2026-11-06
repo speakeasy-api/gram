@@ -17,7 +17,8 @@ import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -479,7 +480,7 @@ export function SignalDrawer({
                         >
                           {collecting && (
                             <Button.LeftIcon>
-                              <Loader2 className="size-4 animate-spin" />
+                              <Spinner className="mr-0" />
                             </Button.LeftIcon>
                           )}
                           <Button.Text>Suppress all</Button.Text>
@@ -594,9 +595,7 @@ export function SignalDrawer({
                           {!rationaleSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
-                          <Text small muted>
-                            Loading evidence…
-                          </Text>
+                          <SkeletonParagraph label="Loading evidence" />
                         )}
                         {evidenceQuery.isError && (
                           <div className="flex items-center gap-2">

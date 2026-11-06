@@ -54,6 +54,8 @@
     "@radix-ui/react-tabs": "^1.2.1",
     "@radix-ui/react-toggle-group": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
+    "@rive-app/canvas": "2.45.1",
+    "@rive-app/react-canvas": "4.37.1",
     "@stripe/react-stripe-js": "7.0.0",
     "@stripe/stripe-js": "10.1.0",
     "@tailwindcss/vite": "catalog:",

@@ -20,7 +20,6 @@ import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
 import {
   ChevronLeft,
   Home,
-  Loader2,
   MessageCircle,
   Minus,
   Pin,
@@ -68,6 +67,7 @@ import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
 import { RequireScope } from "@/components/require-scope";
 import { useProject } from "@/contexts/Auth";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // Shared square icon button used by the page chrome (back affordances).
 // bg-card so the button stays a solid chip when it sits on the brand mesh;
@@ -741,9 +741,13 @@ function ChatHomeCompactRecents(): ReactElement {
         )}
       </div>
       {loading ? (
-        <p className="text-muted-foreground px-3 text-sm">
-          Loading conversations…
-        </p>
+        <div className="px-3">
+          <Skeleton label="Loading conversations">
+            <div className="h-5 w-full" />
+            <div className="h-5 w-full" />
+            <div className="h-5 w-full" />
+          </Skeleton>
+        </div>
       ) : chats.length === 0 ? (
         <p className="text-muted-foreground px-3 text-sm">
           Your recent conversations will appear here.
@@ -770,9 +774,13 @@ function RecentsBody({
 }): ReactElement {
   if (loading) {
     return (
-      <p className="text-muted-foreground px-3 text-sm">
-        Loading conversations…
-      </p>
+      <div className="px-3">
+        <Skeleton label="Loading conversations">
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+        </Skeleton>
+      </div>
     );
   }
   if (chats.length === 0) {
@@ -1071,13 +1079,23 @@ function ConversationBody({
     );
   }
   if (!ready) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" />
-      </div>
-    );
+    return <ConversationSkeleton />;
   }
   return <ConversationSurface chatId={chatId} />;
+}
+
+/** Placeholder transcript while the conversation binds. */
+function ConversationSkeleton(): ReactElement {
+  return (
+    <div className="mx-auto h-full w-full max-w-3xl p-6">
+      <Skeleton label="Loading conversation">
+        <div className="h-10 w-1/2 self-end" />
+        <div className="h-24 w-full" />
+        <div className="h-10 w-1/3 self-end" />
+        <div className="h-16 w-full" />
+      </Skeleton>
+    </div>
+  );
 }
 
 function ConversationSurface({
@@ -1177,11 +1195,7 @@ function SavedConversation({ chatId }: { chatId: string }): ReactElement {
   }, [aui, chatId, isListLoading]);
 
   if (activeRemoteId !== chatId) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" />
-      </div>
-    );
+    return <ConversationSkeleton />;
   }
   return <ChatSurface />;
 }

@@ -20,7 +20,9 @@ import type { SuggestRiskPolicyResult } from "@gram/client/models/components/sug
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
 import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -414,11 +416,13 @@ function UseCaseTable({
           </Button>
         </div>
       ) : isLoading ? (
-        Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="border-b p-4">
-            <div className="bg-muted/40 h-16 animate-pulse" />
-          </div>
-        ))
+        <div role="status" aria-label="Loading use cases">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="border-b p-4">
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ))}
+        </div>
       ) : (
         presets.map((preset) => {
           // The Shadow AI use case follows the project's one slot: it opens
@@ -662,7 +666,7 @@ function DescribePanel({
         className="self-start"
       >
         {pending ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner className="mr-0" />
         ) : (
           <Sparkles className="size-4" />
         )}

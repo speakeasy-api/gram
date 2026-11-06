@@ -1,6 +1,7 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RiskContentNotice } from "./RiskContentNotice";
 import { useRiskContentRestricted } from "./use-risk-content-restricted";
-import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   useCallback,
@@ -369,7 +370,7 @@ export function MaskedMatch({
         }}
       >
         {isLoading ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <Spinner className="mr-0 h-3 w-3" />
         ) : (
           <EyeOff className="h-3 w-3" />
         )}
@@ -624,7 +625,7 @@ export function EventMatchDialog({
           </div>
         ) : value === null ? (
           <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="mr-0" />
             <span>{isLoading ? "Revealing…" : "No event content."}</span>
           </div>
         ) : (

@@ -395,8 +395,8 @@ describe("plugin detail permission boundary", () => {
 
   it("does not mount either query tree until grants are loaded", () => {
     state.loading = true;
-    const { container } = render(<PluginDetail />);
-    expect(container.innerHTML).toBe("");
+    render(<PluginDetail />);
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
     expect(adminQuery).not.toHaveBeenCalled();
   });
   it("mounts admin detail but not assignment queries for org readers", () => {

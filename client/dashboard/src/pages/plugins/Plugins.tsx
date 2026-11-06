@@ -8,6 +8,7 @@ import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -75,7 +76,7 @@ export default function Plugins(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
   return hasScope("org:admin", organization.id) ? (
     <PluginsWithMarketplaceSettings />

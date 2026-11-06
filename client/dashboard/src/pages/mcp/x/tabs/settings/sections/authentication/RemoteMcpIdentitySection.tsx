@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -35,7 +36,7 @@ import {
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
+import { ChevronDown, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -1055,7 +1056,7 @@ export function RemoteMcpIdentitySectionBody({
             >
               {savePending ? (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>
