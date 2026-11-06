@@ -23,6 +23,7 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
       onIssue={vi.fn<() => void>()}
       issuing={false}
       secret="gram_secret"
+      existingKey={null}
       gatewayURL={gatewayURL}
       serverCount={1}
     />,
@@ -45,7 +46,7 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   expect(copied).not.toContain("gram_secret");
 });
 
-function covered(existingKey?: { lastUsedAt?: Date } | null) {
+function covered(existingKey: { lastUsedAt?: Date } | null | undefined) {
   render(
     <StepInstall
       command={null}
@@ -61,6 +62,20 @@ function covered(existingKey?: { lastUsedAt?: Date } | null) {
     />,
   );
 }
+
+it("claims neither state while the agent's keys are unknown", () => {
+  covered(undefined);
+  expect(
+    screen.getByText("A key that already exists cannot be shown here."),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/any key the agent already holds keeps working/),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("This agent needs a key before it can be connected."),
+  ).toBeNull();
+  expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
+});
 
 it("asks for a key when the agent has none", () => {
   covered(null);
@@ -86,6 +101,10 @@ it("says an agent with a used key is already connected", () => {
 it("says an agent already has a key that nothing has used yet", () => {
   covered({});
   expect(screen.getByText("This agent already has a key.")).toBeTruthy();
+  expect(
+    screen.getByText(/Nothing has used it yet: issue another only if/),
+  ).toBeTruthy();
+  expect(screen.queryByText(/the current one keeps working/)).toBeNull();
   expect(
     screen.getByRole("button", { name: "Issue another key" }),
   ).toBeTruthy();

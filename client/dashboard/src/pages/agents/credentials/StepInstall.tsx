@@ -33,14 +33,22 @@ export type ExistingAgentKey = {
  * What covers the step while no key is on screen. An agent that already has
  * one is usually connected, so saying it "needs a key" reads as if it were
  * not: the only thing missing is a key to show, and a new one is for a new
- * runtime.
+ * runtime. While the agent's keys are unknown the copy claims neither.
  */
 function keyCover(existingKey: ExistingAgentKey | null | undefined): {
   title: string;
   detail: string;
   action: string;
 } {
-  if (!existingKey) {
+  if (existingKey === undefined) {
+    return {
+      title: "A key that already exists cannot be shown here.",
+      detail:
+        "A key can only be read at the moment it is issued. Issue one to connect a runtime: any key the agent already holds keeps working.",
+      action: "Issue a key",
+    };
+  }
+  if (existingKey === null) {
     return {
       title: "This agent needs a key before it can be connected.",
       detail:
@@ -49,10 +57,16 @@ function keyCover(existingKey: ExistingAgentKey | null | undefined): {
     };
   }
   const lastUsed = formatRelativeTime(existingKey.lastUsedAt ?? null);
+  if (!lastUsed) {
+    return {
+      title: "This agent already has a key.",
+      detail:
+        "A key can only be read at the moment it is issued, so it cannot be shown here. Nothing has used it yet: issue another only if that one was lost.",
+      action: "Issue another key",
+    };
+  }
   return {
-    title: lastUsed
-      ? `This agent is already connected. Its key was last used ${lastUsed}.`
-      : "This agent already has a key.",
+    title: `This agent is already connected. Its key was last used ${lastUsed}.`,
     detail:
       "A key can only be read at the moment it is issued, so it cannot be shown here. Issue another only to connect a new runtime: the current one keeps working.",
     action: "Issue another key",
@@ -79,8 +93,11 @@ export function StepInstall({
   onIssue: () => void;
   issuing: boolean;
   secret: string | null;
-  /** The agent's live key, when it already has one. */
-  existingKey?: ExistingAgentKey | null;
+  /**
+   * The agent's live key when it has one, `null` when it is known to have
+   * none, and `undefined` while that is unknown.
+   */
+  existingKey: ExistingAgentKey | null | undefined;
   gatewayURL: string;
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";

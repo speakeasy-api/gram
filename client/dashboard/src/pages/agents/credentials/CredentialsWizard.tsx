@@ -395,17 +395,21 @@ export function CredentialsWizard({
   const existing = agent !== undefined;
   // An agent opened again usually has a working key already. The install
   // step cannot show it, but must not read as if the agent were unconnected.
-  // Same options as the agent's own pages, so all of them read one cached
-  // list.
+  // Same options and permission gate as the agent's own pages, so all of them
+  // read one cached list and none sends a request it would be refused.
   const agentKeys = useListAPIKeys({ agentId: agent?.id ?? "" }, keysSecurity, {
     queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
-    enabled: existing,
+    enabled: existing && agent.permissions.authorize,
     retry: false,
     throwOnError: false,
   });
+  // `null` only once a read confirms there is no live key; `undefined` while
+  // the list is not read, loading or failed, so the step claims neither.
   const existingKey = useMemo(() => {
+    if (!existing) return null;
+    if (!agentKeys.isSuccess) return undefined;
     const now = Date.now();
-    const live = (agentKeys.data?.keys ?? []).filter(
+    const live = agentKeys.data.keys.filter(
       (key) => !key.expiresAt || key.expiresAt.getTime() > now,
     );
     if (live.length === 0) return null;
@@ -414,7 +418,7 @@ export function CredentialsWizard({
       .filter((at): at is Date => at !== undefined)
       .sort((a, b) => b.getTime() - a.getTime())[0];
     return { lastUsedAt };
-  }, [agentKeys.data]);
+  }, [existing, agentKeys.isSuccess, agentKeys.data]);
 
   // Opened for a named platform: the credential is settled and the agent is
   // named after what will be signing in, so the flow starts at the servers —
