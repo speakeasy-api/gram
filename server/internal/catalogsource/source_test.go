@@ -1,6 +1,7 @@
 package catalogsource
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -124,7 +127,7 @@ func TestExportAuthentication(t *testing.T) {
 	handler := NewExportHandler(func(context.Context) (mcpregistry.CatalogBundle, error) {
 		calls++
 		return mcpregistry.CatalogBundle{Version: 1}, nil
-	}, v)
+	}, v, testenv.NewLogger(t))
 	for _, auth := range []string{"", "Basic good", "Bearer bad", "Bearer ", "Bearer good extra", "Bearer " + strings.Repeat("x", maxTokenBytes+1)} {
 		r := httptest.NewRequest(http.MethodGet, ExportPath, nil)
 		r.Header.Set("Authorization", auth)
@@ -154,13 +157,16 @@ func TestExportAuthentication(t *testing.T) {
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	_, err = mcpregistry.DecodeCatalogBundle(w.Body)
 	require.NoError(t, err)
+	var logs bytes.Buffer
 	handler = NewExportHandler(func(context.Context) (mcpregistry.CatalogBundle, error) {
 		return mcpregistry.CatalogBundle{}, errors.New("secret")
-	}, v)
+	}, v, slog.New(slog.NewTextHandler(&logs, nil)))
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 	require.Equal(t, 500, w.Code)
 	require.NotContains(t, w.Body.String(), "secret")
+	require.Contains(t, logs.String(), "secret")
+	require.Contains(t, logs.String(), "catalog export failed")
 	var b boundedBuffer
 	_, err = b.Write(make([]byte, mcpregistry.CatalogBundleByteLimit+1))
 	require.Error(t, err)

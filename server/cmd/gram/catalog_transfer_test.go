@@ -30,3 +30,15 @@ func TestCatalogTransferRejectsRemoteConfiguration(t *testing.T) {
 	app.Commands = []*cli.Command{newCatalogTransferCommand()}
 	require.ErrorContains(t, app.RunContext(t.Context(), []string{"test", "catalog-transfer"}), "loopback")
 }
+
+//nolint:paralleltest // Mutates process configuration through t.Setenv.
+func TestCatalogTransferNamesMissingConfiguration(t *testing.T) {
+	for _, missing := range []string{"GRAM_ADMIN_SERVER_URL", "GRAM_ADMIN_OIDC_EMULATOR_URL"} {
+		t.Setenv("GRAM_ADMIN_SERVER_URL", "http://127.0.0.1:1")
+		t.Setenv("GRAM_ADMIN_OIDC_EMULATOR_URL", "http://127.0.0.1:2")
+		t.Setenv(missing, "")
+		app := cli.NewApp()
+		app.Commands = []*cli.Command{newCatalogTransferCommand()}
+		require.ErrorContains(t, app.RunContext(t.Context(), []string{"test", "catalog-transfer"}), missing+" must be configured")
+	}
+}

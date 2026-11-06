@@ -65,7 +65,7 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 		}
 		handler := catalogsource.NewExportHandler(func(ctx context.Context) (mcpregistry.CatalogBundle, error) {
 			return registry.ExportCatalog(ctx, store)
-		}, verifier)
+		}, verifier, PullLogger(ctx))
 		mux.Handle(http.MethodGet, catalogsource.ExportPath, handler.ServeHTTP)
 	}
 	return nil

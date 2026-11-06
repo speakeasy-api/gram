@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
@@ -56,7 +58,7 @@ func NewGoogleVerifier(ctx context.Context, audience string, subjects []string, 
 		var err error
 		validator, err = idtoken.NewValidator(ctx)
 		if err != nil {
-			return nil, errors.New("initialize catalog source validator")
+			return nil, fmt.Errorf("initialize catalog source validator: %w", err)
 		}
 	}
 	return &GoogleVerifier{audience: audience, subjects: allowed, validator: validator}, nil
@@ -93,7 +95,12 @@ func validToken(token string) bool {
 
 // NewExportHandler authorizes only this read-only GET endpoint. Do not install
 // it as middleware on the admin router.
-func NewExportHandler(export func(context.Context) (mcpregistry.CatalogBundle, error), verifier Verifier) http.Handler {
+func NewExportHandler(export func(context.Context) (mcpregistry.CatalogBundle, error), verifier Verifier, logger *slog.Logger) http.Handler {
+	if logger == nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "catalog export unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodGet {
@@ -117,11 +124,13 @@ func NewExportHandler(export func(context.Context) (mcpregistry.CatalogBundle, e
 		}
 		bundle, err := export(r.Context())
 		if err != nil {
+			logger.ErrorContext(r.Context(), "catalog export failed", attr.SlogError(err))
 			http.Error(w, "catalog export unavailable", http.StatusInternalServerError)
 			return
 		}
 		var buf boundedBuffer
 		if err := json.NewEncoder(&buf).Encode(bundle); err != nil {
+			logger.ErrorContext(r.Context(), "encode catalog export failed", attr.SlogError(err))
 			http.Error(w, "catalog export unavailable", http.StatusInternalServerError)
 			return
 		}

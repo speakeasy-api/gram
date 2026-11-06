@@ -37,6 +37,8 @@ func TestSync(t *testing.T) {
 				assert.Empty(t, r.Cookies(), "Admin cookies must not reach the mock provider, even on the same host")
 				switch r.Method {
 				case http.MethodGet:
+					assert.Equal(t, "state", r.URL.Query().Get("state"))
+					assert.Equal(t, adminURL+"/admin/auth.callback", r.URL.Query().Get("redirect_uri"))
 					w.Header().Set("Content-Type", "text/html")
 					_, _ = fmt.Fprint(w, `<form method="POST" action="/authorize"><input name="state_token" value="signed&amp;token"><input name="user_email" value="eng@speakeasyapi.dev"></form><form method="POST" action="/authorize"><input name="state_token" value="signed&amp;token"><input name="user_email" value="alternate@example.test"></form>`)
 				case http.MethodPost:

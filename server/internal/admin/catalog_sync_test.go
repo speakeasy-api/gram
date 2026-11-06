@@ -138,7 +138,7 @@ func TestCatalogSyncHTTPAssetsAndCatchUp(t *testing.T) {
 			return errors.New("unauthorized")
 		}
 		return nil
-	})))
+	}), s.logger))
 	t.Cleanup(sourceHTTP.Close)
 	fetcher, err := catalogsource.NewClient(sourceHTTP.URL+catalogsource.ExportPath, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "synthetic-export-token"}), sourceHTTP.Client())
 	require.NoError(t, err)

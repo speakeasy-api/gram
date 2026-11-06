@@ -12,13 +12,20 @@ import (
 func newCatalogTransferCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "catalog-transfer",
-		Usage:     "Sync the local catalog through authenticated local Admin HTTP",
+		Usage:     "Sync local catalog using GRAM_ADMIN_SERVER_URL and GRAM_ADMIN_OIDC_EMULATOR_URL",
 		ArgsUsage: " ",
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 0 {
 				return fmt.Errorf("catalog-transfer accepts no arguments")
 			}
-			result, err := cataloglocalclient.Sync(c.Context, os.Getenv("GRAM_ADMIN_SERVER_URL"), os.Getenv("GRAM_ADMIN_OIDC_EMULATOR_URL"), os.Getenv("GRAM_ADMIN_OIDC_MOCK_USER_EMAIL"))
+			adminURL, providerURL := os.Getenv("GRAM_ADMIN_SERVER_URL"), os.Getenv("GRAM_ADMIN_OIDC_EMULATOR_URL")
+			if adminURL == "" {
+				return fmt.Errorf("GRAM_ADMIN_SERVER_URL must be configured")
+			}
+			if providerURL == "" {
+				return fmt.Errorf("GRAM_ADMIN_OIDC_EMULATOR_URL must be configured")
+			}
+			result, err := cataloglocalclient.Sync(c.Context, adminURL, providerURL, os.Getenv("GRAM_ADMIN_OIDC_MOCK_USER_EMAIL"))
 			if err != nil {
 				return fmt.Errorf("sync local catalog: %w", err)
 			}
