@@ -2237,6 +2237,9 @@ jobs:
 
       # Only transformed modules, including _metadata.json; never test results.
       # Restore after installation, which can replace node_modules.
+      # Lockfile/config changes invalidate the prefix; add new transform inputs
+      # to CONFIG_HASH. Bump vitest-modules-blacksmith-v1 to invalidate all entries.
+      # Revision fallback never crosses the dependency/configuration boundary.
       - name: Vitest cache key
         id: vitest-cache-key
         env:
