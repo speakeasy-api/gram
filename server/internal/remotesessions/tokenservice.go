@@ -547,9 +547,102 @@ type availabilityCheckKey struct{}
 // subject may proceed, and obtaining it here would wait on an upstream token
 // endpoint while callers hold admission locks. A broken self credential is
 // reported when a request needs it.
-func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
-	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), attribution, projectID, organizationID, issuerID, subject)
+//
+// When mcpServerID is valid the check covers that proxied server's own clients,
+// as ResolveServerAccessTokens does; otherwise it covers every client the
+// issuer binds.
+func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject, mcpServerID uuid.NullUUID) error {
+	checkCtx := context.WithValue(ctx, availabilityCheckKey{}, true)
+	if mcpServerID.Valid {
+		_, err := m.ResolveServerAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject, mcpServerID.UUID, false)
+		return err
+	}
+	_, err := m.ResolveAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject)
 	return err
+}
+
+// requiredServerClients decides which of the clients bound to the issuer an MCP
+// server's callers need. It is the one rule for this: the runtime enforces it and
+// the management API reports it, so settings cannot disagree with what callers
+// are asked for.
+//
+// A server with no associated client bound to the issuer needs the clients no
+// other server claims, so a client nothing explains stays fail-closed. When every
+// client belongs to another server, or the server explicitly detached the rest,
+// it has no upstream credential to require, which is what a session records as a
+// no-auth choice for it.
+func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, error) {
+	if len(clientIDs) == 0 {
+		return nil, nil
+	}
+	uses, err := q.DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
+		McpServerID:            mcpServerID,
+		OrganizationID:         organizationID,
+		UserSessionIssuerID:    userSessionIssuerID,
+		RemoteSessionClientIds: clientIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describe bound client use: %w", err)
+	}
+	var own, unclaimed []uuid.UUID
+	for _, use := range uses {
+		switch {
+		case use.AssociatedWithMcpServer:
+			own = append(own, use.RemoteSessionClientID)
+		case clientUnclaimed(use):
+			unclaimed = append(unclaimed, use.RemoteSessionClientID)
+		}
+	}
+	if len(own) == 0 {
+		return unclaimed, nil
+	}
+	return own, nil
+}
+
+// clientUnclaimed reports that nothing says whether a bound client is the
+// configured server's: it has no association, no other server has one, and the
+// server has not explicitly detached it.
+func clientUnclaimed(use remotesessions_repo.DescribeBoundClientUseRow) bool {
+	return !use.AssociatedWithMcpServer && len(use.OtherMcpServerIds) == 0 && !use.DetachedFromMcpServer
+}
+
+// ResolveServerAccessTokens resolves the caller's credentials for one proxied
+// MCP server that shares a user session issuer with other servers: only the
+// clients requiredServerClients names are required, so a client another server
+// on the issuer signs in through cannot refuse this server's callers. Each
+// credential still routes to the backend by its recorded resource.
+func (m *ChallengeManager) ResolveServerAccessTokens(
+	ctx context.Context,
+	attribution RefreshAttribution,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	mcpServerID uuid.UUID,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	ids := make([]uuid.UUID, 0, len(clients))
+	for _, client := range clients {
+		ids = append(ids, client.ClientID)
+	}
+	required, err := requiredServerClients(ctx, remotesessions_repo.New(m.db), organizationID, userSessionIssuerID, mcpServerID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if len(required) == 0 {
+		return nil, nil
+	}
+	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return !slices.Contains(required, client.ClientID)
+	})
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
