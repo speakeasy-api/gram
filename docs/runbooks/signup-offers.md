@@ -81,8 +81,9 @@ PAYG activation, not discount discovery or an agent assertion.
 ## Surface and seed assessment
 
 - **Staff Admin MCP:** no new tool in this change. This is shared, pre-signup
-  configuration, not an existing organization's configuration. Read-only offer
-  discovery alone would not provide the management outcome.
+  configuration, not an existing organization's configuration. Shared offer
+  writes need their own authorization and audit design before Admin MCP exposes
+  them. Read-only offer discovery alone would not provide the management outcome.
 - **Customer Platform MCP:** no tool change. Shared staff-only offers must not become
   tenant-visible configuration or an alternative way to grant networking access.
   Pre-signup code attribution and payment-method collection remain browser-owned:

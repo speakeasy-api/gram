@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,6 +27,10 @@ type registryIconsReceipt struct {
 	Before    mcpregistry.CatalogIcons `json:"before"`
 	After     mcpregistry.CatalogIcons `json:"after"`
 }
+
+// registryIconsReceiptTimeout bounds the receipt reads after commit, which no
+// longer follow the request's cancellation.
+const registryIconsReceiptTimeout = 10 * time.Second
 
 type registryIconsWriter struct {
 	runner   *writeRunner
@@ -70,7 +75,8 @@ func (s *registryIconsWriter) apply(ctx context.Context, input SetRegistryIconsI
 	}
 	// Bounding icons reads through the pool, so it waits for the entry lock to
 	// go. The change has committed, so a client disconnect must not blank them.
-	readCtx := context.WithoutCancel(ctx)
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), registryIconsReceiptTimeout)
+	defer cancel()
 	receipt.Before = boundedCatalogIcons(readCtx, s.registry, replaced)
 	receipt.After = boundedCatalogIcons(readCtx, s.registry, stored)
 	return receipt, nil

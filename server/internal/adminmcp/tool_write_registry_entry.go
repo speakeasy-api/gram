@@ -103,15 +103,16 @@ func (s *registryEntryWriter) apply(ctx context.Context, input CreateRegistryEnt
 }
 
 // registryCreateError maps a mutation failure. A name taken by a concurrent
-// create is stale state; a rejected record reports its first issue, so the
-// caller can correct it rather than read the target again.
+// create is stale state. Any other rejection reports its first issue, which
+// may be about the record or about registry state such as an Okta mapping
+// another entry holds; the issue says which.
 func registryCreateError(err error) error {
 	var invalid *mcpregistry.InvalidError
 	switch {
 	case errors.Is(err, mcpregistry.ErrConflict):
 		return ErrStaleState
 	case errors.As(err, &invalid) && len(invalid.Issues) > 0:
-		return fmt.Errorf("record_json is not a valid registry record: %s: %s", invalid.Issues[0].Path, invalid.Issues[0].Message)
+		return fmt.Errorf("the registry rejected this record: %s: %s", invalid.Issues[0].Path, invalid.Issues[0].Message)
 	default:
 		return fmt.Errorf("create registry entry: %w", err)
 	}
