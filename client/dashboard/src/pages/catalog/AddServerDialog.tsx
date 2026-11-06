@@ -839,10 +839,7 @@ function ConfigurePhaseContent({
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&
     !userIdentityPermissionBlocked &&
-    (canConfigureGitHub ||
-      !releaseState.serverConfigs.some(
-        (config) => config.identityMode === "agent" && config.githubApp,
-      ));
+    !githubPermissionBlocked;
 
   // With guardrails on offer, finishing Configure moves to that step; the
   // install itself starts from there.

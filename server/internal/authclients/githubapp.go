@@ -144,11 +144,9 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, err
 	}
-	if s.audit != nil {
-		err = s.audit.LogAuthClientUpdate(ctx, tx, audit.LogAuthClientUpdateEvent{ActorSlug: nil, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, AuthClientURN: urn.NewAuthClient(client.ID), AuthClientName: client.Name, AuthClientSnapshotBefore: before, AuthClientSnapshotAfter: after})
-		if err != nil {
-			return nil, fmt.Errorf("audit GitHub App configuration: %w", err)
-		}
+	err = s.audit.LogAuthClientUpdate(ctx, tx, audit.LogAuthClientUpdateEvent{ActorSlug: nil, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, AuthClientURN: urn.NewAuthClient(client.ID), AuthClientName: client.Name, AuthClientSnapshotBefore: before, AuthClientSnapshotAfter: after})
+	if err != nil {
+		return nil, fmt.Errorf("audit GitHub App configuration: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("save GitHub App: %w", err)

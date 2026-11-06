@@ -29,6 +29,74 @@ export function useGitHubAppDraft(
   enabled: boolean,
 ): GitHubAppDraftState {
   const client = useSdkClient();
+  const { bound, loading, error, retry } = useBoundGitHubApp(serverId, enabled);
+  const [draft, setDraft] = useState<GitHubAppDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const value =
+    draft ??
+    (bound?.githubApp
+      ? {
+          instanceUrl: bound.githubApp.instanceUrl,
+          appId: bound.githubApp.appId,
+          installationId: bound.githubApp.installationId,
+          privateKey: "",
+        }
+      : newGitHubAppDraft());
+  const canSave = !loading && !error && !!upstreamUrl && gitHubAppReady(value);
+  const save = async () => {
+    if (!canSave || !upstreamUrl) return false;
+    setSaving(true);
+    try {
+      await client.authClients.configureGitHubApp({
+        configureGitHubAppAuthClientRequestBody: {
+          ...value,
+          id: bound?.id,
+          mcpServerId: serverId,
+          name: bound?.name ?? `${name} service account`,
+          upstreamOrigin: new URL(upstreamUrl).origin,
+        },
+      });
+      setDraft(null);
+      await retry();
+      toast.success("GitHub App service account saved");
+      return true;
+    } catch {
+      toast.error(
+        "Could not verify or save the GitHub App. Check its credentials, installation, and network access.",
+      );
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+  const detach = async () => {
+    if (!bound) return;
+    await client.authClients.detachFromMcpServer({
+      detachAuthClientFromMcpServerRequestBody: {
+        id: bound.id,
+        mcpServerId: serverId,
+      },
+    });
+    setDraft(null);
+    await retry();
+  };
+  return {
+    value,
+    setDraft,
+    bound,
+    saving,
+    canSave,
+    save,
+    detach,
+    loading,
+    error,
+    retry: () => {
+      void retry().catch(() => undefined);
+    },
+  };
+}
+
+export function useBoundGitHubApp(serverId: string, enabled: boolean) {
   const query = useAuthClientsInfinite(
     { mcpServerId: serverId, clientType: "service_account", limit: 100 },
     undefined,
@@ -56,73 +124,10 @@ export function useGitHubAppDraft(
   const bound = query.data?.pages
     .flatMap((page) => page.result.items)
     .find((item) => item.githubApp);
-  const [draft, setDraft] = useState<GitHubAppDraft | null>(null);
-  const [saving, setSaving] = useState(false);
-  const value =
-    draft ??
-    (bound?.githubApp
-      ? {
-          instanceUrl: bound.githubApp.instanceUrl,
-          appId: bound.githubApp.appId,
-          installationId: bound.githubApp.installationId,
-          privateKey: "",
-        }
-      : newGitHubAppDraft());
-  const canSave =
-    !incomplete &&
-    !query.isLoading &&
-    !query.isError &&
-    !!upstreamUrl &&
-    gitHubAppReady(value);
-  const save = async () => {
-    if (!canSave || !upstreamUrl) return false;
-    setSaving(true);
-    try {
-      await client.authClients.configureGitHubApp({
-        configureGitHubAppAuthClientRequestBody: {
-          ...value,
-          id: bound?.id,
-          mcpServerId: serverId,
-          name: bound?.name ?? `${name} service account`,
-          upstreamOrigin: new URL(upstreamUrl).origin,
-        },
-      });
-      setDraft(null);
-      await query.refetch();
-      toast.success("GitHub App service account saved");
-      return true;
-    } catch {
-      toast.error(
-        "Could not verify or save the GitHub App. Check its credentials, installation, and network access.",
-      );
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
-  const detach = async () => {
-    if (!bound) return;
-    await client.authClients.detachFromMcpServer({
-      detachAuthClientFromMcpServerRequestBody: {
-        id: bound.id,
-        mcpServerId: serverId,
-      },
-    });
-    setDraft(null);
-    await query.refetch();
-  };
   return {
-    value,
-    setDraft,
     bound,
-    saving,
-    canSave,
-    save,
-    detach,
     loading: enabled && (query.isLoading || !!incomplete),
     error: enabled && (query.isError || query.isFetchNextPageError),
-    retry: () => {
-      void query.refetch().catch(() => undefined);
-    },
+    retry: query.refetch,
   };
 }

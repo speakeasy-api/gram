@@ -1,3 +1,4 @@
+import { useBoundGitHubApp } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
@@ -308,7 +309,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const { hasScope, hasAnyScope } = useRBAC();
+  const { hasScope, hasAnyScope, isLoading: rbacLoading } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
@@ -398,23 +399,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
+  const githubApp = useBoundGitHubApp(
+    mcpServer?.id ?? "",
+    !!mcpServer?.remoteMcpServerId && !rbacLoading && hasScope("org:read"),
+  );
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
+    !!githubApp.bound,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError;
+    isRemoteSessionClientsError || isRemoteHeadersError || githubApp.error;
   // Only worth probing when nothing is configured: that is the one state where
   // the upstream's answer changes what the pill should say.
   const identityProbeStatus = useUpstreamProbe(
     remoteMcpServerId,
-    !identityUnavailable &&
+    !rbacLoading &&
+      !identityUnavailable &&
       remoteIdentityMode === "none" &&
       !passThroughAuthorization &&
       !isLoadingRemoteSessionClients &&
-      !isLoadingRemoteHeaders,
+      !isLoadingRemoteHeaders &&
+      !githubApp.loading,
   );
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
@@ -751,7 +759,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             identityProbeStatus === "authentication-required"
           }
           unavailable={identityUnavailable}
-          loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
+          loading={
+            isLoadingRemoteSessionClients ||
+            isLoadingRemoteHeaders ||
+            githubApp.loading
+          }
           settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         />
       ) : null}

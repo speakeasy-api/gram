@@ -538,6 +538,11 @@ const listGitHubAppServers = `-- name: ListGitHubAppServers :many
 SELECT DISTINCT a.mcp_server_id FROM mcp_server_auth_clients a
 JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
 WHERE a.organization_id = $1 AND a.mcp_server_id = ANY($2::uuid[])
+  AND (NOT a.deleted OR NOT EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients replacement
+    WHERE replacement.mcp_server_id = a.mcp_server_id
+      AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+  ))
 `
 
 type ListGitHubAppServersParams struct {
@@ -814,6 +819,11 @@ SELECT EXISTS (
  SELECT 1 FROM mcp_server_auth_clients a
  JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
  WHERE a.mcp_server_id = $1 AND a.organization_id = $2
+   AND (NOT a.deleted OR NOT EXISTS (
+     SELECT 1 FROM mcp_server_auth_clients replacement
+     WHERE replacement.mcp_server_id = a.mcp_server_id
+       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+   ))
 ) AS present
 `
 

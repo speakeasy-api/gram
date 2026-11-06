@@ -27,7 +27,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -402,7 +401,7 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var buildOptions []remotemcp.BuildOption
 	var upstreamToken remotesessions.UpstreamToken
-	hasGitHubApp, err := authclientsrepo.New(s.db).ServerHasGitHubAppAuthClient(ctx, authclientsrepo.ServerHasGitHubAppAuthClientParams{OrganizationID: endpoint.OrganizationID, McpServerID: serverRow.ID})
+	hasGitHubApp, err := s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, serverRow.ID)
 	if err != nil {
 		return fmt.Errorf("check consent GitHub App requirement: %w", err)
 	}
