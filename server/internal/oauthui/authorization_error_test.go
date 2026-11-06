@@ -322,7 +322,7 @@ func pageText(response *httptest.ResponseRecorder) string {
 	return strings.ReplaceAll(strings.Join(strings.Fields(response.Body.String()), " "), "&#39;", "'")
 }
 
-// Only an outage says to retry; a fault of ours says we are on it.
+// Only an outage says to retry; a fault of ours points to support.
 func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -331,7 +331,7 @@ func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
 		want      string
 		wantRetry bool
 	}{
-		{"internal fault", http.StatusInternalServerError, "We're looking into it.", false},
+		{"internal fault", http.StatusInternalServerError, "If it keeps happening, share the technical details below with Speakeasy support.", false},
 		{"outage", http.StatusServiceUnavailable, "Try connecting again shortly.", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -355,7 +355,7 @@ func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
 		want      string
 		wantRetry bool
 	}{
-		{oauthui.ReasonCheckFailed, "We're looking into it.", false},
+		{oauthui.ReasonCheckFailed, "If it keeps happening, share the technical details below with Speakeasy support.", false},
 		{oauthui.ReasonCheckUnavailable, "Try again shortly.", true},
 		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
 		{oauthui.ReasonCheckNeedsReconnect, "reconnect to the service", false},

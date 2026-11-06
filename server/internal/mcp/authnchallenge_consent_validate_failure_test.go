@@ -85,7 +85,7 @@ func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *tes
 	require.Equal(t, http.StatusInternalServerError, status)
 	require.Contains(t, page, "Couldn't check the connection")
 	require.Contains(t, page, "Checking the server's connection")
-	require.Contains(t, page, "We're looking into it.")
+	require.Contains(t, page, "If it keeps happening, share the technical details below with Speakeasy support.")
 	require.NotContains(t, page, "again shortly")
 	require.NotContains(t, page, "resolve upstream tokens")
 	require.Contains(t, page, "Error ID")

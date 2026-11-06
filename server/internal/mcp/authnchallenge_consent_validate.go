@@ -95,7 +95,7 @@ func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
 	return checkFailure{code: code, page: checkFailurePage(code)}, true
 }
 
-// checkFailurePage suggests retrying only for an outage; a fault of ours or an unknown party never gets a retry.
+// checkFailurePage suggests retrying only for an outage; a fault of ours or an unknown party points to support.
 func checkFailurePage(code mcpconnectionattempts.Code) oauthui.Reason {
 	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
 	switch meaning.WhoFixes {
