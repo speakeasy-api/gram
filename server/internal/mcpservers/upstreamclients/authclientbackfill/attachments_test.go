@@ -282,6 +282,7 @@ func TestRun_AttachmentGrantWaitsOnAConcurrentConnectionChange(t *testing.T) {
 // The backfill fixture must not require an index retired by the resource cutover.
 // Both runs use private cloned test databases, never the application database.
 func TestSeedAgentAttachmentFixture_BothGrantIndexShapes(t *testing.T) {
+	t.Parallel()
 	for _, expanded := range []bool{false, true} {
 		name := "old_indexes"
 		if expanded {
