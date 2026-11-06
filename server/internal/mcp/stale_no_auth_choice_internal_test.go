@@ -367,82 +367,6 @@ func staleChoiceRemedyGate(s *Service, remedies map[uuid.UUID]bool) *metaGateCon
 	return gate
 }
 
-func rowForMember(t *testing.T, rows []mcpconnectionattempts.Row, memberID uuid.UUID) mcpconnectionattempts.Row {
-	t.Helper()
-	for _, row := range rows {
-		if row.MemberID == memberID.String() {
-			return row
-		}
-	}
-	require.FailNow(t, "no row for member", memberID.String())
-	return mcpconnectionattempts.Row{}
-}
-
-// An admin's setup change reads apart from a sign-in never done, and names who can fix it.
-func TestRecordConsentPage_StaleChoiceIsSetupChanged(t *testing.T) {
-	t.Parallel()
-	rec := mcpconnectionattemptstest.New(t)
-	s := &Service{connections: rec.Recorder}
-	reconnectable, adminOnly, unchecked, neverSignedIn := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{reconnectable: true, adminOnly: false})
-	stale := gapWithChoice(authClientReasonNoAuthStale)
-	firstConnect := gapResolution(authClientReasonMissingChoice)
-	view := &gatewayConsentView{
-		members: []metaMember{
-			{serverID: reconnectable, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
-			{serverID: adminOnly, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
-			{serverID: unchecked, authClient: &stale, upstreamUnavailable: staleMemberError(authClientReasonNoAuthStale)},
-			{serverID: neverSignedIn, authClient: &firstConnect},
-		},
-		Servers: []gatewayServer{
-			{ServerID: reconnectable.String(), Status: gatewayServerNotConnected},
-			{ServerID: adminOnly.String(), Status: gatewayServerReconnect},
-			{ServerID: unchecked.String(), Status: gatewayServerNotConnected},
-			{ServerID: neverSignedIn.String(), Status: gatewayServerNotConnected},
-		},
-	}
-	view.staleChoiceRemedies = s.staleChoiceRemedies(t.Context(), testenv.NewLogger(t), gate, view.members[:2])
-
-	s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
-
-	rows := rec.Rows()
-	for name, tc := range map[string]struct {
-		member uuid.UUID
-		reason mcpconnectionattempts.Code
-		detail string
-		who    mcpconnectionattempts.WhoFixes
-	}{
-		"consent replaces the choice":  {reconnectable, mcpconnectionattempts.CodeNeedsSignIn, memberSetupChangedDetail, mcpconnectionattempts.WhoPerson},
-		"consent cannot replace it":    {adminOnly, mcpconnectionattempts.CodeUpstreamSignInNotSetUp, memberSetupChangedDetail, mcpconnectionattempts.WhoAdmin},
-		"remedy not checked":           {unchecked, mcpconnectionattempts.CodeNeedsSignIn, memberSetupChangedDetail, mcpconnectionattempts.WhoPerson},
-		"never signed in is unchanged": {neverSignedIn, mcpconnectionattempts.CodeNeedsSignIn, string(gatewayServerNotConnected), mcpconnectionattempts.WhoPerson},
-	} {
-		row := rowForMember(t, rows, tc.member)
-		require.Equal(t, tc.reason.String(), row.Reason, name)
-		require.Equal(t, tc.detail, row.SubReason, name)
-		require.Equal(t, string(tc.who), row.WhoFixes, name)
-	}
-}
-
-// The status dedupe still writes a row when a member's setup changes under the same attempt.
-func TestRecordConsentPage_SetupChangeIsANewMemberStatus(t *testing.T) {
-	t.Parallel()
-	s, rec, _ := memberStatusService(t)
-	endpoint, state := gatewayEndpoint(), openState()
-	member := uuid.New()
-	render := func(unavailable error) {
-		view := memberView(map[uuid.UUID]gatewayServerStatus{member: gatewayServerNotConnected})
-		view.members = []metaMember{{serverID: member, upstreamUnavailable: unavailable}}
-		s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
-	}
-
-	render(nil)
-	render(staleMemberError(authClientReasonNoAuthStale))
-	rows := rec.Rows()
-	require.Len(t, rows, 2)
-	require.Equal(t, memberSetupChangedDetail, rows[1].SubReason)
-}
-
 // callApprovedMember runs a call through execute_tool on a gateway whose catalog approves member.
 func callApprovedMember(t *testing.T, s *Service, gate *metaGateContext, member metaMember) string {
 	t.Helper()
@@ -552,4 +476,20 @@ func TestStaleChoiceSavedOnlyFromTheCredential(t *testing.T) {
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
 	require.True(t, ok)
 	require.True(t, stale.saved)
+}
+
+// A person told to reconnect first is told consent is needed, not that signing in won't help.
+func TestStaleChoiceStatusFollowsTheMessage(t *testing.T) {
+	t.Parallel()
+	s := &Service{logger: testenv.NewLogger(t)}
+	member := metaMember{slug: "db", serverID: uuid.New(), upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
+	unrefreshable := staleChoiceRemedyGate(s, nil)
+	unrefreshable.authentication.refreshableUserSession = false
+	status, detail, _ := s.staleMemberStatus(t.Context(), s.logger, unrefreshable, member)
+	require.Equal(t, metamcp.SignInNeedsConsent, status)
+	require.Contains(t, detail, "If that doesn't help, ask your administrator")
+
+	owner := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
+	status, _, _ = s.staleMemberStatus(t.Context(), s.logger, owner, member)
+	require.Equal(t, metamcp.SignInActionRequired, status)
 }

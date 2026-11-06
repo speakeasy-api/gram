@@ -1126,8 +1126,8 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) (string, staleChoiceRemedy) {
 	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
 	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
-	if what, decided := staleChoiceHappened(remedy); decided && stale.saved {
-		s.recordMemberFailure(ctx, gate, member, what, mcpconnectionattempts.Detail(memberSetupChangedDetail))
+	if stale.saved {
+		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
 	}
 	return message, remedy
 }

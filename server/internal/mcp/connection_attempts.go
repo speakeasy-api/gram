@@ -246,21 +246,13 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 		return memberStatus{id: "", status: "", what: nil, opts: nil}, false
 	}
 	var authClient *authClientResolution
-	var unavailable error
 	for i := range gateway.members {
 		if gateway.members[i].serverID == serverID {
 			authClient = gateway.members[i].authClient
-			unavailable = gateway.members[i].upstreamUnavailable
 			break
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
-	if stale, ok := errors.AsType[memberStaleChoiceError](unavailable); ok && stale.saved && (what == mcpconnectionattempts.CodeNeedsSignIn || what == mcpconnectionattempts.CodeUpstreamSignInNotSetUp) {
-		detail = memberSetupChangedDetail
-		if code, decided := staleChoiceHappened(gateway.staleChoiceRemedies[serverID]); decided {
-			what = code
-		}
-	}
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
 	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
@@ -370,18 +362,17 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 // memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
 const memberSetupChangedDetail = "setup_changed"
 
-// staleChoiceHappened records whoever the stale choice's message tells to act first; no remedy decides nothing.
+// staleChoiceHappened records whoever the stale choice's message tells to act first.
 // An unchecked remedy is our failed lookup, not the person's or an admin's.
-func staleChoiceHappened(remedy staleChoiceRemedy) (mcpconnectionattempts.Code, bool) {
+func staleChoiceHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
 	switch remedy {
 	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
-		return mcpconnectionattempts.CodeNeedsSignIn, true
+		return mcpconnectionattempts.CodeNeedsSignIn
 	case staleChoiceAskAdmin:
-		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, true
+		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
 	case staleChoiceUnchecked:
-		return mcpconnectionattempts.CodeInternalError, true
 	}
-	return mcpconnectionattempts.Code{}, false
+	return mcpconnectionattempts.CodeInternalError
 }
 
 // gatewayServerHappened maps a server's consent status, and any gap in its
