@@ -52,6 +52,7 @@ import {
   useHideInsightsDock,
   useInsightsState,
 } from "@/components/insights-context";
+import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -310,7 +311,6 @@ export function ChatLanding({
             }
           >
             <ChatComposer />
-            <StartFreshThread />
             <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
             <NavigateOnFirstMessage />
           </div>
@@ -394,14 +394,7 @@ export function ChatLanding({
   );
 }
 
-/**
- * Carries a draft typed into the fallback input over to the shared composer.
- *
- * The fallback renders only until the assistant runtime is ready; the two
- * controls keep their drafts in different places, so without this a message
- * typed during that window vanishes when the composer swaps in. Runs after
- * StartFreshThread so the text lands on the new thread, not the old one.
- */
+/** Start a fresh landing conversation, then transfer any fallback draft. */
 function SeedComposerDraft({
   value,
   onSeeded,
@@ -409,38 +402,7 @@ function SeedComposerDraft({
   value: string;
   onSeeded: () => void;
 }): null {
-  const aui = useAui();
-  const listLoading = useAuiState(({ threads }) => threads.isLoading);
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (listLoading || seededRef.current || !value.trim()) return;
-    seededRef.current = true;
-    aui.composer().setText(value);
-    onSeeded();
-  }, [aui, listLoading, value, onSeeded]);
-  return null;
-}
-
-/**
- * The landing widgets always start a NEW conversation: they share one runtime
- * with the dock, and the dock is the only surface that deliberately continues
- * an existing chat. Without this, opening /chat (or project home) after a dock
- * conversation would drop the next message into that thread.
- */
-function StartFreshThread(): null {
-  const aui = useAui();
-  // Switch unconditionally, exactly once, as soon as the thread list has
-  // loaded. Reacting to "the thread has messages" instead would fire on the
-  // user's OWN send — switching the just-sent message out from under them and
-  // leaving an empty /chat/new. Thread ids are minted lazily
-  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
-  const listLoading = useAuiState(({ threads }) => threads.isLoading);
-  const switchedRef = useRef(false);
-  useEffect(() => {
-    if (switchedRef.current || listLoading) return;
-    switchedRef.current = true;
-    aui.threads().switchToNewThread();
-  }, [aui, listLoading]);
+  useComposerDraftHandover(value, onSeeded, { startFresh: true });
   return null;
 }
 

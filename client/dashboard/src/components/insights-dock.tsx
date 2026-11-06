@@ -1,3 +1,4 @@
+import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
@@ -1767,15 +1768,7 @@ function FallbackDraftHandover({
   value: string;
   onHandedOver: () => void;
 }): null {
-  const aui = useAui();
-  // Until the thread list loads, the composer belongs to a placeholder thread
-  // that drops anything written to it.
-  const listLoading = useAuiState(({ threads }) => threads.isLoading);
-  useEffect(() => {
-    if (listLoading || !value.trim()) return;
-    aui.composer().setText(value);
-    onHandedOver();
-  }, [aui, listLoading, value, onHandedOver]);
+  useComposerDraftHandover(value, onHandedOver);
   return null;
 }
 

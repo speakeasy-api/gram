@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   activeRoute: "detail" as "detail" | "new" | "home" | "page",
   assistantReady: true,
   composerSetText: vi.fn(),
+  composerText: "",
   threadsLoading: false,
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
@@ -97,9 +98,15 @@ vi.mock("@assistant-ui/react", () => ({
   useAui: () => ({
     composer: () => ({
       stopDictation: vi.fn(),
-      setText: mocks.composerSetText,
+      setText: (text: string) => {
+        mocks.composerSetText(text);
+        mocks.composerText = text;
+      },
+      getState: () => ({ text: mocks.composerText }),
     }),
     thread: () => ({ append: vi.fn() }),
+    threads: () => ({ getState: () => ({ isLoading: mocks.threadsLoading }) }),
+    subscribe: () => () => {},
   }),
   useAuiState: (
     selector: (state: {
@@ -216,6 +223,7 @@ beforeEach(() => {
   mocks.activeRoute = "detail";
   mocks.assistantReady = true;
   mocks.composerSetText.mockClear();
+  mocks.composerText = "";
   mocks.threadsLoading = false;
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
