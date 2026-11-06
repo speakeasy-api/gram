@@ -115,7 +115,7 @@ vi.mock("@gram/client/react-query/summarizeChat.js", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => false,
-    hasAnyScope: () => false,
+    hasAnyScope: (scopes: string[]) => scopes.includes("org:read"),
     hasAllScopes: () => false,
     isLoading: false,
     grants: [],
@@ -357,7 +357,11 @@ describe("ChatDetailSheet session actor", () => {
 
     expectAgentLink("Project Assistant");
     expect(screen.getByText("on behalf of")).toBeTruthy();
-    expect(screen.getByText("Invoking Person")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Invoking Person" })
+        .getAttribute("href"),
+    ).toContain(encodeURIComponent("user:invoking-user"));
     expect(screen.getByText("U_UNMAPPED")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "U_UNMAPPED" })).toBeNull();
 

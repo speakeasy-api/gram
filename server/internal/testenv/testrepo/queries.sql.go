@@ -216,6 +216,21 @@ func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jso
 	return result.RowsAffected(), nil
 }
 
+const clearSlackParticipantHistoricalMappingFixture = `-- name: ClearSlackParticipantHistoricalMappingFixture :exec
+UPDATE chat_message_participants SET user_id = NULL, display_name = 'Historical name'
+WHERE message_id = $1 AND project_id = $2
+`
+
+type ClearSlackParticipantHistoricalMappingFixtureParams struct {
+	MessageID uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ClearSlackParticipantHistoricalMappingFixture(ctx context.Context, arg ClearSlackParticipantHistoricalMappingFixtureParams) error {
+	_, err := q.db.Exec(ctx, clearSlackParticipantHistoricalMappingFixture, arg.MessageID, arg.ProjectID)
+	return err
+}
+
 const copyConsentEMACredentialToProjectFixture = `-- name: CopyConsentEMACredentialToProjectFixture :exec
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
@@ -7581,6 +7596,100 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 	return err
 }
 
+const setSlackParticipantAssistantCreatorFixture = `-- name: SetSlackParticipantAssistantCreatorFixture :exec
+UPDATE assistants SET created_by_user_id = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantAssistantCreatorFixtureParams struct {
+	UserID    pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantAssistantCreatorFixture(ctx context.Context, arg SetSlackParticipantAssistantCreatorFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantAssistantCreatorFixture, arg.UserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setSlackParticipantAssistantDeletedFixture = `-- name: SetSlackParticipantAssistantDeletedFixture :exec
+UPDATE assistants SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantAssistantDeletedFixtureParams struct {
+	Deleted   bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantAssistantDeletedFixture(ctx context.Context, arg SetSlackParticipantAssistantDeletedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantAssistantDeletedFixture, arg.Deleted, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setSlackParticipantChatDeletedFixture = `-- name: SetSlackParticipantChatDeletedFixture :exec
+UPDATE chats SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantChatDeletedFixtureParams struct {
+	Deleted   bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantChatDeletedFixture(ctx context.Context, arg SetSlackParticipantChatDeletedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantChatDeletedFixture, arg.Deleted, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setSlackParticipantEventDeletedFixture = `-- name: SetSlackParticipantEventDeletedFixture :exec
+UPDATE assistant_thread_events SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantEventDeletedFixtureParams struct {
+	Deleted   bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantEventDeletedFixture(ctx context.Context, arg SetSlackParticipantEventDeletedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantEventDeletedFixture, arg.Deleted, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setSlackParticipantThreadDeletedFixture = `-- name: SetSlackParticipantThreadDeletedFixture :exec
+UPDATE assistant_threads SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantThreadDeletedFixtureParams struct {
+	Deleted   bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantThreadDeletedFixture(ctx context.Context, arg SetSlackParticipantThreadDeletedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantThreadDeletedFixture, arg.Deleted, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setSlackParticipantThreadSourceFixture = `-- name: SetSlackParticipantThreadSourceFixture :exec
+UPDATE assistant_threads SET source_kind = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetSlackParticipantThreadSourceFixtureParams struct {
+	SourceKind string
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) SetSlackParticipantThreadSourceFixture(ctx context.Context, arg SetSlackParticipantThreadSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, setSlackParticipantThreadSourceFixture, arg.SourceKind, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setStaleDelegationRefreshExpiryFixture = `-- name: SetStaleDelegationRefreshExpiryFixture :exec
 UPDATE trusted_issuer_sessions
 SET identity_assertion_encrypted = 'valid-assertion',
@@ -8264,6 +8373,22 @@ func (q *Queries) SoftDeleteWorkloadIssuerFixture(ctx context.Context, arg SoftD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const stampSlackParticipantEventSourceFixture = `-- name: StampSlackParticipantEventSourceFixture :exec
+UPDATE assistant_thread_events
+SET normalized_payload_json = normalized_payload_json || '{"_gram_source_kind":"speakeasy_slack"}'::jsonb
+WHERE id = $1 AND project_id = $2
+`
+
+type StampSlackParticipantEventSourceFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) StampSlackParticipantEventSourceFixture(ctx context.Context, arg StampSlackParticipantEventSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, stampSlackParticipantEventSourceFixture, arg.ID, arg.ProjectID)
+	return err
 }
 
 const stripDelegationLifecycleSecretsFixture = `-- name: StripDelegationLifecycleSecretsFixture :exec

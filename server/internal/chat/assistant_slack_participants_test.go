@@ -15,6 +15,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func seedSlackParticipantThread(t *testing.T, ti *chatTestInstance, ctx context.Context, source string) (uuid.UUID, uuid.UUID, uuid.UUID) {
@@ -47,7 +48,7 @@ func TestAssistantSlackParticipantsListAndLoad(t *testing.T) {
 	require.NoError(t, sq.CreateSlackMappingPersonForTest(ctx, slackrepo.CreateSlackMappingPersonForTestParams{OrganizationID: ti.orgID, UserID: "demo_invoking_user"}))
 	_, err := sq.CreateSlackMappingForTest(ctx, slackrepo.CreateSlackMappingForTestParams{OrganizationID: ti.orgID, SlackTeamID: "T_INVOKING", SlackUserID: "U_FIRST", UserID: "demo_invoking_user"})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE assistants SET created_by_user_id = 'demo_assistant_creator' WHERE id = $1", assistantID)
+	err = testrepo.New(ti.conn).SetSlackParticipantAssistantCreatorFixture(ctx, testrepo.SetSlackParticipantAssistantCreatorFixtureParams{ProjectID: ti.projectID, ID: assistantID, UserID: conv.ToPGText("demo_assistant_creator")})
 	require.NoError(t, err)
 	// Context and backfilled history are not invocation identities. Exact keys
 	// and the server's source stamp must win over thread defaults.
@@ -91,12 +92,63 @@ func TestAssistantSlackParticipantsListAndLoad(t *testing.T) {
 	require.Equal(t, "demo_assistant_creator", stored.UserID.String)
 	// A historical snapshot can predate mapping. Deduplicate by Slack identity,
 	// not its optional Speakeasy user ID; message attribution stays untouched.
-	_, err = ti.conn.Exec(ctx, "UPDATE chat_message_participants SET user_id = NULL WHERE message_id = $1", messageID)
+	err = testrepo.New(ti.conn).ClearSlackParticipantHistoricalMappingFixture(ctx, testrepo.ClearSlackParticipantHistoricalMappingFixtureParams{ProjectID: ti.projectID, MessageID: uuid.NullUUID{UUID: messageID, Valid: true}})
 	require.NoError(t, err)
 	loaded, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Len(t, loaded.Participants, 2)
+	require.Equal(t, "demo_invoking_user", conv.PtrValOr(loaded.Participants[0].UserID, ""))
+	require.Equal(t, "Invoking Person", conv.PtrValOr(loaded.Participants[0].DisplayName, ""))
 	require.Nil(t, loaded.Messages[0].Participants[0].UserID)
+	require.Equal(t, "Historical name", conv.PtrValOr(loaded.Messages[0].Participants[0].DisplayName, ""))
+	listed, err = ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, loaded.Participants, listed.Chats[0].Participants)
+}
+
+func TestAssistantSlackParticipantsTeamlessSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, multipleWorkspaces := range []bool{false, true} {
+		name := "unique event workspace"
+		if multipleWorkspaces {
+			name = "ambiguous event workspaces"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ti := newTestChatService(t)
+			ctx := initSessionCtx(t, ti)
+			assistantID, threadID, chatID := seedSlackParticipantThread(t, ti, ctx, "slack")
+			// The same sender in two directory workspaces leaves the snapshot
+			// unresolved. Only event evidence may disambiguate the chat rollup.
+			seedTagDirectory(t, ti, "T_FIRST", "U_SHARED", "First workspace person")
+			seedTagDirectory(t, ti, "T_SECOND", "U_SHARED", "Second workspace person")
+			messageID, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, CreatedAt: conv.ToPGTimestamptz(time.Now())})
+			require.NoError(t, err)
+			require.NoError(t, repo.New(ti.conn).RecordSlackMessageParticipant(ctx, repo.RecordSlackMessageParticipantParams{ProjectID: ti.projectID, MessageID: messageID, ProviderUserID: "U_SHARED"}))
+			seedSlackParticipantEvent(t, ti, assistantID, threadID, `{"team_id":"T_FIRST","user_id":"U_SHARED"}`)
+			// Repeated invocations in one workspace are still unambiguous.
+			seedSlackParticipantEvent(t, ti, assistantID, threadID, `{"team_id":"T_FIRST","user_id":"U_SHARED"}`)
+			if multipleWorkspaces {
+				seedSlackParticipantEvent(t, ti, assistantID, threadID, `{"team_id":"T_SECOND","user_id":"U_SHARED"}`)
+			}
+			loaded, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+			require.NoError(t, err)
+			if multipleWorkspaces {
+				require.Len(t, loaded.Participants, 3)
+				require.Nil(t, loaded.Participants[0].ProviderTeamID)
+			} else {
+				require.Len(t, loaded.Participants, 1)
+				require.Equal(t, "T_FIRST", conv.PtrValOr(loaded.Participants[0].ProviderTeamID, ""))
+				require.Equal(t, "First workspace person", conv.PtrValOr(loaded.Participants[0].DisplayName, ""))
+			}
+			require.Len(t, loaded.Messages[0].Participants, 1)
+			require.Nil(t, loaded.Messages[0].Participants[0].ProviderTeamID)
+			require.Nil(t, loaded.Messages[0].Participants[0].DisplayName)
+			listed, err := ti.service.ListChats(ctx, defaultPayload())
+			require.NoError(t, err)
+			require.Equal(t, loaded.Participants, listed.Chats[0].Participants)
+		})
+	}
 }
 
 func TestAssistantSlackParticipantsIsolationAndDeletion(t *testing.T) {
@@ -136,28 +188,38 @@ func TestAssistantSlackParticipantsIsolationAndDeletion(t *testing.T) {
 		require.Empty(t, hidden)
 	}
 	// An explicit Slack stamp works even on a thread originating elsewhere.
-	_, err = ti.conn.Exec(ctx, "UPDATE assistant_threads SET source_kind = 'dashboard' WHERE id = $1", threadID)
+	err = testrepo.New(ti.conn).SetSlackParticipantThreadSourceFixture(ctx, testrepo.SetSlackParticipantThreadSourceFixtureParams{ProjectID: ti.projectID, ID: threadID, SourceKind: "dashboard"})
 	require.NoError(t, err)
 	hidden, err := q.ListAssistantSlackParticipants(ctx, params)
 	require.NoError(t, err)
 	require.Empty(t, hidden)
-	_, err = ti.conn.Exec(ctx, `UPDATE assistant_thread_events SET normalized_payload_json = normalized_payload_json || '{"_gram_source_kind":"speakeasy_slack"}'::jsonb WHERE id = $1`, eventID)
+	err = testrepo.New(ti.conn).StampSlackParticipantEventSourceFixture(ctx, testrepo.StampSlackParticipantEventSourceFixtureParams{ProjectID: ti.projectID, ID: eventID})
 	require.NoError(t, err)
 	rows, err = q.ListAssistantSlackParticipants(ctx, params)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+	fixtures := testrepo.New(ti.conn)
 	for _, target := range []struct {
-		table string
-		id    uuid.UUID
+		name       string
+		setDeleted func(bool) error
 	}{
-		{"assistant_thread_events", eventID}, {"assistant_threads", threadID}, {"assistants", assistantID}, {"chats", chatID},
+		{"event", func(deleted bool) error {
+			return fixtures.SetSlackParticipantEventDeletedFixture(ctx, testrepo.SetSlackParticipantEventDeletedFixtureParams{ProjectID: ti.projectID, ID: eventID, Deleted: deleted})
+		}},
+		{"thread", func(deleted bool) error {
+			return fixtures.SetSlackParticipantThreadDeletedFixture(ctx, testrepo.SetSlackParticipantThreadDeletedFixtureParams{ProjectID: ti.projectID, ID: threadID, Deleted: deleted})
+		}},
+		{"assistant", func(deleted bool) error {
+			return fixtures.SetSlackParticipantAssistantDeletedFixture(ctx, testrepo.SetSlackParticipantAssistantDeletedFixtureParams{ProjectID: ti.projectID, ID: assistantID, Deleted: deleted})
+		}},
+		{"chat", func(deleted bool) error {
+			return fixtures.SetSlackParticipantChatDeletedFixture(ctx, testrepo.SetSlackParticipantChatDeletedFixtureParams{ProjectID: ti.projectID, ID: chatID, Deleted: deleted})
+		}},
 	} {
-		_, err = ti.conn.Exec(ctx, "UPDATE "+target.table+" SET deleted_at = clock_timestamp() WHERE id = $1", target.id)
-		require.NoError(t, err)
+		require.NoError(t, target.setDeleted(true))
 		hidden, err := q.ListAssistantSlackParticipants(ctx, params)
 		require.NoError(t, err)
-		require.Empty(t, hidden, target.table)
-		_, err = ti.conn.Exec(ctx, "UPDATE "+target.table+" SET deleted_at = NULL WHERE id = $1", target.id)
-		require.NoError(t, err)
+		require.Empty(t, hidden, target.name)
+		require.NoError(t, target.setDeleted(false))
 	}
 }
