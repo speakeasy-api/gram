@@ -579,6 +579,39 @@ describe("the review step", () => {
     expect(form.addGrants ?? []).toEqual([]);
   });
 
+  it("closes the review when the role is read again with other grants, and saves what the next review shows", () => {
+    // The roles list keeps being refreshed while the editor is open. A review
+    // opened before the role gained a grant no longer describes the save, so
+    // it closes rather than commit grants nobody reviewed; the next save is
+    // reviewed afresh and keeps the grant the role gained.
+    const { reread } = renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.getByRole("button", { name: "Save role" })).toBeTruthy();
+
+    const linear = [{ resourceKind: "mcp" as const, resourceId: "server-b" }];
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    fireEvent.click(
+      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+    );
+    fireEvent.click(review.getByRole("button", { name: "Save role" }));
+    expect(mocks.update).toHaveBeenCalledOnce();
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([
+      { scope: "log:read", selectors: undefined },
+    ]);
+    expect(form.removeGrants ?? []).toEqual([]);
+  });
+
   it("saves straight away when new holders gain nothing sensitive", () => {
     addAda();
     renderEditor({ ...role, grants: [{ scope: "org:read" }] });

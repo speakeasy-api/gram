@@ -278,8 +278,11 @@ export function CreateRoleDialog({
   // ─── Rule editor state ────────────────────────────────────────
   type DialogStep = "form" | "rule-editor" | "review";
   const [dialogStep, setDialogStep] = useState<DialogStep>("form");
-  // What the pending save adds, shown for review before it goes through.
+  // What the pending save adds, shown for review before it goes through. The
+  // save commits the grants that were reviewed, not the form as it stands
+  // when the review is confirmed.
   const [review, setReview] = useState<{
+    grants: SdkRoleGrant[];
     added: AddedPermission[];
     newHolders: NewHolders | null;
     confirmed: boolean;
@@ -686,48 +689,70 @@ export function CreateRoleDialog({
 
   // ─── Submit ───────────────────────────────────────────────────
 
+  // The grants the form holds now, in the shape the save sends.
+  const pendingGrants = useMemo(
+    () => (scopeDefinitions ? sdkGrantsFromForm(grants, scopeDefinitions) : []),
+    [grants, scopeDefinitions],
+  );
+
+  // A review is of the grants as they were when it opened. The form follows
+  // the role as it is read again, so if the grants change while the review is
+  // open, what was reviewed is no longer what would be saved: the review
+  // closes, and the next save opens a fresh one.
+  if (
+    review &&
+    dialogStep === "review" &&
+    JSON.stringify(pendingGrants) !== JSON.stringify(review.grants)
+  ) {
+    setReview(null);
+    setDialogStep("form");
+  }
+
   // A save that adds a permission, or adds holders to a role that grants
   // sensitive access, goes through the review step first; the confirmation
   // there is required only when something sensitive is among what it gives.
   const handleSubmit = () => {
     if (!scopeDefinitions) return;
 
-    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
-    if (dialogStep !== "review") {
-      let addGrants = sdkGrants;
-      let newHolders: NewHolders | null = null;
-      if (isEditing) {
-        const changes = diffGrants(
-          sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
-          sdkGrants,
+    if (dialogStep === "review") {
+      if (review) commitSave(review.grants);
+      return;
+    }
+
+    const sdkGrants = pendingGrants;
+    let addGrants = sdkGrants;
+    let newHolders: NewHolders | null = null;
+    if (isEditing) {
+      const changes = diffGrants(
+        sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+        sdkGrants,
+      );
+      // Lifting an exception gives the permission back where it applied,
+      // so it is reviewed like an addition.
+      addGrants = [
+        ...changes.addGrants,
+        ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
+      ];
+      // Whoever the save adds to the role gains everything it grants, as
+      // the save leaves it. A new role's grants are all additions already.
+      const members = [...selectedMembers].filter(
+        (id) => !initialMembers.has(id),
+      ).length;
+      const agents = [...selectedAgents].filter(
+        (id) => !initialAgents.has(id),
+      ).length;
+      if (members + agents > 0) {
+        const sensitive = addedPermissions(sdkGrants, catalogue).filter(
+          (p) => p.sensitive,
         );
-        // Lifting an exception gives the permission back where it applied,
-        // so it is reviewed like an addition.
-        addGrants = [
-          ...changes.addGrants,
-          ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
-        ];
-        // Whoever the save adds to the role gains everything it grants, as
-        // the save leaves it. A new role's grants are all additions already.
-        const members = [...selectedMembers].filter(
-          (id) => !initialMembers.has(id),
-        ).length;
-        const agents = [...selectedAgents].filter(
-          (id) => !initialAgents.has(id),
-        ).length;
-        if (members + agents > 0) {
-          const sensitive = addedPermissions(sdkGrants, catalogue).filter(
-            (p) => p.sensitive,
-          );
-          if (sensitive.length > 0) newHolders = { members, agents, sensitive };
-        }
+        if (sensitive.length > 0) newHolders = { members, agents, sensitive };
       }
-      const added = addedPermissions(addGrants, catalogue);
-      if (added.length > 0 || newHolders) {
-        setReview({ added, newHolders, confirmed: false });
-        setDialogStep("review");
-        return;
-      }
+    }
+    const added = addedPermissions(addGrants, catalogue);
+    if (added.length > 0 || newHolders) {
+      setReview({ grants: sdkGrants, added, newHolders, confirmed: false });
+      setDialogStep("review");
+      return;
     }
     commitSave(sdkGrants);
   };
