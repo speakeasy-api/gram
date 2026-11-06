@@ -46,7 +46,8 @@ type metaMemberError struct {
 func (e *metaMemberError) Error() string { return e.message }
 
 // handleMetaDescribeServerCall: one member's catalog as qualified names and
-// descriptions, without schemas (describe_tools' job).
+// descriptions, without schemas (describe_tools' job). A member that cannot be
+// described is answered as an isError result and returned as the failure.
 func (s *Service) handleMetaDescribeServerCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -54,29 +55,31 @@ func (s *Service) handleMetaDescribeServerCall(
 	members []metaMember,
 	req *rawRequest,
 	argsRaw json.RawMessage,
-) (json.RawMessage, error) {
+) (json.RawMessage, *metaMemberFailure, error) {
 	var args struct {
 		Server string `json:"server"`
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogWarn(ctx, logger)
 		}
 	}
 	if args.Server == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
 	}
 
 	member, ok := findMetaMember(members, args.Server)
 	if !ok {
-		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
+		return nil, nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, s.memberFailureMessage(ctx, logger, gate, member, err))
+			failure := newMetaMemberFailure(member, err, s.memberFailureMessage(ctx, logger, gate, member, err))
+			body, marshalErr := marshalMetaToolError(ctx, logger, req.ID, failure.message)
+			return body, &failure, marshalErr
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	described := make([]metamcp.DescribedTool, 0, len(catalog.entries))
@@ -97,13 +100,15 @@ func (s *Service) handleMetaDescribeServerCall(
 		Tools: described,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
 	}
-	return marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	body, err := marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	return body, nil, err
 }
 
 // handleMetaDescribeToolsCall: full input schemas for the requested
-// qualified names; misses land in not_found rather than being dropped.
+// qualified names; misses land in not_found rather than being dropped. Members
+// that cannot be described land in failed and are returned as failures.
 func (s *Service) handleMetaDescribeToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -111,17 +116,17 @@ func (s *Service) handleMetaDescribeToolsCall(
 	members []metaMember,
 	req *rawRequest,
 	argsRaw json.RawMessage,
-) (json.RawMessage, error) {
+) (json.RawMessage, []metaMemberFailure, error) {
 	var args struct {
 		Tools []string `json:"tools"`
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogWarn(ctx, logger)
 		}
 	}
 	if len(args.Tools) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogWarn(ctx, logger)
 	}
 
 	// Group by member so each toolset is described once.
@@ -130,7 +135,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		toolNames []string
 	}
 	if len(args.Tools) > metamcp.MaxDescribeTools {
-		return nil, oops.E(oops.CodeInvalid, nil, "tools accepts at most %d names per call", metamcp.MaxDescribeTools).LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "tools accepts at most %d names per call", metamcp.MaxDescribeTools).LogWarn(ctx, logger)
 	}
 
 	requestsBySlug := map[string]*memberRequest{}
@@ -146,7 +151,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		seen[qualified] = struct{}{}
 		serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
 		member, ok := findMetaMember(members, serverSlug)
 		if !ok {
@@ -164,6 +169,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 
 	described := []metamcp.SchemaTool{}
 	failed := []metamcp.FailedServer{}
+	var failures []metaMemberFailure
 	for _, slug := range order {
 		mr := requestsBySlug[slug]
 		catalog, err := s.describeMetaMember(ctx, logger, gate, mr.member)
@@ -171,10 +177,12 @@ func (s *Service) handleMetaDescribeToolsCall(
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
 			if _, ok := errors.AsType[*metaMemberError](err); ok {
-				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: s.memberFailureMessage(ctx, logger, gate, mr.member, err)})
+				failure := newMetaMemberFailure(mr.member, err, s.memberFailureMessage(ctx, logger, gate, mr.member, err))
+				failures = append(failures, failure)
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: failure.message})
 				continue
 			}
-			return nil, err
+			return nil, nil, err
 		}
 		for _, toolName := range mr.toolNames {
 			entry, ok := catalog.byName[toolName]
@@ -202,9 +210,10 @@ func (s *Service) handleMetaDescribeToolsCall(
 		Failed:   failed,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
 	}
-	return marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	body, err := marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	return body, failures, err
 }
 
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The
@@ -347,25 +356,17 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
-		// a gateway fault. Internal faults — unexpected errors and server
-		// invariant violations — keep the error envelope. The innermost
-		// shareable message carries the actionable cause (every
-		// ShareableError public is written to be client-safe).
+		// a gateway fault. Internal faults (unexpected errors and server
+		// invariant violations) keep the error envelope.
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
 			shareable.Code != oops.CodeUnexpected && shareable.Code != oops.CodeInvariantViolation {
-			deepest := shareable
-			for inner := errors.Unwrap(error(deepest)); inner != nil; inner = errors.Unwrap(inner) {
-				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
-					deepest = innerShareable
-				}
-			}
 			// An unknown tool or invalid call refused before dispatch is one
 			// the program can correct.
 			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&
 				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
 				invocation.rejected = true
 			}
-			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error())
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepestShareableError(shareable).Error())
 			attempt.fail(shareable.HTTPStatus(ctx), message)
 			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}

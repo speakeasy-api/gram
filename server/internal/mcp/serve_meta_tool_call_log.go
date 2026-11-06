@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -115,6 +116,16 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr)
+	if params == nil {
+		return
+	}
+	s.telemLogger.Log(ctx, *params)
+}
+
+// metaToolCallFailureLogParams builds the failed tool_call row for a gateway
+// call, or nil when it has no project to be logged under.
+func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) *tm.LogParams {
 	status, message := attempt.status, attempt.message
 	if status == 0 {
 		status, message = http.StatusInternalServerError, "unexpected error"
@@ -162,7 +173,7 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 		toolInfo.OrganizationID = descriptor.OrganizationID
 	}
 	if toolInfo.ProjectID == "" {
-		return
+		return nil
 	}
 
 	logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(status, true)
@@ -185,12 +196,59 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
 	}
 
-	s.telemLogger.Log(ctx, tm.LogParams{
+	return &tm.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
-	})
+	}
+}
+
+// metaMemberFailure is a member a discovery call named that could not be
+// described. The call answers it as an isError result or a failed entry
+// rather than as an error.
+type metaMemberFailure struct {
+	// member is the member that failed.
+	member metaMember
+
+	// status is the HTTP status the failure is logged with.
+	status int
+
+	// message is what the caller was told about the failure.
+	message string
+}
+
+// newMetaMemberFailure records that member failed with err, whose message the
+// caller was told.
+func newMetaMemberFailure(member metaMember, err error, message string) metaMemberFailure {
+	return metaMemberFailure{member: member, status: metaMemberErrorStatus(err), message: message}
+}
+
+// logMetaMemberDiscoveryFailure writes a failed tool_call row on a member that
+// a gateway discovery call named and could not describe, so the member's
+// failure counts include the call. It is shaped like a gateway tool call that
+// failed before dispatch, with two differences:
+//
+//   - It is not stamped with the gateway. Gateway usage counts discovery calls
+//     from their meta_discovery rows and executions from the tool_call rows
+//     stamped with the gateway, so a stamp would count this call twice.
+//   - It is written on its own trace, linked to the request's. Rows that share
+//     a trace and a project are summarized as one call, and the call's
+//     meta_discovery row would otherwise hide this one from tool logs.
+func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, arguments []byte, start time.Time, failure metaMemberFailure) {
+	ctx, span := s.tracer.Start(ctx, "mcp.meta.member_discovery_failure",
+		trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)))
+	defer span.End()
+
+	attempt := newMetaToolCallAttempt(start)
+	attempt.member = &failure.member
+	attempt.fail(failure.status, failure.message)
+	params := metaToolCallFailureLogParams(ctx, gate, metamcp.QualifyName(failure.member.slug, toolName), arguments, attempt, nil)
+	if params == nil {
+		return
+	}
+	delete(params.Attributes, attr.MetaMcpServerIDKey)
+	s.telemLogger.Log(ctx, *params)
 }
 
 // metaMemberToolURN is the synthetic URN of a member tool that failed before
