@@ -22,7 +22,15 @@ export function useAgentPolicyScopes(): {
   isLoading: boolean;
   isError: boolean;
 } {
-  const { data, isLoading, isError } = useListAgentPolicyScopes();
+  // The app-wide query default throws every error but 401/403 to the route
+  // error boundary, and this read never returns 403; opting out lets a 5xx
+  // (or a 404 while the server is older than the dashboard) reach the
+  // editor's own inline error state instead of replacing the whole tab.
+  const { data, isLoading, isError } = useListAgentPolicyScopes(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
   const scopes = useMemo(
     () =>
       (data?.scopes ?? []).filter((scope): scope is AgentPolicyScope =>
