@@ -8,32 +8,32 @@ The only change outside the folder is `go.mod`/`go.sum` (importing
 
 What is real and what is a stub:
 
-| Part | State |
-| --- | --- |
-| `rbac.zed`, the whole schema | Real. Compiles, passes SpiceDB's type-system validation, and has no developer warning except the allowed style hint. |
-| Loader: compile, walk into a `Registry`, cross-check the Go tables | Real. |
-| Row landing (`Registry.Land`): a grant row read as relationships | Real. |
-| Typed call sites (`refs.go`) and the `Client` (policies, intersection) | Real shape, small. |
-| The in-process evaluator (`RegistryEvaluator`) and `Predicate.SQL` | Stubs returning `ErrNotImplemented`. |
-| Conformance test | Real on SpiceDB's side: 36 cases run through SpiceDB's own evaluator over our rows. Our evaluator's side is skipped until it exists. |
+| Part                                                                   | State                                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `rbac.zed`, the whole schema                                           | Real. Compiles, passes SpiceDB's type-system validation, and has no developer warning except the allowed style hint.                 |
+| Loader: compile, walk into a `Registry`, cross-check the Go tables     | Real.                                                                                                                                |
+| Row landing (`Registry.Land`): a grant row read as relationships       | Real.                                                                                                                                |
+| Typed call sites (`refs.go`) and the `Client` (policies, intersection) | Real shape, small.                                                                                                                   |
+| The in-process evaluator (`RegistryEvaluator`) and `Predicate.SQL`     | Stubs returning `ErrNotImplemented`.                                                                                                 |
+| Conformance test                                                       | Real on SpiceDB's side: 36 cases run through SpiceDB's own evaluator over our rows. Our evaluator's side is skipped until it exists. |
 
 ## Layout
 
-| File | What it holds |
-| --- | --- |
-| `rbac.zed` | The schema: 14 definitions, 8 partials, 8 caveats. The only place a permission is defined. |
-| `schema.go` | `go:embed`, `CompileSchema` (SpiceDB `pkg/schemadsl/compiler`), `LoadRegistry` (walks the compiled protos into `Registry`). |
-| `registry.go` | The compiled shape: types, relations (grant, direct, block, own block, edge, fact), permission expressions, caveats. |
-| `catalogue.go` | `ScopeCatalogue` (description, sensitive, strict, block, delegatable since, selector keys, surface), `Answers`, `Composites`, `UndeclaredScopes`. |
-| `edges.go` | `Edges` (where each edge's value comes from) and `Facts` (relations filled from a row's columns). |
-| `default_roles.go` | `DefaultRoles` and `DefaultForEveryone`: seed data, kept out of the schema. |
-| `tables.go` | The checks SpiceDB cannot make: schema against catalogue, edges, facts, answers, and "every block is subtracted". |
-| `rows.go` | `Registry.Land`: one grant row to the relationships it stands for. |
-| `refs.go` | Typed references and methods, the only way to build a `Check`. |
-| `client.go` | `Client`, `Caller`/policies, `Evaluator`, `Lookup`/`Predicate`, stubbed `RegistryEvaluator`. |
-| `example/handlers.go` | Handler-style code for the representative checks. |
-| `schema_test.go` | Compile, validation, warnings gate, registry/table agreement, typed methods, row landing. |
-| `conformance_test.go` | The behaviour cases, answered by SpiceDB's evaluator; the in-process evaluator must agree. |
+| File                  | What it holds                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rbac.zed`            | The schema: 14 definitions, 8 partials, 8 caveats. The only place a permission is defined.                                                        |
+| `schema.go`           | `go:embed`, `CompileSchema` (SpiceDB `pkg/schemadsl/compiler`), `LoadRegistry` (walks the compiled protos into `Registry`).                       |
+| `registry.go`         | The compiled shape: types, relations (grant, direct, block, own block, edge, fact), permission expressions, caveats.                              |
+| `catalogue.go`        | `ScopeCatalogue` (description, sensitive, strict, block, delegatable since, selector keys, surface), `Answers`, `Composites`, `UndeclaredScopes`. |
+| `edges.go`            | `Edges` (where each edge's value comes from) and `Facts` (relations filled from a row's columns).                                                 |
+| `default_roles.go`    | `DefaultRoles` and `DefaultForEveryone`: seed data, kept out of the schema.                                                                       |
+| `tables.go`           | The checks SpiceDB cannot make: schema against catalogue, edges, facts, answers, and "every block is subtracted".                                 |
+| `rows.go`             | `Registry.Land`: one grant row to the relationships it stands for.                                                                                |
+| `refs.go`             | Typed references and methods, the only way to build a `Check`.                                                                                    |
+| `client.go`           | `Client`, `Caller`/policies, `Evaluator`, `Lookup`/`Predicate`, stubbed `RegistryEvaluator`.                                                      |
+| `example/handlers.go` | Handler-style code for the representative checks.                                                                                                 |
+| `schema_test.go`      | Compile, validation, warnings gate, registry/table agreement, typed methods, row landing.                                                         |
+| `conformance_test.go` | The behaviour cases, answered by SpiceDB's evaluator; the in-process evaluator must agree.                                                        |
 
 Run everything with `go test ./server/internal/authz/zedspike/...`. No Docker,
 no database.
@@ -73,15 +73,15 @@ no database.
 Storage does not change and no SpiceDB server runs. `Registry.Land` reads each
 `principal_grants` row as relationships, in memory:
 
-| Row column | Becomes | Example |
-| --- | --- | --- |
-| `principal_urn` `user:dana` / `user:all` / `role:organization:<id>` / `agent:<id>` / `api_key:<id>` | subject `user:dana` / `user:*` / `role:organization_<id>#member` / `agent:<id>` / `api_key:<id>` | |
-| `scope` | relation, `:` as `_`, plus `_direct` / `_own` by principal | `mcp:connect` → `mcp_connect` |
-| `selectors.resource_id` concrete | object is that resource | `mcp_server:S#mcp_connect@…` |
-| `resource_id "*"` with `project_id` | object is the project | `project:P#mcp_connect@…` |
-| `resource_id "*"` alone | object is the organization | `organization:O#mcp_connect@…` |
-| other selector keys | caveat `granted_*` parameters | `tool: search` → `mcp_tools_allow{granted_tool: "search"}` |
-| `inferred` | keeps a user's concrete grant out of `_direct` | |
+| Row column                                                                                          | Becomes                                                                                          | Example                                                    |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `principal_urn` `user:dana` / `user:all` / `role:organization:<id>` / `agent:<id>` / `api_key:<id>` | subject `user:dana` / `user:*` / `role:organization_<id>#member` / `agent:<id>` / `api_key:<id>` |                                                            |
+| `scope`                                                                                             | relation, `:` as `_`, plus `_direct` / `_own` by principal                                       | `mcp:connect` → `mcp_connect`                              |
+| `selectors.resource_id` concrete                                                                    | object is that resource                                                                          | `mcp_server:S#mcp_connect@…`                               |
+| `resource_id "*"` with `project_id`                                                                 | object is the project                                                                            | `project:P#mcp_connect@…`                                  |
+| `resource_id "*"` alone                                                                             | object is the organization                                                                       | `organization:O#mcp_connect@…`                             |
+| other selector keys                                                                                 | caveat `granted_*` parameters                                                                    | `tool: search` → `mcp_tools_allow{granted_tool: "search"}` |
+| `inferred`                                                                                          | keeps a user's concrete grant out of `_direct`                                                   |                                                            |
 
 Role assignments become `role:<id>#member@user:<id>`. Edges and facts come
 from the check, never from storage (`edgeRelationships` in the conformance
