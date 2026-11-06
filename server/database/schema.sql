@@ -5886,6 +5886,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_resource_key
 ON remote_sessions (subject_urn, remote_session_client_id, rtrim(resource, '/')) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
+-- Deliberately preserve the retired issuer-qualified key's paired-index shape.
+-- The subject/client/resource key already enforces uniqueness across issuers;
+-- this counterpart adds no issuer or server authorization dimension.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_resource_key
 ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id, rtrim(resource, '/')) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
