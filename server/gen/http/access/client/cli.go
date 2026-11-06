@@ -1537,7 +1537,7 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 
 // BuildListChallengesPayload builds the payload for the access listChallenges
 // endpoint from CLI flags.
-func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesFrom string, accessListChallengesTo string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
+func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesExcludeScopes string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesFrom string, accessListChallengesTo string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
 	var err error
 	var outcome *string
 	{
@@ -1561,6 +1561,21 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 	{
 		if accessListChallengesScope != "" {
 			scope = &accessListChallengesScope
+		}
+	}
+	var excludeScopes []string
+	{
+		if accessListChallengesExcludeScopes != "" {
+			err = json.Unmarshal([]byte(accessListChallengesExcludeScopes), &excludeScopes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeScopes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeScopes) > 20 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_scopes", excludeScopes, len(excludeScopes), 20, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var projectID *string
@@ -1662,6 +1677,7 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
+	v.ExcludeScopes = excludeScopes
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids
