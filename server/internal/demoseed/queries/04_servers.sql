@@ -575,13 +575,13 @@ VALUES (@id::uuid, @project_id::uuid, @org_id::text,
 -- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
    upstream_display_name, created_at, last_used_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
-        ARRAY['releases:read'], 'Fictional release account',
+        ARRAY['releases:read'], 'https://mcp.linear.app/mcp', 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
 -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
@@ -593,13 +593,13 @@ VALUES (@id::uuid,
 -- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
    grant_generation, last_validated_at, validation_status, created_at, last_used_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], @grant_generation::bigint,
+        ARRAY['read'], 'https://mcp.linear.app/mcp', @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
         now() - make_interval(hours => @hours_ago::int));
