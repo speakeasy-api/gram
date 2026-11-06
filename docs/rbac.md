@@ -202,6 +202,14 @@ The body of a refused request stays the generic `forbidden` error. The detail tr
 
 Only the slug and the kind leave the server; the resource id and the caller's grants do not. A handler may probe a scope, swallow the refusal and continue, so the engine records the most recent denial and the middleware only reads it on a 403. The dashboard maps the slug to the catalogue (`client/dashboard/src/lib/denial.ts`) so a failed mutation says which permission is needed and where, and an access request email names the permission with its catalogue label and description.
 
+#### Sensitive access
+
+A scope is sensitive when granting it exposes other members' private activity (`chat:read`, `chat:write`, `log:read`) or allows destructive administration (`org:admin`). The catalogue carries the flag and the reason (`sensitivity`), and three places act on it:
+
+- **Role editor.** A save that adds a permission shows a review step first, listing each added permission with what it includes (`sub_scopes`) and where it applies. The confirmation checkbox is required only when a sensitive permission is among them. Saves that only remove permissions or rename the role skip the step.
+- **Assignment.** Changing a member's roles previews what the new roles add that the member did not have, and asks for confirmation when any of it is sensitive. The grant dialog opened from an access request previews a role that gives sensitive access before assigning it.
+- **Audit log.** `access_role:create`, `access_role:update` and `access_member:update_role` rows carry `sensitive_scopes_added` in their metadata: the sensitive scopes the change newly satisfies, computed by `authz.SensitiveScopesAdded` over the implication closure of the grants before and after. Adding `org:admin` to a holder of `org:read` records `org:admin`; widening `chat:read` to `chat:write` records `chat:write` alone; a change that adds nothing sensitive writes no metadata, so older rows and plain changes look alike. The audit log page shows the scopes on the row.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
