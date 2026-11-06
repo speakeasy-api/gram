@@ -13,11 +13,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,6 +45,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
@@ -1087,4 +1090,86 @@ func TestFreshInvalidGrantWritesOnlyTheRefreshRow(t *testing.T) {
 	rows := rec.Rows()[1:]
 	require.Len(t, rows, 1)
 	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
+}
+
+// upsertUnreadableRemoteSession stores a live connection whose access token can't be decrypted.
+func upsertUnreadableRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, userSessionIssuerID, remoteSessionClientID uuid.UUID, subject urn.SessionSubject, resource string) {
+	t.Helper()
+
+	_, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userSessionIssuerID,
+		RemoteSessionClientID: remoteSessionClientID,
+		AccessTokenEncrypted:  "not-ciphertext",
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
+		RefreshExpiresAt:      pgtype.Timestamptz{Valid: false},
+		Scopes:                []string{},
+		Resource:              pgtype.Text{String: resource, Valid: resource != ""},
+	})
+	require.NoError(t, err)
+}
+
+// An unreadable stored token is our fault: a 500 recorded as internal_error, never a reconnect challenge.
+func TestUnreadableUpstreamTokenDirectServerIsInternalError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "gate-unreadable")
+
+	subject := urn.NewUserSubject("gate-unreadable-user-" + uuid.NewString())
+	upsertUnreadableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject, "")
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.Empty(t, w.Header().Get("WWW-Authenticate"), "reconnecting can't fix a token we can't read")
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Equal(t, subject.String(), row.SubjectURN)
+}
+
+// An unreadable stored token fails its gateway member as our error and never dials it without the credential.
+func TestUnreadableUpstreamTokenGatewayMemberIsInternalError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	var memberCalls atomic.Int32
+	// Answers anyone, so an anonymous dial would succeed.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			memberCalls.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstream.URL)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "contact Speakeasy support")
+	require.NotContains(t, strings.ToLower(text), "connect")
+	require.Zero(t, memberCalls.Load(), "never an anonymous call")
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, meta.ID.String(), row.ServerID)
+	require.NotEmpty(t, row.MemberID)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
 }
