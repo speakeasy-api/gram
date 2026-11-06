@@ -27,7 +27,7 @@ Speakeasy Control Plane helps your organization connect, secure, and manage MCPs
 
 **Naming note:** The product is now called Speakeasy Control Plane. It was previously called Gram, and this GitHub repository has not yet been renamed (`speakeasy-api/gram`). <!-- brand-ok: explains the former product and repository name -->
 
-To get started on the hosted platform, [sign up](https://app.getgram.ai/) or read the [getting started guide](https://www.speakeasy.com/docs/ai-control-plane/getting-started).
+To get started on the hosted platform, [sign up](https://ai.speakeasy.com/sign-up) or read the [getting started guide](https://www.speakeasy.com/docs/ai-control-plane/getting-started).
 
 ### Supports popular AI providers
 
