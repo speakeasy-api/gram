@@ -197,15 +197,22 @@ function SalesforceFixture({
   step,
   integration = "native",
   path = "own",
+  salesforceServer = "sobject-reads",
 }: {
   step: string;
   integration?: string;
   path?: string;
+  salesforceServer?: string;
 }) {
   const [s, dispatch] = useReducer(reduce, {
     ...initialState("salesforce"),
     step,
-    values: { ...initialState("salesforce").values, integration, path },
+    values: {
+      ...initialState("salesforce").values,
+      integration,
+      path,
+      salesforceServer,
+    },
   });
   return (
     <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
@@ -219,6 +226,45 @@ it("shows both Salesforce connection choices and the hosted instance field", asy
   await user.click(screen.getByText("Speakeasy-hosted Salesforce CRM"));
   expect(screen.getByLabelText("Salesforce instance URL")).toBeDefined();
   expect(screen.queryByLabelText("Salesforce server")).toBeNull();
+});
+it.each([
+  ["data360", "Data 360", /Data 360 license/, /View Data 360/],
+  [
+    "headless-360",
+    "Headless 360 (Beta)",
+    /67.0 or later/,
+    /Salesforce beta service/,
+  ],
+  [
+    "tableau-next",
+    "Tableau Next",
+    /Tableau Next guided or manual setup/,
+    /access to the Tableau Next models/,
+  ],
+])(
+  "enables %s and explains its prerequisites",
+  async (id, title, requirement, permissions) => {
+    const user = userEvent.setup();
+    render(<SalesforceFixture step="choices" />);
+    const option = screen.getByRole("option", { name: title });
+    expect(option).toHaveProperty("disabled", false);
+    await user.selectOptions(screen.getByLabelText("Salesforce server"), id);
+    expect(screen.getByText(requirement)).toBeDefined();
+    expect(screen.getByText(permissions)).toBeDefined();
+  },
+);
+it.each([
+  ["data360", "Data 360", /Data 360 license/],
+  ["headless-360", "Headless 360 (Beta)", /67.0 or later/],
+  ["tableau-next", "Tableau Next", /Tableau Next guided or manual setup/],
+])("uses %s activation instructions", (id, title, requirement) => {
+  render(<SalesforceFixture step="activation" salesforceServer={id} />);
+  expect(screen.getByText(title)).toBeDefined();
+  expect(screen.getByText(id)).toBeDefined();
+  expect(screen.getByText(requirement)).toBeDefined();
+  expect(
+    screen.getByText(/only a successful connection test confirms access/),
+  ).toBeDefined();
 });
 it("uses the real Salesforce callback and native scopes", () => {
   render(<SalesforceFixture step="oauth" />);

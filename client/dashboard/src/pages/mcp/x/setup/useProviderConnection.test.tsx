@@ -1430,40 +1430,51 @@ describe("Slack permission choice hydration", () => {
 });
 
 describe("Salesforce shared actions", () => {
-  it("saves a native Consumer Key as a public client and persists the selected sandbox server", async () => {
-    const s = initialState("salesforce");
-    const { result } = mount("salesforce", {
-      step: "credentials",
-      values: {
-        ...s.values,
-        environment: "sandbox",
-        salesforceServer: "sobject-all",
-        clientId: "key",
-      },
-    });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.next());
-    await waitFor(() => expect(result.current.state.saved).toBe(true));
-    expect(mocks.updateRemote).toHaveBeenCalledWith({
-      updateServerForm: {
-        id: "upstream",
-        url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
-      },
-    });
-    expect(mocks.commit).toHaveBeenCalledWith({
-      commitServerIdentityConfigurationForm: expect.objectContaining({
-        clientConfiguration: {
+  it.each([
+    ["sobject-all", "sandbox", "sandbox/platform/sobject-all"],
+    ["data360", "production", "data/data360"],
+    ["data360", "sandbox", "data/sandbox/data360"],
+    ["headless-360", "production", "platform/headless-360"],
+    ["headless-360", "sandbox", "sandbox/platform/headless-360"],
+    ["tableau-next", "production", "analytics/tableau-next"],
+    ["tableau-next", "sandbox", "sandbox/analytics/tableau-next"],
+  ])(
+    "saves a native public client and persists %s (%s)",
+    async (salesforceServer, environment, path) => {
+      const s = initialState("salesforce");
+      const { result } = mount("salesforce", {
+        step: "credentials",
+        values: {
+          ...s.values,
+          environment,
+          salesforceServer,
           clientId: "key",
-          clientSecret: undefined,
-          tokenEndpointAuthMethod: "none",
-          scope: ["mcp_api", "refresh_token"],
         },
-      }),
-    });
-    expect(result.current.state.authorized || result.current.state.tested).toBe(
-      false,
-    );
-  });
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.state.saved).toBe(true));
+      expect(mocks.updateRemote).toHaveBeenCalledWith({
+        updateServerForm: {
+          id: "upstream",
+          url: `https://api.salesforce.com/platform/mcp/v1/${path}`,
+        },
+      });
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientConfiguration: {
+            clientId: "key",
+            clientSecret: undefined,
+            tokenEndpointAuthMethod: "none",
+            scope: ["mcp_api", "refresh_token"],
+          },
+        }),
+      });
+      expect(
+        result.current.state.authorized || result.current.state.tested,
+      ).toBe(false);
+    },
+  );
   it("saves hosted instance configuration without changing the MCP endpoint", async () => {
     const url = "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
     mocks.remote.mockResolvedValue({ id: "upstream", url });

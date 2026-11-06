@@ -12,6 +12,54 @@ import {
 } from "@/pages/mcp/x/setup/provider-setup";
 
 describe("Salesforce connection contracts", () => {
+  it.each([
+    ["data360", "data/data360", "data/sandbox/data360"],
+    ["headless-360", "platform/headless-360", "sandbox/platform/headless-360"],
+    [
+      "tableau-next",
+      "analytics/tableau-next",
+      "sandbox/analytics/tableau-next",
+    ],
+  ])(
+    "maps %s catalog endpoints through the native OAuth flow",
+    (id, production, sandbox) => {
+      for (const [environment, path] of [
+        ["production", production],
+        ["sandbox", sandbox],
+      ]) {
+        const url = `https://api.salesforce.com/platform/mcp/v1/${path}`;
+        const selection = {
+          integration: "native",
+          environment,
+          salesforceServer: id,
+        };
+        expect(salesforceSelectionForUrl(url)).toEqual(selection);
+        expect(setupProviderForUrl(url)).toBe("salesforce");
+        const s = initialState("salesforce");
+        Object.assign(s.values, selection, { clientId: "key" });
+        expect(salesforceConnection(s.values)).toMatchObject({
+          url,
+          issuer:
+            environment === "sandbox"
+              ? "https://test.salesforce.com"
+              : "https://login.salesforce.com",
+          scopes: ["mcp_api", "refresh_token"],
+          authMethod: "none",
+        });
+        expect(validate({ ...s, step: "credentials" })).toEqual({});
+      }
+    },
+  );
+  it.each([
+    "sandbox/data/data360",
+    "platform/data360",
+    "data/headless-360",
+    "platform/tableau-next",
+  ])("does not recognize an incorrect native server path: %s", (path) => {
+    expect(
+      setupProviderForUrl(`https://api.salesforce.com/platform/mcp/v1/${path}`),
+    ).toBeNull();
+  });
   it("maps native environments and server choices to their actual upstream", () => {
     const s = initialState("salesforce");
     expect(salesforceConnection(s.values)).toMatchObject({

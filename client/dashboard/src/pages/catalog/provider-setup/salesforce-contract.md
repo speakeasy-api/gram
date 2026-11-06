@@ -13,12 +13,23 @@ settings. Simulated provider outcomes were not transferred.
 | Salesforce-native MCP           | Selected SObject server and production/sandbox determine the upstream URL | External Client App Consumer Key; public client with PKCE; `mcp_api refresh_token`; production or sandbox authorization/token endpoints |
 | Speakeasy-hosted Salesforce CRM | Fixed hosted endpoint; Salesforce instance saved as `MCP-Instance-URL`    | Instance-specific authorization/token endpoints; Consumer Key and optional secret; `api refresh_token`                                  |
 
-The native production pattern is
+The native SObject production pattern is
 `https://api.salesforce.com/platform/mcp/v1/platform/<SOBJECT-SERVER>`;
 sandbox adds `sandbox/` before `platform/`. The implemented choices are
 `sobject-reads`, `sobject-mutations`, `sobject-deletes`, and `sobject-all`.
-Data 360, Headless 360, and Tableau Next remain visible but unavailable pending
-their connection contracts.
+The additional native choices use the same External Client App OAuth contract
+(`mcp_api refresh_token`, public client with PKCE):
+
+| Server              | Production path after `/platform/mcp/v1/` | Sandbox path                     | Prerequisites                                                                 |
+| ------------------- | ----------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| Data 360            | `data/data360`                            | `data/sandbox/data360`           | Data 360 license, API v66.0+, View Data 360 or Manage Data 360 permissions    |
+| Headless 360 (Beta) | `platform/headless-360`                   | `sandbox/platform/headless-360`  | API v67.0+, user permissions for the requested platform/setup operations      |
+| Tableau Next        | `analytics/tableau-next`                  | `sandbox/analytics/tableau-next` | Tableau Next guided/manual setup and access to the requested analytics assets |
+
+All seven native choices configure their exact production/sandbox endpoints and
+use the existing credential save, sign-in, and connection test. Setup shows the
+selected server's prerequisites and activation instructions; it does not attempt
+to detect licenses, permissions, or activation state.
 
 The registry record is `com.pulsemcp.mirror/gram-salesforce`, titled Salesforce
 CRM, in `data/servers/com.pulsemcp.mirror__gram-salesforce.json`. It describes
@@ -32,7 +43,8 @@ the isolated local catalog through Admin MCP on 2026-11-06, with all 14 supplied
 endpoints, manual authentication, and the Salesforce guide link. The application
 catalog API and browser list both return it. The earlier empty local search
 preceded this publication. This local operation does not establish production
-catalog availability and is not a seed or source-code change.
+catalog availability and is not a seed or source-code change. Production catalog
+publication was subsequently confirmed by the requester.
 
 ## Saving and verification
 
@@ -97,6 +109,11 @@ the real callback, support gating, and a 400px viewport without horizontal overf
 - [Salesforce server URLs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/server-urls.html)
 - [External Client App](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/create-external-client-app.html)
 - [Native OAuth endpoints and PKCE](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/postman.html)
+- [GA hosted-server OAuth scopes](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/beta-to-ga-transition.html)
+- [Data 360 prerequisites and URLs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/data360-mcp.html)
+- [Headless 360 prerequisites and URLs](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/headless-360-mcp.html)
+- [Tableau Next server](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/references/reference/tableau-next.html)
+- [Tableau Next setup prerequisites](https://help.salesforce.com/s/articleView?id=005462387&language=en_US&type=1)
 
 ## Catalog browser follow-up (2026-11-06)
 
@@ -122,6 +139,14 @@ the real callback, support gating, and a 400px viewport without horizontal overf
   coverage. The focused catalog/setup suite passes 228 tests.
 
 Live authorization and authenticated discovery remain pending valid Salesforce
-app credentials and an authorized test account. The additional catalog endpoints
-for Data 360, Headless 360 and Tableau Next are published, but their setup choices
-remain unavailable pending their authentication/prerequisite contracts.
+app credentials and an authorized test account. The later Data 360, Headless 360,
+and Tableau Next extension enables their choices using the documented native
+OAuth contract and product prerequisites above. Focused tests cover all six
+additional endpoint mappings and public-client credential saves; they do not
+establish live access to those products.
+
+The extension's focused setup suite passes 190 tests across 11 files. Dashboard
+lint (including type-check) and unused-code checks pass. Local browser checks
+verified all six additional production/sandbox endpoint selections, each server's
+prerequisites and activation instructions, and a 400px layout without horizontal
+overflow. These UI checks did not submit credentials or authorize Salesforce.
