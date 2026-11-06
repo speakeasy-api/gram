@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -54,6 +55,66 @@ var errValidationUnfinished = errors.New("remote session validation did not fini
 // verifyHitStoreOutage rules out the caller's own deadline, which is no outage.
 func verifyHitStoreOutage(ctx context.Context, err error) bool {
 	return ctx.Err() == nil && oops.IsInfrastructureFailure(err)
+}
+
+// checkFailure is what a check that reached no verdict means. Its row and its
+// error page both read it, so they agree on who fixes it and whether retrying helps.
+type checkFailure struct {
+	// code is the row's reason.
+	code mcpconnectionattempts.Code
+
+	// page explains it on the error page; ReasonDefault when the card shows a notice instead.
+	page oauthui.Reason
+}
+
+// classifyCheckFailure explains a check that reached no verdict; false when it records nothing.
+func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
+	var code mcpconnectionattempts.Code
+	switch {
+	case err == nil, errors.Is(ctx.Err(), context.Canceled),
+		errors.Is(err, errValidationRateLimited), errors.Is(err, errRemoteSessionMemberOffline), errors.Is(err, errRemoteSessionVerdictNotRecorded):
+		// Nothing was checked, the person left, or the verdict has its own row.
+		return checkFailure{code: code, page: oauthui.ReasonDefault}, false
+	case errors.Is(err, errRemoteSessionNoUsableCredential):
+		return checkFailure{code: mcpconnectionattempts.CodeInvalidRemoteSession, page: oauthui.ReasonDefault}, true
+	case errors.Is(err, errRemoteSessionUnroutable):
+		code = mcpconnectionattempts.CodeCredentialMisconfigured
+	default:
+		code = resolveFailureHappened(err)
+		if member, ok := errors.AsType[memberConnectionError](err); ok {
+			code = member.code
+		}
+		if code == mcpconnectionattempts.CodeInternalError && verifyHitStoreOutage(ctx, err) {
+			code = mcpconnectionattempts.CodeAuthCheckUnavailable
+		}
+	}
+	// A refresh another request holds is that request's row.
+	if code == (mcpconnectionattempts.Code{}) {
+		return checkFailure{code: code, page: oauthui.ReasonDefault}, false
+	}
+	return checkFailure{code: code, page: checkFailurePage(code)}, true
+}
+
+// checkFailurePage suggests retrying only for an outage; a fault of ours or an unknown party never gets a retry.
+func checkFailurePage(code mcpconnectionattempts.Code) oauthui.Reason {
+	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
+	switch meaning.WhoFixes {
+	case mcpconnectionattempts.WhoAdmin:
+		return oauthui.ReasonCheckNeedsAdmin
+	case mcpconnectionattempts.WhoPerson:
+		return oauthui.ReasonCheckNeedsReconnect
+	case mcpconnectionattempts.WhoProvider:
+		return oauthui.ReasonCheckUnavailable
+	case mcpconnectionattempts.WhoSpeakeasy:
+		if code == mcpconnectionattempts.CodeInternalError {
+			return oauthui.ReasonCheckFailed
+		}
+		return oauthui.ReasonCheckUnavailable
+	case mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoNobody:
+		return oauthui.ReasonCheckFailed
+	default:
+		return oauthui.ReasonCheckFailed
+	}
 }
 
 // validationUnfinishedNotice follows a Verify that reached no verdict; it says nothing about now.
@@ -121,9 +182,14 @@ func (s *Service) probeRemoteSession(
 	client remotesessions.Client,
 	expectedGrant *remotesessions.RemoteGrant,
 	trigger remotesessionmetrics.ValidationTrigger,
-) error {
+) (retErr error) {
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
+	defer func() {
+		if failure, ok := classifyCheckFailure(ctx, retErr); ok {
+			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code)
+		}
+	}()
 
 	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
 	if err != nil {

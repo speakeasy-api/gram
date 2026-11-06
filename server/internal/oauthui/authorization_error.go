@@ -137,7 +137,27 @@ const (
 	ReasonUnavailable Reason = "unavailable"
 	// ReasonProviderUnavailable identifies a sign-in provider that is down or rate limiting.
 	ReasonProviderUnavailable Reason = "provider-unavailable"
+	// ReasonCheckFailed identifies a server connection check that failed on our side; retrying won't help.
+	ReasonCheckFailed Reason = "check-failed"
+	// ReasonCheckUnavailable identifies a server connection check stopped by an outage; retrying can help.
+	ReasonCheckUnavailable Reason = "check-unavailable"
+	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
+	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
+	// ReasonCheckNeedsReconnect identifies a server connection check the person can fix by reconnecting.
+	ReasonCheckNeedsReconnect Reason = "check-needs-reconnect"
 )
+
+// check reports a failed server connection check, rather than a failed connection.
+func (r Reason) check() bool {
+	switch r {
+	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNeedsReconnect:
+		return true
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonProviderUnavailable:
+		return false
+	default:
+		return false
+	}
+}
 
 // errorKind groups OAuth error codes by who can act on them, which is what
 // the person reading the page needs to know.
@@ -153,8 +173,10 @@ const (
 	// errorKindNotAllowed: the client or person is refused by policy, which
 	// the organization's administrators control.
 	errorKindNotAllowed errorKind = "not-allowed"
-	// errorKindUnavailable: a Speakeasy-side failure that retrying may clear.
+	// errorKindUnavailable: a Speakeasy-side outage that retrying may clear.
 	errorKindUnavailable errorKind = "unavailable"
+	// errorKindInternal: a Speakeasy-side fault that retrying is not known to clear.
+	errorKindInternal errorKind = "internal"
 	// errorKindOther: any code not classified above.
 	errorKindOther errorKind = "other"
 )
@@ -163,7 +185,10 @@ func classifyError(page AuthorizationError) errorKind {
 	if page.Reason != ReasonDefault {
 		return errorKind(page.Reason)
 	}
-	if page.Status >= http.StatusInternalServerError {
+	if page.Status == http.StatusInternalServerError {
+		return errorKindInternal
+	}
+	if page.Status > http.StatusInternalServerError {
 		return errorKindUnavailable
 	}
 	if page.Status == http.StatusForbidden || page.Status == http.StatusUnauthorized {
@@ -193,6 +218,9 @@ type authorizationErrorView struct {
 
 	// Approval selects staff change approval wording.
 	Approval bool
+
+	// Check selects server connection check wording.
+	Check bool
 
 	// ErrorID preserves the public service error identifier.
 	ErrorID string
@@ -332,6 +360,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		Styles:         consentpage.Styles,
 		Setup:          page.Setup,
 		Approval:       page.Approval,
+		Check:          page.Reason.check(),
 		ErrorID:        page.ErrorID,
 		Kind:           classifyError(page),
 		ClientName:     page.ClientName,

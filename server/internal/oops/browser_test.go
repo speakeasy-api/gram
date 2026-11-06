@@ -98,3 +98,17 @@ func TestBrowserErrorAnnotationsCompose(t *testing.T) {
 		require.Contains(t, response.Body.String(), "Speakeasy dashboard")
 	}
 }
+
+// A fault's message is for developers; the page keeps its error ID instead.
+func TestBrowserErrHandleHidesFaultMessage(t *testing.T) {
+	t.Parallel()
+	fault := oops.E(oops.CodeUnexpected, errors.New("invariant"), "resolve upstream tokens for validation")
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return fault
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusInternalServerError)
+	require.Equal(t, oops.CodeUnexpected.UserMessage(), body.Description)
+	require.NotContains(t, response.Body.String(), "resolve upstream tokens for validation")
+	require.Contains(t, response.Body.String(), fault.AsGoa(t.Context()).ID)
+}

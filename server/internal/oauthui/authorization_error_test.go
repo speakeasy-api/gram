@@ -316,3 +316,63 @@ func TestAuthorizationErrorLeadsWithWhatHappened(t *testing.T) {
 		})
 	}
 }
+
+// pageText is the rendered page with whitespace collapsed and apostrophes unescaped.
+func pageText(response *httptest.ResponseRecorder) string {
+	return strings.ReplaceAll(strings.Join(strings.Fields(response.Body.String()), " "), "&#39;", "'")
+}
+
+// Only an outage says to retry; a fault of ours says we are on it.
+func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		status    int
+		want      string
+		wantRetry bool
+	}{
+		{"internal fault", http.StatusInternalServerError, "We're looking into it.", false},
+		{"outage", http.StatusServiceUnavailable, "Try connecting again shortly.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: tc.status, Code: "unexpected", ErrorID: "err-123", ClientName: "Example Client", ServerName: "example-server"}))
+			page := pageText(response)
+			require.Contains(t, page, "This is a problem on our side")
+			require.Contains(t, page, tc.want)
+			require.Equal(t, tc.wantRetry, strings.Contains(page, "again shortly"))
+			require.Contains(t, page, "err-123")
+		})
+	}
+}
+
+// A failed server connection check names the check, and says to retry only when retrying can help.
+func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		reason    oauthui.Reason
+		want      string
+		wantRetry bool
+	}{
+		{oauthui.ReasonCheckFailed, "We're looking into it.", false},
+		{oauthui.ReasonCheckUnavailable, "Try again shortly.", true},
+		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
+		{oauthui.ReasonCheckNeedsReconnect, "reconnect to the service", false},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusInternalServerError, Code: "unexpected", Reason: tc.reason, ErrorID: "err-123"}))
+			page := pageText(response)
+			require.Contains(t, page, "<title>Couldn't check the connection · Speakeasy</title>")
+			require.Contains(t, page, "Checking the server's connection")
+			require.NotContains(t, page, "Your MCP client")
+			require.NotContains(t, page, "Couldn't connect")
+			require.Contains(t, page, tc.want)
+			require.Equal(t, tc.wantRetry, strings.Contains(page, "again shortly"))
+			require.Contains(t, page, "back button")
+			require.Contains(t, page, "err-123")
+		})
+	}
+}

@@ -641,23 +641,42 @@ func (s *Service) recordRemoteSessionVerdict(
 	verdict remotesessions.ValidationOutcome,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive || (verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled)) {
+	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	what := verdictHappened(verdict, target.tunnelID.Valid)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what,
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
+		mcpconnectionattempts.Member(target.memberID),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+	)
+}
+
+// recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
+func (s *Service) recordRemoteSessionCheck(
+	ctx context.Context,
+	fromRequest mcpconnectionattempts.Option,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	client remotesessions.Client,
+	trigger remotesessionmetrics.ValidationTrigger,
+	what mcpconnectionattempts.Happened,
+	opts ...mcpconnectionattempts.Option,
+) {
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+		return
+	}
+	opts = append([]mcpconnectionattempts.Option{
 		fromRequest,
 		mcpconnectionattempts.Detail(string(trigger)),
-		mcpconnectionattempts.Member(target.memberID),
 		mcpconnectionattempts.Provider(client.IssuerURL),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
 		mcpconnectionattempts.RemoteSessionClient(client.ID),
 		mcpconnectionattempts.RemoteSessionIssuer(client.RemoteSessionIssuerID),
 		mcpconnectionattempts.Subject(challengeState.Subject),
-	)
+	}, opts...)
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
 func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {
