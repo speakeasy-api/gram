@@ -48,6 +48,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
+import { useSetupStep } from "./useSetupStep";
 import { HeadersSection } from "../HeadersSection";
 import { useCatalogHeaderSuggestions } from "../useCatalogHeaderSuggestions";
 import { useHeaderDrafts } from "@/lib/remote-identity";
@@ -93,6 +94,9 @@ export function RemoteMcpIdentitySectionBody({
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const organization = useOrganization();
+  // A Platform MCP "Add credentials" link lands here; the secret it needs is a
+  // header, so open the list instead of leaving it behind a closed disclosure.
+  const setupStep = useSetupStep();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite =
     !rbacLoading && hasScope("mcp:write", target.permissionResourceId);
@@ -897,7 +901,7 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
-          <Collapsible>
+          <Collapsible defaultOpen={setupStep === "credentials"}>
             <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
               <ChevronDown
                 aria-hidden="true"

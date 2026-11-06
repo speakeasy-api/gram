@@ -60,7 +60,7 @@ func TestCatalogRegistrationToolReturnsDashboardSetupURLForBrowserCatalogServer(
 	})
 	require.NoError(t, err)
 	require.Equal(t, "continue_dashboard_setup", registered.NextAction)
-	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, registered.DashboardSetupURL)
+	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings\?setup=sign-in#authentication$`, registered.DashboardSetupURL)
 }
 
 // Deleting the MCP server in the dashboard leaves its catalogue registration
@@ -110,7 +110,7 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
 	require.False(t, second.AlreadyRegistered, "a server re-added after deletion is new")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
-	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, second.DashboardSetupURL)
+	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings\?setup=sign-in#authentication$`, second.DashboardSetupURL)
 }
 
 // Over MCP, a registration result carries the card in _meta and keeps the same

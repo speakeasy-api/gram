@@ -28,6 +28,7 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
+import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
@@ -76,6 +77,7 @@ export function AuthenticationSection({
           )}
         </SettingsSection.Description>
       </SettingsSection.Header>
+      {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
       {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
