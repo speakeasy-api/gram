@@ -90,6 +90,19 @@ export function otherSeriesForTheme(isDark: boolean): string {
   return isDark ? OTHER_SERIES_DARK : OTHER_SERIES;
 }
 
+// Tool call outcomes, as base.css paints them: --bg-success-default,
+// --bg-destructive-default and --bg-warning-default (feedback green, red and
+// orange 500, the same in both themes). The status dots use those tokens as
+// classes, so a bar and a dot of one outcome are one color. Every chart of
+// call outcomes draws from here, so success and failure never change color
+// between two charts of the same calls. Pending takes the rollup neutral
+// (otherSeriesForTheme), since it has no outcome yet.
+export const OUTCOME = {
+  ok: "hsl(108, 24%, 41%)",
+  failed: ACCENT_RED,
+  blocked: "hsl(23, 96%, 62%)",
+} as const;
+
 // Severity bands: critical = brand red, high = feedback-orange-600,
 // medium = feedback-orange-400, low/info = neutral (never blue).
 export const SEVERITY = {
