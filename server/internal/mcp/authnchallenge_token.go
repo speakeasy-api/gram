@@ -1655,13 +1655,17 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if endpoint.MetaMcpServerID.Valid {
 		return upstreamRefreshServed
 	}
-	// Where the auth client resolver serves the organization, a choice it
-	// cannot use sends the session to reconnect rather than refreshing into
-	// the same rejection.
-	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti); err != nil {
+	// Where the auth client resolver serves the organization it decides the
+	// refresh: a choice it cannot use sends the session to reconnect rather
+	// than refreshing into the same rejection. Only a registration identity
+	// chaining may still serve is left to the chaining decision below.
+	resolverReconnect, chain, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti)
+	if err != nil {
 		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
-	} else if decided {
-		return upstreamRefreshOf(reconnect)
+		return upstreamRefreshCheckFailed
+	}
+	if decided && !chain.clientID.Valid {
+		return upstreamRefreshOf(resolverReconnect)
 	}
 	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
@@ -1670,6 +1674,10 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshCheckFailed
 	}
 	if !proxied {
+		if decided {
+			// Chaining cannot serve it, so the reconnect stands.
+			return upstreamRefreshReconnect
+		}
 		if !reauthorizes {
 			return upstreamRefreshServed
 		}
@@ -1681,24 +1689,28 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshOf(reconnect)
 	}
 
-	choice, err := s.refreshUpstreamChoice(ctx, endpoint, jti)
-	switch {
-	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
-		return upstreamRefreshReconnect
-	case err != nil:
-		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
-		return upstreamRefreshCheckFailed
-	case choice.noAuth(), !reauthorizes:
-		return upstreamRefreshServed
+	// The resolver's registration already needs reconnecting.
+	choice, reconnect := chain, decided
+	if !decided {
+		choice, err = s.refreshUpstreamChoice(ctx, endpoint, jti)
+		switch {
+		case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
+			return upstreamRefreshReconnect
+		case err != nil:
+			logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		case choice.noAuth(), !reauthorizes:
+			return upstreamRefreshServed
+		}
+		reconnect, err = s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
+		if err != nil {
+			logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
 	}
 	routing.backend = consentBackendRemote
 	if tunneled {
 		routing.backend = consentBackendTunneled
-	}
-	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
-	if err != nil {
-		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
-		return upstreamRefreshCheckFailed
 	}
 	// Identity chaining vouches for a known user, which an anonymous subject is not.
 	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
