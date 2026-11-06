@@ -1,0 +1,18 @@
+server/internal/demoseed/local_test.go
+  h_2620cc60cfd1e9 17,30-65
+server/internal/demoseed/queries/local.sql
+  h_2620cc60cfd1e9 76-77,79
+server/internal/demoseed/repo/local.sql.go
+  h_2620cc60cfd1e9 192-193,195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b528a68b27faa2568d03eb32b44a132c30212686",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
