@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 for (const input of ["", "events\n", "quit\n"]) {
   test(`fixture serve exits after stdin closes (${JSON.stringify(input)})`, async (t) => {
     const child = spawn(
       process.execPath,
-      [new URL("./serve.ts", import.meta.url).pathname],
+      [fileURLToPath(new URL("./serve.ts", import.meta.url))],
       {
         stdio: ["pipe", "pipe", "pipe"],
       },

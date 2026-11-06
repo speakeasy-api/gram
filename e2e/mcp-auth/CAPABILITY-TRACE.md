@@ -314,4 +314,4 @@ At MCP server → Settings → Authentication → Credentials:
 
 ## Review boundaries
 
-No product, Platform MCP, or Command K changes are proposed here; no new discoverability or MCP contract is claimed. This trace deliberately distinguishes available controls, source-level hypotheses, measured outcomes, and unproven setup paths. Unit tests validate the standalone mock/protocol driver, not product serving or SQL compatibility. Staff enforcement restoration is cleanup, not a measured rollback-after-mutation regression.
+No product, Platform MCP, or Command K changes are proposed here; no new discoverability or MCP contract is claimed. This trace deliberately distinguishes available controls, source-level hypotheses, measured outcomes, and unproven setup paths. Unit tests validate the standalone mock/protocol driver, not product serving or SQL compatibility. The current runner leaves upstream enforcement and the organization gateway enabled after the suite; it does not restore their previous policy state or measure rollback after mutation.

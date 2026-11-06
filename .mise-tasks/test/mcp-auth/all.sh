@@ -59,7 +59,7 @@ for phase in scenarios org-wide-scenarios; do
   workers=1
   [ "$phase" = scenarios ] && workers="${MCP_AUTH_WORKERS:-3}"
   phase_args=(--project="$phase" --global-timeout=14400000)
-  # The regular project already finished in the previous phase.
+  # The regular project succeeded in the previous phase.
   [ "$phase" = org-wide-scenarios ] && phase_args+=(--no-deps)
   if MCP_AUTH_WORKERS="$workers" mise run test:mcp-auth "${phase_args[@]}" > "$output/$phase.log" 2>&1; then
     code=0
@@ -72,6 +72,11 @@ for phase in scenarios org-wide-scenarios; do
     cp -R e2e/.playwright/mcp-auth "$output/$phase"
   fi
   printf '%s: exit %s\n' "$phase" "$code"
+  if [ "$phase" = scenarios ] && [ "$code" -ne 0 ]; then
+    printf 'org-wide-scenarios\tskipped-prerequisite-failed\n' >> "$output/status.tsv"
+    printf 'Skipping organization-wide measurement because its prerequisite phase failed.\n'
+    break
+  fi
 done
 if MCP_AUTH_KEEP_SHARED_PROJECT=0 mise run test:mcp-auth --project=shared-project-cleanup > "$output/shared-project-cleanup.log" 2>&1; then
   code=0

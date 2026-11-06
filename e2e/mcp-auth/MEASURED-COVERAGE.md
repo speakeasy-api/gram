@@ -1,6 +1,6 @@
 # Measured typed-client authentication coverage
 
-> **Historical 44-case baseline.** Additional hypothesis-driven path cases are being measured separately; this table is not the complete expanded inventory. See `STATE-CONSTRUCTION.md` for hand-built-state requirements, and run `mise run test:mcp-auth --list` for current cases.
+> **Historical 44-case baseline.** Additional hypothesis-driven path cases are being measured separately; this table is not the complete expanded inventory. See [`PATH-EVIDENCE.md`](PATH-EVIDENCE.md) for the expanded per-path measurement ledger and `STATE-CONSTRUCTION.md` for hand-built-state requirements, and run `mise run test:mcp-auth --list` for current cases.
 
 Latest completed attempt per scenario identity, not a sum of historical reruns. All browser setup uses the real UI; SQL diagnostics are read-only and never provision or repair fixtures. These are synthetic cases, not exported production records.
 

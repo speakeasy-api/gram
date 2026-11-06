@@ -1,11 +1,12 @@
 import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
-import { constants, rmSync } from "node:fs";
+import { access, mkdtemp } from "node:fs/promises";
+import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, type AuthScenario } from "./fixtures.ts";
+import { registerWorkerTempDirectory } from "./worker-temp-directory.ts";
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL("../../", import.meta.url));
@@ -81,9 +82,7 @@ export class TunnelActions {
     // No dedicated build:tunnel-agent task exists. Use the repository's mise
     // toolchain and compile its actual command, never a substitute transport.
     const directory = await mkdtemp(join(tmpdir(), "mcp-auth-tunnel-"));
-    process.once("exit", () =>
-      rmSync(directory, { recursive: true, force: true }),
-    );
+    const cleanup = registerWorkerTempDirectory(directory);
     const path = join(directory, "tunnel-agent");
     try {
       await execute(
@@ -106,7 +105,7 @@ export class TunnelActions {
         },
       );
     } catch {
-      await rm(directory, { recursive: true, force: true });
+      cleanup();
       throw new Error(
         "ENV_TUNNEL_AGENT_BUILD: native tunnel/cmd/tunnel-agent could not build with mise go -mod=readonly; provide MCP_AUTH_TUNNEL_AGENT_BIN or repair the Go toolchain",
       );
