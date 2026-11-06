@@ -9,6 +9,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHideInsightsDock, useInsightsState } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
+import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
+import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +44,9 @@ const mocks = vi.hoisted(() => ({
   assistantReady: true,
   composerSetText: vi.fn(),
   composerText: "",
+  composerBound: true,
+  runtimeMount: vi.fn(),
+  switchToNewThread: vi.fn(),
   threadsLoading: false,
   resolveCreator: undefined as
     | ((chat: { userId: string }) => unknown)
@@ -57,7 +62,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/elements", async () => {
-  const { createContext, createElement, useContext } = await import("react");
+  const { createContext, createElement, useContext, useEffect } =
+    await import("react");
   const RuntimeContext = createContext(false);
 
   return {
@@ -77,6 +83,9 @@ vi.mock("@/elements", async () => {
       };
     }) => {
       const hasRuntime = useContext(RuntimeContext);
+      useEffect(() => {
+        mocks.runtimeMount();
+      }, []);
       mocks.elementsConfig(config);
       if (config.composer) mocks.skillContext = config.composer.skillContext;
       if (config.history) {
@@ -100,12 +109,15 @@ vi.mock("@assistant-ui/react", () => ({
       stopDictation: vi.fn(),
       setText: (text: string) => {
         mocks.composerSetText(text);
-        mocks.composerText = text;
+        if (mocks.composerBound) mocks.composerText = text;
       },
       getState: () => ({ text: mocks.composerText }),
     }),
     thread: () => ({ append: vi.fn() }),
-    threads: () => ({ getState: () => ({ isLoading: mocks.threadsLoading }) }),
+    threads: () => ({
+      getState: () => ({ isLoading: mocks.threadsLoading }),
+      switchToNewThread: mocks.switchToNewThread,
+    }),
     subscribe: () => () => {},
   }),
   useAuiState: (
@@ -224,6 +236,9 @@ beforeEach(() => {
   mocks.assistantReady = true;
   mocks.composerSetText.mockClear();
   mocks.composerText = "";
+  mocks.composerBound = true;
+  mocks.runtimeMount.mockClear();
+  mocks.switchToNewThread.mockClear();
   mocks.threadsLoading = false;
   mocks.resolveCreator = undefined;
   mocks.hasScope.mockReturnValue(false);
@@ -580,6 +595,134 @@ describe("InsightsProvider", () => {
       rerender(probe());
 
       expect(seen.at(-1)).toBe(true);
+    });
+
+    function LandingSeed({
+      value,
+      onAccepted,
+    }: {
+      value: string;
+      onAccepted: () => void;
+    }): null {
+      useComposerDraftHandover(value, onAccepted);
+      return null;
+    }
+
+    function FreshLanding({
+      initialValue = "",
+    }: {
+      initialValue?: string;
+    }): JSX.Element {
+      const ready = useFreshAssistantConversation();
+      const [value, setValue] = useState(initialValue);
+      return (
+        <>
+          <input
+            aria-label="Landing draft"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          {ready && (
+            <LandingSeed value={value} onAccepted={() => setValue("")} />
+          )}
+        </>
+      );
+    }
+
+    function landing(initialValue = ""): JSX.Element {
+      return (
+        <InsightsProvider
+          mcpConfig={{ projectSlug: "project" } as never}
+          title="Assistant"
+          subtitle=""
+        >
+          <FreshLanding initialValue={initialValue} />
+        </InsightsProvider>
+      );
+    }
+
+    it("starts landing with a fresh keyed runtime once, even without a draft", () => {
+      const { rerender } = render(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(2);
+      expect(mocks.switchToNewThread).not.toHaveBeenCalled();
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      rerender(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not seed the previous ready runtime before requesting the keyed reset", () => {
+      const writesAtMount: number[] = [];
+      mocks.composerSetText.mockImplementationOnce(() => {
+        writesAtMount.push(mocks.runtimeMount.mock.calls.length);
+      });
+      render(landing("pending draft"));
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(2);
+      expect(writesAtMount).toEqual([2]);
+      expect(mocks.composerText).toBe("pending draft");
+      expect(mocks.switchToNewThread).not.toHaveBeenCalled();
+    });
+
+    it("preserves the landing draft through connection and keyed publication", () => {
+      mocks.assistantReady = false;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.composerText).toBe("pending draft");
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "",
+      );
+      expect(mocks.switchToNewThread).not.toHaveBeenCalled();
+    });
+
+    it("retains landing text when the new runtime drops a write and retries after binding", () => {
+      mocks.assistantReady = false;
+      mocks.composerBound = false;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "pending draft",
+      );
+      mocks.composerBound = true;
+      rerender(landing());
+      expect(mocks.composerText).toBe("pending draft");
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "",
+      );
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.switchToNewThread).not.toHaveBeenCalled();
+    });
+
+    it("waits for landing list loading without resetting its keyed runtime again", () => {
+      mocks.assistantReady = false;
+      mocks.threadsLoading = true;
+      const { rerender } = render(landing());
+      fireEvent.change(screen.getByLabelText("Landing draft"), {
+        target: { value: "pending draft" },
+      });
+      mocks.assistantReady = true;
+      rerender(landing());
+      expect(mocks.composerSetText).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Landing draft")).toHaveProperty(
+        "value",
+        "pending draft",
+      );
+      mocks.threadsLoading = false;
+      rerender(landing());
+      expect(mocks.composerText).toBe("pending draft");
+      expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
+      expect(mocks.switchToNewThread).not.toHaveBeenCalled();
     });
 
     it("moves a draft from the fallback input to the composer when ready", () => {

@@ -5,10 +5,8 @@ import { useEffect, useRef } from "react";
 export function useComposerDraftHandover(
   value: string,
   onAccepted: () => void,
-  { startFresh = false }: { startFresh?: boolean } = {},
 ): void {
   const aui = useAui();
-  const switchStarted = useRef(false);
   const accepted = useRef(false);
 
   useEffect(() => {
@@ -20,16 +18,6 @@ export function useComposerDraftHandover(
       if (aui.threads().getState().isLoading) return;
       writing = true;
       try {
-        if (startFresh) {
-          if (!switchStarted.current) {
-            switchStarted.current = true;
-            aui.threads().switchToNewThread();
-          }
-          // The public switch returns void and may bind asynchronously. Wait
-          // for the selected destination, not just the switch being requested.
-          const { mainThreadId, newThreadId } = aui.threads().getState();
-          if (!newThreadId || mainThreadId !== newThreadId) return;
-        }
         if (!value.trim()) return;
         const composer = aui.composer();
         composer.setText(value);
@@ -51,5 +39,5 @@ export function useComposerDraftHandover(
       active = false;
       unsubscribe();
     };
-  }, [aui, startFresh, value, onAccepted]);
+  }, [aui, value, onAccepted]);
 }

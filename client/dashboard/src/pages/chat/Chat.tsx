@@ -52,6 +52,7 @@ import {
   useHideInsightsDock,
   useInsightsState,
 } from "@/components/insights-context";
+import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
 import { useComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
@@ -186,8 +187,8 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
-    useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
+  const assistantReady = useFreshAssistantConversation();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -402,7 +403,7 @@ function SeedComposerDraft({
   value: string;
   onSeeded: () => void;
 }): null {
-  useComposerDraftHandover(value, onSeeded, { startFresh: true });
+  useComposerDraftHandover(value, onSeeded);
   return null;
 }
 
