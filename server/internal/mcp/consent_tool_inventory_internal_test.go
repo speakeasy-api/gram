@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -448,10 +449,13 @@ func TestConsentFormFitsFullEscapedInventory(t *testing.T) {
 func TestConsentFormRejectsInvalidInput(t *testing.T) {
 	t.Parallel()
 	for name, body := range map[string]string{
-		"invalid escape":  "state=%zz",
-		"semicolon":       "state=x;action=approve",
-		"too many fields": strings.Repeat("tools=x&", consentFormMaxFields),
-		"too many bytes":  "state=" + strings.Repeat("x", int(consentFormMaxBytes)),
+		"invalid escape":     "state=%zz",
+		"semicolon":          "state=x;action=approve",
+		"too many fields":    strings.Repeat("tools=x&", consentFormMaxFields),
+		"too many bytes":     "state=" + strings.Repeat("x", int(consentFormMaxBytes)),
+		"tool name too long": "tools=" + strings.Repeat("x", consentInventoryMaxNameBytes+1),
+		"escaped tool key":   "%74ools=" + strings.Repeat("x", consentInventoryMaxNameBytes+1),
+		"metadata too large": "state=" + strings.Repeat("x", consentFormFixedFieldsMaxBytes/2) + "&csrf_token=" + strings.Repeat("x", consentFormFixedFieldsMaxBytes/2),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -460,5 +464,29 @@ func TestConsentFormRejectsInvalidInput(t *testing.T) {
 			require.Error(t, parseConsentForm(httptest.NewRecorder(), r))
 			require.Nil(t, r.PostForm)
 		})
+	}
+}
+
+func TestConsentFormStopsReadingOversizedField(t *testing.T) {
+	t.Parallel()
+	body := "state=" + strings.Repeat("x", int(consentFormMaxBytes)/2)
+	reader := &io.LimitedReader{R: strings.NewReader(body), N: int64(len(body))}
+	r := httptest.NewRequest(http.MethodPost, "/", reader)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	require.Error(t, parseConsentForm(httptest.NewRecorder(), r))
+	require.Greater(t, reader.N, int64(len(body)/2), "oversized fields are refused before reading the complete body")
+	require.Nil(t, r.PostForm)
+}
+
+func TestConsentFormPreservesEmptyFieldsAndRepeatedValues(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{"", "&", "tools=a&&tools=b&", "state=a%26b&%74ools=c+d&tools=%25"} {
+		r := httptest.NewRequest(http.MethodPost, "/?state=query", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		expected, err := url.ParseQuery(body)
+		require.NoError(t, err)
+		require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+		require.Equal(t, expected, r.PostForm)
+		require.Equal(t, append(expected["state"], "query"), r.Form["state"])
 	}
 }

@@ -130,6 +130,13 @@ const selectionMaxNameBytes = 200
 // caller-owned slices are never mutated or aliased. The returned selection
 // is compiled — a persisted document is always a valid one.
 func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntry) (*SessionSelection, error) {
+	size, err := selectionJSONSize(resource, grantID, entries)
+	if err != nil {
+		return nil, err
+	}
+	if size > selectionMaxWriteBytes {
+		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxWriteBytes)
+	}
 	vocabRank := func(name string) int {
 		return slices.Index(KnownAnnotations, name)
 	}
@@ -168,14 +175,74 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 	if err := selection.compile(); err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(selection)
-	if err != nil {
-		return nil, fmt.Errorf("marshal tool selection: %w", err)
-	}
-	if len(raw) > selectionMaxWriteBytes {
-		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxWriteBytes)
-	}
 	return selection, nil
+}
+
+// selectionJSONSize measures the wire document using only bounded individual
+// strings. It stops at the write budget before cloning or encoding snapshots.
+func selectionJSONSize(resource string, grantID uuid.UUID, entries []AllowEntry) (int, error) {
+	if !validResource(resource) {
+		return 0, fmt.Errorf("tool selection carries an invalid resource binding")
+	}
+	if len(entries) > MaxTools+len(KnownAnnotations) {
+		return 0, fmt.Errorf("tool selection exceeds %d allow entries", MaxTools+len(KnownAnnotations))
+	}
+	header, err := json.Marshal(&SessionSelection{Resource: resource, GrantID: grantID, Allow: []AllowEntry{}, nameSet: nil, liveAnnotations: nil})
+	if err != nil {
+		return 0, fmt.Errorf("measure tool selection: %w", err)
+	}
+	size := len(header)
+	for i, entry := range entries {
+		if entry.Type != AllowTypeTool && entry.Type != AllowTypeAnnotation {
+			return 0, fmt.Errorf("tool selection carries unknown allow entry type")
+		}
+		if len(entry.Name) > selectionMaxNameBytes {
+			return 0, fmt.Errorf("tool selection carries an invalid tool name")
+		}
+		if entry.Mode != nil && *entry.Mode != AnnotationModeSnapshot && *entry.Mode != AnnotationModeLive {
+			return 0, fmt.Errorf("tool selection carries unknown annotation mode")
+		}
+		metadata := entry
+		metadata.Tools = nil
+		raw, err := json.Marshal(metadata)
+		if err != nil {
+			return 0, fmt.Errorf("measure tool selection entry: %w", err)
+		}
+		size += len(raw)
+		if i > 0 {
+			size++ // Comma between entries.
+		}
+		if entry.Tools != nil {
+			if len(*entry.Tools) > MaxTools {
+				return 0, fmt.Errorf("snapshot expansion exceeds %d names", MaxTools)
+			}
+			if *entry.Tools == nil {
+				size += len(`,"tools":null`)
+			} else {
+				size += len(`,"tools":[]`)
+			}
+			for j, name := range *entry.Tools {
+				if len(name) > selectionMaxNameBytes {
+					return 0, fmt.Errorf("tool selection carries an invalid snapshot tool name")
+				}
+				encoded, err := json.Marshal(name)
+				if err != nil {
+					return 0, fmt.Errorf("measure snapshot tool name: %w", err)
+				}
+				size += len(encoded)
+				if j > 0 {
+					size++ // Comma between names.
+				}
+				if size > selectionMaxWriteBytes {
+					return size, nil
+				}
+			}
+		}
+		if size > selectionMaxWriteBytes {
+			return size, nil
+		}
+	}
+	return size, nil
 }
 
 // ParseSessionSelection decodes and validates a stored tool_selection

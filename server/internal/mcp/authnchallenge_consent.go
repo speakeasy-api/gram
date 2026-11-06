@@ -5,6 +5,8 @@
 package mcp
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -15,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -106,7 +107,11 @@ func (d consentTemplateData) ConsentPath() string {
 // exhaustion (gosec G120). The tool picker can post toolfilter.MaxTools names
 // of up to consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
 // encoding, with 64 KiB reserved for fixed fields.
-const consentFormMaxBytes = int64(toolfilter.MaxTools*(3*consentInventoryMaxNameBytes+len("&tools=")) + (64 << 10))
+const consentFormMaxBytes = int64(toolfilter.MaxTools*(3*consentInventoryMaxNameBytes+len("&tools=")) + consentFormFixedFieldsMaxBytes)
+
+// consentFormFixedFieldsMaxBytes bounds non-tool fields and each encoded field,
+// so parsing never buffers the complete multi-megabyte selection body.
+const consentFormFixedFieldsMaxBytes = 64 << 10 // 64 KiB
 
 // consentFormMaxFields allows every selected tool plus room for consent metadata.
 const consentFormMaxFields = toolfilter.MaxTools + 64
@@ -118,23 +123,46 @@ func parseConsentForm(w http.ResponseWriter, r *http.Request) error {
 		r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
 		contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err == nil && contentType == "application/x-www-form-urlencoded" {
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				return fmt.Errorf("read consent form: %w", err)
-			}
-			raw := string(body)
-			if strings.Count(raw, "&")+1 > consentFormMaxFields {
-				return fmt.Errorf("consent form exceeds %d fields", consentFormMaxFields)
-			}
+			scanner := bufio.NewScanner(r.Body)
+			scanner.Buffer(nil, consentFormFixedFieldsMaxBytes+1)
+			scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+				if i := bytes.IndexByte(data, '&'); i >= 0 {
+					return i + 1, data[:i], nil
+				}
+				if atEOF {
+					return len(data), data, bufio.ErrFinalToken
+				}
+				return 0, nil, nil
+			})
 			form := make(url.Values)
-			for field := range strings.SplitSeq(raw, "&") {
-				values, err := url.ParseQuery(field)
+			fields, fixedBytes := 0, 0
+			for scanner.Scan() {
+				fields++
+				if fields > consentFormMaxFields {
+					return fmt.Errorf("consent form exceeds %d fields", consentFormMaxFields)
+				}
+				values, err := url.ParseQuery(scanner.Text())
 				if err != nil {
 					return fmt.Errorf("decode consent form field: %w", err)
 				}
 				for key, fieldValues := range values {
+					if key == "tools" {
+						for _, name := range fieldValues {
+							if len(name) > consentInventoryMaxNameBytes {
+								return fmt.Errorf("consent tool name exceeds %d bytes", consentInventoryMaxNameBytes)
+							}
+						}
+					} else {
+						fixedBytes += len(scanner.Bytes())
+						if fixedBytes > consentFormFixedFieldsMaxBytes {
+							return fmt.Errorf("consent metadata exceeds %d bytes", consentFormFixedFieldsMaxBytes)
+						}
+					}
 					form[key] = append(form[key], fieldValues...)
 				}
+			}
+			if err := scanner.Err(); err != nil {
+				return fmt.Errorf("read consent form field: %w", err)
 			}
 			r.PostForm = form
 		}

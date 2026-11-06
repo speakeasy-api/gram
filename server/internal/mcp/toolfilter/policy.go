@@ -172,6 +172,17 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	if p == nil {
 		return []byte("null"), nil
 	}
+	selectionSize := 0
+	if p.Selection != nil {
+		size, err := selectionJSONSize(p.Selection.Resource, p.Selection.GrantID, p.Selection.Allow)
+		if err != nil {
+			return nil, err
+		}
+		if size > selectionMaxWriteBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
+		}
+		selectionSize = size
+	}
 	if p.Gateway == nil {
 		if p.Selection == nil || p.Resource != p.Selection.Resource {
 			return nil, fmt.Errorf("session policy has no valid selection")
@@ -206,6 +217,15 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	version := 1
 	if policy.Catalog != nil {
 		version = 2
+	}
+	if policy.Selection != nil {
+		header, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: nil, Catalog: policy.Catalog})
+		if err != nil {
+			return nil, fmt.Errorf("measure gateway policy: %w", err)
+		}
+		if len(header)+len(`,"selection":`)+selectionSize > selectionMaxWriteBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
+		}
 	}
 	raw, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: policy.Selection, Catalog: policy.Catalog})
 	if err != nil {
