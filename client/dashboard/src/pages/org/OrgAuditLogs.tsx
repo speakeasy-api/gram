@@ -18,6 +18,7 @@ import {
   type FilterValue,
 } from "@/components/filters";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -1106,9 +1107,12 @@ function OrgAuditLogsInner() {
             className="focus:outline-none"
           >
             {isLoading ? (
-              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                <Icon name="loader-circle" className="size-4 animate-spin" />
-                <span>Loading audit logs...</span>
+              <div className="p-4">
+                <Skeleton label="Loading audit logs">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-10 w-full" />
+                  ))}
+                </Skeleton>
               </div>
             ) : error ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">

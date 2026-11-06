@@ -424,7 +424,7 @@ func (s *Service) serveConsentProxiedMCP(
 	var chosenClient uuid.UUID
 	switch {
 	case auth == nil:
-		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		tokens, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:

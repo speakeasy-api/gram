@@ -9,6 +9,7 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -16,22 +17,32 @@ import (
 
 // Endpoints wraps the "agent" service endpoints.
 type Endpoints struct {
-	GetPlugins           goa.Endpoint
-	GetMyConnections     goa.Endpoint
-	HideMcpServer        goa.Endpoint
-	UnhideMcpServer      goa.Endpoint
-	ListSyncedUsers      goa.Endpoint
-	GetConfiguration     goa.Endpoint
-	UpdateConfiguration  goa.Endpoint
-	ListAiScanTargets    goa.Endpoint
-	UpsertAiScanTarget   goa.Endpoint
-	DeleteAiScanTarget   goa.Endpoint
-	GetSessionMeta       goa.Endpoint
-	ReportSessionMoved   goa.Endpoint
-	ReportAIScan         goa.Endpoint
-	ReportState          goa.Endpoint
-	ReportCrash          goa.Endpoint
-	CreateSessionHandoff goa.Endpoint
+	GetPlugins                   goa.Endpoint
+	GetMyConnections             goa.Endpoint
+	GetClaudeObservabilityPlugin goa.Endpoint
+	HideMcpServer                goa.Endpoint
+	UnhideMcpServer              goa.Endpoint
+	ListSyncedUsers              goa.Endpoint
+	GetConfiguration             goa.Endpoint
+	UpdateConfiguration          goa.Endpoint
+	ListAiScanTargets            goa.Endpoint
+	UpsertAiScanTarget           goa.Endpoint
+	DeleteAiScanTarget           goa.Endpoint
+	GetSessionMeta               goa.Endpoint
+	ReportSessionMoved           goa.Endpoint
+	ReportAIScan                 goa.Endpoint
+	ReportState                  goa.Endpoint
+	ReportCrash                  goa.Endpoint
+	CreateSessionHandoff         goa.Endpoint
+}
+
+// GetClaudeObservabilityPluginResponseData holds both the result and the HTTP
+// response body reader of the "getClaudeObservabilityPlugin" method.
+type GetClaudeObservabilityPluginResponseData struct {
+	// Result is the method result.
+	Result *GetClaudeObservabilityPluginResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
 }
 
 // NewEndpoints wraps the methods of the "agent" service with endpoints.
@@ -39,22 +50,23 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPlugins:           NewGetPluginsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
-		GetMyConnections:     NewGetMyConnectionsEndpoint(s, a.APIKeyAuth),
-		HideMcpServer:        NewHideMcpServerEndpoint(s, a.APIKeyAuth),
-		UnhideMcpServer:      NewUnhideMcpServerEndpoint(s, a.APIKeyAuth),
-		ListSyncedUsers:      NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
-		GetConfiguration:     NewGetConfigurationEndpoint(s, a.APIKeyAuth),
-		UpdateConfiguration:  NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
-		ListAiScanTargets:    NewListAiScanTargetsEndpoint(s, a.APIKeyAuth),
-		UpsertAiScanTarget:   NewUpsertAiScanTargetEndpoint(s, a.APIKeyAuth),
-		DeleteAiScanTarget:   NewDeleteAiScanTargetEndpoint(s, a.APIKeyAuth),
-		GetSessionMeta:       NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
-		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
-		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
-		ReportState:          NewReportStateEndpoint(s, a.APIKeyAuth),
-		ReportCrash:          NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
-		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
+		GetPlugins:                   NewGetPluginsEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		GetMyConnections:             NewGetMyConnectionsEndpoint(s, a.APIKeyAuth),
+		GetClaudeObservabilityPlugin: NewGetClaudeObservabilityPluginEndpoint(s, a.APIKeyAuth),
+		HideMcpServer:                NewHideMcpServerEndpoint(s, a.APIKeyAuth),
+		UnhideMcpServer:              NewUnhideMcpServerEndpoint(s, a.APIKeyAuth),
+		ListSyncedUsers:              NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
+		GetConfiguration:             NewGetConfigurationEndpoint(s, a.APIKeyAuth),
+		UpdateConfiguration:          NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
+		ListAiScanTargets:            NewListAiScanTargetsEndpoint(s, a.APIKeyAuth),
+		UpsertAiScanTarget:           NewUpsertAiScanTargetEndpoint(s, a.APIKeyAuth),
+		DeleteAiScanTarget:           NewDeleteAiScanTargetEndpoint(s, a.APIKeyAuth),
+		GetSessionMeta:               NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
+		ReportSessionMoved:           NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
+		ReportAIScan:                 NewReportAIScanEndpoint(s, a.APIKeyAuth),
+		ReportState:                  NewReportStateEndpoint(s, a.APIKeyAuth),
+		ReportCrash:                  NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
+		CreateSessionHandoff:         NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -62,6 +74,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPlugins = m(e.GetPlugins)
 	e.GetMyConnections = m(e.GetMyConnections)
+	e.GetClaudeObservabilityPlugin = m(e.GetClaudeObservabilityPlugin)
 	e.HideMcpServer = m(e.HideMcpServer)
 	e.UnhideMcpServer = m(e.UnhideMcpServer)
 	e.ListSyncedUsers = m(e.ListSyncedUsers)
@@ -133,6 +146,33 @@ func NewGetMyConnectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.GetMyConnections(ctx, p)
+	}
+}
+
+// NewGetClaudeObservabilityPluginEndpoint returns an endpoint function that
+// calls the method "getClaudeObservabilityPlugin" of service "agent".
+func NewGetClaudeObservabilityPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetClaudeObservabilityPluginPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.GetClaudeObservabilityPlugin(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &GetClaudeObservabilityPluginResponseData{Result: res, Body: body}, nil
 	}
 }
 

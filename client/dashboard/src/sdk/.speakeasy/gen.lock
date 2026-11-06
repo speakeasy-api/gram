@@ -110,6 +110,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentCreateSessionHandoff.ts: {}
   src/funcs/agentDeleteAiScanTarget.ts: {}
+  src/funcs/agentGetClaudeObservabilityPlugin.ts: {}
   src/funcs/agentGetConfiguration.ts: {}
   src/funcs/agentGetMyConnections.ts: {}
   src/funcs/agentGetPlugins.ts: {}
@@ -755,6 +756,7 @@ trackedFiles:
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
+  src/funcs/telemetryGetOrgMcpServerActivity.ts: {}
   src/funcs/telemetryGetOrganizationGatewayOverview.ts: {}
   src/funcs/telemetryGetOrganizationGatewayUsage.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
@@ -1326,6 +1328,7 @@ trackedFiles:
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
   src/models/components/getorganizationgatewayactivitypayload.ts: {}
+  src/models/components/getorgmcpserveractivityresult.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -1748,6 +1751,7 @@ trackedFiles:
   src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
+  src/models/components/projectmcpserveractivity.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
   src/models/components/projectsummary.ts: {}
   src/models/components/promoterequestbody.ts: {}
@@ -2503,6 +2507,7 @@ trackedFiles:
   src/models/operations/getactivedeployment.ts: {}
   src/models/operations/getadminopenrouterkeyusage.ts: {}
   src/models/operations/getagent.ts: {}
+  src/models/operations/getagentclaudeobservabilityplugin.ts: {}
   src/models/operations/getagentmyconnections.ts: {}
   src/models/operations/getagentplugins.ts: {}
   src/models/operations/getagentsessionmeta.ts: {}
@@ -2585,6 +2590,7 @@ trackedFiles:
   src/models/operations/getorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/getorganizationusersessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuermigratepreflight.ts: {}
+  src/models/operations/getorgmcpserveractivity.ts: {}
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
@@ -3157,6 +3163,8 @@ trackedFiles:
   src/react-query/agent.ts: {}
   src/react-query/agentConnectionBlocks.core.ts: {}
   src/react-query/agentConnectionBlocks.ts: {}
+  src/react-query/agentGetClaudeObservabilityPlugin.core.ts: {}
+  src/react-query/agentGetClaudeObservabilityPlugin.ts: {}
   src/react-query/agentMyConnections.core.ts: {}
   src/react-query/agentMyConnections.ts: {}
   src/react-query/agentPlugins.core.ts: {}
@@ -3515,6 +3523,8 @@ trackedFiles:
   src/react-query/getMeterUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getOrgMcpServerActivity.core.ts: {}
+  src/react-query/getOrgMcpServerActivity.ts: {}
   src/react-query/getOrganizationGatewayOverview.core.ts: {}
   src/react-query/getOrganizationGatewayOverview.ts: {}
   src/react-query/getOrganizationGatewayUsage.core.ts: {}
@@ -7326,6 +7336,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getAgentClaudeObservabilityPlugin:
+    speakeasy-default-get-agent-claude-observability-plugin:
+      parameters:
+        header:
+          Gram-User-Email: "dev@acme.corp"
+      responses:
+        "200":
+          application/zip: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getAgentMyConnections:
     speakeasy-default-get-agent-my-connections:
       parameters:
@@ -8069,6 +8091,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrgMcpServerActivity:
+    speakeasy-default-get-org-mcp-server-activity:
+      requestBody:
+        application/json: {"recent_window_days": 14}
+      responses:
+        "200":
+          application/json: {"projects": [{"activity": [{"recent_tool_calls": 288382, "target_id": "<id>", "target_label": "<value>", "target_type": "tunneled_mcp_server", "total_tool_calls": 479128}], "project_id": "bebcff46-c317-4c84-a76f-4b84eab42751"}], "recent_window_days": 578686}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getOrganization:
     speakeasy-default-get-organization:
       responses:
@@ -10909,7 +10942,7 @@ examples:
           mcp_server_id: "9fe4eeb2-ab23-422d-8b3c-8f84188e6522"
       responses:
         "200":
-          application/json: {"associations": []}
+          application/json: {"associations": [], "required_client_ids": ["fe4eeb2a-b232-42db-83c8-f84188e65223", "5683a8ef-51a1-46b2-bb89-2537e3be4ecf"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

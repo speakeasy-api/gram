@@ -1049,6 +1049,11 @@ type issuerGateAuthentication struct {
 	// directWorkloadHandoff is enabled only by direct proxy dispatch.
 	directWorkloadHandoff bool
 
+	// ownClientsOnly limits a caller with no chosen client to the clients of
+	// the proxied server being served, rather than every client the issuer
+	// binds, which may belong to other servers sharing it.
+	ownClientsOnly bool
+
 	// chosenClient narrows upstream resolution to the one client the
 	// credential chose for the endpoint's server; invalid resolves every
 	// client the issuer binds unless chosenNoAuth is set.
@@ -1240,6 +1245,7 @@ func (s *Service) authenticateIssuerGate(
 
 		refreshableUserSession: refreshableUserSession,
 		directWorkloadHandoff:  false,
+		ownClientsOnly:         false,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,

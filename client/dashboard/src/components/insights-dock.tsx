@@ -1,4 +1,5 @@
 import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
+import { Spinner } from "@/components/ui/Spinner";
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
@@ -53,7 +54,6 @@ import {
   ArrowLeft,
   ArrowUp,
   HistoryIcon,
-  Loader2,
   Maximize2,
   SquarePen,
   Terminal,
@@ -1609,7 +1609,7 @@ export function InsightsProvider({
             noMcpAccessConfigured: noToolsetsConfigured,
           }) && (
             <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm">
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
               <span>Connecting to the Project Assistant…</span>
             </div>
           )}
@@ -1620,7 +1620,10 @@ export function InsightsProvider({
 
   // Page content (outlet) + the docked composer. The document scrolls, so the
   // composer rides a zero-height sticky rail at the end of the content: it
-  // pins to the viewport bottom and spans the content area's width.
+  // pins to the viewport bottom and spans the content area's width. `mt-auto`
+  // pushes the rail to the bottom of this full-height column when the page is
+  // shorter than the viewport (e.g. while loading); sticky alone would leave
+  // it right under the content.
   const dockSurface = (
     <div className="relative flex w-full flex-1 flex-col">
       {children}
@@ -1641,7 +1644,7 @@ export function InsightsProvider({
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. */}
       {!hideTrigger && !dockDismissed && (
-        <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+        <div className="pointer-events-none sticky bottom-0 z-30 mt-auto h-0 shrink-0">
           <InsightsDock
             suggestions={suggestions}
             open={isExpanded}

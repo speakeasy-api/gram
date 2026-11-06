@@ -1,4 +1,5 @@
 import { SettingsSection } from "@/components/detail/settings-section";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -38,7 +39,12 @@ export function RemoteMcpSessionsSection({
   let sessionControls: JSX.Element;
   if (loading) {
     sessionControls = (
-      <SessionsNotice>Loading session settings...</SessionsNotice>
+      <SettingsSection.Body>
+        <Skeleton label="Loading session settings">
+          <div className="h-5 w-48" />
+          <div className="h-9 w-full max-w-md" />
+        </Skeleton>
+      </SettingsSection.Body>
     );
   } else if (failed || !issuerQuery.data) {
     sessionControls = (

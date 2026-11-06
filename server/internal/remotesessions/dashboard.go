@@ -61,6 +61,8 @@ type serverIdentityRequest struct {
 	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
 	// is empty or "cimd", both of which prefer CIMD.
 	registrationMethod string
+	// replacement is the explicit choice to replace the provider's bound client.
+	replacement *ClientReplacement
 }
 
 func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload *gen.CommitServerIdentityConfigurationPayload) (*gen.CommitServerIdentityConfigurationResult, error) {
@@ -165,6 +167,13 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
 	// re-stamps every server carrying that issuer, so write access to the named
 	// target alone would let a caller repoint its siblings.
+	// A replacement moves the servers it names, which need not share the issuer:
+	// one can reach the client through a gateway or an organization issuer.
+	if req.replacement != nil {
+		for _, id := range req.replacement.ServerIDs {
+			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+		}
+	}
 	if target.UserSessionIssuerID.Valid {
 		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
 			ProjectID:           *authCtx.ProjectID,
@@ -257,9 +266,10 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 	return &out
 }
 
-// plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationResource is what a
-// registered client without scopes will discover at login.
+// plan describes the request as an identity plan: this server moves to the
+// requested client, and no client another server uses is unbound.
+// registrationResource is what a registered client without scopes will discover
+// at login.
 func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin bool, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
@@ -306,6 +316,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin
 		Provider:            provider,
 		Client:              client,
 		Bound:               ReplaceBound,
+		Replacement:         r.replacement,
 		ResourceDisplay:     nil,
 	}
 }
@@ -378,8 +389,10 @@ func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string
 	}
 	providerTier := scopeOf(res.Provider).String()
 	clientTier := conv.Ternary(res.Client.ProjectID.Valid, "project-specific", "organization-level")
-	status := conv.Ternary(clientMode == serverIdentityClientModeExisting, serverIdentityStatusLinked, serverIdentityStatusRegistered)
-	method := string(res.Method)
+	status := conv.Ternary(clientMode == serverIdentityClientModeExisting || res.Reused, serverIdentityStatusLinked, serverIdentityStatusRegistered)
+	// Reusing the provider's bound client links a stored client, as far as the
+	// caller can tell.
+	method := conv.Ternary(res.Reused, string(RegistrationLinked), string(res.Method))
 	providerPath := serverIdentityProviderPath(res.Provider.ID)
 	clientPath := serverIdentityClientPath(res.Provider.ID, res.Client.ID)
 	return &gen.CommitServerIdentityConfigurationResult{
@@ -406,6 +419,20 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
 		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
+		replacement:         nil,
+	}
+	if conv.PtrValOr(payload.ReplaceClient, false) {
+		serverIDs := make([]uuid.UUID, 0, len(payload.ReplaceClientServerIds))
+		for _, raw := range payload.ReplaceClientServerIds {
+			serverID, err := uuid.Parse(raw)
+			if err != nil {
+				return serverIdentityRequest{}, fmt.Errorf("parse replace_client_server_ids: %w", err)
+			}
+			serverIDs = append(serverIDs, serverID)
+		}
+		req.replacement = &ClientReplacement{ServerIDs: serverIDs}
+	} else if len(payload.ReplaceClientServerIds) > 0 {
+		return serverIdentityRequest{}, errors.New("replace_client_server_ids requires replace_client")
 	}
 	var err error
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)

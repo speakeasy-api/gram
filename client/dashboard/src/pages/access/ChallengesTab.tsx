@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { enumPresentation } from "@/lib/enum";
 import {
   Select,
@@ -19,7 +20,7 @@ import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { Badge as MoonshineBadge } from "@/components/ui/Badge";
 import { type Column, Table } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -604,7 +605,7 @@ export function ChallengesTab(): JSX.Element {
                 >
                   {isLoadingMore ? (
                     <>
-                      <Loader2 className="size-4 animate-spin" />
+                      <Spinner className="mr-0 size-4" />
                       Loading...
                     </>
                   ) : (

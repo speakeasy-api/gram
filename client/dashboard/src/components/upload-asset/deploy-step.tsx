@@ -29,6 +29,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
@@ -416,10 +417,9 @@ function DeployCompletedMessage({
   // Still loading tools
   if (toolsLoading) {
     return (
-      <Stack direction="horizontal" gap={1} align="center">
-        <Spinner />
-        <Text>Checking generated tools...</Text>
-      </Stack>
+      <div role="status" aria-label="Checking generated tools">
+        <Skeleton className="h-9 w-full" />
+      </div>
     );
   }
 

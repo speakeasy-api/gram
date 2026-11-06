@@ -1,11 +1,5 @@
-import {
-  ExternalLink,
-  Loader2,
-  Plus,
-  SaveIcon,
-  Trash2,
-  XIcon,
-} from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
+import { ExternalLink, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import {
   Field,
   FieldDescription,
@@ -634,7 +628,7 @@ function AddressRow({
           >
             <Button.Icon>
               {update.isPending ? (
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0 size-4" />
               ) : (
                 <SaveIcon aria-hidden="true" className="size-4" />
               )}
@@ -811,7 +805,7 @@ function AddressChangeDialog({
           >
             {isLoading && (
               <Button.LeftIcon>
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0 size-4" />
               </Button.LeftIcon>
             )}
             <Button.Text>
@@ -954,7 +948,7 @@ function RemoveLastAddressDialog({
           >
             {isLoading && (
               <Button.LeftIcon>
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0 size-4" />
               </Button.LeftIcon>
             )}
             <Button.Text>
@@ -1046,7 +1040,7 @@ function NewPlatformAddressRow({
         >
           <Button.Icon>
             {submitting ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             ) : (
               <SaveIcon aria-hidden="true" className="size-4" />
             )}
@@ -1153,7 +1147,7 @@ function NewCustomAddressRow({
         >
           <Button.Icon>
             {submitting ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             ) : (
               <SaveIcon aria-hidden="true" className="size-4" />
             )}

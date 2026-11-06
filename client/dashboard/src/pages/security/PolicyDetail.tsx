@@ -61,13 +61,13 @@ import {
   Check,
   Code,
   Info,
-  Loader2,
   Shield,
   ThumbsDown,
   ThumbsUp,
   TriangleAlert,
   X,
 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   type ReactNode,
   useDeferredValue,
@@ -114,7 +114,7 @@ import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
 import {
   initialPolicyMCPScopeValue,
   policyMCPScopeComplete,
@@ -356,14 +356,8 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
           }
         />
       </Page.Header>
-      <Page.Body>
-        {isLoading || !policy ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        ) : (
-          <PolicyEditorFor policy={policy} />
-        )}
+      <Page.Body isLoading={isLoading || !policy}>
+        {policy && <PolicyEditorFor policy={policy} />}
       </Page.Body>
     </Page>
   );
@@ -1060,7 +1054,7 @@ function InspectMatrix({
   if (categoriesQuery.isLoading) {
     return (
       <Text small muted className="flex items-center gap-2">
-        <Loader2 className="size-4 animate-spin" />
+        <Spinner className="mr-0" />
         Loading inspection surfaces...
       </Text>
     );
@@ -2626,9 +2620,14 @@ function SessionReview({
               onSelect={setSelectedIdState}
             />
           ) : chatsLoading ? (
-            <Text small muted className="block px-3 py-6 text-center">
-              Loading sessions…
-            </Text>
+            <div className="p-3">
+              <Skeleton label="Loading sessions">
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+                <div className="h-12 w-full" />
+              </Skeleton>
+            </div>
           ) : chats.length === 0 ? (
             <Text small muted className="block px-3 py-6 text-center">
               No sessions match your search.
@@ -2679,7 +2678,7 @@ function ReevaluatingIndicator({
 
   return (
     <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <Spinner className="mr-0 h-3.5 w-3.5" />
       <Text small muted>
         Re-evaluating…
       </Text>
@@ -2850,7 +2849,7 @@ function JudgeSessionBanner({
   if (fetching && !evalResult) {
     return (
       <div className="border-border bg-muted/30 flex items-start gap-3 border-b px-4 py-3">
-        <Loader2 className="text-muted-foreground mt-0.5 size-4 shrink-0 animate-spin" />
+        <Spinner className="text-muted-foreground mt-0.5 mr-0 shrink-0" />
         <div className="min-w-0">
           <Text small className="font-medium">
             Judge is evaluating this session
@@ -3090,9 +3089,9 @@ function SessionTranscript({
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {transcript.isLoading ? (
-            <Text small muted className="block p-6 text-center">
-              Loading transcript…
-            </Text>
+            <div className="p-6">
+              <SkeletonParagraph label="Loading transcript" />
+            </div>
           ) : transcript.isError ? (
             <Text small muted className="block p-6 text-center">
               Failed to load transcript.

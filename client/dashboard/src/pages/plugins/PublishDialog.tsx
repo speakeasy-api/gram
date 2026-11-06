@@ -1,9 +1,9 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/moon/input";
 import { Label } from "@/components/moon/label";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 interface PublishDialogProps {
@@ -350,7 +350,7 @@ export const PublishDialog = memo(function PublishDialog({
                 >
                   {searchLoading && (
                     <div className="text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs">
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="mr-0 h-3 w-3" />
                       Searching GitHub…
                     </div>
                   )}

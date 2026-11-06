@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
 import { Button } from "@/components/ui/Button";
@@ -6,7 +7,7 @@ import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { MutationStatus } from "@tanstack/react-query";
-import { Fullscreen, Loader2, X } from "lucide-react";
+import { Fullscreen, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import * as z from "zod";
 
@@ -254,7 +255,7 @@ export function PromptEditor({
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
               <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             ) : null}
             <Button.Text>{isPending ? "Saving..." : "Save Prompt"}</Button.Text>
