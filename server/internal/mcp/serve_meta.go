@@ -494,7 +494,7 @@ func (s *Service) handleMetaInitialize(
 // metaInstructionMembers names the servers this caller's tool listing would
 // offer. A failed snapshot only drops the summary: the handshake must not fail.
 func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
-	if metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
+	if gate.organizationID == "" || metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
 		return nil
 	}
 	if gate.memberChoices != nil {

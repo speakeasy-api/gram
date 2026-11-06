@@ -97,6 +97,9 @@ func MemberSummary(members []MemberLabel) string {
 			rest = fmt.Sprintf(" and %d more", left)
 		}
 		if utf8.RuneCountInString(next+rest+".") > memberSummaryLimit {
+			if i == 0 && len(members) == 1 {
+				return "Tools from 1 server."
+			}
 			if i == 0 {
 				return fmt.Sprintf("Tools from %d servers.", len(members))
 			}
