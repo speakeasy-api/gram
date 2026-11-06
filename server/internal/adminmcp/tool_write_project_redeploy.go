@@ -112,7 +112,7 @@ func (w *projectRedeployWriter) apply(ctx context.Context, input RedeployProject
 	if err != nil {
 		return projectRedeployReceipt{}, fmt.Errorf("parse redeployed deployment id: %w", err)
 	}
-	if err := w.redeployer.Dispatch(context.WithoutCancel(ctx), projectID, deploymentID, expectedActive); err != nil {
+	if err := w.redeployer.Dispatch(ctx, projectID, deploymentID, expectedActive); err != nil {
 		return projectRedeployReceipt{}, fmt.Errorf("deployment %s was created but did not start, and the active deployment is unchanged: %w", receipt.DeploymentID, err)
 	}
 	return receipt, nil

@@ -1,6 +1,7 @@
 package deployments_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -48,7 +49,10 @@ func TestStaffRedeployer_ProjectWithOnlyExternalMCPsDropsThemAndBecomesActive(t 
 	require.Equal(t, staff.ID, record.ActorID)
 
 	cloneID := uuid.MustParse(clone.ID)
-	require.NoError(t, redeployer.Dispatch(ctx, projectID, cloneID, source))
+	// The clone is committed, so a client that has gone away must not strand it.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.NoError(t, redeployer.Dispatch(cancelled, projectID, cloneID, source))
 
 	require.NotNil(t, clone.IdempotencyKey)
 	workflowID := fmt.Sprintf("v1:process-deployment:%s", *clone.IdempotencyKey)
@@ -82,4 +86,20 @@ func TestStaffRedeployer_PrepareRefusesDeploymentFromAnotherProject(t *testing.T
 		ActorDisplayName:   nil,
 	})
 	require.Error(t, err)
+}
+
+func TestStaffRedeployer_PrepareRequiresATransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
+	redeployer := deployments.NewStaffRedeployer(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, ti.temporalEnv, audit.NewLogger())
+
+	_, err := redeployer.Prepare(ctx, nil, deployments.StaffRedeploy{
+		OrganizationID:     "",
+		ProjectID:          uuid.New(),
+		SourceDeploymentID: uuid.New(),
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "staff-subject"),
+		ActorDisplayName:   nil,
+	})
+	require.ErrorContains(t, err, "transaction is required")
 }

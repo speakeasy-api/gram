@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,8 +20,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// statusCreated is a deployment that has not started processing.
-const statusCreated = "created"
+const (
+	// statusCreated is a deployment that has not started processing.
+	statusCreated = "created"
+
+	// staffDispatchTimeout bounds starting a committed clone. Dispatch is one
+	// read and one workflow start, so 30 seconds covers a slow Temporal without
+	// leaving a staff request blocked on an outage.
+	staffDispatchTimeout = 30 * time.Second
+)
 
 // StaffRedeployer redeploys a project for Speakeasy staff, who act across
 // organizations and so have no project auth context. It performs no
@@ -71,8 +79,13 @@ func (r *StaffRedeployer) Prepare(ctx context.Context, dbtx pgx.Tx, req StaffRed
 
 // Dispatch starts processing a committed clone without waiting for it.
 // Promotion only happens while expectedActive is still the active deployment.
-// A clone that has already left the created status is left alone.
+// A clone that has already left the created status is left alone. The clone is
+// already committed, so the start outlives the caller's cancellation and has its
+// own deadline.
 func (r *StaffRedeployer) Dispatch(ctx context.Context, projectID, deploymentID, expectedActive uuid.UUID) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), staffDispatchTimeout)
+	defer cancel()
+
 	logger := r.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogDeploymentID(deploymentID.String()))
 
 	dep, err := mv.DescribeDeployment(ctx, logger, repo.New(r.db), mv.ProjectID(projectID), mv.DeploymentID(deploymentID))

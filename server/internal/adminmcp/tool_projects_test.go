@@ -81,13 +81,13 @@ func TestListOrganizationProjectsBoundsAndSafeProjection(t *testing.T) {
 func TestProjectRedeployPreviewRequiresExactProjectAndMatchingOrganization(t *testing.T) {
 	t.Parallel()
 	reads := testProjectReads()
-	reads.preview = &gen.AdminProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenapiAssets: 1, ExternalMcps: 2}
+	reads.preview = &gen.AdminProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenapiAssets: 1, FunctionAssets: 3, Packages: 4, ExternalMcps: 2}
 	args := `{"organization_id":"org-a","project_id":"` + testProjectID + `"}`
 	status, _, data := callStaffReadTool(t, reads, "get_project_redeploy_preview", args)
 	require.Equal(t, http.StatusOK, status)
 	var preview ProjectRedeployPreview
 	require.NoError(t, json.Unmarshal(data, &preview))
-	require.Equal(t, ProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenAPIAssets: 1, ExternalMCPs: 2}, preview)
+	require.Equal(t, ProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenAPIAssets: 1, FunctionAssets: 3, Packages: 4, ExternalMCPs: 2}, preview)
 
 	_, body, _ := callStaffReadTool(t, reads, "get_project_redeploy_preview", `{"organization_id":"org-a","project_id":"example"}`)
 	require.Contains(t, body, `"isError":true`)

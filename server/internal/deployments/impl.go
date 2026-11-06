@@ -792,10 +792,6 @@ func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen
 		return nil, err
 	}
 
-	if dbtx == nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "transaction is required").LogError(ctx, s.logger)
-	}
-
 	if payload == nil || payload.DeploymentID == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").LogError(ctx, s.logger)
 	}
@@ -841,6 +837,10 @@ type redeployRequest struct {
 // prepareRedeploy clones a deployment and records the audit entry in the
 // caller's transaction. Authorizing the caller is the caller's job.
 func prepareRedeploy(ctx context.Context, tracer trace.Tracer, logger *slog.Logger, auditLogger *audit.Logger, dbtx pgx.Tx, req redeployRequest) (*types.Deployment, error) {
+	if dbtx == nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "transaction is required").LogError(ctx, logger)
+	}
+
 	span := trace.SpanFromContext(ctx)
 	tx := repo.New(dbtx)
 
