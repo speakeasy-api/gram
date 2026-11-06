@@ -16,9 +16,12 @@
 // - each finding is checked against a strict schema, with length limits;
 // - agent text reaches Linear only inside code blocks (or as a plain-text
 //   title), so it cannot add links, images or mentions to an issue;
+// - credentials and email addresses the agent copied from a page are
+//   redacted before anything reaches Linear;
 // - in CI, nothing the agent wrote is printed.
-// What is not handled here is deduplication across nights, which is why this
-// is a custom safe-output job rather than gh-aw's built-in Linear output.
+// It also deduplicates across nights (`fingerprint` and the `searchIssues`
+// check in `main`), which gh-aw's built-in Linear output cannot, so this runs
+// as a custom safe-output job.
 
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -73,6 +76,45 @@ function text(v: unknown, field: string, max: number): string {
   return v;
 }
 
+// Evidence is copied from console output and RPC bodies, so it can carry a
+// credential or someone's email. The prompt asks the agent to redact them;
+// this catches what it misses. Patterns err toward redacting too much.
+const REDACTIONS: [RegExp, string][] = [
+  // JSON Web Tokens.
+  [
+    /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g,
+    "<redacted-jwt>",
+  ],
+  // Authorization headers.
+  [/\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 <redacted>"],
+  // Cookies and key-like headers or fields, as `name=value` or `"name": "value"`.
+  [
+    /\b((?:gram_session|session|cookie|set-cookie|authorization|gram-key|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|secret|token)["']?\s*[:=]\s*["']?)(?!(?:Bearer|Basic|Token)\s|<)[^"'\s;,}&]{4,}/gi,
+    "$1<redacted>",
+  ],
+  // Well-known key prefixes.
+  [
+    /\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9_-]{16,}/g,
+    "<redacted-key>",
+  ],
+  [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, "<redacted-key>"],
+  [/\blin_(?:api|oauth)_[A-Za-z0-9]{20,}/g, "<redacted-key>"],
+  [/\bxox[abprs]-[A-Za-z0-9-]{10,}/g, "<redacted-key>"],
+  [/\bAKIA[0-9A-Z]{16}\b/g, "<redacted-key>"],
+  [/\bgram_[a-z]+_[A-Za-z0-9]{16,}/g, "<redacted-key>"],
+  // Email addresses.
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<redacted-email>"],
+];
+
+export function redact(value: string): string {
+  return REDACTIONS.reduce((v, [re, to]) => v.replace(re, to), value);
+}
+
+// A free-text field: validated, then redacted.
+function prose(v: unknown, field: string, max: number): string {
+  return redact(text(v, field, max));
+}
+
 // Returns the finding, or throws a reason that names only the field: the
 // reason is logged, the content is not.
 export function parseFinding(raw: unknown): Finding {
@@ -85,10 +127,12 @@ export function parseFinding(raw: unknown): Finding {
   const severity = r["severity"];
   if (!SEVERITIES.includes(severity as Finding["severity"]))
     throw new Error("bad severity");
-  const route = text(r["route"], "route", 300);
+  const rawRoute = text(r["route"], "route", 300);
   // A dashboard path: no scheme, no host (`//host/...`), no markup.
-  if (!/^\/(?!\/)[A-Za-z0-9/_.~%=&?-]*$/.test(route))
+  if (!/^\/(?!\/)[A-Za-z0-9/_.~%=&?-]*$/.test(rawRoute))
     throw new Error("bad route");
+  // A query string can carry a token.
+  const route = redact(rawRoute);
   // A safe-output tool takes strings, so steps may arrive one per line.
   const rawSteps = r["steps"];
   const steps =
@@ -118,12 +162,12 @@ export function parseFinding(raw: unknown): Finding {
     severity: severity as Finding["severity"],
     route,
     signature: text(r["signature"], "signature", 200),
-    title: text(r["title"], "title", 300),
-    steps: steps.map((s, i) => text(s, `steps[${i}]`, 500)),
-    expected: text(r["expected"], "expected", 2000),
-    actual: text(r["actual"], "actual", 2000),
-    evidence: text(r["evidence"], "evidence", 8000),
-    ...(story ? { story: text(story, "story", 8000) } : {}),
+    title: prose(r["title"], "title", 300),
+    steps: steps.map((s, i) => prose(s, `steps[${i}]`, 500)),
+    expected: prose(r["expected"], "expected", 2000),
+    actual: prose(r["actual"], "actual", 2000),
+    evidence: prose(r["evidence"], "evidence", 8000),
+    ...(story ? { story: prose(story, "story", 8000) } : {}),
   };
 }
 

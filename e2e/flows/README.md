@@ -48,7 +48,9 @@ CI runs `.github/workflows/flow-checks.md`, a
 `flow-checks.lock.yml` with `gh aw compile flow-checks`:
 
 1. **Replay** — ordinary workflow steps boot the stack and run
-   `mise run test:flows`. No LLM. If every flow passes, the run stops there.
+   `mise run test:flows`. No LLM. If every flow passes, the step records a
+   `noop` safe output, and gh-aw's harness exits before it starts Claude: no
+   model call and no comment.
 2. **Heal** — otherwise a Claude Code agent re-walks each failing story in a
    real browser (`.github/prompts/heal-flow.md`) and returns one verdict:
    - `healed` — the flow still works; the UI moved. It rewrites

@@ -14,7 +14,7 @@ import { after, describe as suite, test } from "node:test";
 // The helpers are imported without running the filer.
 process.env["MAGELLAN_FILE_NO_MAIN"] = "1";
 delete process.env["usage_run_url"];
-const { block, describe, fingerprint, parseFinding, plainTitle } =
+const { block, describe, fingerprint, parseFinding, plainTitle, redact } =
   await import("./file.mts");
 
 const script = resolve(".mise-tasks/magellan/file.mts");
@@ -284,6 +284,146 @@ suite("parseFinding", () => {
         (err: Error) => !err.message.includes(secret),
       );
     }
+  });
+});
+
+suite("redact", () => {
+  for (const [name, input, secret] of [
+    [
+      "a JWT",
+      "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJlX2hlcmU failed",
+      "eyJhbGciOiJIUzI1NiJ9",
+    ],
+    [
+      "a bearer header",
+      "Authorization: Bearer abcdef0123456789abcdef",
+      "abcdef0123456789abcdef",
+    ],
+    ["a lowercase bearer", "bearer abcdef0123456789", "abcdef0123456789"],
+    ["a basic header", "Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA=="],
+    [
+      "the session cookie",
+      "cookie: gram_session=s3cr3t-session-value; Path=/",
+      "s3cr3t-session-value",
+    ],
+    [
+      "a set-cookie header",
+      "set-cookie: abc123def456; HttpOnly",
+      "abc123def456",
+    ],
+    ["a JSON api key", '{"api_key": "k-1234567890"}', "k-1234567890"],
+    [
+      "a JSON access token",
+      '{"access_token":"at.1234567890"}',
+      "at.1234567890",
+    ],
+    ["a refresh token", "refresh-token=rt_abcdefgh", "rt_abcdefgh"],
+    ["a client secret", "client_secret: cs_abcdefgh", "cs_abcdefgh"],
+    ["a password", 'password="hunter2hunter2"', "hunter2hunter2"],
+    ["a Gram-Key header", "Gram-Key: gk_live_0123456789", "gk_live_0123456789"],
+    ["an x-api-key header", "x-api-key=ak0123456789", "ak0123456789"],
+    ["a query token", "/x?token=abcdef123456", "abcdef123456"],
+    [
+      "an OpenAI-style key",
+      "used sk-proj-abcdefghijklmnop1234",
+      "abcdefghijklmnop1234",
+    ],
+    [
+      "an Anthropic key",
+      "sk-ant-api03-abcdefghijklmnopqrstu",
+      "abcdefghijklmnopqrstu",
+    ],
+    ["a Stripe key", "sk_live_abcdefghijklmnop1234", "abcdefghijklmnop1234"],
+    [
+      "a GitHub token",
+      "ghp_abcdefghijklmnopqrstuvwxyz0123",
+      "ghp_abcdefghijklmnopqrstuvwxyz0123",
+    ],
+    [
+      "a fine-grained GitHub token",
+      "github_pat_11ABCDEFG0123456789_abcdefghij",
+      "github_pat_11ABCDEFG0123456789",
+    ],
+    [
+      "a Linear key",
+      "lin_api_abcdefghijklmnopqrstuvwxyz",
+      "lin_api_abcdefghijklmnopqrstuvwxyz",
+    ],
+    [
+      "a Slack token",
+      "xoxb-1234567890-abcdefghij",
+      "xoxb-1234567890-abcdefghij",
+    ],
+    ["an AWS key id", "AKIAABCDEFGHIJKLMNOP", "AKIAABCDEFGHIJKLMNOP"],
+    [
+      "a Speakeasy key",
+      "gram_live_abcdef0123456789abcd",
+      "gram_live_abcdef0123456789abcd",
+    ],
+    [
+      "an email",
+      "invited jane.doe+test@example.co.uk to the org",
+      "jane.doe+test@example.co.uk",
+    ],
+  ] as const) {
+    test(`redacts ${name}`, () => {
+      const out = redact(input);
+      assert.ok(!out.includes(secret), out);
+      assert.match(out, /<redacted/);
+    });
+  }
+
+  for (const input of [
+    "POST /rpc/toolsets.list 500",
+    "TypeError: Cannot read properties of undefined (reading 'map')",
+    '{"name":"unexpected","message":"toolset not found","status":404}',
+    'Warning: Each child in a list should have a unique "key" prop.',
+    "Open the project, then click Toolsets",
+  ]) {
+    test(`keeps ordinary evidence: ${input.slice(0, 40)}`, () => {
+      assert.equal(redact(input), input);
+    });
+  }
+
+  test("redacts every occurrence", () => {
+    const out = redact("a@example.com and b@example.com");
+    assert.equal(out, "<redacted-email> and <redacted-email>");
+  });
+
+  test("keeps the header name so the evidence still reads", () => {
+    assert.equal(
+      redact("Authorization: Bearer abcdef0123456789"),
+      "Authorization: Bearer <redacted>",
+    );
+  });
+
+  test("is applied to every field that reaches Linear", () => {
+    const secret = "jane@example.com";
+    const f = parseFinding(
+      valid({
+        title: `Invite for ${secret} fails`,
+        steps: [`Invite ${secret}`],
+        expected: secret,
+        actual: secret,
+        evidence: `{"email":"${secret}"}`,
+        story: `Invite ${secret}`,
+      }),
+    );
+    const body = describe(f, fingerprint(f));
+    assert.ok(!body.includes(secret));
+    assert.ok(!f.title.includes(secret));
+  });
+
+  test("redacts a token in the route's query string", () => {
+    const f = parseFinding(
+      valid({ route: "/acme/projects/p/x?access_token=abcdef123456" }),
+    );
+    assert.ok(!f.route.includes("abcdef123456"));
+  });
+
+  test("does not change the fingerprint of a route without secrets", () => {
+    const f = parseFinding(valid());
+    assert.equal(f.route, valid().route);
   });
 });
 

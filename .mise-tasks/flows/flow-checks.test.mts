@@ -399,6 +399,48 @@ suite("lock file", () => {
     }
   });
 
+  test("every npm install is an exact version with a release-age cooldown", () => {
+    const installs = Object.values(lockJobs)
+      .flatMap((j) => j.steps ?? [])
+      .filter((st) => /\bnpm (?:install|i)\b/.test(st.run ?? ""));
+    assert.ok(installs.length > 0);
+    for (const st of installs as {
+      name: string;
+      run: string;
+      env?: Record<string, string>;
+    }[]) {
+      for (const pkg of st.run
+        .match(/(?<=npm (?:install|i) -g ).*/)![0]
+        .split(" ")) {
+        assert.match(
+          pkg,
+          /^(@[\w.-]+\/)?[\w.-]+@\d+\.\d+\.\d+$/,
+          `${st.name}: ${pkg}`,
+        );
+      }
+      assert.ok(
+        Number(st.env?.["NPM_CONFIG_MIN_RELEASE_AGE"]) >= 1,
+        `${st.name}: no cooldown`,
+      );
+    }
+  });
+
+  test("the zizmor exemptions name only generated lock files", () => {
+    const zizmor = yaml(readFileSync(resolve(".github/zizmor.yml"), "utf8"));
+    for (const [rule, cfg] of Object.entries(zizmor.rules) as [
+      string,
+      { ignore?: string[] },
+    ][]) {
+      for (const f of cfg.ignore ?? []) {
+        assert.match(
+          f,
+          /\.lock\.yml$/,
+          `${rule} ignores a hand-written workflow: ${f}`,
+        );
+      }
+    }
+  });
+
   test("threat detection is on", () => {
     const manifest = JSON.parse(/^# gh-aw-manifest: (.*)$/m.exec(lock)![1]!);
     assert.equal(manifest.threat_detection.mode, "enabled");

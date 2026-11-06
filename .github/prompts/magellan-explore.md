@@ -85,6 +85,9 @@ This may be production. Real people may share the org.
 - `title`: what is wrong, in user terms.
 - `steps`: the steps to reproduce, one per line.
 - `expected`, `actual`: what should happen, and what does.
-- `evidence`: console text, or RPC method, status and error body.
+- `evidence`: console text, or RPC method, status and error body. Cut it to
+  the lines that show the bug, and replace any token, key, cookie, email
+  address or other personal data with `<redacted>`. The filer redacts what it
+  recognizes too, but do not rely on it.
 - `story` (optional): a draft `story.md` for `e2e/flows` that would catch
   this, in the format of the existing stories.
