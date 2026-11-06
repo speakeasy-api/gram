@@ -55,8 +55,23 @@ not change the story. A removed step or a new required step does.
      fails and leaves a screenshot.
    - `changed` — the diff intentionally changes the flow. The story needs a
      human edit; the agent proposes one.
-3. **Report** — CI posts the verdicts as one PR comment. The check does not
-   block merges yet.
+3. **Report** — CI posts the verdicts as one PR comment, with the commands to
+   replay and heal each failing flow on your machine. A healed script is in
+   the run's `flow-checks` artifact under `healed/<flow>/`; review it before
+   you commit it. The check does not block merges yet.
+
+## Healing in CI
+
+CI heals inside the agent jail (`../agent-jail/README.md`): the agent sees a
+copy of `e2e/` and the branch diff, reaches only the local stack and the
+Anthropic proxy, and holds no secret. The job that boots the stack drops
+`ATLAS_TOKEN` after boot and leaves no GitHub token on disk, and the PR
+comment is posted by a separate job that runs no repository code. In the jail
+the agent uses `flow-browser`, `flow-test` and `flow-typecheck`
+(`jail-bin/`) instead of the `mise` tasks.
+
+Locally, `mise run flows:heal` runs the same prompt (`HEAL.md`) without a
+jail, against your own stack.
 
 ## Writing a new flow
 

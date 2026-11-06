@@ -2,9 +2,11 @@
 # See e2e/flows/README.md.
 #
 # Replays every e2e/flows/*/flow.spec.ts against a freshly booted stack. When a
-# flow fails, a Claude Code agent re-walks that flow's story and says whether
-# the UI only moved (healed), the flow broke, or the PR changed it on purpose.
-# The verdicts go into one PR comment. This check never blocks a merge yet.
+# flow fails, a Claude Code agent re-walks that flow's story inside the agent
+# jail (e2e/agent-jail/README.md) and says whether the UI only moved (healed),
+# the flow broke, or the PR changed it on purpose. A separate job, which runs
+# no repository code, posts the verdicts and how to heal locally as one PR
+# comment. This check never blocks a merge yet.
 name: Flow checks
 
 on:
@@ -13,6 +15,7 @@ on:
     paths:
       - client/dashboard/**
       - e2e/flows/**
+      - e2e/agent-jail/**
       - e2e/flows.config.ts
       - .mise-tasks/test/flows.sh
       - .mise-tasks/flows/**
@@ -34,19 +37,22 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 60
+    timeout-minutes: 75
     permissions:
       contents: read
-      pull-requests: write # posts the verdict comment
+    outputs:
+      replay: ${{ steps.replay.outcome }}
     env:
       GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
-          # The heal agent reads `git diff origin/main...HEAD` to tell an
+          # The heal agent gets `git diff origin/main...HEAD` to tell an
           # intended flow change from a broken one.
           fetch-depth: 0
+          # No GitHub token left on disk for anything later in the job.
+          persist-credentials: false
 
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
@@ -73,8 +79,7 @@ jobs:
           git config user.email "flow-checks@example.com"
           git config user.name "Flow Checks"
 
-      # ATLAS_TOKEN stays on this step only, out of reach of the agent and
-      # its installer.
+      # ATLAS_TOKEN exists in this step only.
       - name: Boot the stack
         env:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
@@ -85,36 +90,112 @@ jobs:
         continue-on-error: true
         run: mise run test:flows
 
-      - name: Install Claude Code
+      - name: List failing flows
+        id: failing
         if: steps.replay.outcome == 'failure'
-        # A pinned npm release, checked against the registry's integrity hash,
-        # rather than a mutable install script.
-        run: mise exec -- npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code@2.1.311
+        run: |
+          # Spec files are relative to testDir: <flow>/flow.spec.ts.
+          flows=$(jq -r '[.. | objects | select(.specs?) | .specs[]
+            | select(.ok == false) | .file | split("/")[0]
+            | select(test("^[a-z0-9-]+$"))] | unique | join(" ")' \
+            e2e/.flows/results.json)
+          echo "flows=$flows" >> "$GITHUB_OUTPUT"
+          printf '%s\n' $flows > e2e/.flows/failing.txt
+          git diff origin/main...HEAD -- client/ e2e/flows/ > e2e/.flows/branch.diff
 
-      # One agent per failing flow. Each writes e2e/.flows/<flow>-verdict.json.
-      - name: Heal failing flows
-        if: steps.replay.outcome == 'failure'
-        continue-on-error: true
+      # Everything the agent runs, installed root-owned and read-only:
+      # pinned npm releases, integrity-checked, not a mutable install script.
+      - name: Install the agent jail
+        if: steps.failing.outputs.flows != ''
+        run: |
+          versions=$(cd e2e && node -p '["@playwright/test", "@types/node"].map((p) =>
+            `${p}@${require(require.resolve(p + "/package.json")).version}`).join(" ")')
+          ts=$(node -p 'require(require.resolve("typescript/package.json")).version')
+          sudo NODE_BIN="$(mise which node)" e2e/agent-jail/jail.sh install 2.1.311 \
+            @playwright/cli@0.1.17 $versions "typescript@$ts"
+          sudo e2e/agent-jail/jail.sh browsers
+
+      # The key goes to the proxy's own user; the agent never holds it. The
+      # agent's only way out is the proxy and these stack ports.
+      - name: Start the agent jail
+        if: steps.failing.outputs.flows != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # Spec files are relative to testDir: <flow>/flow.spec.ts.
-          failed=$(jq -r '[.. | objects | select(.specs?) | .specs[]
-            | select(.ok == false) | .file | split("/")[0]] | unique[]' \
-            e2e/.flows/results.json)
-          for flow in $failed; do
-            PATH="$HOME/.local/bin:$PATH" mise run flows:heal "$flow" &
+          ports=$(mise exec -- bash -c 'echo "$GRAM_SITE_PORT $GRAM_SERVER_PORT $GRAM_DEVIDP_PORT"')
+          sudo --preserve-env=ANTHROPIC_API_KEY e2e/agent-jail/jail.sh start $ports
+          echo "JAIL_PORTS=${ports// /,}" >> "$GITHUB_ENV"
+
+      # One jailed agent per failing flow. Each writes
+      # e2e/.flows/<flow>-verdict.json.
+      - name: Heal failing flows
+        if: steps.failing.outputs.flows != ''
+        continue-on-error: true
+        env:
+          FLOWS: ${{ steps.failing.outputs.flows }}
+        run: |
+          eval "$(mise exec -- bash -c 'printf "export GRAM_SITE_URL=%q GRAM_SERVER_URL=%q\n" "$GRAM_SITE_URL" "$GRAM_SERVER_URL"')"
+          for flow in $FLOWS; do
+            sudo --preserve-env=GRAM_SITE_URL,GRAM_SERVER_URL,JAIL_PORTS \
+              e2e/flows/heal-ci.sh "$flow" &
           done
           wait
 
+      - name: Stop the agent jail
+        if: always() && steps.failing.outputs.flows != ''
+        run: sudo e2e/agent-jail/jail.sh stop
+
+      # Only the verdicts, for the report job: small, and validated there too.
+      - name: Upload verdicts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flow-verdicts
+          path: |
+            e2e/.flows/failing.txt
+            e2e/.flows/*-verdict.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Traces, screenshots, transcripts and healed scripts. The stack is a
+      # throwaway local one, so there is nothing secret in them.
+      - name: Upload flow artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flow-checks
+          path: e2e/.flows
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Runs no repository code and holds the only token that can write to the PR.
+  report:
+    name: report
+    needs: flow-checks
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.flow-checks.result != 'skipped' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write # posts the verdict comment
+    steps:
+      - name: Download verdicts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: flow-verdicts
+          path: verdicts
+
       - name: Post verdicts
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          REPLAY: ${{ steps.replay.outcome }}
+          REPLAY: ${{ needs.flow-checks.outputs.replay }}
         run: |
+          # Verdict text comes from an agent: keep it plain, short, and free of
+          # links, mentions and markdown before it goes into a comment.
+          clean='(.[0:400] | gsub("https?://\\S*"; "(link removed)") | gsub("www\\.\\S*"; "(link removed)")
+            | gsub("[^A-Za-z0-9 .,:;()_/'"'"'-]"; " ") | gsub("\\s+"; " "))'
           marker='<!-- flow-checks -->'
           {
             echo "$marker"
@@ -124,15 +205,28 @@ jobs:
             else
               echo "| Flow | Verdict | Step | Summary |"
               echo "| --- | --- | --- | --- |"
-              for f in e2e/.flows/*-verdict.json; do
-                [ -f "$f" ] || continue
-                jq -r '"| \(.flow) | **\(.verdict)** | \(.step // "-") | \(.summary) |"' "$f" ||
-                  echo "| $(basename "$f" -verdict.json) | unknown | - | the agent did not return a verdict |"
+              failing=$(grep -E '^[a-z0-9-]+$' verdicts/failing.txt 2>/dev/null || true)
+              for flow in $failing; do
+                f="verdicts/${flow}-verdict.json"
+                jq -r --arg flow "$flow" "
+                  (if (.verdict | IN(\"healed\", \"broken\", \"changed\")) then .verdict else \"unknown\" end) as \$v
+                  | \"| \(\$flow) | **\(\$v)** | \((.step // \"-\") | tostring | $clean) | \((.summary // \"\") | tostring | $clean) |\"" \
+                  "$f" 2>/dev/null ||
+                  echo "| $flow | unknown | - | the agent did not return a verdict |"
               done
               echo
-              echo "_healed_: UI moved, flow still works; the new script is in the run artifacts."
+              echo "_healed_: the UI moved but the flow still works; the new script is in the run's \`flow-checks\` artifact under \`healed/<flow>/\`."
               echo "_broken_: a user can no longer finish the flow."
-              echo "_changed_: this PR changes the flow on purpose; update its story.md."
+              echo "_changed_: this PR changes the flow on purpose; update its \`story.md\`."
+              echo
+              echo "**Check or heal a flow on your machine:**"
+              echo
+              echo '```bash'
+              for flow in $failing; do
+                echo "mise run test:flows flows/$flow/   # replay it"
+                echo "mise run flows:heal $flow          # heal it, or find out why it broke"
+              done
+              echo '```'
             fi
             echo
             echo "[Run, traces and screenshots]($RUN_URL). This check does not block merging."
@@ -142,17 +236,5 @@ jobs:
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md
           else
-            gh pr comment "$PR" --body-file comment.md
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
           fi
-
-      # Healed scripts, transcripts, traces and screenshots.
-      - name: Upload flow artifacts
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: flow-checks
-          path: |
-            e2e/.flows
-            e2e/flows/*/flow.spec.ts
-          retention-days: 7
-          if-no-files-found: ignore

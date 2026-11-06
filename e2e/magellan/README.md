@@ -22,8 +22,10 @@ that break where nobody wrote a check.
 5. Each issue includes a draft `story.md`. Once the bug is fixed, commit that
    story under `e2e/flows/` and the flow checks keep it fixed.
 
-Runs land in `e2e/.magellan/<timestamp>/` (git-ignored): `focus.md`,
-`findings.jsonl`, `notes.md`, screenshots, and the agent transcript.
+Runs land in `e2e/.magellan/<timestamp>/` (git-ignored). That directory is
+the agent's workspace: `context/` holds copies of what it may read (the
+focus list, the dashboard source, the flow stories) and `out/` is the only
+place it may write (`findings.jsonl`, `notes.md`, screenshots).
 
 ## Where it runs
 
@@ -32,9 +34,10 @@ findings that were artifacts of the local stack (feature gates off, state
 left by earlier test runs). In production, what Magellan sees is what users
 see.
 
-`.github/workflows/magellan.yml` explores on weeknights. It uploads no
-artifacts and logs no findings, because the repo is public: screenshots and
-detail go to Linear only.
+`.github/workflows/magellan.yml` explores on weeknights, inside the agent
+jail (`../agent-jail/README.md`). It uploads no artifacts and logs no
+findings, because the repo is public: screenshots and detail go to Linear
+only.
 
 The local stack still works for trying out prompt changes:
 
@@ -58,26 +61,45 @@ To set it up, or to replace a dead session:
    `gram_session` cookie value.
 3. Close that profile **without logging out**. Logging out ends the session.
 4. In the repo's `magellan` environment, set the `MAGELLAN_SESSION` secret to
-   the cookie value, set the variables `MAGELLAN_SITE_URL` (the `https://`
-   dashboard host the cookie came from) and `MAGELLAN_ORG` (the integration
-   org's slug), and set the `ANTHROPIC_API_KEY` and `MAGELLAN_LINEAR_API_KEY`
-   secrets.
+   the cookie value, the `MAGELLAN_ORG` variable to the integration org's
+   slug, and the `ANTHROPIC_API_KEY` and `MAGELLAN_LINEAR_API_KEY` secrets.
+   If the dashboard loads from hosts besides the site, list them in the
+   `MAGELLAN_EXTRA_HOSTS` variable (comma-separated); everything else is
+   blocked.
+5. Under the environment's **Deployment branches**, allow `main` only.
+   Otherwise anyone who can push a branch could run a changed workflow with
+   these secrets.
+
+The site is fixed in the workflow and in `explore.sh`
+(`https://app.getgram.ai`), not a variable: the session is never sent
+anywhere else. Change both, in a reviewed PR, if the dashboard moves.
 
 The session dies on logout-everywhere, on removal from the org, or when
 session storage is reset. When it dies, `keepalive` fails with a message
 pointing here.
 
-The agent's rules for a shared org: it only touches data it named
-`Magellan <time>`, deletes that data before it finishes, never changes
-org settings, and never sends anything outside the product. A run that times
-out can leave its data behind; the next run deletes `Magellan` data older
-than a day before it starts.
+The agent's rules for a shared org: it names what it creates
+`Magellan <run id> ...`, edits or deletes only data with its own run's id,
+deletes that data before it finishes (it keeps the last 10 minutes of its
+budget for this), never changes org settings, and never sends anything
+outside the product. What a run could not delete is listed in its
+`notes.md`; nothing deletes another run's leftovers by name, so clear those
+by hand.
 
-The agent never sees the session: the script logs the browser in before the
-agent starts, deletes the state file, and denies the agent the
-`playwright-cli` commands that read cookies or run code in the page. Its
-writes are limited to the run directory, and the workflow refuses to file if
-the checkout changed.
+## Security
+
+- **The agent holds no secret.** The jail loads the bot's session into the
+  browser and deletes the file before the agent starts. The Anthropic key
+  stays with the jail's proxy. The Linear key exists only in the filing
+  step, after the agent has exited.
+- **Its browser commands are an allowlist** (`browser.mjs`): no `eval`,
+  cookies, storage, headers, uploads or route mocks, and no navigation off
+  the site.
+- **Its network is the site and the Anthropic API**, enforced by the jail,
+  not by the prompt.
+- **Its output is untrusted.** `magellan:file` validates each finding, puts
+  agent text into Linear only inside code blocks, and in CI logs nothing the
+  agent wrote.
 
 ## Not yet
 

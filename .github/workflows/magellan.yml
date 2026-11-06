@@ -2,11 +2,14 @@
 # user in a dedicated integration org, and files the bugs it can prove as
 # Linear Triage issues. See e2e/magellan/README.md.
 #
-# The repo is public, so this workflow uploads no artifacts and logs no
-# findings: screenshots and detail go to Linear only.
+# The agent runs inside the agent jail (e2e/agent-jail/README.md): it holds
+# no secret, its browser can reach only the site, and it can reach nothing
+# else but the Anthropic proxy. The repo is public, so this workflow uploads
+# no artifacts and logs no findings: screenshots and detail go to Linear only.
 #
-# Setup, in the `magellan` environment:
-# - vars:    MAGELLAN_SITE_URL (e.g. https://app.speakeasy.com), MAGELLAN_ORG
+# Setup, in the `magellan` environment (restrict it to the main branch):
+# - vars:    MAGELLAN_ORG, MAGELLAN_EXTRA_HOSTS (optional: comma-separated
+#            hosts the dashboard loads from besides the site itself)
 # - secrets: MAGELLAN_SESSION (the bot's `gram_session`), ANTHROPIC_API_KEY,
 #            MAGELLAN_LINEAR_API_KEY
 name: Magellan
@@ -31,47 +34,57 @@ on:
 permissions:
   contents: read
 
+# Every explore run shares one group, so two runs never file at once.
 concurrency:
-  # Every explore run shares one group, so two runs never file at once.
   group: ${{ github.event.schedule == '0 15 * * *' && 'magellan-keepalive' || 'magellan' }}
   cancel-in-progress: false
+
+env:
+  # Fixed here, not a variable: the session is only ever sent to this site.
+  # explore.sh checks it against the same list.
+  MAGELLAN_SITE_URL: https://app.getgram.ai
 
 jobs:
   keepalive:
     name: keepalive
-    if: github.event.schedule == '0 15 * * *'
+    # The environment's branch rule is the real guard; this makes a run from
+    # any other branch fail early and visibly.
+    if: github.event.schedule == '0 15 * * *' && github.ref == 'refs/heads/main'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: magellan
     timeout-minutes: 5
     steps:
-      # Any authenticated call slides the session's 72h expiry. A failure
-      # here means the session is gone and someone has to capture a new one.
+      # Any authenticated call slides the session's 72h expiry. A 401 or 403
+      # means the session is gone and someone has to capture a new one.
       - name: Refresh the bot session
         env:
-          SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
           SESSION: ${{ secrets.MAGELLAN_SESSION }}
         run: |
           status=$(curl --proto '=https' --max-time 30 -s -o /dev/null -w '%{http_code}' \
-            -H "Gram-Session: $SESSION" "${SITE_URL%/}/rpc/auth.info")
+            -H "Gram-Session: $SESSION" "${MAGELLAN_SITE_URL}/rpc/auth.info" || true)
           if [ "$status" = 401 ] || [ "$status" = 403 ]; then
             echo "::error::The Magellan bot session is no longer valid (auth.info returned $status). Capture a new one; see e2e/magellan/README.md."
             exit 1
           elif [ "$status" != 200 ]; then
-            echo "::error::auth.info returned $status. Retry, or check MAGELLAN_SITE_URL (it must be https)."
+            echo "::error::auth.info returned $status. Retry later."
             exit 1
           fi
 
   explore:
     name: explore
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 2-6'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 2-6')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: magellan
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
+          # No GitHub token left on disk.
+          persist-credentials: false
 
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
@@ -82,30 +95,48 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Install the browser
-        run: mise run playwright:install-browser
+      # Pinned npm releases, integrity-checked, root-owned and read-only.
+      - name: Install the agent jail
+        run: |
+          sudo NODE_BIN="$(mise which node)" e2e/agent-jail/jail.sh install 2.1.311 @playwright/cli@0.1.17
+          sudo e2e/agent-jail/jail.sh browsers
 
-      - name: Install Claude Code
-        # A pinned npm release, checked against the registry's integrity hash,
-        # rather than a mutable install script.
-        run: mise exec -- npm install --global --prefix "$HOME/.local" @anthropic-ai/claude-code@2.1.311
+      # The proxy lets the browser reach the site (and the listed extra
+      # hosts) and nothing else. The Anthropic key goes to the proxy's own
+      # user; the agent never holds it.
+      - name: Start the agent jail
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXTRA_HOSTS: ${{ vars.MAGELLAN_EXTRA_HOSTS }}
+        run: |
+          hosts="${MAGELLAN_SITE_URL#https://}"
+          for h in ${EXTRA_HOSTS//,/ }; do
+            [[ "$h" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || {
+              echo "::error::MAGELLAN_EXTRA_HOSTS has a bad host name"; exit 1; }
+            hosts="$hosts,$h"
+          done
+          JAIL_ALLOWED_HOSTS="$hosts" sudo --preserve-env=ANTHROPIC_API_KEY,JAIL_ALLOWED_HOSTS \
+            e2e/agent-jail/jail.sh start
 
       - name: Explore
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          MAGELLAN_SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
           MAGELLAN_ORG: ${{ vars.MAGELLAN_ORG }}
           MAGELLAN_SESSION: ${{ secrets.MAGELLAN_SESSION }}
           SINCE: ${{ inputs.since || '24 hours ago' }}
-        run: PATH="$HOME/.local/bin:$PATH" mise run magellan:explore --since "$SINCE"
+        run: mise run magellan:explore --since "$SINCE"
 
-      # The agent may only write under e2e/.magellan (git-ignored). Filing runs
-      # repo code with a Linear key, so refuse if anything else changed.
-      - name: Check the agent left the checkout alone
+      - name: Stop the agent jail
+        if: always()
+        run: sudo e2e/agent-jail/jail.sh stop
+
+      # The agent cannot see the checkout (the jail hides /home), so this
+      # should never fire. Filing runs repo code with a Linear key, so check
+      # anyway, and fail closed if the check itself fails.
+      - name: Check the checkout is unchanged
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::The explore step changed tracked files; not filing."
-            git status --porcelain
+          status=$(git status --porcelain) || { echo "::error::Could not verify the checkout; not filing."; exit 1; }
+          if [ -n "$status" ]; then
+            echo "::error::Tracked files changed during exploring; not filing."
             exit 1
           fi
 

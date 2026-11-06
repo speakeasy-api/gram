@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Inside the agent jail: drive a browser against the local stack. `open`
+# always uses the jail's headless config.
+set -euo pipefail
+cd "${JAIL_WORK:?}"
+if [ "${1:-}" = open ]; then
+    shift
+    exec playwright-cli -s=heal open --config="$JAIL_WORK/cli.config.json" "$@"
+fi
+exec playwright-cli -s=heal "$@"
