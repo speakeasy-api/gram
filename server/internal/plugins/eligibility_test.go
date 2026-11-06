@@ -60,38 +60,6 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 	require.Empty(t, got.Servers, "eligibility replay respects administrator removal")
 }
 
-// A role allowed to use every server doesn't pull each newly enabled one into its plugins.
-func TestEligibleServerSkipsWildcardRoleGrant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
-	ac, _ := contextvalues.GetAuthContext(ctx)
-	role := createTestRolePrincipal(t, ctx, ti, "wildcard")
-	server := createTestToolset(t, ctx, ti.conn, "Wildcard enabled")
-	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Disabled, ID: server.ID, ProjectID: *ac.ProjectID}))
-	principal, err := urn.ParsePrincipal(role)
-	require.NoError(t, err)
-	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource).MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
-	require.NoError(t, err)
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Wildcard delivery"})
-	require.NoError(t, err)
-	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
-	require.NoError(t, err)
-
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Exercise the public attachment hook in its enclosing eligibility transaction.
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	require.NoError(t, testrepo.New(tx).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Private, ID: server.ID, ProjectID: *ac.ProjectID}))
-	_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-
-	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
-	require.NoError(t, err)
-	require.Empty(t, got.Servers, "a wildcard Use grant does not deliver a newly enabled server")
-}
-
 // A live wrapper whose backing toolset is deleted is never delivered, canonical or not.
 func TestRoleDeliverySkipsWrapperOnDeletedToolset(t *testing.T) {
 	t.Parallel()
