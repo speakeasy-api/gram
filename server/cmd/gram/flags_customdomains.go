@@ -19,8 +19,13 @@ func customDomainFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    "custom-domain-backend-service",
-			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			Usage:   "Kubernetes service that custom domain MCP routes use (defaults to gram-server)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-server-backend-service",
+			Usage:   "Kubernetes service that custom domain server routes use (defaults to the custom domain MCP backend service)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_SERVER_BACKEND_SERVICE"},
 		},
 		&cli.StringFlag{
 			Name:    "custom-domain-cname",

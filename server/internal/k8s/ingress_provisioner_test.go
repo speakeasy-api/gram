@@ -19,10 +19,11 @@ func newIngressProvisioner(t *testing.T) (*IngressProvisioner, *fake.Clientset) 
 	t.Helper()
 	cs := fake.NewSimpleClientset()
 	return &IngressProvisioner{
-		clientset:      cs,
-		namespace:      ingressTestNamespace,
-		backendService: "gram-server",
-		logger:         testenv.NewLogger(t),
+		clientset:            cs,
+		namespace:            ingressTestNamespace,
+		mcpBackendService:    "custom-domain-mcp",
+		serverBackendService: "custom-domain-server",
+		logger:               testenv.NewLogger(t),
 	}, cs
 }
 
@@ -60,7 +61,7 @@ func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
 		PathType: new(networkingv1.PathTypeExact),
 		Backend: networkingv1.IngressBackend{
 			Service: &networkingv1.IngressServiceBackend{
-				Name: "gram-server",
+				Name: "custom-domain-mcp",
 				Port: networkingv1.ServiceBackendPort{Number: 80},
 			},
 			Resource: nil,
@@ -72,7 +73,7 @@ func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
 		PathType: &pathTypePrefix,
 		Backend: networkingv1.IngressBackend{
 			Service: &networkingv1.IngressServiceBackend{
-				Name: "gram-server",
+				Name: "custom-domain-server",
 				Port: networkingv1.ServiceBackendPort{Number: 80},
 			},
 			Resource: nil,
