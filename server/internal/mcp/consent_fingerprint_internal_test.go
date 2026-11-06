@@ -1,12 +1,16 @@
 package mcp
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -80,9 +84,10 @@ func TestConsentBackendFingerprintFollowsEnforcement(t *testing.T) {
 		typed, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
 		require.NotEqual(t, issuerBound, typed)
-		recorded, err := f.service.consentBackendEvidence(ctx, endpoint, true)
+		recorded, err := f.service.consentBackendEvidence(ctx, endpoint)
 		require.NoError(t, err)
-		require.Equal(t, issuerBound, recorded, "the issuer-covering evidence recorded beside it is what the upstream client choice compares")
+		require.Equal(t, typed, recorded.typedHash)
+		require.Equal(t, issuerBound, recorded.hash, "the issuer-covering evidence recorded beside it is what the upstream client choice compares")
 
 		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
 		resynced, err := f.service.consentBackendFingerprint(ctx, endpoint)
@@ -152,6 +157,8 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},
 				catalog:    &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{member.slug: approved}},
 			}
+			var logs bytes.Buffer
+			f.service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
 			err := f.service.validateCatalogMember(t.Context(), gate, member)
 			if !tc.rejected {
 				require.NoError(t, err)
@@ -160,6 +167,9 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 			var consent catalogConsentError
 			require.ErrorAs(t, err, &consent)
 			require.ErrorContains(t, err, "configuration changed")
+			var diagnostic map[string]any
+			require.NoError(t, json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &diagnostic))
+			require.Equal(t, tc.enforced && tc.approved.TypedBackendHash != "", diagnostic[string(attr.McpConsentComparisonsKey)].(map[string]any)["typed_compared"])
 		})
 	}
 }

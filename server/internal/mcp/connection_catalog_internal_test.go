@@ -60,13 +60,13 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			m.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 		}, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": false, "auth_client_id_matches": true}},
 		{name: "changed auth client", change: func(_ *metaGateContext, m *metaMember) { m.authClient.clientID = uuid.New() }, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
-		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true}},
-		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true}},
+		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true, "typed_compared": false}},
+		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true, "typed_compared": false}},
 		{name: "missing approved configuration", change: func(g *metaGateContext, _ *metaMember) {
 			a := g.catalog.Members["source"]
 			a.BackendHash = ""
 			g.catalog.Members["source"] = a
-		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
+		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false, "typed_compared": false}},
 		{name: "with enforcement off the typed fingerprint decides nothing", change: func(_ *metaGateContext, m *metaMember) {
 			m.configuration.typedHash = "private changed hash"
 		}},

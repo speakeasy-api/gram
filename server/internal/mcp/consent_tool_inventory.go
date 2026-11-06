@@ -87,6 +87,9 @@ type consentToolInventory struct {
 	// BackendHash pins evidence to the configured backend, not just a tool name.
 	BackendHash string `json:"backend_hash,omitempty"`
 
+	// Recomputed at reuse validation, never trusted from the cache.
+	otherModeBackendHash string
+
 	// StateID keys the snapshot to one authn challenge.
 	StateID string `json:"state_id"`
 

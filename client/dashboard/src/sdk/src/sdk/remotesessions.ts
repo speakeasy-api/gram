@@ -200,7 +200,7 @@ export class RemoteSessions extends ClientSDK {
    * detachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.
+   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding. With upstream auth enforcement off, detach returns a conflict (409): turn off User Identity on the server instead. With enforcement on, detach retires the typed auth-client link so the server stops offering the client, but preserves the underlying association. Repeating that detach returns not found (404). Requires mcp:write on the server.
    */
   async detachServerClientAssociation(
     request: DetachServerClientAssociationRequest,

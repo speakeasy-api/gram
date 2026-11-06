@@ -158,16 +158,8 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 	// resource and permissions are still compared through the remote set.
 	otherModeHash := ""
 	if reuse {
-		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-		if err != nil {
-			return nil, err
-		}
-		backend, err := s.consentBackendEvidence(ctx, endpoint, enforced)
-		if err != nil {
-			return nil, err
-		}
 		otherMode := *inventory
-		otherMode.BackendHash = backend
+		otherMode.BackendHash = inventory.otherModeBackendHash
 		otherModeHash = consentInventoryFingerprint(&otherMode)
 	}
 	// Resolve the default only when saving reusable evidence. Other explicit
@@ -313,9 +305,19 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if inventory.CompletedAt.IsZero() || time.Since(inventory.CompletedAt) > time.Minute {
 		return nil, nil
 	}
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
 	if err != nil {
 		return nil, err
+	}
+	backend, err := s.consentBackendEvidence(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	backendHash := backend.hash
+	inventory.otherModeBackendHash = backend.typedHash
+	if enforced {
+		backendHash = backend.typedHash
+		inventory.otherModeBackendHash = backend.hash
 	}
 	if inventory.BackendHash != backendHash {
 		return nil, nil
@@ -344,32 +346,38 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 	if err != nil {
 		return "", err
 	}
-	return s.consentBackendEvidence(ctx, endpoint, !enforced)
+	evidence, err := s.consentBackendEvidence(ctx, endpoint)
+	if err != nil {
+		return "", err
+	}
+	if enforced {
+		return evidence.typedHash, nil
+	}
+	return evidence.hash, nil
 }
 
 // consentBackendEvidence fingerprints the endpoint's access-relevant
-// configuration, covering a proxied server's derived authorization server
-// only with derivedIssuer. A hosted server is routed by that authorization
-// server, so it is always covered.
-func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *ResolvedMcpEndpoint, derivedIssuer bool) (string, error) {
+// configuration in both modes from the same reads. The typed form omits a
+// proxied server's derived authorization server. A hosted server is routed
+// by that authorization server, so both forms cover it.
+func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *ResolvedMcpEndpoint) (memberConfiguration, error) {
 	evidence := map[string]any{"resource": endpoint.UpstreamResource, "toolset": endpoint.ToolsetID}
 	if !endpoint.McpServerID.Valid {
-		return consentEvidenceHash(evidence), nil
+		hash := consentEvidenceHash(evidence)
+		return memberConfiguration{hash: hash, typedHash: hash}, nil
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("read consent backend: %w", err)
+		return memberConfiguration{}, fmt.Errorf("read consent backend: %w", err)
 	}
 	evidence["server"] = server.ID
 	evidence["remote"] = server.RemoteMcpServerID
 	evidence["tunnel"] = server.TunneledMcpServerID
 	evidence["toolset"] = server.ToolsetID
 	evidence["variation"] = server.ToolVariationsGroupID
-	if derivedIssuer || server.ToolsetID.Valid {
-		evidence["issuer"] = server.RemoteSessionIssuerID
-	}
+	evidence["issuer"] = server.RemoteSessionIssuerID
 	evidence["visibility"] = server.Visibility
 	evidence["network"] = server.NetworkAccessMode
 	if server.RemoteMcpServerID.Valid {
@@ -377,14 +385,18 @@ func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *Resolved
 			ID: server.RemoteMcpServerID.UUID, ProjectID: endpoint.ProjectID,
 		})
 		if err != nil {
-			return "", fmt.Errorf("read consent remote backend: %w", err)
+			return memberConfiguration{}, fmt.Errorf("read consent remote backend: %w", err)
 		}
 		headerFingerprint, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ConfigurationFingerprint(ctx, remote.ID)
 		if err != nil {
-			return "", fmt.Errorf("read consent backend headers: %w", err)
+			return memberConfiguration{}, fmt.Errorf("read consent backend headers: %w", err)
 		}
 		evidence["url"] = remote.Url
 		evidence["headers"] = headerFingerprint
 	}
-	return consentEvidenceHash(evidence), nil
+	hash := consentEvidenceHash(evidence)
+	if !server.ToolsetID.Valid {
+		delete(evidence, "issuer")
+	}
+	return memberConfiguration{hash: hash, typedHash: consentEvidenceHash(evidence)}, nil
 }

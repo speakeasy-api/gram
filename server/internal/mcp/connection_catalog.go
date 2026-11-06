@@ -486,7 +486,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	if approved.configurationChanged(member.configuration, typedChoices) {
 		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
-			map[string]bool{"configuration_hash_present": member.configuration.hash != "", "approved_hash_recorded": approved.BackendHash != ""})
+			map[string]bool{"configuration_hash_present": member.configuration.hash != "", "approved_hash_recorded": approved.BackendHash != "", "typed_compared": typedChoices && approved.TypedBackendHash != ""})
 	}
 	return nil
 }
