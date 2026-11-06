@@ -12,18 +12,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate, mutationOptions, invalidate, permission, directory } =
-  vi.hoisted(() => ({
-    mutate: vi.fn(),
-    mutationOptions: vi.fn(),
-    invalidate: vi.fn(),
-    permission: { admin: true },
-    // The directory role mappings the list reads, when it reads them.
-    directory: {
-      data: undefined as unknown,
-      enabled: vi.fn(),
-    },
-  }));
+const {
+  mutate,
+  mutationOptions,
+  invalidate,
+  permission,
+  directory,
+  roleUpdate,
+  roles,
+} = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  // Rewrites of a role's rule covering every server go through the role.
+  roleUpdate: vi.fn(),
+  // The organization's roles, with the grants Role Manager stores.
+  roles: { list: [] as unknown[] },
+  mutationOptions: vi.fn(),
+  invalidate: vi.fn(),
+  permission: { admin: true },
+  // The directory role mappings the list reads, when it reads them.
+  directory: {
+    data: undefined as unknown,
+    enabled: vi.fn(),
+  },
+}));
 
 vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
   useDirectoryRoleMappings: (
@@ -54,6 +65,41 @@ vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
 
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: invalidate,
+  useRoles: () => ({ data: { roles: roles.list } }),
+}));
+
+vi.mock("@gram/client/react-query/updateRole.js", () => ({
+  useUpdateRoleMutation: () => ({ mutate: roleUpdate, isPending: false }),
+}));
+
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "proj-1", name: "Default" }),
+  useOrganization: () => ({
+    projects: [
+      { id: "proj-1", name: "Default" },
+      { id: "proj-2", name: "Other" },
+    ],
+  }),
+}));
+
+// The project's servers: this one and two others.
+vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
+  useListToolsetsForOrg: () => ({
+    isSuccess: true,
+    data: {
+      toolsets: [
+        { id: "server-1", projectId: "proj-1" },
+        { id: "server-2", projectId: "proj-1" },
+        { id: "server-elsewhere", projectId: "proj-2" },
+      ],
+    },
+  }),
+}));
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  useListMcpServersForOrg: () => ({
+    isSuccess: true,
+    data: { mcpServers: [{ id: "server-3", projectId: "proj-1" }] },
+  }),
 }));
 vi.mock("@gram/client/react-query/plugin.js", () => ({
   invalidateAllPlugin: invalidate,
@@ -132,6 +178,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   permission.admin = true;
   directory.data = undefined;
+  roles.list = [];
 });
 
 function entry(
@@ -428,9 +475,22 @@ describe("what a row change writes", () => {
     expect(savedEntries().entries).toEqual([]);
   });
 
-  it("subtracts a role an organization-wide rule still reaches", () => {
-    // The rule is the role editor's, so taking the role off this one server
-    // has to be written as a block naming it.
+  it("names a role's servers individually when removing it from one it reaches through every server", () => {
+    // A rule cannot cover every server but one, so taking the role off this
+    // server rewrites the role instead of writing blocks here.
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+          },
+        ],
+      },
+    ];
     renderList([
       entry({
         principalUrn: "role:global:1",
@@ -443,16 +503,103 @@ describe("what a row change writes", () => {
     fireEvent.click(
       screen.getByLabelText("Remove Engineering from this server"),
     );
-    // A block outranks every grant, so this one is confirmed before it lands.
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(roleUpdate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
 
-    // Blocks are independent, so taking the role off this server names all
-    // three scopes.
+    expect(mutate).not.toHaveBeenCalled();
+    const [variables] = roleUpdate.mock.calls.at(-1) ?? [];
+    expect(variables.request.updateRoleForm).toEqual({
+      id: "1",
+      removeGrants: [
+        {
+          scope: "mcp:connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+      ],
+      addGrants: [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "server-2" },
+            { resourceKind: "mcp", resourceId: "server-3" },
+            { resourceKind: "mcp", resourceId: "*", projectId: "proj-2" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("clears one line of a role reaching every server, with its block here", () => {
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+            ],
+          },
+          {
+            scope: "mcp:blocked_read",
+            selectors: [{ resourceKind: "mcp", resourceId: "server-1" }],
+          },
+        ],
+      },
+    ];
+    const engineering = {
+      principalUrn: "role:global:1",
+      kind: "role",
+      displayName: "Engineering",
+    } as const;
+    renderList([
+      entry({ ...engineering, level: "view", appliesTo: "all_resources" }),
+      entry({ ...engineering, level: "blocked_view" }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
     expect(
-      savedEntries()
-        .entries.map((e: { level: string }) => e.level)
-        .sort(),
-    ).toEqual(["blocked", "blocked_manage", "blocked_view"]);
+      screen.getByText("Clear Engineering's view setting on Acme Ops?"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
+
+    const [variables] = roleUpdate.mock.calls.at(-1) ?? [];
+    expect(variables.request.updateRoleForm).toEqual({
+      id: "1",
+      removeGrants: [
+        {
+          scope: "mcp:read",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+          ],
+        },
+        {
+          scope: "mcp:blocked_read",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-1" }],
+        },
+      ],
+      addGrants: [
+        {
+          scope: "mcp:read",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "server-2" },
+            { resourceKind: "mcp", resourceId: "server-3" },
+          ],
+        },
+      ],
+    });
   });
 });
 

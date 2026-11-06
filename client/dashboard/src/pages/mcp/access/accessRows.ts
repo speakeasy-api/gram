@@ -37,6 +37,15 @@ export const SCOPE_ROWS: { key: ScopeKey; label: string; hint: string }[] = [
   { key: "manage", label: "Manage", hint: "Change its settings and access" },
 ];
 
+/** "view", "view and manage", "connect, view and manage". */
+export function lineLabels(lines: ScopeKey[]): string {
+  const labels = SCOPE_ROWS.filter((line) => lines.includes(line.key)).map(
+    (line) => line.label.toLowerCase(),
+  );
+  if (labels.length <= 1) return labels.join("");
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
 /**
  * The scopes whose grant satisfies a check for this one, itself included.
  * Mirrors scopeExpansions in authz/scopes.go: read and write both satisfy

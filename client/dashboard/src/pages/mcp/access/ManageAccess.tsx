@@ -33,6 +33,11 @@ import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRoles } from "@gram/client/react-query/roles.js";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { convertWildcardGrants } from "./wildcardConversion";
+import { useProjectServerIds } from "./useProjectServerIds";
 import {
   type RoleDirectorySource,
   roleDirectorySources,
@@ -65,6 +70,7 @@ import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
+import { ConvertWildcardDialog } from "./ConvertWildcardDialog";
 import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
@@ -78,6 +84,8 @@ import {
   scopeState,
   type ScopeState,
   SCOPE_ROWS,
+  BLOCK_LEVEL,
+  lineLabels,
   type AccessRow,
   type ScopeKey,
 } from "./accessRows";
@@ -98,6 +106,15 @@ import { RoleLink } from "@/components/role-link";
 import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
+/** A clear or removal that rewrites a role's rule covering every server. */
+interface WildcardChange {
+  row: AccessRow;
+  lines: ScopeKey[];
+  action: "clear" | "remove";
+}
+
+const ALL_LINES: ScopeKey[] = SCOPE_ROWS.map((line) => line.key);
+
 interface NarrowingTarget {
   row: AccessRow;
   tools: string[];
@@ -160,6 +177,20 @@ export function ManageAccess({
   // The row whose removal is waiting to be confirmed, when the write is not
   // the plain deletion the button looks like.
   const [removing, setRemoving] = useState<AccessRow | null>(null);
+  // A clear or removal that has to turn a role's rule covering every server
+  // into rules naming servers, waiting to be confirmed.
+  const [converting, setConverting] = useState<WildcardChange | null>(null);
+  const project = useProject();
+  const organization = useOrganization();
+  const { data: rolesData } = useRoles(undefined, undefined, {
+    enabled: isAdmin,
+    throwOnError: false,
+  });
+  const projectServers = useProjectServerIds(
+    project.id,
+    resourceId,
+    converting !== null,
+  );
 
   // The organization's members, so a role row can show who it reaches. The
   // audience entries carry ids; the names and photos live here.
@@ -228,17 +259,32 @@ export function ManageAccess({
   const visible = pageOf(rows, page);
   const pages = pageCount(rows.length);
 
+  // Check access answers from the same rules, so an open answer is redone.
+  const invalidateAccess = () =>
+    Promise.all([
+      invalidateAllResourceAudience(queryClient),
+      queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
+      invalidateAllExplainResourceAccess(queryClient),
+      invalidateAllRoles(queryClient),
+      invalidateAllPlugin(queryClient),
+      invalidateAllPlugins(queryClient),
+    ]);
+
+  const updateRole = useUpdateRoleMutation({
+    onSuccess: async () => {
+      await invalidateAccess();
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not save access. Please try again.",
+      ),
+  });
+
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
-      // Check access answers from the same rules, so an open answer is redone.
-      await Promise.all([
-        invalidateAllResourceAudience(queryClient),
-        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
-        invalidateAllExplainResourceAccess(queryClient),
-        invalidateAllRoles(queryClient),
-        invalidateAllPlugin(queryClient),
-        invalidateAllPlugins(queryClient),
-      ]);
+      await invalidateAccess();
       setAdding(null);
     },
     // The server refuses some writes for a reason worth reading — blocking
@@ -332,6 +378,10 @@ export function ManageAccess({
   // name. Only that case is worth a dialog.
   const removeRow = (row: AccessRow) => {
     if (!canManage) return;
+    if (holdsOwnWildcard(row, ALL_LINES)) {
+      setConverting({ row, lines: ALL_LINES, action: "remove" });
+      return;
+    }
     if (inheritedGrants(row).length === 0) {
       applyWrite(() => revokeRowWrite(direct, row, resourceName));
       return;
@@ -343,6 +393,85 @@ export function ManageAccess({
     if (!removing || !canManage) return;
     applyWrite(() => revokeRowWrite(direct, removing, resourceName));
     setRemoving(null);
+  };
+
+  // A role's own rule covering every server, for any of these lines. Only a
+  // role's can be rewritten here: its rules live on the role.
+  const holdsOwnWildcard = (row: AccessRow, lines: ScopeKey[]) =>
+    row.kind === "role" &&
+    orgWide.some(
+      (entry) =>
+        entry.principalUrn === row.principalUrn &&
+        lines.some(
+          (line) => entry.level === line || entry.level === BLOCK_LEVEL[line],
+        ),
+    );
+
+  const clearScope = (row: AccessRow, scope: ScopeKey) => {
+    if (!canManage) return;
+    if (holdsOwnWildcard(row, [scope])) {
+      setConverting({ row, lines: [scope], action: "clear" });
+      return;
+    }
+    applyWrite(() => clearScopeWrite(direct, row, scope, resourceName));
+  };
+
+  const conversion = useMemo(() => {
+    if (!converting || !projectServers.settled) return null;
+    const role = rolesData?.roles.find(
+      (candidate) => candidate.principalUrn === converting.row.principalUrn,
+    );
+    if (!role) return null;
+    return {
+      role,
+      ...convertWildcardGrants({
+        grants: role.grants ?? [],
+        lines: converting.lines,
+        resourceId,
+        resourceIds: projectServers.resourceIds,
+        projectId: project.id,
+        projectServerIds: projectServers.serverIds,
+        otherProjectIds: organization.projects
+          .map((p) => p.id)
+          .filter((id) => id !== project.id),
+      }),
+    };
+  }, [
+    converting,
+    projectServers.settled,
+    projectServers.serverIds,
+    projectServers.resourceIds,
+    rolesData,
+    resourceId,
+    project.id,
+    organization.projects,
+  ]);
+
+  const confirmConvert = () => {
+    if (!converting || !conversion || !canManage) return;
+    const { row, lines, action } = converting;
+    const server = resourceName ?? "this server";
+    updateRole.mutate(
+      {
+        request: {
+          updateRoleForm: {
+            id: conversion.role.id,
+            addGrants: conversion.addGrants,
+            removeGrants: conversion.removeGrants,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            action === "remove"
+              ? `${row.displayName} no longer has access to ${server}. It now names its servers individually.`
+              : `Cleared ${row.displayName}'s ${lineLabels(lines)} setting on ${server}. It now names its servers individually.`,
+          );
+          setConverting(null);
+        },
+      },
+    );
   };
 
   const addPrincipals = (principalUrns: string[]) => {
@@ -447,11 +576,10 @@ export function ManageAccess({
                     revokeScopeWrite(direct, row, scope, resourceName),
                   )
                 }
-                onClearScope={(scope) =>
-                  applyWrite(() =>
-                    clearScopeWrite(direct, row, scope, resourceName),
-                  )
-                }
+                onClearScope={(scope) => clearScope(row, scope)}
+                clearableWildcards={ALL_LINES.filter((line) =>
+                  holdsOwnWildcard(row, [line]),
+                )}
                 onNarrow={() => openNarrowing(row)}
                 onBlockDestructive={() =>
                   applyWrite(() =>
@@ -532,6 +660,22 @@ export function ManageAccess({
         />
       )}
 
+      {converting && (
+        <ConvertWildcardDialog
+          change={converting}
+          serverName={resourceName ?? "this server"}
+          projectName={project.name}
+          otherServers={
+            projectServers.settled ? projectServers.otherServerCount : undefined
+          }
+          coveredEveryProject={conversion?.coveredEveryProject ?? false}
+          ready={conversion !== null}
+          pending={updateRole.isPending}
+          onConfirm={confirmConvert}
+          onClose={() => setConverting(null)}
+        />
+      )}
+
       {adding && canManage && (
         <AddAudienceDialog
           title={
@@ -593,6 +737,7 @@ function PrincipalRow({
   onAllow,
   onRevokeScope,
   onClearScope,
+  clearableWildcards,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -615,6 +760,8 @@ function PrincipalRow({
   onAllow: (scope: ScopeKey) => void;
   onRevokeScope: (scope: ScopeKey) => void;
   onClearScope: (scope: ScopeKey) => void;
+  /** Lines held by the row's own rule covering every server. */
+  clearableWildcards: ScopeKey[];
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
@@ -700,7 +847,7 @@ function PrincipalRow({
             expanded={open}
           >
             {/* A pencil says the row is editable, and the struck-through
-                pencil says the editing is what stops. */}
+              pencil says the editing is what stops. */}
             {open ? (
               <PencilOff className="h-4 w-4" />
             ) : (
@@ -752,6 +899,7 @@ function PrincipalRow({
                   onAllow={() => onAllow(key)}
                   onRevoke={() => onRevokeScope(key)}
                   onClear={() => onClearScope(key)}
+                  clearable={clearableWildcards.includes(key)}
                   onNarrow={onNarrow}
                   onBlockDestructive={onBlockDestructive}
                   onAllowDestructive={onAllowDestructive}
@@ -790,6 +938,7 @@ function ScopeLine({
   onAllow,
   onRevoke,
   onClear,
+  clearable,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -806,6 +955,8 @@ function ScopeLine({
   onAllow: () => void;
   onRevoke: () => void;
   onClear: () => void;
+  /** True when a rule covering every server can be cleared from this line. */
+  clearable: boolean;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
@@ -820,6 +971,7 @@ function ScopeLine({
     onAllow,
     onRevoke,
     onClear,
+    clearable,
     onNarrow,
     onBlockDestructive,
     onAllowDestructive,
@@ -895,6 +1047,7 @@ function scopeOptions({
   onAllow,
   onRevoke,
   onClear,
+  clearable,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -905,16 +1058,22 @@ function scopeOptions({
   onAllow: () => void;
   onRevoke: () => void;
   onClear: () => void;
+  clearable: boolean;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
 }): InlineChoiceOption[] {
   const state = scopeState(row, scope, catalog);
+  const offersClear = state.canClear || clearable;
   // With another rule opening the whole line, opening it here only lifts this
   // row's own block and drops its own rule: the same write as Clear, so it is
-  // offered once, as Clear.
+  // offered once, as Clear. Clearing a rule covering every server writes
+  // something else, so both stay on offer then.
   const allowIsClear =
-    state.canClear && !state.granted && openedElsewhere(row, scope);
+    state.canClear &&
+    !clearable &&
+    !state.granted &&
+    openedElsewhere(row, scope);
   const options = choiceOptions({
     row,
     scope,
@@ -926,8 +1085,9 @@ function scopeOptions({
     onAllowDestructive,
   }).filter((option) => !(allowIsClear && option.onSelect === onAllow));
   // Clearing deletes this row's own grant and block for the line and writes
-  // nothing in their place, so the line is left unset rather than flipped.
-  if (state.canClear) {
+  // nothing in their place, so the line is left unset rather than flipped. A
+  // rule covering every server is cleared too, after a confirmation.
+  if (offersClear) {
     options.push({
       label: "Clear",
       onSelect: onClear,
