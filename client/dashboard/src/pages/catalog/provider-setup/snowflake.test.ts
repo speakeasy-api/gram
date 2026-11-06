@@ -142,3 +142,52 @@ it("normalizes the copied account hostname consistently for MCP and OAuth", () =
     "https://example-example-account.snowflakecomputing.com/oauth/authorize",
   );
 });
+
+it("keeps backslashes and quotes inside generated SQL literals", () => {
+  const sql = snowflakeSql(
+    {
+      ...values,
+      accessRole: String.raw`"example\'role"`,
+      warehouse: String.raw`"example\'warehouse"`,
+      oauthIntegration: String.raw`"example\'oauth"`,
+    },
+    "https://local.example/callback",
+  );
+  expect(sql.oauth).toContain(
+    String.raw`ALLOWED_ROLES_LIST = ('example\\''role');`,
+  );
+  expect(sql.users).toContain(String.raw`DEFAULT_ROLE = 'example\\''role'`);
+  expect(sql.users).toContain(
+    String.raw`DEFAULT_WAREHOUSE = 'example\\''warehouse'`,
+  );
+  expect(sql.credentials).toContain(
+    String.raw`SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('example\\''oauth')`,
+  );
+});
+
+it("generates complete server creation and access SQL for valid values", () => {
+  const sql = snowflakeSql(values, "https://local.example/callback");
+  expect(sql.creator).toContain(
+    "GRANT CREATE MCP SERVER ON SCHEMA EXAMPLE_DB.MCP TO ROLE EXAMPLE_CREATOR;",
+  );
+  expect(sql.create).toContain(
+    "CREATE MCP SERVER EXAMPLE_DB.MCP.EXAMPLE_SERVER\nFROM SPECIFICATION $$",
+  );
+  expect(sql.create).toContain('identifier: "AGENT_DB.AGENTS.EXAMPLE_AGENT"');
+  expect(sql.role).toBe("CREATE ROLE IF NOT EXISTS EXAMPLE_MCP_USER;");
+  expect(sql.cortex).toBe(
+    "GRANT DATABASE ROLE SNOWFLAKE.CORTEX_AGENT_USER TO ROLE EXAMPLE_MCP_USER;",
+  );
+  expect(sql.grants).toContain(
+    "GRANT USAGE ON MCP SERVER EXAMPLE_DB.MCP.EXAMPLE_SERVER TO ROLE EXAMPLE_MCP_USER;",
+  );
+  expect(sql.grants).toContain(
+    "GRANT USAGE ON AGENT AGENT_DB.AGENTS.EXAMPLE_AGENT TO ROLE EXAMPLE_MCP_USER;",
+  );
+  expect(sql.users).toContain(
+    "GRANT ROLE EXAMPLE_MCP_USER TO USER EXAMPLE_USER;",
+  );
+  const existing = snowflakeSql({ ...values, method: "existing" });
+  expect(existing.create).toBeUndefined();
+  expect(existing.grants).toBe(sql.grants);
+});

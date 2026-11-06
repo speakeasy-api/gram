@@ -220,3 +220,36 @@ it("clears old Snowflake instructions when another editor changes the source", (
   expect(next.step).toBe("account");
   expect(next.saved).toBe(false);
 });
+
+it("completes Snowflake setup only for the verified current configuration", () => {
+  const initial = initialState("snowflake");
+  const connected = {
+    ...initial,
+    saved: true,
+    authorized: true,
+    tested: true,
+    values: {
+      ...initial.values,
+      host: "example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+    },
+  };
+  for (const state of [
+    { ...connected, saved: false },
+    { ...connected, authorized: false },
+    { ...connected, tested: false },
+    { ...connected, configChanged: true },
+    { ...connected, values: { ...connected.values, host: "" } },
+    { ...connected, values: { ...connected.values, database: "" } },
+    {
+      ...connected,
+      values: { ...connected.values, accessRole: "ACCOUNTADMIN" },
+    },
+  ])
+    expect(reduce(state, { type: "complete" }).screen).toBe("setup");
+  const complete = reduce(connected, { type: "complete" });
+  expect(complete.screen).toBe("success");
+  expect(complete.done).toEqual(steps(connected).map((step) => step.id));
+});

@@ -194,7 +194,8 @@ export function snowflakeSql(
 > {
   const result: ReturnType<typeof snowflakeSql> = {};
   const id = identifier,
-    literal = (value: string) => "'" + value.replace(/'/g, "''") + "'";
+    literal = (value: string) =>
+      "'" + value.replaceAll("\\", "\\\\").replaceAll("'", "''") + "'";
   const a = identifierParts(v.agent).map(id),
     role = id(v.accessRole),
     creator = id(v.creatorRole);
