@@ -381,7 +381,7 @@ function SetupHeader({
     </header>
   );
 }
-function SetupBody({
+export function SetupBody({
   serverUrl,
   serverName,
 }: {

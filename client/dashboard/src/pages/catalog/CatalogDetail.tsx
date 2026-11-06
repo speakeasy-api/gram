@@ -1,3 +1,5 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { isSnowflakeCatalogServer } from "./snowflake-install";
 import { CatalogLogo } from "./CatalogLogo";
 import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
@@ -27,7 +29,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Minus, Server as ServerIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { Outlet, useParams } from "react-router";
+import { Outlet, useNavigate, useParams } from "react-router";
 import { Spinner } from "@/components/ui/Spinner";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
@@ -60,6 +62,8 @@ function primaryRemoteUrl(server: CatalogServer): string | undefined {
 export default function CatalogDetail(): JSX.Element {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
+  const navigate = useNavigate();
+  const setupRollout = useProviderSetupRollout();
   const client = useSdkClient();
   const decodedSpecifier = serverSpecifier
     ? decodeURIComponent(serverSpecifier)
@@ -88,6 +92,20 @@ export default function CatalogDetail(): JSX.Element {
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
   }, [data, decodedSpecifier]);
+
+  const handleAdd = () => {
+    if (
+      setupRollout !== "disabled" &&
+      server &&
+      isSnowflakeCatalogServer(server)
+    ) {
+      void navigate(
+        routes.mcp.catalog.detail.setup.href(
+          encodeURIComponent(server.registrySpecifier),
+        ),
+      );
+    } else setShowAddDialog(true);
+  };
 
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -271,14 +289,14 @@ export default function CatalogDetail(): JSX.Element {
                         <CatalogInstallButton
                           state="added"
                           size="md"
-                          onAdd={() => setShowAddDialog(true)}
+                          onAdd={handleAdd}
                         />
                       </Stack>
                     ) : (
                       <CatalogInstallButton
                         state={install}
                         size="md"
-                        onAdd={() => setShowAddDialog(true)}
+                        onAdd={handleAdd}
                       />
                     )}
                   </div>

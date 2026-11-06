@@ -1,4 +1,3 @@
-import { snowflakeRemoteTemplate } from "./snowflake-install";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -229,55 +228,6 @@ describe("useRemoteMcpInstallWorkflow", () => {
   // initial state
   // -------------------------------------------------------------------------
 
-  it("requires Snowflake variables and installs only the resolved native URL", async () => {
-    const servers = [
-      makeServer({
-        registrySpecifier: "com.snowflake/cortex-mcp",
-        remotes: [remote(snowflakeRemoteTemplate)],
-      }),
-    ];
-    const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({ servers }),
-    );
-    if (result.current.phase !== "configure")
-      throw new Error("Expected configure");
-    expect(result.current.canInstall).toBe(false);
-    await act(async () => {
-      if (result.current.phase === "configure")
-        await result.current.startInstall();
-    });
-    expect(mockProbeURL).not.toHaveBeenCalled();
-    act(() => {
-      if (result.current.phase === "configure")
-        result.current.updateServerConfig(0, {
-          snowflakeVariables: {
-            account_url: "example.snowflakecomputing.com",
-            mcp_database: "APP",
-            mcp_schema: "PUBLIC",
-            mcp_server_name: "MCP",
-          },
-        });
-    });
-    if (result.current.phase !== "configure")
-      throw new Error("Expected configure");
-    expect(result.current.canInstall).toBe(true);
-    await act(async () => {
-      if (result.current.phase === "configure")
-        await result.current.startInstall();
-    });
-    const url =
-      "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP";
-    expect(mockProbeURL).toHaveBeenCalledWith(
-      { probeURLForm: { url } },
-      undefined,
-      undefined,
-    );
-    expect(mockCreateServer).toHaveBeenCalledWith(
-      { createServerForm: expect.objectContaining({ url }) },
-      undefined,
-      undefined,
-    );
-  });
   it("cancels pending admission on reset", async () => {
     const servers = [makeServer()];
     let admit!: (value: boolean) => void;

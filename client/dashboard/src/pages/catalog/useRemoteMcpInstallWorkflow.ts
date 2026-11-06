@@ -1,8 +1,3 @@
-import {
-  isSnowflakeTemplate,
-  resolveSnowflakeInstall,
-  type SnowflakeInstallValues,
-} from "./snowflake-install";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
@@ -68,7 +63,6 @@ export interface ServerConfig {
   remotes: ExternalMCPRemote[];
   /** User-entered header values, keyed by [headerValueKey]. */
   headerValues: Record<string, string>;
-  snowflakeVariables?: SnowflakeInstallValues;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
   /** An OAuth service account client to bind instead of agentAuthorization. */
@@ -148,11 +142,7 @@ export interface ConfigurePhase extends WorkflowBase {
     updates: Partial<
       Pick<
         ServerConfig,
-        | "name"
-        | "identityMode"
-        | "agentAuthorization"
-        | "serviceAccountClient"
-        | "snowflakeVariables"
+        "name" | "identityMode" | "agentAuthorization" | "serviceAccountClient"
       >
     >,
   ) => void;
@@ -299,12 +289,7 @@ interface InstallTarget {
 function buildInstallTargets(config: ServerConfig): InstallTarget[] {
   return config.remotes.map((remote) => ({
     server: config.server,
-    remote: isSnowflakeTemplate(config.server.registrySpecifier, remote.url)
-      ? {
-          ...remote,
-          url: resolveSnowflakeInstall(config.snowflakeVariables) ?? remote.url,
-        }
-      : remote,
+    remote,
     name:
       config.remotes.length > 1
         ? `${config.name.replace(/_Governed$/, "")} ${getRemoteDisplayInfo(remote.url).name}_Governed`
@@ -501,7 +486,6 @@ export function useRemoteMcpInstallWorkflow({
           | "identityMode"
           | "agentAuthorization"
           | "serviceAccountClient"
-          | "snowflakeVariables"
         >
       >,
     ) => {
@@ -620,13 +604,6 @@ export function useRemoteMcpInstallWorkflow({
       !issuerQuery.isLoading &&
       installBlockedReason === undefined &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
-      serverConfigs.every((c) =>
-        c.remotes.every(
-          (remote) =>
-            !isSnowflakeTemplate(c.server.registrySpecifier, remote.url) ||
-            resolveSnowflakeInstall(c.snowflakeVariables) !== null,
-        ),
-      ) &&
       serverConfigs.every(
         (c) =>
           c.identityMode !== "agent" ||

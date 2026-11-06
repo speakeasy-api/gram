@@ -513,6 +513,20 @@ describe("Snowflake instructions", () => {
     );
   }
 
+  it("uses the approved shared plan card before collecting account details", () => {
+    task("begin");
+    expect(
+      screen.getByRole("heading", {
+        name: "Let’s connect your Snowflake Cortex Agent to Speakeasy.",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Check permissions and region availability"),
+    ).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("Identity")).toBeNull();
+  });
+
   it("routes credentials to the Snowflake SQL and required fields", () => {
     const { container } = task("credentials", {
       oauthIntegration: "EXAMPLE_OAUTH",

@@ -88,22 +88,6 @@ export function SnowflakeTask(): JSX.Element {
   const v = s.values,
     sql = snowflakeSql(v, callback);
   switch (s.step) {
-    case "begin":
-      return (
-        <>
-          <p>
-            Connect to a Snowflake-managed MCP server that exposes an existing
-            Cortex Agent. We’ll help you prepare server and access SQL,
-            configure OAuth, save credentials, sign in, and test the connection.
-          </p>
-          <p className="mt-5">
-            You’ll need the approved account, server and agent details, an
-            administrator who can grant access, and a non-privileged role for
-            the people connecting. Snowflake-managed MCP is unavailable in
-            government regions and China.
-          </p>
-        </>
-      );
     case "account":
       return (
         <>

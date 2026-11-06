@@ -11,7 +11,6 @@ import { Eye, Link, Settings2 } from "lucide-react";
 import {
   AppChoice,
   CallbackUrlStatus,
-  Correction,
   Choices,
   CopyValue,
   CopyAction,
@@ -45,6 +44,20 @@ function Plan() {
           </div>
         </Card.Content>
       </Card>
+      {s.provider === "snowflake" && (
+        <details className="mt-6">
+          <summary>Check permissions and region availability</summary>
+          <p className="mt-3">
+            You’ll need a security owner to grant access, a role that can create
+            the MCP server if needed, and ACCOUNTADMIN or a delegated role with
+            CREATE INTEGRATION for OAuth. These can be different people.
+          </p>
+          <p className="mt-3">
+            This setup isn’t available in China or government regions. Each
+            person will sign in using their own Snowflake account.
+          </p>
+        </details>
+      )}
       {s.provider === "github" && (
         <details className="mt-6">
           <summary>Organization approval and SSO</summary>
