@@ -683,7 +683,9 @@ export function ChatLogsTable({
   });
   const { data: ancestors } = useQuery({
     queryKey: ["chatSubsessionAncestors", chatIds, linksData?.links],
-    enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
+    enabled:
+      sort == null &&
+      !!linksData?.links.some((link) => link.kind === "subagent"),
     retry: false,
     throwOnError: false,
     queryFn: async () => {
@@ -742,14 +744,31 @@ export function ChatLogsTable({
     }
     return map;
   }, [chatIds, linksData]);
-  const groupedChats = useMemo(
-    () =>
-      groupSubsessions(
-        [...chats, ...(ancestors?.parents ?? [])],
-        ancestors?.links ?? linksData?.links ?? [],
-      ),
-    [chats, linksData, ancestors],
-  );
+  const groupedChats = useMemo(() => {
+    const links = linksData?.links ?? [];
+    if (sort != null) {
+      // The API sorts and paginates the whole result set. Keep its exact rows
+      // and order; grouping or inserting ancestors would break that contract.
+      const subagentIds = new Set(
+        links
+          .filter(
+            (link) =>
+              link.kind === "subagent" &&
+              link.parentChatId &&
+              link.parentChatId !== link.childChatId,
+          )
+          .map((link) => link.childChatId),
+      );
+      return chats.map((session) => ({
+        session,
+        depth: subagentIds.has(session.id) ? 1 : 0,
+      }));
+    }
+    return groupSubsessions(
+      [...chats, ...(ancestors?.parents ?? [])],
+      ancestors?.links ?? links,
+    );
+  }, [chats, linksData, ancestors, sort]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const columns: Column<SessionRow>[] = [

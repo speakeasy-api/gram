@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import type { ChatSessionLink } from "@gram/client/models/components/chatsessionlink.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -6,6 +7,10 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
+
+const { sessionLinks } = vi.hoisted(() => ({
+  sessionLinks: [] as ChatSessionLink[],
+}));
 
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -46,7 +51,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
   // No lineage edges by default: rows render without the icon cluster, and
   // the hook never reaches useGramContext (no SDK provider in these tests).
-  useListChatSessionLinks: () => ({ data: { links: [] } }),
+  useListChatSessionLinks: () => ({ data: { links: sessionLinks } }),
 }));
 
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
@@ -114,7 +119,74 @@ function renderTable(ui: ReactNode) {
 describe("ChatLogsTable", () => {
   afterEach(() => {
     cleanup();
+    sessionLinks.length = 0;
     vi.restoreAllMocks();
+  });
+
+  it.each(["asc", "desc"] as const)(
+    "preserves Activity %s order instead of moving subagents below parents",
+    (direction) => {
+      sessionLinks.push({
+        parentChatId: "parent",
+        childChatId: "child",
+        parentCaptured: true,
+        childCaptured: true,
+        kind: "subagent",
+        targetHarness: "claude-tag",
+        createdAt: new Date(),
+      });
+      const parent = { ...makeChat("parent"), title: "Parent session" };
+      const child = {
+        ...makeChat("child"),
+        title: "Child session",
+        lastMessageTimestamp: new Date("2026-01-01T12:05:00Z"),
+      };
+      const chats = direction === "asc" ? [parent, child] : [child, parent];
+      renderTable(
+        <ChatLogsTable
+          chats={chats}
+          sort={{ id: "chronological", direction }}
+          onDeleteChat={() => {}}
+          onSelectChat={() => {}}
+          isLoading={false}
+          error={null}
+        />,
+      );
+
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(2);
+      chats.forEach((chat, index) => {
+        expect(within(rows[index]!).getAllByText(chat.title!)).not.toHaveLength(
+          0,
+        );
+      });
+      expect(screen.getByText("Subagent")).toBeTruthy();
+    },
+  );
+
+  it("labels a sorted subagent whose parent is not on the page without adding a row", () => {
+    sessionLinks.push({
+      parentChatId: "off-page-parent",
+      childChatId: "child",
+      parentCaptured: true,
+      childCaptured: true,
+      kind: "subagent",
+      targetHarness: "claude-tag",
+      createdAt: new Date(),
+    });
+    renderTable(
+      <ChatLogsTable
+        chats={[makeChat("child")]}
+        sort={{ id: "chronological", direction: "desc" }}
+        onDeleteChat={() => {}}
+        onSelectChat={() => {}}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("Subagent")).toBeTruthy();
   });
 
   it("shows unknown cost, not $0, for a session whose agent reports no cost", () => {
@@ -171,7 +243,11 @@ describe("ChatLogsTable", () => {
     "shows last message time, falling back to creation when absent (has messages: %s)",
     (hasMessages) => {
       const chat = makeChat("chat-activity");
-      if (!hasMessages) chat.lastMessageTimestamp = undefined;
+      if (!hasMessages) {
+        // Exercise the defensive fallback for responses missing this SDK-required field.
+        // @ts-expect-error Missing timestamp is intentional for this regression case.
+        chat.lastMessageTimestamp = undefined;
+      }
 
       renderTable(
         <ChatLogsTable
