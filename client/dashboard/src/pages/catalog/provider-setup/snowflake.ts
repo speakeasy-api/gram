@@ -45,6 +45,8 @@ export const roleAllowed = (value: string): boolean =>
   ![
     "ACCOUNTADMIN",
     "SECURITYADMIN",
+    "SYSADMIN",
+    "USERADMIN",
     "GLOBALORGADMIN",
     "ORGADMIN",
     "PUBLIC",

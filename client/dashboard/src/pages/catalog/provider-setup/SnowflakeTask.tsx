@@ -438,13 +438,15 @@ export function SnowflakeTask(): JSX.Element {
                     </Alert>
                   )}
                 </Section>
-                <Section title="Create the integration in Snowflake">
-                  <p>
-                    Run the prepared statement. Keep the same integration-owner
-                    role selected for the next task.
-                  </p>
-                  <Sql name="oauth" text={sql.oauth} />
-                </Section>
+                {sql.oauth && (
+                  <Section title="Create the integration in Snowflake">
+                    <p>
+                      Run the prepared statement. Keep the same
+                      integration-owner role selected for the next task.
+                    </p>
+                    <Sql name="oauth" text={sql.oauth} />
+                  </Section>
+                )}
               </>
             ) : (
               <p className="mt-4">

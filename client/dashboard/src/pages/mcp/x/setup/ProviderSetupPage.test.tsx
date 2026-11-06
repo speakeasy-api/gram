@@ -5,7 +5,11 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
-import type { Action, State } from "@/pages/catalog/provider-setup/state";
+import {
+  names,
+  type Action,
+  type State,
+} from "@/pages/catalog/provider-setup/state";
 import { ProviderSetupPage } from "./ProviderSetupPage";
 
 const mocks = vi.hoisted(() => ({
@@ -22,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   error: "",
   loading: false,
   headers: [] as RemoteMcpServerHeader[],
+  loadProgress: vi.fn(),
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -40,16 +45,17 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
-  useGetRemoteMcpServer: () => ({
-    data: {
-      url:
-        mocks.provider === "github"
-          ? "https://api.githubcopilot.com/mcp"
-          : mocks.provider === "salesforce"
-            ? "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads"
-            : "https://mcp.slack.com/mcp",
-    },
-  }),
+  useGetRemoteMcpServer: () => {
+    const urls: Record<string, string> = {
+      github: "https://api.githubcopilot.com/mcp",
+      slack: "https://mcp.slack.com/mcp",
+      salesforce:
+        "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+      snowflake:
+        "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+    };
+    return { data: { url: urls[mocks.provider] } };
+  },
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders", () => ({
   useRemoteMcpServerHeaders: () => ({
@@ -63,14 +69,14 @@ vi.mock("./provider-setup", async (importOriginal) => {
   const { initialState } = await import("@/pages/catalog/provider-setup/state");
   return {
     ...actual,
-    loadProviderProgress: () => {
-      const state = initialState(
-        mocks.provider === "github"
-          ? "github"
-          : mocks.provider === "salesforce"
-            ? "salesforce"
-            : "slack",
-      );
+    loadProviderProgress: (
+      provider: State["provider"],
+      key: string,
+      defaults?: Partial<State["values"]>,
+      sourceFingerprint?: string,
+    ) => {
+      mocks.loadProgress(provider, key, defaults, sourceFingerprint);
+      const state = initialState(provider);
       return {
         ...state,
         step: mocks.initialStep,
@@ -79,9 +85,11 @@ vi.mock("./provider-setup", async (importOriginal) => {
         tested: mocks.initiallyValidated,
         values: {
           ...state.values,
+          ...defaults,
           org: "example-org",
           path: mocks.salesforcePath,
         },
+        sourceFingerprint,
       };
     },
   };
@@ -214,7 +222,7 @@ afterEach(() => {
 });
 
 describe("provider setup completion celebration", () => {
-  it.each(["github", "slack", "salesforce"])(
+  it.each(["github", "slack", "salesforce", "snowflake"] as const)(
     "celebrates %s after success renders, without delaying completion",
     async (provider) => {
       mocks.provider = provider;
@@ -238,7 +246,7 @@ describe("provider setup completion celebration", () => {
       expect(canvas.className).toContain("pointer-events-none");
       expect(canvas.getAttribute("aria-hidden")).toBe("true");
       expect(canvas.closest("section")?.getAttribute("aria-label")).toBe(
-        `Current ${provider === "github" ? "GitHub" : provider === "salesforce" ? "Salesforce" : "Slack"} setup task`,
+        `Current ${names[provider]} setup task`,
       );
       view.rerender(<Setup />);
       expect(mocks.fire).toHaveBeenCalledTimes(1);
@@ -390,4 +398,24 @@ it("allows Salesforce installation instructions but disables Continue at the sup
   expect(screen.queryByRole("button", { name: "Complete setup" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(next().disabled).toBe(false);
+});
+
+it("hands the native Snowflake source values and fingerprint into retained progress", () => {
+  mocks.provider = "snowflake";
+  render(<Setup />);
+  expect(mocks.loadProgress).toHaveBeenCalledWith(
+    "snowflake",
+    expect.any(String),
+    {
+      host: "https://example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+    },
+    JSON.stringify([
+      server.remoteMcpServerId,
+      "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+      "",
+    ]),
+  );
 });

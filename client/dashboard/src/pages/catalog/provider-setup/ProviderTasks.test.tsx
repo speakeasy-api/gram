@@ -507,9 +507,35 @@ describe("Snowflake instructions", () => {
     );
   }
   it("withholds incomplete SQL", () => {
-    task("create");
+    const { container } = task("create", {
+      creatorRole: "EXAMPLE_CREATOR",
+      database: "",
+      schema: "",
+      serverName: "",
+    });
+    expect(container.querySelector("[data-sql]")).toBeNull();
     expect(screen.queryByRole("button", { name: "Copy SQL" })).toBeNull();
   });
+
+  it.each([false, true])(
+    "shows callback recovery without an empty SQL instruction (failed=%s)",
+    (failed) => {
+      callback.data.callbackUrl = "";
+      callback.isError = failed;
+      const { container } = task("oauth", {
+        oauthIntegration: "EXAMPLE_OAUTH",
+      });
+      expect(container.querySelector('[data-sql="oauth"]')).toBeNull();
+      expect(
+        screen.queryByText("Create the integration in Snowflake"),
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          failed ? /Couldn’t load the callback URL/ : /Loading callback URL/,
+        ),
+      ).toBeDefined();
+    },
+  );
   it.each([false, true])("uses the actual callback (saved=%s)", (saved) => {
     const { container } = task(
       "oauth",

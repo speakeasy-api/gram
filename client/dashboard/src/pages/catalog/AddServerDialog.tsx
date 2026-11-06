@@ -1,6 +1,8 @@
+import { FieldError } from "@/components/ui/Field";
 import {
   isSnowflakeTemplate,
   resolveSnowflakeInstall,
+  snowflakeInstallErrors,
   type SnowflakeInstallValues,
 } from "./snowflake-install";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
@@ -1922,6 +1924,7 @@ function SnowflakeInstallFields({
 }: {
   releaseState: ConfigurePhase;
 }): JSX.Element {
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const fields: {
     key: keyof SnowflakeInstallValues;
     label: string;
@@ -1949,6 +1952,7 @@ function SnowflakeInstallFields({
           )
         )
           return null;
+        const errors = snowflakeInstallErrors(config.snowflakeVariables);
         return (
           <div key={index} className="space-y-3">
             <Text small className="font-medium">
@@ -1960,26 +1964,38 @@ function SnowflakeInstallFields({
               names are converted to hyphens. Use double quotes for
               case-sensitive database, schema, or server names.
             </Text>
-            {fields.map((field) => (
-              <div key={field.key} className="space-y-1">
-                <label htmlFor={`snowflake-${index}-${field.key}`}>
-                  {field.label} (required)
-                </label>
-                <Input
-                  id={`snowflake-${index}-${field.key}`}
-                  placeholder={field.placeholder}
-                  value={config.snowflakeVariables?.[field.key] ?? ""}
-                  onChange={(value) =>
-                    releaseState.updateServerConfig(index, {
-                      snowflakeVariables: {
-                        ...config.snowflakeVariables,
-                        [field.key]: value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            ))}
+            {fields.map((field) => {
+              const id = `snowflake-${index}-${field.key}`;
+              const value = config.snowflakeVariables?.[field.key] ?? "";
+              const error =
+                value.trim() || touched.has(id) ? errors[field.key] : undefined;
+              return (
+                <div key={field.key} className="space-y-1">
+                  <label htmlFor={`snowflake-${index}-${field.key}`}>
+                    {field.label} (required)
+                  </label>
+                  <Input
+                    id={`snowflake-${index}-${field.key}`}
+                    placeholder={field.placeholder}
+                    value={value}
+                    aria-invalid={!!error}
+                    aria-describedby={error ? `${id}-error` : undefined}
+                    onBlur={() =>
+                      setTouched((previous) => new Set([...previous, id]))
+                    }
+                    onChange={(value) =>
+                      releaseState.updateServerConfig(index, {
+                        snowflakeVariables: {
+                          ...config.snowflakeVariables,
+                          [field.key]: value,
+                        },
+                      })
+                    }
+                  />
+                  {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
+                </div>
+              );
+            })}
             {resolveSnowflakeInstall(config.snowflakeVariables) && (
               <Text small muted>
                 These values determine the installed MCP server URL. Continue

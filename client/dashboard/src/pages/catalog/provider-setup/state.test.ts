@@ -253,3 +253,26 @@ it("completes Snowflake setup only for the verified current configuration", () =
   expect(complete.screen).toBe("success");
   expect(complete.done).toEqual(steps(connected).map((step) => step.id));
 });
+
+it.each(["warehouse", "users", "toolTitle", "creatorRole"] as const)(
+  "keeps Snowflake credentials when SQL-only %s changes",
+  (field) => {
+    const initial = initialState("snowflake");
+    const changed = reduce(
+      {
+        ...initial,
+        saved: true,
+        authorized: true,
+        tested: true,
+        values: { ...initial.values, clientId: "app", clientSecret: "secret" },
+      },
+      { type: "field", field, value: "EXAMPLE_CHANGED" },
+    );
+    expect(changed.values.clientId).toBe("app");
+    expect(changed.values.clientSecret).toBe("secret");
+    expect(changed.saved).toBe(true);
+    expect(changed.configChanged).toBe(false);
+    expect(changed.authorized).toBe(false);
+    expect(changed.tested).toBe(false);
+  },
+);
