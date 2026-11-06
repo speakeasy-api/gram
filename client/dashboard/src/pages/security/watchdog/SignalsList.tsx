@@ -26,11 +26,7 @@ import {
  * the sparkline against its start, so the number moves with the drawn line),
  * or a "new" badge when the window opened with nothing to compare against.
  */
-export function SignalTrend({
-  sparkline,
-}: {
-  sparkline: number[];
-}): JSX.Element {
+function SignalTrend({ sparkline }: { sparkline: number[] }): JSX.Element {
   const trend = trendPercent(sparkline);
   if (trend === null) {
     return (
