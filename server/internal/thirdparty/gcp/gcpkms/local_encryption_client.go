@@ -38,8 +38,10 @@ type LocalEncryptionClient struct {
 	root []byte
 
 	// disabled records keys DisableEncryptionKey was called for; they refuse
-	// to encrypt or decrypt, as a key with no enabled version does in KMS. IAM
-	// is not modelled.
+	// to encrypt or decrypt, as a key with no enabled version does in KMS. It
+	// is per process and not persisted, like LocalSigningClient's: a key
+	// disabled by one local process stays usable in another and after a
+	// restart. IAM is not modelled.
 	mu       sync.Mutex
 	disabled map[string]bool
 }

@@ -43,8 +43,11 @@ type fakeEncryptionRing struct {
 	// primaryState is the state CreateCryptoKey reports for the first version.
 	primaryState kmspb.CryptoKeyVersion_CryptoKeyVersionState
 
-	// versions lists the versions ListCryptoKeyVersions returns per key.
+	// versions lists each key's versions in creation order.
 	versions map[string][]string
+
+	// versionStates is each version's state; a version without one is ENABLED.
+	versionStates map[string]kmspb.CryptoKeyVersion_CryptoKeyVersionState
 }
 
 func newFakeEncryptionRing() *fakeEncryptionRing {
@@ -53,6 +56,7 @@ func newFakeEncryptionRing() *fakeEncryptionRing {
 		primaryVersion: "3",
 		primaryState:   kmspb.CryptoKeyVersion_ENABLED,
 		versions:       map[string][]string{},
+		versionStates:  map[string]kmspb.CryptoKeyVersion_CryptoKeyVersionState{},
 	}
 }
 
@@ -71,6 +75,7 @@ func (f *fakeEncryptionRing) CreateCryptoKey(ctx context.Context, req *kmspb.Cre
 	key.Primary = &kmspb.CryptoKeyVersion{Name: key.GetName() + "/cryptoKeyVersions/1", State: f.primaryState}
 	f.mu.Lock()
 	f.versions[key.GetName()] = []string{key.GetName() + "/cryptoKeyVersions/1"}
+	f.versionStates[key.GetName()+"/cryptoKeyVersions/1"] = f.primaryState
 	f.mu.Unlock()
 
 	return key, nil
@@ -93,10 +98,30 @@ func (f *fakeEncryptionRing) ListCryptoKeyVersions(_ context.Context, req *kmspb
 
 	resp := &kmspb.ListCryptoKeyVersionsResponse{}
 	for _, name := range f.versions[req.GetParent()] {
-		resp.CryptoKeyVersions = append(resp.CryptoKeyVersions, &kmspb.CryptoKeyVersion{Name: name, State: kmspb.CryptoKeyVersion_ENABLED})
+		state, ok := f.versionStates[name]
+		if !ok {
+			state = kmspb.CryptoKeyVersion_ENABLED
+		}
+		if req.GetFilter() == "state=ENABLED" && state != kmspb.CryptoKeyVersion_ENABLED {
+			continue
+		}
+		resp.CryptoKeyVersions = append(resp.CryptoKeyVersions, &kmspb.CryptoKeyVersion{Name: name, State: state})
 	}
 
 	return resp, nil
+}
+
+func (f *fakeEncryptionRing) UpdateCryptoKeyVersion(ctx context.Context, req *kmspb.UpdateCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	version, err := f.fakeKeyRing.UpdateCryptoKeyVersion(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	f.mu.Lock()
+	f.versionStates[req.GetCryptoKeyVersion().GetName()] = kmspb.CryptoKeyVersion_DISABLED
+	f.mu.Unlock()
+
+	return version, nil
 }
 
 func (f *fakeEncryptionRing) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
@@ -254,10 +279,10 @@ func TestCreateEncryptionKey_DisablesKeyWhosePrimaryIsNotEnabled(t *testing.T) {
 
 	_, err := newFakeEncryptionClient(t, ring).CreateEncryptionKey(t.Context(), CreateEncryptionKeyParams{KeyRing: testKeyRing, KeyID: "orgkek-1"})
 	require.ErrorContains(t, err, "expected ENABLED")
-	require.Equal(t, []string{testEncryptionKeyName + "/cryptoKeyVersions/1"}, ring.disabledVersions())
+	require.Empty(t, ring.disabledVersions(), "a version that is already disabled is left alone")
 }
 
-func TestCreateEncryptionKey_ReportsExistingKey(t *testing.T) {
+func TestCreateEncryptionKey_DisablesAKeyThatAlreadyExists(t *testing.T) {
 	t.Parallel()
 
 	ring := newFakeEncryptionRing()
@@ -267,8 +292,11 @@ func TestCreateEncryptionKey_ReportsExistingKey(t *testing.T) {
 	_, err := client.CreateEncryptionKey(t.Context(), params)
 	require.NoError(t, err)
 
+	// A second create of the same random id is a retry of a create whose
+	// response was lost, so the key it finds is ours and must be disabled.
 	_, err = client.CreateEncryptionKey(t.Context(), params)
 	require.ErrorIs(t, err, ErrKeyExists)
+	require.Equal(t, []string{testEncryptionKeyName + "/cryptoKeyVersions/1"}, ring.disabledVersions())
 }
 
 func TestCreateEncryptionKey_ReconcilesUncertainCreate(t *testing.T) {

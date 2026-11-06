@@ -6,8 +6,9 @@ import (
 	"errors"
 )
 
-// encryptionProbeAAD is the associated data the encryption probe binds, so the
-// probe also proves the key honours associated data.
+// encryptionProbeAAD is the associated data the encryption probe sends on both
+// calls, so the probe exercises the associated data path. A passing round trip
+// does not show that the key rejects different associated data.
 const encryptionProbeAAD = "gram-key-verification-probe-aad"
 
 // VerifyEncryptionKey proves end to end that a client can reach a symmetric

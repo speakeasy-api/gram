@@ -28,7 +28,9 @@ const ProbePayload = "gram-key-verification-probe"
 type VerifyReason string
 
 const (
-	// ReasonVerified means the key signed and the signature validated.
+	// ReasonVerified means the probe passed: for a signing key, the key signed
+	// and the signature validated; for an encryption key, the key encrypted the
+	// probe payload and decrypted it again.
 	ReasonVerified VerifyReason = "verified"
 
 	// ReasonInvalidResourceName means the stored resource name is not a
@@ -42,8 +44,9 @@ const (
 	// Usually a missing roles/cloudkms.signerVerifier grant.
 	ReasonPermissionDenied VerifyReason = "permission_denied"
 
-	// ReasonKeyUnusable means the key version exists but cannot sign right now:
-	// DISABLED, DESTROYED, or still PENDING_GENERATION.
+	// ReasonKeyUnusable means the key exists but cannot be used right now: the
+	// version is DISABLED, DESTROYED or still PENDING_GENERATION, or an
+	// encryption key has no enabled version.
 	ReasonKeyUnusable VerifyReason = "key_unusable"
 
 	// ReasonUnsupportedAlgorithm means the key signs with an algorithm Speakeasy does
@@ -65,8 +68,9 @@ const (
 	ReasonRoundTripFailed VerifyReason = "round_trip_failed"
 
 	// ReasonUnavailable means the probe could not complete for a transient
-	// reason: a timeout, a rate limit, or KMS being briefly unreachable. It is
-	// the one reason worth retrying; every other failure is stable.
+	// reason: a timeout, a rate limit, KMS being briefly unreachable, or a
+	// response that failed its integrity checksums in transit. It is the one
+	// reason worth retrying; every other failure is stable.
 	ReasonUnavailable VerifyReason = "unavailable"
 
 	// ReasonUnexpected means the probe failed in a way this package does not
@@ -75,13 +79,14 @@ const (
 	ReasonUnexpected VerifyReason = "unexpected"
 )
 
-// VerifyResult reports whether a key is usable for signing. It is a value rather
+// VerifyResult reports whether a key is usable for signing (VerifySigningKey)
+// or for encryption (VerifyEncryptionKey). It is a value rather
 // than an error because most negative outcomes here are normal, reportable
 // states a human can act on, and callers surface them rather than treating them
 // as faults. Reason distinguishes those from the ones that are not.
 type VerifyResult struct {
-	// Verified is true only when the key produced a signature that validated
-	// against its own public half.
+	// Verified is true only when the probe passed: a signature that validated
+	// against the key's own public half, or an encrypt and decrypt round trip.
 	Verified bool
 
 	// Reason is the machine-readable outcome. Callers should branch on this
@@ -90,7 +95,8 @@ type VerifyResult struct {
 
 	// Algorithm is the JOSE algorithm the key actually signs with. It is set
 	// whenever the public key was readable, including on an algorithm mismatch,
-	// so callers can report what the key really is.
+	// so callers can report what the key really is. Always empty for an
+	// encryption key, which has no public half.
 	Algorithm jose.SignatureAlgorithm
 
 	// Detail explains a negative result in terms a human can act on. It may carry

@@ -160,16 +160,20 @@ func (c *kmsEncryptionClient) CreateEncryptionKey(ctx context.Context, params Cr
 		SkipInitialVersionCreation: false,
 	})
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return nil, fmt.Errorf("%w: %s in %s", ErrKeyExists, params.KeyID, params.KeyRing)
-		}
-		if isTransientKMSError(err) || ctx.Err() != nil {
+		// Key ids are random, so AlreadyExists means an earlier attempt of this
+		// create landed and its response was lost before a retry: the key is
+		// ours and must not be left enabled.
+		alreadyExists := status.Code(err) == codes.AlreadyExists
+		if alreadyExists || isTransientKMSError(err) || ctx.Err() != nil {
 			// GCP may have persisted the key even though the response was lost;
 			// the name is deterministic, so disable the key we would own.
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 			defer cancel()
 			if cleanupErr := c.reconcileUncertainEncryptionKeyCreate(cleanupCtx, keyName); cleanupErr != nil {
 				return nil, fmt.Errorf("gcp kms key %s may exist and requires reconciliation (%w): %w", keyName, cleanupErr, err)
+			}
+			if alreadyExists {
+				return nil, fmt.Errorf("%w: %s in %s, its versions were disabled: %w", ErrKeyExists, params.KeyID, params.KeyRing, err)
 			}
 			return nil, fmt.Errorf("gcp kms key %s may exist, its versions were disabled if present: %w", keyName, err)
 		}
