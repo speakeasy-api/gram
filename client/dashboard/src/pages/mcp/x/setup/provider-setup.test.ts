@@ -22,7 +22,6 @@ describe("Provider setup routing", () => {
       expect(setupProviderForUrl(url)).toBeNull();
   });
   it.each([
-    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
     "https://example.okta.com/mcp",
   ])("leaves other providers on their existing path: %s", (url) => {
@@ -311,3 +310,27 @@ it.each(["all", "read"])(
     sessionStorage.removeItem(key);
   },
 );
+
+it.each([
+  "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+])("hands off only User Identity Salesforce installs: %s", (url) => {
+  const servers = [{ remotes: [{ url }] }];
+  const status = {
+    status: "completed" as const,
+    key: "sf",
+    name: "Salesforce",
+    remoteUrl: url,
+    mcpServerId: "id",
+    mcpServerParam: "installed",
+  };
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "user" }]),
+  ).toBe("installed");
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "agent" }]),
+  ).toBeNull();
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "none" }]),
+  ).toBeNull();
+});
