@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -18,13 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRegistryIconsApprovalRevisionAndRetry(t *testing.T) {
+func TestRegistryIconsAppliesAndChecksRevision(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_registry_icons")
-	_, _, registry := newRegistryEntryWriter(t, f)
+	f := newWriteFixture(t, "admin_mcp_registry_icons")
+	_, registry := newRegistryEntryWriter(t, f)
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetRegistryIcons: true}} //nolint:exhaustive // Only the tested icon operation is enabled.
-	writer := &registryIconsWriter{store: f.store, registry: registry, writes: writes, baseURL: "https://staff.example.test" + Path}
-	tools := newWriteTools(f.store, writes, writer.baseURL, map[WriteOperation]operationWriter{OperationSetRegistryIcons: writer}) //nolint:exhaustive // Only the tested icon operation is dispatched.
+	writer := &registryIconsWriter{runner: f.runner, registry: registry, writes: writes}
 	original, err := registry.Create(t.Context(), json.RawMessage(registryRecord("example.test/"+uuid.NewString())))
 	require.NoError(t, err)
 	base, _ := url.Parse("https://assets.example.test")
@@ -32,34 +30,23 @@ func TestRegistryIconsApprovalRevisionAndRetry(t *testing.T) {
 	asset, err := assetrepo.New(f.db).CreatePlatformAsset(t.Context(), assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: "icon.svg", Sha256: "icons-test", Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
 	require.NoError(t, err)
 	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(base, asset.ID), MimeType: "image/svg+xml", Sizes: []string{"any"}}
-	input := PrepareSetRegistryIconsInput{EntryID: original.ID.String(), ExpectedUpdatedAt: mcpregistry.Token(original), RetryKey: "icons-1", Icons: mcpregistry.CatalogIcons{Default: icon, Dark: icon}}
-	_, err = writer.prepare(context.Background(), input)
+	input := SetRegistryIconsInput{EntryID: original.ID.String(), ExpectedUpdatedAt: mcpregistry.Token(original), Icons: mcpregistry.CatalogIcons{Default: icon, Dark: icon}}
+	_, err = writer.apply(context.Background(), input)
 	require.Error(t, err)
-	for _, bad := range []PrepareSetRegistryIconsInput{{EntryID: "not-uuid", ExpectedUpdatedAt: input.ExpectedUpdatedAt, RetryKey: "bad"}, {EntryID: input.EntryID, RetryKey: "bad"}, {EntryID: input.EntryID, ExpectedUpdatedAt: input.ExpectedUpdatedAt}} {
-		_, err = writer.prepare(writeContext(t, f), bad)
+	for _, bad := range []SetRegistryIconsInput{{EntryID: "not-uuid", ExpectedUpdatedAt: input.ExpectedUpdatedAt}, {EntryID: input.EntryID}} {
+		_, err = writer.apply(writeContext(t, f), bad)
 		require.Error(t, err)
 	}
 	invalid := input
 	invalid.Icons.Default = &mcpregistry.CatalogIcon{Src: "https://private.example/icon.svg", MimeType: "image/svg+xml", Sizes: []string{"any"}}
-	_, err = writer.prepare(writeContext(t, f), invalid)
+	_, err = writer.apply(writeContext(t, f), invalid)
 	require.Error(t, err)
-	prepared, err := writer.prepare(writeContext(t, f), input)
+	require.NotErrorIs(t, err, ErrStaleState, "a bad icon is reported as bad input")
+
+	receipt, err := writer.apply(writeContext(t, f), input)
 	require.NoError(t, err)
-	replay, err := writer.prepare(writeContext(t, f), input)
-	require.NoError(t, err)
-	require.True(t, replay.Replay)
-	_, err = tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.ErrorIs(t, err, ErrProposalNotApproved)
-	id := uuid.MustParse(prepared.ProposalID)
-	stored, err := f.store.GetForOwner(t.Context(), id, f.owner)
-	require.NoError(t, err)
-	_, err = writer.view(stored)
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), id, f.owner.SubjectURN, stored.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-	require.NoError(t, err)
-	result, err := tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.NoError(t, err)
-	require.Equal(t, string(ProposalSucceeded), result.Status)
+	require.Empty(t, receipt.Before)
+	require.Equal(t, input.Icons, receipt.After)
 	actual, err := registry.Get(t.Context(), original.ID)
 	require.NoError(t, err)
 	require.NotEqual(t, mcpregistry.Token(original), mcpregistry.Token(actual))
@@ -69,32 +56,18 @@ func TestRegistryIconsApprovalRevisionAndRetry(t *testing.T) {
 	cleared, err := mcpregistry.WithCatalogIcons(actual.Data, mcpregistry.CatalogIcons{})
 	require.NoError(t, err)
 	require.JSONEq(t, string(original.Data), string(cleared))
-	replay, err = writer.prepare(writeContext(t, f), input)
-	require.NoError(t, err)
-	require.True(t, replay.Replay)
-	input.ExpectedUpdatedAt = mcpregistry.Token(actual)
-	input.RetryKey = "icons-stale"
-	oversized := input
-	oversized.Icons = mcpregistry.CatalogIcons{Default: &mcpregistry.CatalogIcon{Src: "", MimeType: "image/svg+xml", Sizes: []string{"any"}}}
-	overhead, err := json.Marshal(oversized)
-	require.NoError(t, err)
-	oversized.Icons.Default.Src = strings.Repeat("x", maxProposalArgumentBytes-len(overhead))
-	_, err = writer.prepare(writeContext(t, f), oversized)
-	require.EqualError(t, err, "icon replacement preview exceeds storage limit; use shorter icon URLs")
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetRegistryIcons, "", "executed"))
 
-	prepared, err = writer.prepare(writeContext(t, f), input)
-	require.NoError(t, err)
-	id = uuid.MustParse(prepared.ProposalID)
-	stored, err = f.store.GetForOwner(t.Context(), id, f.owner)
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), id, f.owner.SubjectURN, stored.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-	require.NoError(t, err)
+	_, err = writer.apply(writeContext(t, f), input)
+	require.ErrorIs(t, err, ErrStaleState, "repeating a write against the old revision changes nothing")
+
+	input.ExpectedUpdatedAt = mcpregistry.Token(actual)
 	_, err = registry.Save(t.Context(), actual.ID, mcpregistry.Token(actual), actual.Data)
 	require.NoError(t, err)
-	result, err = tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
+	_, err = writer.apply(writeContext(t, f), input)
 	require.ErrorIs(t, err, ErrStaleState)
-	require.NotEqual(t, string(ProposalSucceeded), result.Status)
 }
+
 func TestRegistryIconsBoundedProjection(t *testing.T) {
 	t.Parallel()
 	data := json.RawMessage(`{"server":{"icons":[{"src":"private"}]},"_meta":{"private":"secret","com.speakeasy.ai/icons":{"default":{"src":"https://public.example/icon.svg","mimeType":"image/svg+xml","sizes":["any"]}}}}`)
@@ -113,8 +86,8 @@ type validatedRegistryReader struct {
 
 func TestRegistryIconsTrustedProjection(t *testing.T) { //nolint:tparallel // Subtests must finish before the parent mutates their shared asset and registry URL.
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_registry_icon_projection")
-	_, _, registry := newRegistryEntryWriter(t, f)
+	f := newWriteFixture(t, "admin_mcp_registry_icon_projection")
+	_, registry := newRegistryEntryWriter(t, f)
 	base, err := url.Parse("https://assets.example")
 	require.NoError(t, err)
 	registry.WithAssetBaseURL(base)
@@ -175,13 +148,13 @@ func TestRegistryIconsTrustedProjection(t *testing.T) { //nolint:tparallel // Su
 	require.False(t, registry.IsPublicCatalogIcon(ctx, icon))
 }
 
-func TestRegistryIconsPrepareLegacyPreview(t *testing.T) {
+func TestRegistryIconsClearsLegacyIconsWithoutEchoingThem(t *testing.T) {
 	t.Parallel()
 	for _, legacy := range []string{`{"default":{"src":"https://private.example/secret","mimeType":"image/svg+xml","sizes":["any"]}}`, `"malformed-secret"`} {
 		t.Run(legacy, func(t *testing.T) {
 			t.Parallel()
-			f := newProposalFixture(t, "admin_mcp_icons_legacy")
-			_, _, registry := newRegistryEntryWriter(t, f)
+			f := newWriteFixture(t, "admin_mcp_icons_legacy")
+			_, registry := newRegistryEntryWriter(t, f)
 			var root map[string]any
 			require.NoError(t, json.Unmarshal([]byte(registryRecord("example.test/"+uuid.NewString())), &root))
 			root["_meta"] = map[string]any{"com.speakeasy.ai/icons": json.RawMessage(legacy)}
@@ -192,27 +165,18 @@ func TestRegistryIconsPrepareLegacyPreview(t *testing.T) {
 			entry, err := registry.Get(t.Context(), id)
 			require.NoError(t, err)
 			writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetRegistryIcons: true}} //nolint:exhaustive // Only the tested icon operation is enabled.
-			writer := &registryIconsWriter{store: f.store, registry: registry, writes: writes}
-			prepared, err := writer.prepare(writeContext(t, f), PrepareSetRegistryIconsInput{EntryID: id.String(), ExpectedUpdatedAt: mcpregistry.Token(entry), RetryKey: "clear-legacy"})
+			writer := &registryIconsWriter{runner: f.runner, registry: registry, writes: writes}
+			receipt, err := writer.apply(writeContext(t, f), SetRegistryIconsInput{EntryID: id.String(), ExpectedUpdatedAt: mcpregistry.Token(entry)})
 			require.NoError(t, err)
-			stored, err := f.store.GetForOwner(t.Context(), uuid.MustParse(prepared.ProposalID), f.owner)
+			encoded, err := json.Marshal(receipt)
 			require.NoError(t, err)
-			require.NotContains(t, string(stored.Preview), "secret")
-			var preview registryIconsPreview
-			require.NoError(t, json.Unmarshal(stored.Preview, &preview))
-			require.Empty(t, preview.Before)
-			_, err = f.store.Approve(t.Context(), stored.ID, f.owner.SubjectURN, stored.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-			require.NoError(t, err)
-			tools := newWriteTools(f.store, writes, writer.baseURL, map[WriteOperation]operationWriter{OperationSetRegistryIcons: writer}) //nolint:exhaustive // Only the tested icon operation is dispatched.
-			result, err := tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
-			require.NoError(t, err)
-			require.Equal(t, string(ProposalSucceeded), result.Status)
+			require.NotContains(t, string(encoded), "secret")
+			require.Empty(t, receipt.Before)
 			cleared, err := registry.Get(t.Context(), id)
 			require.NoError(t, err)
 			icons, err := mcpregistry.ParseCatalogIcons(cleared.Data)
 			require.NoError(t, err)
 			require.Empty(t, icons)
-
 		})
 	}
 }

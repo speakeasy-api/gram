@@ -96,7 +96,6 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				Setup:          false,
 				Status:         code,
 				Reason:         reason,
-				Approval:       false,
 				ErrorID:        payload.ID,
 				Code:           payload.Name,
 				Description:    description,

@@ -104,7 +104,7 @@ func TestRequireWriteAuthority(t *testing.T) {
 	_, err = requireWriteAuthority(ctx, enabled, OperationSetOrganizationFeature)
 	require.ErrorIs(t, err, ErrWriteIdentity)
 
-	// Missing generation or client row cannot bind a proposal.
+	// Missing generation or client row cannot bind a write.
 	staff := &contextvalues.AdminAuthContext{SessionID: "s", OIDCSubject: staffSubject, Email: "staff@example.test"}
 	partial := Principal{Subject: "user:" + staffSubject, Email: staff.Email, ClientID: staffClient, ConnectionID: "connection-1", Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
 	ctx = contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, partial), staff)

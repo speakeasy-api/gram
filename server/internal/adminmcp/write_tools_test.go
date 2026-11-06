@@ -3,99 +3,186 @@ package adminmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// stubWriter stands in for an operation that has an implementation.
-type stubWriter struct{}
-
-func (stubWriter) revalidate(context.Context, pgx.Tx, Proposal) error { return nil }
-func (stubWriter) view(Proposal) (proposalView, error)                { return proposalView{}, nil }
-func (stubWriter) execution(writeAuthority) ProposalExecution         { return ProposalExecution{} }
-func (stubWriter) registerPrepare(*mcp.Server)                        {}
-
-func writeContext(t *testing.T, f proposalFixture) context.Context {
+func writeContext(t *testing.T, f writeFixture) context.Context {
 	t.Helper()
 	staff := &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}
 	principal := Principal{Subject: f.owner.SubjectURN, Email: staff.Email, ClientID: "test-client", ClientRowID: f.owner.ClientRowID.String(), ConnectionID: f.owner.ConnectionID.String(), Generation: f.owner.Generation.String(), Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
 	return contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, principal), staff)
 }
 
-func TestWriteToolsDispatchByStoredOperation(t *testing.T) {
+// renameOrganization stands in for a business mutator.
+func renameOrganization(id, name string, fail error) func(context.Context, pgx.Tx) (bool, error) {
+	return func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		renamed, err := repo.New(tx).RenameOrganizationFixture(ctx, repo.RenameOrganizationFixtureParams{Name: name, ID: id})
+		if err != nil {
+			return false, err //nolint:wrapcheck // Test mutator.
+		}
+		if fail != nil {
+			return false, fail
+		}
+		return renamed == 1, nil
+	}
+}
+
+func fixtureAuthority(ctx context.Context, t *testing.T) writeAuthority {
+	t.Helper()
+	authority, err := requireWriteIdentity(ctx)
+	require.NoError(t, err)
+	authority.Operation = OperationSetOrganizationFeature
+	return authority
+}
+
+func TestRunWriteRecordsExecutedEventWithTarget(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_write_dispatch")
+	f := newWriteFixture(t, "admin_mcp_run_write")
 	ctx := writeContext(t, f)
+	renamed, err := runWrite(ctx, f.runner, fixtureAuthority(ctx, t), writeTarget{OrganizationID: f.orgA}, renameOrganization(f.orgA, "Renamed A", nil))
+	require.NoError(t, err)
+	require.True(t, renamed)
+	require.Equal(t, "Renamed A", organizationName(t, f.db, f.orgA))
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))
+}
 
-	feature, _, err := f.store.Create(t.Context(), f.owner, featureProposal(f.orgA, "dispatch-feature", true), time.Now())
+func TestRunWriteRecordsGlobalWritesWithoutOrganization(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_run_write_global")
+	ctx := writeContext(t, f)
+	_, err := runWrite(ctx, f.runner, fixtureAuthority(ctx, t), writeTarget{ResourceKind: "registry_entry", ResourceID: "io.example/fixture"}, renameOrganization(f.orgA, "Renamed A", nil))
 	require.NoError(t, err)
-	onboardingInput := featureProposal(f.orgA, "dispatch-onboarding", true)
-	onboardingInput.Operation = OperationAssignOrganizationOnboardingPlaybook
-	onboarding, _, err := f.store.Create(t.Context(), f.owner, onboardingInput, time.Now())
-	require.NoError(t, err)
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, "", writeEventExecuted))
+}
 
-	both := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true, OperationAssignOrganizationOnboardingPlaybook: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	featureOnly := newWriteTools(f.store, both, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}})                                  //nolint:exhaustive // Only selected operations are implemented by this test.
-	out, err := featureOnly.status(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
-	require.NoError(t, err)
-	require.Equal(t, string(OperationSetOrganizationFeature), out.Operation)
-	_, err = featureOnly.status(ctx, ProposalIDInput{ProposalID: onboarding.ID.String()})
-	require.ErrorIs(t, err, ErrProposalNotFound, "a stored operation without a writer is not reachable")
-	_, err = featureOnly.execute(ctx, ProposalIDInput{ProposalID: onboarding.ID.String()})
-	require.ErrorIs(t, err, ErrProposalNotFound)
+func TestRunWriteFailureRollsBackAndLeavesFailureEvent(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_run_write_failure")
+	ctx := writeContext(t, f)
+	failure := errors.New("synthetic failure")
+	_, err := runWrite(ctx, f.runner, fixtureAuthority(ctx, t), writeTarget{OrganizationID: f.orgA}, renameOrganization(f.orgA, "Renamed A", failure))
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, "Synthetic A", organizationName(t, f.db, f.orgA))
+	require.Zero(t, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventFailed))
+}
 
-	// The switch checked is the one for the stored operation, not any enabled one.
-	onboardingOnly := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationAssignOrganizationOnboardingPlaybook: true}}                                                              //nolint:exhaustive // Only selected write operations are enabled by this test.
-	tools := newWriteTools(f.store, onboardingOnly, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}, OperationAssignOrganizationOnboardingPlaybook: stubWriter{}}) //nolint:exhaustive // Only selected operations are implemented by this test.
-	_, err = tools.status(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
-	require.ErrorIs(t, err, ErrWriteDisabled)
-	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
-	require.ErrorIs(t, err, ErrWriteDisabled)
-	_, err = tools.status(ctx, ProposalIDInput{ProposalID: onboarding.ID.String()})
+func TestRunWriteRefusesRevokedAndReauthorizedConnections(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		change func(*testing.T, writeFixture)
+	}{
+		{"reconsent", func(t *testing.T, f writeFixture) { t.Helper(); f.reauth() }},
+		{"revoked client", func(t *testing.T, f writeFixture) {
+			t.Helper()
+			require.NoError(t, repo.New(f.db).RevokeOAuthClientFixture(t.Context(), f.owner.ClientRowID))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newWriteFixture(t, "admin_mcp_run_write_connection")
+			ctx := writeContext(t, f)
+			tc.change(t, f)
+			_, err := runWrite(ctx, f.runner, fixtureAuthority(ctx, t), writeTarget{OrganizationID: f.orgA}, renameOrganization(f.orgA, "Renamed A", nil))
+			require.ErrorIs(t, err, ErrConnectionChanged)
+			require.Equal(t, "Synthetic A", organizationName(t, f.db, f.orgA))
+		})
+	}
+}
+
+func TestRunWriteOnRunsOnTheCallersConnection(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_run_write_on")
+	ctx := writeContext(t, f)
+	conn, err := f.db.Acquire(ctx)
 	require.NoError(t, err)
+	defer conn.Release()
+	var callerPID, writePID uint32
+	callerPID = conn.Conn().PgConn().PID()
+	_, err = runWriteOn(ctx, f.runner, conn, fixtureAuthority(ctx, t), writeTarget{OrganizationID: f.orgA}, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		writePID = tx.Conn().PgConn().PID()
+		return renameOrganization(f.orgA, "Renamed A", nil)(ctx, tx)
+	})
+	require.NoError(t, err)
+	require.Equal(t, callerPID, writePID)
 }
 
 func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	t.Parallel()
-	oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
+	oauth := &StaffOAuth{runner: &writeRunner{}}
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateGlobalIssuer: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	err := AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, writes)
-	require.ErrorContains(t, err, "not implemented")
-	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
-
-	require.NoError(t, AttachWrites(&Runtime{catalogPromotions: &catalogpromotion.Service{}}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
-	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
-	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
-	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
-	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
-	}
+	require.ErrorContains(t, AttachWrites(&Runtime{}, oauth, deps, writes), "not implemented")
+	require.ErrorContains(t, AttachWrites(&Runtime{}, &StaffOAuth{}, deps, WriteConfig{}), "not configured")
 }
 
-func TestAttachedChatAnalysisWriterPrepares(t *testing.T) {
+// Every write must carry the confirmation request, because instructions are
+// now the only thing between an agent and a customer-visible change.
+func TestEveryWriteToolAsksForConfirmation(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_attached_analysis")
+	operations := map[WriteOperation]bool{} //nolint:exhaustive // Filled from AllWriteOperations below.
+	for _, op := range AllWriteOperations {
+		operations[op] = op.implemented()
+	}
 	runtime := NewRuntime(nil, "")
-	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
-	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Test the production wiring for the analysis operation.
-	require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
-	writer, ok := runtime.writes.writers[OperationSetChatAnalysisSettings].(*chatAnalysisWriter)
-	require.True(t, ok)
-	out, err := writer.prepare(writeContext(t, f), PrepareChatAnalysisInput{OrganizationID: f.orgA, Judge: "work_units", Enabled: true, DailyCap: 10, RetryKey: "attached-analysis"})
+	runtime.catalogPromotions = &catalogpromotion.Service{}
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err := runtime.server.Connect(t.Context(), serverTransport, nil)
 	require.NoError(t, err)
-	require.Equal(t, string(ProposalPendingApproval), out.Status)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	writeTools := 0
+	for tool, err := range session.Tools(t.Context(), nil) {
+		require.NoError(t, err)
+		require.NotContains(t, tool.Name, "proposal")
+		require.False(t, strings.HasPrefix(tool.Name, "prepare_"), tool.Name)
+		if tool.Annotations != nil && tool.Annotations.ReadOnlyHint {
+			continue
+		}
+		writeTools++
+		require.True(t, strings.HasSuffix(tool.Description, writeConfirmationNotice), tool.Name)
+		require.Equal(t, 1, strings.Count(tool.Description, "Requires admin:write"), tool.Name)
+		require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
+		require.True(t, *tool.Annotations.DestructiveHint, tool.Name)
+	}
+	require.Equal(t, implementedWriteCount(), writeTools)
+}
+
+func implementedWriteCount() int {
+	count := 0
+	for _, op := range AllWriteOperations {
+		if op.implemented() {
+			count++
+		}
+	}
+	return count
+}
+
+func TestServerInstructionsRequireExplicitConfirmation(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, adminServerInstructions, "explicitly confirmed that exact change")
+	require.Contains(t, adminServerInstructions, "is not confirmation")
+	require.NotContains(t, adminServerInstructions, "proposal")
 }
 
 func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
@@ -117,7 +204,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			}
 			runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 			if tc.attached {
-				oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
+				oauth := &StaffOAuth{runner: &writeRunner{}}
 				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.
 				require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 			}
@@ -140,55 +227,14 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 	}
 }
 
-func TestApprovalPageIdentifiesGlobalEnvironment(t *testing.T) {
+func TestWriteOutputPassesSDKOutputValidation(t *testing.T) {
 	t.Parallel()
-	var page strings.Builder
-	require.NoError(t, proposalApprovalPage.Execute(&page, proposalApprovalView{
-		Resource: "https://admin.example.test/admin-mcp",
-		Change:   proposalView{PlatformGlobal: true, Summary: "Update support matrix", Changes: []proposalViewChange{{Setting: "note", Before: "old", After: `<script>alert(1)</script>`}}},
-	}))
-	require.Contains(t, page.String(), "https://admin.example.test/admin-mcp")
-	require.Contains(t, page.String(), "Platform-global configuration")
-	require.NotContains(t, page.String(), "<dt>Organization")
-	require.NotContains(t, page.String(), "<script>")
-	require.Contains(t, page.String(), "&lt;script&gt;")
-}
-
-func TestFeatureViewRequiresMatchingTarget(t *testing.T) {
-	t.Parallel()
-	writer := &featureWriter{}
-	preview, err := json.Marshal(featurePreview{OrganizationID: "org_b", Name: "B", Slug: "b", Feature: "logs", Before: false, After: true})
-	require.NoError(t, err)
-
-	_, err = writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_a"}, Preview: preview})
-	require.ErrorIs(t, err, ErrProposalInvalidated, "a preview naming another organisation is never shown")
-
-	view, err := writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_b"}, Preview: preview})
-	require.NoError(t, err)
-	require.Equal(t, "Turn the logs feature on", view.Summary)
-	require.Equal(t, []proposalViewChange{{Setting: "logs feature", Before: "Off", After: "On"}}, view.Changes)
-}
-
-func TestApprovalPageEscapesStoredValues(t *testing.T) {
-	t.Parallel()
-	var page strings.Builder
-	err := proposalApprovalPage.Execute(&page, proposalApprovalView{
-		ID:        "proposal",
-		Operation: string(OperationSetOrganizationFeature),
-		Change:    proposalView{Summary: "Turn the logs feature on", OrganizationID: "org_a", OrganizationName: `<script>alert(1)</script>`, OrganizationSlug: `"><img src=x>`},
-		Preview:   `{"name":"<script>alert(1)</script>"}`,
-	})
-	require.NoError(t, err)
-	require.NotContains(t, page.String(), "<script>")
-	require.NotContains(t, page.String(), "<img")
-	require.Contains(t, page.String(), "&lt;script&gt;alert(1)&lt;/script&gt;")
-}
-
-func TestProposalOutputPassesSDKOutputValidation(t *testing.T) {
-	t.Parallel()
+	type output struct {
+		Before json.RawMessage `json:"before"`
+	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	addProposalTool(server, &mcp.Tool{Name: "prepare"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, ProposalOutput, error) {
-		return nil, ProposalOutput{ProposalID: "p", Status: "pending_approval", Preview: json.RawMessage(`{"name":"io.example/fixture"}`), Result: json.RawMessage(`{"id":"e"}`)}, nil
+	addWriteTool(server, &mcp.Tool{Name: "write"}, func(context.Context, struct{}) (output, error) {
+		return output{Before: json.RawMessage(`{"name":"io.example/fixture"}`)}, nil
 	})
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	_, err := server.Connect(t.Context(), serverTransport, nil)
@@ -197,10 +243,7 @@ func TestProposalOutputPassesSDKOutputValidation(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
 
-	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "prepare", Arguments: map[string]any{}})
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "write", Arguments: map[string]any{}})
 	require.NoError(t, err)
-	require.False(t, res.IsError, "an object preview must satisfy the inferred output schema")
-	out, err := json.Marshal(res.StructuredContent)
-	require.NoError(t, err)
-	require.JSONEq(t, `{"proposal_id":"p","status":"pending_approval","operation":"","expires_at":"","preview":{"name":"io.example/fixture"},"replay":false,"result":{"id":"e"}}`, string(out))
+	require.False(t, res.IsError, "an object result must satisfy the inferred output schema")
 }

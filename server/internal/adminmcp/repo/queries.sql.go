@@ -12,84 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const approveProposal = `-- name: ApproveProposal :one
-UPDATE admin_mcp_write_proposals
-SET status = 'approved',
-    approved_by_subject_urn = $1::text,
-    approved_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = $2
-RETURNING id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-`
-
-type ApproveProposalParams struct {
-	ApprovedBySubjectUrn string
-	ID                   uuid.UUID
-}
-
-func (q *Queries) ApproveProposal(ctx context.Context, arg ApproveProposalParams) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, approveProposal, arg.ApprovedBySubjectUrn, arg.ID)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const closeProposal = `-- name: CloseProposal :execrows
-UPDATE admin_mcp_write_proposals
-SET status = $1::text,
-    invalidated_at = CASE WHEN $1::text = 'invalidated' THEN clock_timestamp() ELSE invalidated_at END,
-    invalidation_reason = CASE WHEN $1::text = 'invalidated' THEN $2::text ELSE invalidation_reason END,
-    updated_at = clock_timestamp()
-WHERE id = $3
-  AND status IN ('pending_approval', 'approved')
-`
-
-type CloseProposalParams struct {
-	Status string
-	Reason string
-	ID     uuid.UUID
-}
-
-// Records a terminal refusal state. Only invalidation stores its reason on the
-// proposal; every close also writes a staff event.
-func (q *Queries) CloseProposal(ctx context.Context, arg CloseProposalParams) (int64, error) {
-	result, err := q.db.Exec(ctx, closeProposal, arg.Status, arg.Reason, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const consumeAuthorizationGrant = `-- name: ConsumeAuthorizationGrant :exec
 UPDATE admin_mcp_authorization_grants
 SET consumed_at = $1,
@@ -107,43 +29,23 @@ func (q *Queries) ConsumeAuthorizationGrant(ctx context.Context, arg ConsumeAuth
 	return err
 }
 
-const countPendingProposals = `-- name: CountPendingProposals :one
-SELECT count(*)
-FROM admin_mcp_write_proposals
-WHERE subject_urn = $1
-  AND oauth_client_id = $2
-  AND status = 'pending_approval'
-  AND expires_at > $3
-`
-
-type CountPendingProposalsParams struct {
-	SubjectUrn    string
-	OauthClientID uuid.UUID
-	Now           pgtype.Timestamptz
-}
-
-func (q *Queries) CountPendingProposals(ctx context.Context, arg CountPendingProposalsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countPendingProposals, arg.SubjectUrn, arg.OauthClientID, arg.Now)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countWriteEventsFixture = `-- name: CountWriteEventsFixture :one
 SELECT count(*)
 FROM admin_mcp_write_events
-WHERE proposal_id = $1::uuid
-  AND event = $2
+WHERE operation = $1
+  AND organization_id IS NOT DISTINCT FROM $2
+  AND event = $3
 `
 
 type CountWriteEventsFixtureParams struct {
-	ProposalID uuid.UUID
-	Event      string
+	Operation      pgtype.Text
+	OrganizationID pgtype.Text
+	Event          string
 }
 
-// Test-only: counts staff event trail rows for one proposal and event.
+// Test-only: counts staff event trail rows for one operation, target and event.
 func (q *Queries) CountWriteEventsFixture(ctx context.Context, arg CountWriteEventsFixtureParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countWriteEventsFixture, arg.ProposalID, arg.Event)
+	row := q.db.QueryRow(ctx, countWriteEventsFixture, arg.Operation, arg.OrganizationID, arg.Event)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -283,54 +185,6 @@ func (q *Queries) GetAuthorizationGrant(ctx context.Context, arg GetAuthorizatio
 	return i, err
 }
 
-const getConnectionGenerationFixture = `-- name: GetConnectionGenerationFixture :one
-SELECT active_generation
-FROM admin_mcp_connections
-WHERE id = $1
-`
-
-// Test-only: reads the connection generation after reconsent.
-func (q *Queries) GetConnectionGenerationFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getConnectionGenerationFixture, id)
-	var active_generation uuid.UUID
-	err := row.Scan(&active_generation)
-	return active_generation, err
-}
-
-const getLinkedWriteConnection = `-- name: GetLinkedWriteConnection :one
-SELECT connection.admin_session_id_enc, connection.scopes
-FROM admin_mcp_connections AS connection
-JOIN admin_mcp_oauth_clients AS client ON client.id = connection.oauth_client_id
-WHERE connection.id = $1
-  AND connection.oauth_client_id = $2
-  AND connection.active_generation = $3
-  AND connection.revoked_at IS NULL
-  AND connection.reauthorization_required_at IS NULL
-  AND connection.authorization_expires_at > clock_timestamp()
-  AND client.revoked_at IS NULL
-  AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
-`
-
-type GetLinkedWriteConnectionParams struct {
-	ConnectionID  uuid.UUID
-	OauthClientID uuid.UUID
-	Generation    uuid.UUID
-}
-
-type GetLinkedWriteConnectionRow struct {
-	AdminSessionIDEnc string
-	Scopes            []string
-}
-
-// Reads the active connection's encrypted browser session and scopes for
-// same-staff approval checks.
-func (q *Queries) GetLinkedWriteConnection(ctx context.Context, arg GetLinkedWriteConnectionParams) (GetLinkedWriteConnectionRow, error) {
-	row := q.db.QueryRow(ctx, getLinkedWriteConnection, arg.ConnectionID, arg.OauthClientID, arg.Generation)
-	var i GetLinkedWriteConnectionRow
-	err := row.Scan(&i.AdminSessionIDEnc, &i.Scopes)
-	return i, err
-}
-
 const getLiveOAuthClient = `-- name: GetLiveOAuthClient :one
 SELECT client_id, client_name, client_secret_hash, redirect_uris, client_secret_expires_at
 FROM admin_mcp_oauth_clients
@@ -355,107 +209,6 @@ func (q *Queries) GetLiveOAuthClient(ctx context.Context, clientID string) (GetL
 		&i.ClientSecretHash,
 		&i.RedirectUris,
 		&i.ClientSecretExpiresAt,
-	)
-	return i, err
-}
-
-const getProposal = `-- name: GetProposal :one
-SELECT id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-FROM admin_mcp_write_proposals
-WHERE id = $1
-`
-
-func (q *Queries) GetProposal(ctx context.Context, id uuid.UUID) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, getProposal, id)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getProposalByKey = `-- name: GetProposalByKey :one
-SELECT id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-FROM admin_mcp_write_proposals
-WHERE subject_urn = $1
-  AND oauth_client_id = $2
-  AND operation = $3
-  AND idempotency_key = $4
-`
-
-type GetProposalByKeyParams struct {
-	SubjectUrn     string
-	OauthClientID  uuid.UUID
-	Operation      string
-	IdempotencyKey string
-}
-
-func (q *Queries) GetProposalByKey(ctx context.Context, arg GetProposalByKeyParams) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, getProposalByKey,
-		arg.SubjectUrn,
-		arg.OauthClientID,
-		arg.Operation,
-		arg.IdempotencyKey,
-	)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -563,96 +316,6 @@ func (q *Queries) InsertAuthorizationGrant(ctx context.Context, arg InsertAuthor
 	return err
 }
 
-const insertProposal = `-- name: InsertProposal :one
-INSERT INTO admin_mcp_write_proposals (
-  subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version,
-  platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments,
-  expected_state_digest, proposal_digest, preview, status, expires_at
-) VALUES (
-  $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12, $13,
-  $14, $15, $16, 'pending_approval', $17
-)
-ON CONFLICT (subject_urn, oauth_client_id, operation, idempotency_key) DO NOTHING
-RETURNING id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-`
-
-type InsertProposalParams struct {
-	SubjectUrn             string
-	OauthClientID          uuid.UUID
-	ConnectionID           uuid.UUID
-	ConnectionGeneration   uuid.UUID
-	Operation              string
-	OperationSchemaVersion int32
-	PlatformGlobal         bool
-	OrganizationID         pgtype.Text
-	ProjectID              uuid.NullUUID
-	ResourceKind           pgtype.Text
-	ResourceID             pgtype.Text
-	IdempotencyKey         string
-	Arguments              []byte
-	ExpectedStateDigest    string
-	ProposalDigest         string
-	Preview                []byte
-	ExpiresAt              pgtype.Timestamptz
-}
-
-// Returns no row when a concurrent request already used the retry key.
-func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, insertProposal,
-		arg.SubjectUrn,
-		arg.OauthClientID,
-		arg.ConnectionID,
-		arg.ConnectionGeneration,
-		arg.Operation,
-		arg.OperationSchemaVersion,
-		arg.PlatformGlobal,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.ResourceKind,
-		arg.ResourceID,
-		arg.IdempotencyKey,
-		arg.Arguments,
-		arg.ExpectedStateDigest,
-		arg.ProposalDigest,
-		arg.Preview,
-		arg.ExpiresAt,
-	)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const insertStaffSession = `-- name: InsertStaffSession :exec
 INSERT INTO admin_mcp_sessions
   (id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at)
@@ -753,7 +416,7 @@ WHERE id = $1
 FOR SHARE
 `
 
-// Consent takes the client row before the connection row. Proposal work uses
+// Consent takes the client row before the connection row. Writes use
 // the same order and never takes an exclusive lock on a client shared by other
 // staff.
 func (q *Queries) LockLiveOAuthClient(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
@@ -772,57 +435,13 @@ WHERE client_id = $1
 FOR UPDATE
 `
 
-// Consent locks the client row before the connection row. Proposal work takes
+// Consent locks the client row before the connection row. Writes take
 // the same order.
 func (q *Queries) LockOAuthClientForConsent(ctx context.Context, clientID string) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockOAuthClientForConsent, clientID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const lockProposal = `-- name: LockProposal :one
-SELECT id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-FROM admin_mcp_write_proposals
-WHERE id = $1
-FOR UPDATE
-`
-
-func (q *Queries) LockProposal(ctx context.Context, id uuid.UUID) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, lockProposal, id)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const lockRefreshSession = `-- name: LockRefreshSession :one
@@ -928,33 +547,6 @@ func (q *Queries) LockReusedRefreshSession(ctx context.Context, arg LockReusedRe
 	return i, err
 }
 
-const lockWriteConnectionExclusive = `-- name: LockWriteConnectionExclusive :one
-SELECT active_generation
-FROM admin_mcp_connections
-WHERE id = $1
-  AND oauth_client_id = $2
-  AND subject_urn = $3
-  AND revoked_at IS NULL
-  AND reauthorization_required_at IS NULL
-  AND authorization_expires_at > clock_timestamp()
-  AND scopes @> ARRAY['admin:read', 'admin:write']::text[]
-FOR UPDATE
-`
-
-type LockWriteConnectionExclusiveParams struct {
-	ID            uuid.UUID
-	OauthClientID uuid.UUID
-	SubjectUrn    string
-}
-
-// Serialises proposal creation with reconsent and revocation.
-func (q *Queries) LockWriteConnectionExclusive(ctx context.Context, arg LockWriteConnectionExclusiveParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockWriteConnectionExclusive, arg.ID, arg.OauthClientID, arg.SubjectUrn)
-	var active_generation uuid.UUID
-	err := row.Scan(&active_generation)
-	return active_generation, err
-}
-
 const lockWriteConnectionShared = `-- name: LockWriteConnectionShared :one
 SELECT active_generation
 FROM admin_mcp_connections
@@ -983,83 +575,34 @@ func (q *Queries) LockWriteConnectionShared(ctx context.Context, arg LockWriteCo
 	return active_generation, err
 }
 
-const recordProposalReceipt = `-- name: RecordProposalReceipt :one
-UPDATE admin_mcp_write_proposals
-SET status = 'succeeded',
-    executed_at = clock_timestamp(),
-    result_code = $1::text,
-    result_payload = $2,
-    updated_at = clock_timestamp()
-WHERE id = $3
-  AND status = 'approved'
-RETURNING id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-`
-
-type RecordProposalReceiptParams struct {
-	ResultCode    string
-	ResultPayload []byte
-	ID            uuid.UUID
-}
-
-// Consumes the approval. Returns no row unless the proposal is still approved.
-func (q *Queries) RecordProposalReceipt(ctx context.Context, arg RecordProposalReceiptParams) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, recordProposalReceipt, arg.ResultCode, arg.ResultPayload, arg.ID)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const recordWriteEvent = `-- name: RecordWriteEvent :exec
-INSERT INTO admin_mcp_write_events (proposal_id, subject_urn, oauth_client_id, event, reason_code)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO admin_mcp_write_events (subject_urn, oauth_client_id, event, reason_code, operation, organization_id, resource_kind, resource_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type RecordWriteEventParams struct {
-	ProposalID    uuid.NullUUID
-	SubjectUrn    string
-	OauthClientID uuid.NullUUID
-	Event         string
-	ReasonCode    pgtype.Text
+	SubjectUrn     string
+	OauthClientID  uuid.NullUUID
+	Event          string
+	ReasonCode     pgtype.Text
+	Operation      pgtype.Text
+	OrganizationID pgtype.Text
+	ResourceKind   pgtype.Text
+	ResourceID     pgtype.Text
 }
 
-// Staff-only lifecycle trail. Only bounded reason codes are stored.
+// Staff-only write trail. Stores the operation, its target and bounded reason
+// codes; never arguments or results.
 func (q *Queries) RecordWriteEvent(ctx context.Context, arg RecordWriteEventParams) error {
 	_, err := q.db.Exec(ctx, recordWriteEvent,
-		arg.ProposalID,
 		arg.SubjectUrn,
 		arg.OauthClientID,
 		arg.Event,
 		arg.ReasonCode,
+		arg.Operation,
+		arg.OrganizationID,
+		arg.ResourceKind,
+		arg.ResourceID,
 	)
 	return err
 }
@@ -1086,52 +629,6 @@ func (q *Queries) RegisterOAuthClient(ctx context.Context, arg RegisterOAuthClie
 	return err
 }
 
-const rejectProposal = `-- name: RejectProposal :one
-UPDATE admin_mcp_write_proposals
-SET status = 'rejected',
-    rejected_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-WHERE id = $1
-RETURNING id, subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at, approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at, result_code, result_payload, created_at, updated_at
-`
-
-func (q *Queries) RejectProposal(ctx context.Context, id uuid.UUID) (AdminMcpWriteProposal, error) {
-	row := q.db.QueryRow(ctx, rejectProposal, id)
-	var i AdminMcpWriteProposal
-	err := row.Scan(
-		&i.ID,
-		&i.SubjectUrn,
-		&i.OauthClientID,
-		&i.ConnectionID,
-		&i.ConnectionGeneration,
-		&i.Operation,
-		&i.OperationSchemaVersion,
-		&i.PlatformGlobal,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.IdempotencyKey,
-		&i.Arguments,
-		&i.ExpectedStateDigest,
-		&i.ProposalDigest,
-		&i.Preview,
-		&i.Status,
-		&i.ExpiresAt,
-		&i.ApprovedBySubjectUrn,
-		&i.ApprovedAt,
-		&i.RejectedAt,
-		&i.InvalidatedAt,
-		&i.InvalidationReason,
-		&i.ExecutedAt,
-		&i.ResultCode,
-		&i.ResultPayload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const renameOrganizationFixture = `-- name: RenameOrganizationFixture :execrows
 UPDATE organization_metadata
 SET name = $1
@@ -1143,7 +640,7 @@ type RenameOrganizationFixtureParams struct {
 	ID   string
 }
 
-// Test-only: a synthetic business write run inside proposal execution.
+// Test-only: a synthetic business write run inside a staff write transaction.
 func (q *Queries) RenameOrganizationFixture(ctx context.Context, arg RenameOrganizationFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, renameOrganizationFixture, arg.Name, arg.ID)
 	if err != nil {
@@ -1192,7 +689,7 @@ SET revoked_at = clock_timestamp(),
 WHERE id = $1
 `
 
-// Test-only: simulates a staff client revoked after a proposal was approved.
+// Test-only: simulates a staff client revoked during a live connection.
 func (q *Queries) RevokeOAuthClientFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeOAuthClientFixture, id)
 	return err
@@ -1215,24 +712,6 @@ type RotateStaffSessionParams struct {
 
 func (q *Queries) RotateStaffSession(ctx context.Context, arg RotateStaffSessionParams) error {
 	_, err := q.db.Exec(ctx, rotateStaffSession, arg.Now, arg.ReplacedBySessionID, arg.ID)
-	return err
-}
-
-const setConnectionScopesFixture = `-- name: SetConnectionScopesFixture :exec
-UPDATE admin_mcp_connections
-SET scopes = $1,
-    updated_at = clock_timestamp()
-WHERE id = $2
-`
-
-type SetConnectionScopesFixtureParams struct {
-	Scopes []string
-	ID     uuid.UUID
-}
-
-// Test-only: simulates a scope change between proposal preview and approval.
-func (q *Queries) SetConnectionScopesFixture(ctx context.Context, arg SetConnectionScopesFixtureParams) error {
-	_, err := q.db.Exec(ctx, setConnectionScopesFixture, arg.Scopes, arg.ID)
 	return err
 }
 

@@ -22,7 +22,7 @@ type StaffOAuth struct {
 	Clients              *StaffOAuthClients
 	Authorization        *StaffOAuthAuthorization
 	Tokens               *StaffOAuthTokens
-	Approval             *StaffProposalApproval
+	runner               *writeRunner
 	issuer               string
 	resource             string
 	protectedResourceURL string
@@ -59,7 +59,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 		Clients:              clients,
 		Authorization:        authorization,
 		Tokens:               NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
-		Approval:             newStaffProposalApproval(newProposalStore(db, logger), authorization, challengeCache, writes),
+		runner:               newWriteRunner(db, logger),
 		issuer:               issuer,
 		resource:             resource,
 		protectedResourceURL: protectedResourceURL,
@@ -90,8 +90,6 @@ func (s *StaffOAuth) Attach(mux interface {
 	mux.Handle("GET", Path+"/connect", s.handler(s.Authorization.ConnectHandler()))
 	mux.Handle("POST", Path+"/connect", s.handler(s.Authorization.ConnectHandler()))
 	mux.Handle("POST", Path+"/token", s.handler(s.Tokens.TokenHandler()))
-	mux.Handle("GET", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
-	mux.Handle("POST", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
 	// The authorization error page inlines the shared consent stylesheet, whose
 	// @font-face urls resolve against this origin.
 	mux.Handle("GET", "/mcp/consent-fonts/{file}", func(w http.ResponseWriter, r *http.Request) {

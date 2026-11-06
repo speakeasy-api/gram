@@ -543,7 +543,7 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				SameSite: http.SameSiteLaxMode,
 			}
 			location := w.Header().Get("Location")
-			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
