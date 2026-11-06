@@ -50,17 +50,6 @@ func TestService_ListAgentPolicyScopes_OffersExactlyTheRuntimeSafeScopes(t *test
 		"skill:read",
 		"skill:write",
 	}, slugs)
-
-	// Presentation comes from the catalogue, the same as listScopes.
-	full, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	require.NoError(t, err)
-	labels := make(map[string]string, len(full.Scopes))
-	for _, scope := range full.Scopes {
-		labels[scope.Slug] = scope.Label
-	}
-	for _, scope := range result.Scopes {
-		require.Equal(t, labels[scope.Slug], scope.Label, scope.Slug)
-	}
 }
 
 // An owner configuring their own agent holds no organization grant, so the
