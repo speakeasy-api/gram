@@ -162,7 +162,9 @@ type desiredIngress struct {
 //   - starting | online -> awaiting_approval: the node is up but the tailnet
 //     has not approved it, or revoked its approval; -> online once approved.
 //   - starting -> error: the start failed; retried next poll, backing off
-//     after maxStartFailures in a row.
+//     after maxStartFailures attempts in a row that did not reach online.
+//   - any running state -> draining -> error: the node failed while running;
+//     it is stopped and retried like a failed start.
 //   - starting -> needs_login: control refused the slot's identity before
 //     the node came up.
 //   - any running state -> draining -> stopped: the ingress is no longer
@@ -199,7 +201,8 @@ type slot struct {
 	// inFlight is set while a start goroutine owns the slot.
 	inFlight bool
 
-	// failures counts consecutive failed starts. Once it reaches
+	// failures counts attempts in a row that did not reach online, whether
+	// the start failed or the node died first. Once it reaches
 	// maxStartFailures the slot is held in error until retryAt.
 	failures int
 	retryAt  time.Time
@@ -477,12 +480,12 @@ func (g *Gateway) runningSlots() []*slot {
 	return out
 }
 
-// probeAll refreshes every running slot, stopping any whose identity control
-// refused.
+// probeAll refreshes every running slot, stopping any that can no longer
+// serve: its identity was refused, or its node failed.
 func (g *Gateway) probeAll(ctx context.Context) {
 	for _, s := range g.runningSlots() {
-		if g.probe(ctx, s) {
-			g.stop(ctx, s, NodeStatusNeedsLogin)
+		if final := g.probe(ctx, s); final != "" {
+			g.stop(ctx, s, final)
 		}
 	}
 }
@@ -512,17 +515,23 @@ func (g *Gateway) settle(ctx context.Context, s *slot, t transition) {
 	g.move(ctx, s, t)
 }
 
-// fail records a failed start: the slot moves to error, and after
-// maxStartFailures in a row it backs off instead of retrying every poll.
+// noteFailure counts one failure; after maxStartFailures in a row the slot
+// backs off instead of retrying every poll. The caller holds s.mu.
+func (g *Gateway) noteFailure(s *slot) {
+	s.failures++
+	if s.failures >= maxStartFailures {
+		s.retryAt = g.now().Add(backoffAfterFailures)
+	}
+}
+
+// fail records a failed start: the slot moves to error and counts toward the
+// backoff.
 func (g *Gateway) fail(ctx context.Context, s *slot, message string, wake bool) {
 	g.metrics.Lifecycle(ctx, s.ingress.organizationSlug, OperationStart, ResultError)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.failures++
-	if s.failures >= maxStartFailures {
-		s.retryAt = g.now().Add(backoffAfterFailures)
-	}
+	g.noteFailure(s)
 	g.move(ctx, s, transition{to: NodeStatusError, message: message, wake: wake})
 }
 
@@ -642,8 +651,6 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 	s.node = node
 	s.nodeID = ""
 	s.dnsName = state.FQDN
-	s.failures = 0
-	s.retryAt = time.Time{}
 	// The key row is the source of truth: a restart after a failed clear
 	// still removes it once the node is online.
 	s.authKeyCleared = !row.AuthKeyEncrypted.Valid
@@ -651,8 +658,8 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 	s.mu.Unlock()
 	logger.InfoContext(ctx, "tailnet node started", attr.SlogHostName(state.FQDN))
 
-	if g.probe(ctx, s) {
-		g.stop(ctx, s, NodeStatusNeedsLogin)
+	if final := g.probe(ctx, s); final != "" {
+		g.stop(ctx, s, final)
 	}
 }
 
@@ -687,13 +694,14 @@ func (g *Gateway) failRegistration(ctx context.Context, s *slot, store *Postgres
 }
 
 // probe refreshes a running slot from its node and applies what it finds. It
-// reports whether the node must be stopped because control refused its
-// identity.
-func (g *Gateway) probe(ctx context.Context, s *slot) bool {
+// returns the state to stop the node with when it can no longer serve
+// (needs_login when control refused its identity, error when the node
+// failed), or "" to keep it running.
+func (g *Gateway) probe(ctx context.Context, s *slot) NodeStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.running() {
-		return false
+		return ""
 	}
 
 	state, err := s.node.Status(ctx)
@@ -707,6 +715,11 @@ func (g *Gateway) probe(ctx context.Context, s *slot) bool {
 	t := probeTransition(s.state, s.ingress.label, state, err)
 	g.move(ctx, s, t)
 
+	if t.to == NodeStatusOnline {
+		// Serving is what counts as success for the backoff.
+		s.failures = 0
+		s.retryAt = time.Time{}
+	}
 	if t.to == NodeStatusOnline && !s.authKeyCleared {
 		if err := repo.New(g.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{
 			NetworkIngressID: s.ingress.id, OrganizationID: s.ingress.organizationID, Slot: g.cfg.Ordinal,
@@ -717,11 +730,18 @@ func (g *Gateway) probe(ctx context.Context, s *slot) bool {
 		}
 	}
 
-	return t.to == NodeStatusNeedsLogin
+	switch t.to {
+	case NodeStatusNeedsLogin, NodeStatusError:
+		return t.to
+	default:
+		return ""
+	}
 }
 
 // stop drains a running slot's node and records final. The slot stays known
-// so a later poll can start it again.
+// so a later poll can start it again. Stopping a node because of its current
+// state keeps that state's message; a node that failed counts toward the
+// backoff, so one that keeps dying is not restarted every poll.
 func (g *Gateway) stop(ctx context.Context, s *slot, final NodeStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -729,7 +749,15 @@ func (g *Gateway) stop(ctx context.Context, s *slot, final NodeStatus) {
 		return
 	}
 
-	g.move(ctx, s, transition{to: NodeStatusDraining, message: "", wake: wakes(s.state, NodeStatusDraining)})
+	message := ""
+	if final == s.state {
+		message = s.lastError
+	}
+	if final == NodeStatusError {
+		g.noteFailure(s)
+	}
+
+	g.move(ctx, s, transition{to: NodeStatusDraining, message: message, wake: wakes(s.state, NodeStatusDraining)})
 
 	closeCtx, cancel := context.WithTimeout(ctx, g.cfg.DrainTimeout)
 	defer cancel()
@@ -742,7 +770,7 @@ func (g *Gateway) stop(ctx context.Context, s *slot, final NodeStatus) {
 	g.metrics.HostStatusChanged(ctx, s.ingress.organizationSlug, g.cfg.Ordinal, s.state, "")
 	s.node = nil
 
-	g.move(ctx, s, hold(final, ""))
+	g.move(ctx, s, hold(final, message))
 }
 
 // drain stops every running slot; it runs with a context that survives

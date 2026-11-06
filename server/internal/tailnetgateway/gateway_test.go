@@ -40,6 +40,7 @@ type fakeNode struct {
 	online     bool
 	unapproved bool
 	needsLogin bool
+	statusErr  error
 	closeDelay time.Duration
 	fqdn       string
 	nodeID     string
@@ -58,6 +59,9 @@ func (n *fakeNode) Serve(handler http.Handler) error {
 func (n *fakeNode) Status(context.Context) (tailnetgateway.NodeState, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.statusErr != nil {
+		return tailnetgateway.NodeState{}, n.statusErr
+	}
 	state := "Starting"
 	switch {
 	case n.needsLogin:
@@ -104,6 +108,14 @@ func (n *fakeNode) setApproved(approved bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.unapproved = !approved
+}
+
+// failStatus simulates a node that can no longer report, as when its service
+// listener has died.
+func (n *fakeNode) failStatus(err error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.statusErr = err
 }
 
 // setNeedsLogin simulates control refusing the node's identity, as when the
@@ -165,7 +177,7 @@ func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (ta
 	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
 		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
-	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, unapproved: false, needsLogin: false, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
+	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, unapproved: false, needsLogin: false, statusErr: nil, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
 	r.nodes = append(r.nodes, node)
 	return node, nil
 }
@@ -616,6 +628,61 @@ func TestGatewayReportsHostsAwaitingApproval(t *testing.T) {
 	require.Equal(t, 3, wakes())
 	require.Len(t, f.gateway.Hosts(), 1, "the node stays up so a later approval takes effect")
 	require.Len(t, f.runtime.started(), 1)
+}
+
+func TestGatewayRestartsHostWhoseNodeFailed(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaynodefail", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-node-fail")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	died := errors.New("service listener stopped: listener died")
+	wakes := func() int {
+		messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+		require.NoError(t, err)
+		return len(messages)
+	}
+	latest := func() *fakeNode {
+		nodes := f.runtime.started()
+		return nodes[len(nodes)-1]
+	}
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	latest().setOnline("nONE")
+	f.gateway.Poll(ctx)
+	require.Equal(t, 1, wakes())
+
+	// The node dies: it is stopped, the cause is kept, and the reconciler
+	// hears the host went offline.
+	latest().failStatus(died)
+	f.gateway.Poll(ctx)
+	require.Empty(t, f.gateway.Hosts())
+	require.True(t, latest().isClosed())
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusError), row.Status)
+	require.Contains(t, row.LastError.String, "listener died")
+	require.Equal(t, 2, wakes())
+
+	// The next poll starts it again, as the same device.
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	require.Len(t, f.runtime.started(), 2)
+	require.Empty(t, latest().spec.AuthKey, "the persisted identity reconnects without a key")
+
+	// A node that keeps dying backs off after maxStartFailures.
+	latest().failStatus(died)
+	f.gateway.Poll(ctx)
+	require.Empty(t, f.gateway.Hosts())
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	require.Len(t, f.runtime.started(), 3)
+	latest().failStatus(died)
+	f.gateway.Poll(ctx)
+	require.Empty(t, f.gateway.Hosts())
+	f.gateway.Poll(ctx)
+	require.Never(t, func() bool { return len(f.gateway.Hosts()) > 0 }, 200*time.Millisecond, 20*time.Millisecond)
+	require.Len(t, f.runtime.started(), 3, "the third failure in a row backs the slot off")
 }
 
 func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {
