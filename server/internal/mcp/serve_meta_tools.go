@@ -75,7 +75,9 @@ func (s *Service) handleMetaDescribeServerCall(
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			failure := newMetaMemberFailure(member, err, s.memberFailureMessage(ctx, logger, gate, member, err))
+			// describe_server names one member, so its arguments are all this
+			// member's.
+			failure := newMetaMemberFailure(member, err, s.memberFailureMessage(ctx, logger, gate, member, err), argsRaw)
 			body, marshalErr := marshalMetaToolError(ctx, logger, req.ID, failure.message)
 			return body, &failure, marshalErr
 		}
@@ -177,12 +179,13 @@ func (s *Service) handleMetaDescribeToolsCall(
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
 			if _, ok := errors.AsType[*metaMemberError](err); ok {
-				failure := newMetaMemberFailure(mr.member, err, s.memberFailureMessage(ctx, logger, gate, mr.member, err))
+				failure := newMetaMemberFailure(mr.member, err, s.memberFailureMessage(ctx, logger, gate, mr.member, err), describeToolsMemberArguments(mr.member.slug, mr.toolNames))
 				failures = append(failures, failure)
 				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: failure.message})
 				continue
 			}
-			return nil, nil, err
+			// Members already found unreachable keep their failed rows.
+			return nil, failures, err
 		}
 		for _, toolName := range mr.toolNames {
 			entry, ok := catalog.byName[toolName]
@@ -214,6 +217,21 @@ func (s *Service) handleMetaDescribeToolsCall(
 	}
 	body, err := marshalMetaToolCallResult(ctx, logger, req.ID, structured)
 	return body, failures, err
+}
+
+// describeToolsMemberArguments is the describe_tools arguments narrowed to the
+// names of one member, so a failed row on that member lists only its own
+// tools.
+func describeToolsMemberArguments(slug string, toolNames []string) []byte {
+	qualified := make([]string, 0, len(toolNames))
+	for _, toolName := range toolNames {
+		qualified = append(qualified, metamcp.QualifyName(slug, toolName))
+	}
+	arguments, err := json.Marshal(map[string][]string{"tools": qualified})
+	if err != nil {
+		return nil
+	}
+	return arguments
 }
 
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The

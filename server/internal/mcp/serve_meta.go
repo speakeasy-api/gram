@@ -663,7 +663,7 @@ func (s *Service) callMetaServerTool(
 	}
 	s.logMetaDiscovery(ctx, gate, params.Name, start, err, callFailure)
 	for _, failure := range memberFailures {
-		s.logMetaMemberDiscoveryFailure(ctx, gate, params.Name, params.Arguments, start, failure)
+		s.logMetaMemberDiscoveryFailure(ctx, gate, params.Name, start, failure)
 	}
 	return body, err
 }

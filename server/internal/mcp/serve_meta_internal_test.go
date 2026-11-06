@@ -68,3 +68,13 @@ func TestMetaServerDiscover_MemberSummaryIsPrivate(t *testing.T) {
 	require.True(t, strings.HasSuffix(response.Result.Instructions, metamcp.Instructions))
 	require.Equal(t, "private", response.Result.CacheScope)
 }
+
+// A failed describe_tools row on a member logs only that member's names as its
+// request, never names the call gave for other servers, which may be in other
+// projects.
+func TestDescribeToolsMemberArguments_ListsOnlyTheMembersTools(t *testing.T) {
+	t.Parallel()
+
+	require.JSONEq(t, `{"tools":["member--ping","member--pong"]}`,
+		string(describeToolsMemberArguments("member", []string{"ping", "pong"})))
+}

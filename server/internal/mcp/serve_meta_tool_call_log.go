@@ -216,12 +216,17 @@ type metaMemberFailure struct {
 
 	// message is what the caller was told about the failure.
 	message string
+
+	// arguments is the part of the call's arguments that named this member,
+	// logged as the row's request. A describe_tools can name tools of members
+	// in other projects, and this member's row must not list them.
+	arguments []byte
 }
 
 // newMetaMemberFailure records that member failed with err, whose message the
-// caller was told.
-func newMetaMemberFailure(member metaMember, err error, message string) metaMemberFailure {
-	return metaMemberFailure{member: member, status: metaMemberErrorStatus(err), message: message}
+// caller was told, for a call whose arguments named it as arguments.
+func newMetaMemberFailure(member metaMember, err error, message string, arguments []byte) metaMemberFailure {
+	return metaMemberFailure{member: member, status: metaMemberErrorStatus(err), message: message, arguments: arguments}
 }
 
 // logMetaMemberDiscoveryFailure writes a failed tool_call row on a member that
@@ -235,7 +240,7 @@ func newMetaMemberFailure(member metaMember, err error, message string) metaMemb
 //   - It is written on its own trace, linked to the request's. Rows that share
 //     a trace and a project are summarized as one call, and the call's
 //     meta_discovery row would otherwise hide this one from tool logs.
-func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, arguments []byte, start time.Time, failure metaMemberFailure) {
+func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, failure metaMemberFailure) {
 	ctx, span := s.tracer.Start(ctx, "mcp.meta.member_discovery_failure",
 		trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
@@ -243,7 +248,7 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 	attempt := newMetaToolCallAttempt(start)
 	attempt.member = &failure.member
 	attempt.fail(failure.status, failure.message)
-	params := metaToolCallFailureLogParams(ctx, gate, metamcp.QualifyName(failure.member.slug, toolName), arguments, attempt, nil)
+	params := metaToolCallFailureLogParams(ctx, gate, metamcp.QualifyName(failure.member.slug, toolName), failure.arguments, attempt, nil)
 	if params == nil {
 		return
 	}
