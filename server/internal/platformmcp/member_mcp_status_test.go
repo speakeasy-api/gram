@@ -464,9 +464,12 @@ func TestMemberMCPConnectionStatusTunneledUnboundAndMissingUpstream(t *testing.T
 		}
 		output, err := service.memberConnectionStatus(ctx, principal, target)
 		require.NoError(t, err)
-		require.NotEqual(t, MCPConnectionStateActive, output.State, "an unbound grant cannot authorize a tunneled resource")
-		if !several {
+		if several {
+			require.Equal(t, MCPConnectionStateNotConnected, output.State, "an unbound grant cannot authorize a tunneled resource")
+			require.Equal(t, "choose_on_connect", output.Reason)
+		} else {
 			require.Equal(t, MCPConnectionStateReauthorizationRequired, output.State)
+			require.Equal(t, "resource_authorization_required", output.Reason)
 		}
 	}
 	for _, tunneled := range []bool{false, true} {
