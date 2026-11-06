@@ -276,8 +276,9 @@ type resourceKey struct {
 
 // resourceScopes is what the cached resource row for sv says about scopes,
 // for each client. Behind a login issuer only a client that owns the
-// resource reads the row, as its login would; a server without one has no
-// login to match, so its resolved client reads it.
+// resource reads the row, as its login would; under typed enforcement the
+// server's offers decide ownership instead. A server without a login issuer
+// has no login to match, so its resolved client reads it.
 func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(clientID uuid.UUID) remotesessions.ResourceScopes {
 	none := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
 	row := snap.resourceRow(sv)
@@ -285,6 +286,11 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(client
 		switch {
 		case row == nil:
 			return none
+		case sv.TypedAuthEnforced:
+			if !slices.Contains(sv.OfferedClientIds, clientID) {
+				return none
+			}
+			return *row
 		case sv.UserSessionIssuerID.Valid && !snap.owners[sv.ID][clientID]:
 			return none
 		default:
@@ -417,7 +423,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if snap.discoverScopes {
 		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
-			if !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+			if sv.TypedAuthEnforced || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
 			}
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {

@@ -654,8 +654,7 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{ID: catalog.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID, Status: registrationStatusRegistered, RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(shared), McpServerID: conv.ToNullUUID(serverID), McpEndpointID: conv.ToNullUUID(endpoint.ID)})
 	require.NoError(t, err)
 	for range 2 {
-		tx, err := conn.Begin(ctx)
-		require.NoError(t, err)
+		tx := testenv.BeginTx(t, ctx, conn)
 		result, attachErr := service.attachLocked(ctx, platformrepo.New(tx), principal, project, catalog.ID)
 		require.NoError(t, tx.Rollback(ctx))
 		require.NoError(t, attachErr)
