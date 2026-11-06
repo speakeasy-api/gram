@@ -70,7 +70,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 		})
 	}
 
-	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers}
+	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers, Owner: agentConnectionOwner(*gate, members, servers)}
 	structured, err := json.Marshal(payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize connection_status result").LogError(ctx, logger)
@@ -100,6 +100,27 @@ func (s *Service) handleMetaConnectionStatusCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// agentConnectionOwner names the owner who reconnects an agent gateway's
+// servers when one needs signing in, with the first such server's page, or
+// no page when it could not be built. Every other gateway, and an agent
+// whose servers all work, gets nil.
+func agentConnectionOwner(gate metaGateContext, members []metaMember, servers []metamcp.ConnectionStatusServer) *metamcp.ConnectionStatusOwner {
+	if gate.agentOwner == nil || gate.connectURL != "" {
+		return nil
+	}
+	for i, member := range members {
+		if status := servers[i].Status; status != metamcp.SignInNotConnected && status != metamcp.SignInError {
+			continue
+		}
+		if servers[i].Detail == memberCheckFailedDetail {
+			continue
+		}
+		fix := gate.agentReconnectFor(member)
+		return &metamcp.ConnectionStatusOwner{Name: fix.owner, ReconnectURL: fix.url}
+	}
+	return nil
 }
 
 // memberSignInStatus classifies one member by its own routing rule. A member
@@ -164,7 +185,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	required, err := requiresAuth(ctx, member)
 	if err != nil {
 		logger.ErrorContext(ctx, "check member upstream authentication", attr.SlogError(err))
-		return metamcp.SignInError, "could not check this server", nil
+		return metamcp.SignInError, memberCheckFailedDetail, nil
 	}
 	if required {
 		return metamcp.SignInNotConnected, "", nil
@@ -256,8 +277,13 @@ func memberErrorMessage(err error) string {
 	if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 		return memberErr.message
 	}
-	return "could not check this server"
+	return memberCheckFailedDetail
 }
+
+// memberCheckFailedDetail is the detail of a member whose status could not be
+// read at all. Nothing says its connection is broken, so an agent is not sent
+// to its owner to reconnect it.
+const memberCheckFailedDetail = "could not check this server"
 
 // handleMetaResourcesList lists the gateway's single UI resource.
 func handleMetaResourcesList(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
