@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
@@ -355,17 +356,67 @@ func TestRefusalHappened(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, ok := refusalHappened(tc.err)
+			code, detail, ok := refusalHappened(tc.err)
 			require.True(t, ok)
 			require.Equal(t, tc.want, code)
+			require.Empty(t, detail)
 		})
 	}
 
-	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
+	_, _, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
 	require.False(t, ok, "a call held for approval is not an end state")
+}
 
-	_, ok = refusalHappened(fmt.Errorf("resolve remote MCP tool disposition: %w", errToolNotOnUpstream))
-	require.False(t, ok, "an unknown tool name is the caller's mistake, not a connection outcome")
+// unknownToolProxy serves connectionToolsCall through the catalog-backed authz
+// interceptor; the upstream lists only "other", so "protected" is unknown.
+func unknownToolProxy(t *testing.T, rec *mcpconnectionattemptstest.Recording, prepare func(context.Context, *toolCatalogSync)) {
+	t.Helper()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("an unknown tool must not reach the upstream")
+	}))
+	t.Cleanup(upstream.Close)
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{}}
+	catalog := newCatalogSync(store, func(context.Context, *http.Request) ([]*mcp.Tool, error) {
+		return []*mcp.Tool{{Name: "other", InputSchema: map[string]any{}}}, nil
+	})
+	ctx := blockDestructiveContext(t)
+	prepare(ctx, catalog)
+
+	p := newKillswitchTestProxy(t, upstream.URL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), catalogTestOrgID, catalogTestServerID, testenv.NewLogger(t)), newAuthzInterceptor(t, store, catalog))
+	p.ToolsCallRefusalInterceptors = recordingConnections(rec, "token").refusals()
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Contains(t, rr.Body.String(), toolNotOnUpstreamMessage)
+}
+
+func TestToolsCallConnections_ToolAbsentFromFreshListingRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	unknownToolProxy(t, rec, func(context.Context, *toolCatalogSync) {})
+	rec.RequireNothing()
+}
+
+func TestToolsCallConnections_SkippedToolLookupIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	unknownToolProxy(t, rec, func(ctx context.Context, catalog *toolCatalogSync) {
+		// Another key on the same stripe started the cooldown, so this call can't list.
+		now := time.Unix(1_700_000_000, 0)
+		catalog.refreshes.now = func() time.Time { return now }
+		catalog.refreshes.stripe(toolCatalogRefreshKey(ctx, catalogTestServerID)).Store(now.UnixNano())
+	})
+	rows := rec.Rows()
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError.String(), rows[0].Reason)
+	require.Equal(t, "tool_lookup_skipped", rows[0].SubReason)
 }
 
 func TestToolsCallConnections_PreSendFailures(t *testing.T) {

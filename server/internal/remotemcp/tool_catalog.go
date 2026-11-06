@@ -54,19 +54,19 @@ func newToolCatalogRefreshes() *toolCatalogRefreshes {
 	}
 }
 
-// run calls refresh unless this key completed one within the cooldown, sharing
-// one call between concurrent callers. A skipped refresh is not an error: the
-// caller rereads the catalog either way. A failed refresh doesn't start the
+// run calls refresh unless this key's stripe started one within the cooldown,
+// sharing one call between concurrent callers, and reports whether refresh ran.
+// A skipped refresh is not an error: the caller rereads the catalog either way. A failed refresh doesn't start the
 // cooldown, so a caller who repairs their credential isn't told a tool is missing;
 // sharing still limits a failing upstream to one attempt at a time per key.
 // refresh runs detached from ctx's cancellation because other callers may be
 // waiting on it.
-func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func(context.Context) error) error {
+func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func(context.Context) error) (bool, error) {
 	results := r.flights.DoChan(key, func() (any, error) {
 		stripe := r.stripe(key)
 		claimed, ok := r.claim(stripe)
 		if !ok {
-			return nil, nil
+			return false, nil
 		}
 
 		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), toolCatalogRefreshTimeout)
@@ -76,14 +76,15 @@ func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func
 		if err != nil {
 			stripe.CompareAndSwap(claimed, 0)
 		}
-		return nil, err
+		return err == nil, err
 	})
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("wait for tool catalog refresh: %w", ctx.Err())
+		return false, fmt.Errorf("wait for tool catalog refresh: %w", ctx.Err())
 	case result := <-results:
-		return result.Err
+		listed, _ := result.Val.(bool)
+		return listed, result.Err
 	}
 }
 
@@ -104,13 +105,17 @@ func (r *toolCatalogRefreshes) claim(stripe *atomic.Int64) (int64, bool) {
 	return now, stripe.CompareAndSwap(last, now)
 }
 
-// errToolNotOnUpstream refuses a call for a tool neither the catalog nor the
-// upstream's listing knows about.
-var errToolNotOnUpstream = &proxy.RejectError{
-	Code:    proxy.RejectCodeInvalidParams,
-	Message: "this tool isn't available on this MCP server",
-	Data:    nil,
-}
+const toolNotOnUpstreamMessage = "this tool isn't available on this MCP server"
+
+var (
+	// errToolNotOnUpstream refuses a call for a tool that neither the catalog nor
+	// a listing made for this call knows about.
+	errToolNotOnUpstream = &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: toolNotOnUpstreamMessage, Data: nil}
+
+	// errToolNotRelisted refuses a call for a tool the catalog lacks when the
+	// cooldown skipped the listing, so the upstream was not asked.
+	errToolNotRelisted = &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: toolNotOnUpstreamMessage, Data: nil}
+)
 
 // toolCatalogSync keeps a server's tool catalog current for enforcement: rules
 // read from the catalog, and tools it is missing are recorded from the upstream
@@ -153,7 +158,7 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 
 	refreshKey := toolCatalogRefreshKey(ctx, c.mcpServerID)
 
-	err = c.refreshes.run(ctx, refreshKey, func(refreshCtx context.Context) error {
+	listed, err := c.refreshes.run(ctx, refreshKey, func(refreshCtx context.Context) error {
 		tools, err := c.listUpstream(refreshCtx, userRequest)
 		if err != nil {
 			return fmt.Errorf("list upstream tools: %w", err)
@@ -171,11 +176,13 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 	if err != nil {
 		return "", fmt.Errorf("reread tool catalog: %w", err)
 	}
-	disposition, recorded := catalog[name]
-	if !recorded {
+	if disposition, recorded := catalog[name]; recorded {
+		return disposition, nil
+	}
+	if listed {
 		return "", errToolNotOnUpstream
 	}
-	return disposition, nil
+	return "", errToolNotRelisted
 }
 
 // toolCatalogRefreshKey scopes shared lookups and cooldowns to one caller on one
