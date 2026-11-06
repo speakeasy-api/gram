@@ -153,7 +153,9 @@ func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunn
 		}
 	}
 	switch {
-	case status == 0 && slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) }):
+	case status == 0 && slices.ContainsFunc(causes, func(cause error) bool {
+		return errors.Is(cause, proxy.ErrUpstreamTimedOut) || errors.Is(cause, context.DeadlineExceeded)
+	}):
 		// A slow server looks the same through a tunnel as it does directly.
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case tunneled && status == 0:

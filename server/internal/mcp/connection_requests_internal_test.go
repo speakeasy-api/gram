@@ -264,6 +264,18 @@ func TestMemberClientFailure_CanceledCallerHasNoCode(t *testing.T) {
 	require.False(t, ok)
 }
 
+// A tunneled member that runs out of call time is slow, not broken on our side.
+func TestMemberClientFailure_TunneledDeadlineIsProviderUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code)
+}
+
 func TestRecordMemberFailure(t *testing.T) {
 	t.Parallel()
 
