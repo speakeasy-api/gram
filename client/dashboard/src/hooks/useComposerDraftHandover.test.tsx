@@ -72,7 +72,7 @@ afterEach(cleanup);
 for (const startFresh of [false, true]) {
   describe(startFresh ? "landing draft" : "dock draft", () => {
     it("retains a dropped draft and retries binding even when loading stays false", async () => {
-      const accepted = vi.fn();
+      const accepted = vi.fn<() => void>();
       const { rerender, unmount } = renderHook(() =>
         useComposerDraftHandover("pending draft", accepted, { startFresh }),
       );
@@ -100,7 +100,7 @@ for (const startFresh of [false, true]) {
 
     it("waits for loading, then retains the draft until composer binding", async () => {
       runtime.state.loading = true;
-      const accepted = vi.fn();
+      const accepted = vi.fn<() => void>();
       const { rerender } = renderHook(() =>
         useComposerDraftHandover("pending draft", accepted, { startFresh }),
       );
@@ -130,7 +130,7 @@ it("waits for the fresh-thread switch before writing, without seeding the previo
     getState: () => ({ text: runtime.state.oldText }),
   });
   runtime.switchToNewThread.mockImplementation(() => {});
-  const accepted = vi.fn();
+  const accepted = vi.fn<() => void>();
   const { rerender } = renderHook(() =>
     useComposerDraftHandover("pending draft", accepted, { startFresh: true }),
   );
@@ -153,7 +153,7 @@ it("waits for the fresh-thread switch before writing, without seeding the previo
 });
 
 it("starts a fresh landing thread even without a draft", async () => {
-  const accepted = vi.fn();
+  const accepted = vi.fn<() => void>();
   renderHook(() =>
     useComposerDraftHandover("", accepted, { startFresh: true }),
   );
