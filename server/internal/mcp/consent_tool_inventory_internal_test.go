@@ -381,15 +381,15 @@ func TestAppendConsentInventoryPage_RejectsBlankOverlongAndOverCap(t *testing.T)
 	}, "")
 	require.Error(t, err)
 
-	over := make([]consentInventoryTool, consentInventoryMaxTools+1)
+	over := make([]consentInventoryTool, consentToolNameLimit+1)
 	for i := range over {
-		over[i] = consentInventoryTool{Name: strings.Repeat("t", 3) + string(rune('a'+i%26)) + strings.Repeat("x", i/26)}
+		over[i] = consentInventoryTool{Name: fmt.Sprintf("tool_%05d", i)}
 	}
 	_, err = s.appendConsentInventoryPage(t.Context(), emptyDraft(), "", over, "")
 	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 
-func TestMergeConsentInventoryPage_GatewayCapAllowsMoreThanServerCap(t *testing.T) {
+func TestMergeConsentInventoryPage_SharedInventoryCap(t *testing.T) {
 	t.Parallel()
 
 	tools := func(n int) []consentInventoryTool {
@@ -400,12 +400,12 @@ func TestMergeConsentInventoryPage_GatewayCapAllowsMoreThanServerCap(t *testing.
 		return out
 	}
 
-	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools+1), "", gatewayInventoryMaxTools)
+	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools), "")
 	require.NoError(t, err)
 	require.True(t, draft.Complete)
-	require.Len(t, draft.Tools, consentInventoryMaxTools+1)
+	require.Len(t, draft.Tools, consentInventoryMaxTools)
 
-	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(gatewayInventoryMaxTools+1), "", gatewayInventoryMaxTools)
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools+1), "")
 	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 

@@ -33,15 +33,9 @@ const (
 	// consumes the state, so a longer TTL would only keep dead entries.
 	consentToolInventoryTTL = 10 * time.Minute
 
-	// consentInventoryMaxTools bounds upstream-controlled inventory size; a
-	// server exceeding it fails the attempt rather than truncating, which
-	// would present an incomplete approval surface.
-	consentInventoryMaxTools = 1000
-
-	// gatewayInventoryMaxTools bounds a gateway's combined member inventory.
-	// Consent capture and gateway serving share it. Approval is also bounded
-	// by the 16 MiB connection catalog limit on the whole captured draft.
-	gatewayInventoryMaxTools = 10000
+	// consentInventoryMaxTools bounds combined gateway inventories at capture
+	// and serving. Never truncate the approval surface.
+	consentInventoryMaxTools = 10000
 
 	// consentInventoryMaxNameBytes bounds a single upstream tool name.
 	consentInventoryMaxNameBytes = 200
@@ -204,7 +198,13 @@ func (s *Service) appendConsentInventoryPage(
 	pageTools []consentInventoryTool,
 	nextCursor string,
 ) (consentToolInventory, error) {
-	draft, err := mergeConsentInventoryPage(draft, requestCursor, pageTools, nextCursor, consentInventoryMaxTools)
+	// Keep single-server capture within the picker's explicit-name budget.
+	// Larger servers retain the existing approve-all fallback; gateway capture
+	// bypasses this wrapper and uses the shared gateway inventory limit.
+	if len(draft.Tools)+len(pageTools) > consentToolNameLimit {
+		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, consentToolNameLimit)
+	}
+	draft, err := mergeConsentInventoryPage(draft, requestCursor, pageTools, nextCursor)
 	if err != nil {
 		return draft, err
 	}
@@ -215,13 +215,11 @@ func (s *Service) appendConsentInventoryPage(
 }
 
 // mergeConsentInventoryPage is appendConsentInventoryPage without storing.
-// maxTools caps the merged inventory.
 func mergeConsentInventoryPage(
 	draft consentToolInventory,
 	requestCursor string,
 	pageTools []consentInventoryTool,
 	nextCursor string,
-	maxTools int,
 ) (consentToolInventory, error) {
 	if draft.Complete {
 		return draft, fmt.Errorf("consent inventory attempt is already complete")
@@ -248,8 +246,8 @@ func mergeConsentInventoryPage(
 		seen[tool.Name] = true
 		tool.Annotations = normalizeKnownAnnotations(tool.Annotations)
 	}
-	if len(draft.Tools)+len(pageTools) > maxTools {
-		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, maxTools)
+	if len(draft.Tools)+len(pageTools) > consentInventoryMaxTools {
+		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, consentInventoryMaxTools)
 	}
 
 	if len(nextCursor) > consentInventoryMaxCursorBytes {

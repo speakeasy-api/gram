@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Gateways with more than 1,000 tools across their servers can now be approved on the consent page. The consent limit now matches the 10,000-tool limit for serving a gateway. When a gateway goes over that limit, the page says the gateway has too many tools and asks for an administrator, not "try again later". The general error for tools that do not load is also clearer.
+Gateway consent capture and serving now share a 10,000-tool inventory limit. Larger inventories show an actionable size error instead of asking users to retry. Single servers retain their existing 1,000-tool picker cutoff and approve-all fallback. For gateways, approving all tools supports larger inventories; the existing 1,000-name limit for explicit selections and snapshot annotation grants remains.

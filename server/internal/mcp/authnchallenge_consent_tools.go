@@ -26,12 +26,9 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// consentToolNameLimit caps how many explicit tool names one approve form
-// may submit. Matches consentInventoryMaxTools so any subset of a full
-// single-server inventory — including all of it — is submittable; the approve
-// POST's 1 MiB body cap covers the worst case with URL-encoding inflation.
-// Gateway inventories may exceed it; approving every tool sends no names.
-const consentToolNameLimit = consentInventoryMaxTools
+// consentToolNameLimit bounds the single-server picker and explicit names in
+// the 1 MiB approve form. Larger gateways can approve all tools without names.
+const consentToolNameLimit = 1000
 
 // consentPrefillAttr serializes the subject's stored selection for the
 // island's server-rendered bootstrap: annotation grants with their modes
