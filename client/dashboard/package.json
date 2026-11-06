@@ -63,7 +63,7 @@
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
-    "assistant-stream": "^0.3.29",
+    "assistant-stream": "^0.3.55",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.6.1",
     "chartjs-plugin-zoom": "^2.2.0",
