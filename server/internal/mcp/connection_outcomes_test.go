@@ -885,6 +885,7 @@ func TestConnectionOutcome_ConsentCaptureRecordsMembers(t *testing.T) {
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 
 	consentGetPageWithContext(t, ctx, ti, slug, stateID)
+	require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 
 	row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultAllowed)
 	require.Equal(t, docs.ID.String(), row.MemberID)
@@ -1104,6 +1105,7 @@ func TestConnectionOutcome_RowsCarryTheClientFamily(t *testing.T) {
 		state.FlowID = uuid.NewString()
 		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 		require.NoError(t, ti.service.HandleConsent(httptest.NewRecorder(), withAgent(httptest.NewRequestWithContext(routed(ctx, slug), http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil))))
+		require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 		rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultAllowed)
 		requireFamily(t, rec)
 	})

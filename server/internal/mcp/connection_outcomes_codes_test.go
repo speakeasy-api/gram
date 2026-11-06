@@ -479,6 +479,7 @@ func TestConnectionOutcome_FirstTimeMemberIsNotConnected(t *testing.T) {
 		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 
 		consentGetPageWithContext(t, ctx, ti, slug, stateID)
+		require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 
 		row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn)
 		require.Equal(t, "not_connected", row.SubReason)
