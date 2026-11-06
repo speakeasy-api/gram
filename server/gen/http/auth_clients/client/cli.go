@@ -37,6 +37,8 @@ func BuildConfigureGitHubAppAuthClientPayload(authClientsConfigureGitHubAppAuthC
 		if utf8.RuneCountInString(body.Name) > 100 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
 		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_url", body.InstanceURL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.instance_url", body.InstanceURL, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
 		if utf8.RuneCountInString(body.InstanceURL) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instance_url", body.InstanceURL, utf8.RuneCountInString(body.InstanceURL), 2048, false))
 		}
@@ -45,6 +47,8 @@ func BuildConfigureGitHubAppAuthClientPayload(authClientsConfigureGitHubAppAuthC
 		if utf8.RuneCountInString(body.PrivateKey) > 32768 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.private_key", body.PrivateKey, utf8.RuneCountInString(body.PrivateKey), 32768, false))
 		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_origin", body.UpstreamOrigin, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.upstream_origin", body.UpstreamOrigin, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
 		if utf8.RuneCountInString(body.UpstreamOrigin) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.upstream_origin", body.UpstreamOrigin, utf8.RuneCountInString(body.UpstreamOrigin), 2048, false))
 		}

@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +16,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpsorigin"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -133,16 +132,14 @@ func APIBase(instanceURL string) (string, error) {
 	if instanceURL == "" {
 		instanceURL = "https://github.com"
 	}
-	u, err := url.Parse(instanceURL)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") || u.Opaque != "" {
-		return "", fmt.Errorf("GitHub instance must be an HTTPS origin without credentials, path, query, or fragment")
+	origin, err := httpsorigin.Parse(instanceURL)
+	if err != nil {
+		return "", fmt.Errorf("GitHub instance must be an HTTPS origin without credentials, path, query, or fragment: %w", err)
 	}
-	u.Host = strings.TrimSuffix(strings.ToLower(u.Host), ":443")
-	u.Path = ""
-	if u.Host == "github.com" {
+	if origin == "https://github.com" {
 		return "https://api.github.com", nil
 	}
-	return u.String() + "/api/v3", nil
+	return origin + "/api/v3", nil
 }
 
 // NewInstanceClient uses a customer-owned app on GitHub.com or Enterprise Server.

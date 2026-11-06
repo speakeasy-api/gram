@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpsorigin"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"golang.org/x/sync/singleflight"
@@ -45,11 +44,7 @@ func New(db repo.DBTX, enc *encryption.Client, policy *guardian.Policy) *Provide
 
 // Origin requires an explicit HTTPS origin, not an arbitrary path or userinfo.
 func Origin(raw string) (string, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") || u.Opaque != "" {
-		return "", fmt.Errorf("expected an HTTPS origin without credentials, path, query, or fragment")
-	}
-	return "https://" + strings.TrimSuffix(strings.ToLower(u.Host), ":443"), nil
+	return httpsorigin.Parse(raw)
 }
 
 // Verify proves the supplied key can mint for this installation. No token or
@@ -81,8 +76,8 @@ func (p *Provider) Credential(ctx context.Context, organizationID string, client
 	if err != nil {
 		return none, fmt.Errorf("load GitHub App destination: %w", err)
 	}
-	u, err := url.Parse(target)
-	if err != nil || u.User != nil || u.Scheme != "https" || "https://"+strings.TrimSuffix(strings.ToLower(u.Host), ":443") != config.UpstreamOrigin {
+	origin, err := httpsorigin.FromURL(target)
+	if err != nil || origin != config.UpstreamOrigin {
 		return none, fmt.Errorf("MCP destination does not match the GitHub App credential's allowed origin")
 	}
 	key := organizationID + ":" + clientID.String() + ":" + config.CredentialVersion.String()

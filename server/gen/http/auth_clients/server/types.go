@@ -3939,6 +3939,12 @@ func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAut
 		}
 	}
 	if body.InstanceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_url", *body.InstanceURL, goa.FormatURI))
+	}
+	if body.InstanceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.instance_url", *body.InstanceURL, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
+	}
+	if body.InstanceURL != nil {
 		if utf8.RuneCountInString(*body.InstanceURL) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instance_url", *body.InstanceURL, utf8.RuneCountInString(*body.InstanceURL), 2048, false))
 		}
@@ -3953,6 +3959,12 @@ func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAut
 		if utf8.RuneCountInString(*body.PrivateKey) > 32768 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.private_key", *body.PrivateKey, utf8.RuneCountInString(*body.PrivateKey), 32768, false))
 		}
+	}
+	if body.UpstreamOrigin != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_origin", *body.UpstreamOrigin, goa.FormatURI))
+	}
+	if body.UpstreamOrigin != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.upstream_origin", *body.UpstreamOrigin, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
 	}
 	if body.UpstreamOrigin != nil {
 		if utf8.RuneCountInString(*body.UpstreamOrigin) > 2048 {

@@ -3,7 +3,6 @@ package authclients
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpsorigin"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -68,8 +68,8 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, nil, "remote MCP server not found")
 	}
-	u, err := url.Parse(target)
-	if err != nil || u.User != nil || u.Scheme != "https" || "https://"+strings.TrimSuffix(strings.ToLower(u.Host), ":443") != origin {
+	targetOrigin, err := httpsorigin.FromURL(target)
+	if err != nil || targetOrigin != origin {
 		return nil, oops.E(oops.CodeBadRequest, nil, "allowed MCP origin must match the server's upstream URL")
 	}
 	if err := s.githubApps.Verify(ctx, instance, appID, installationID, payload.PrivateKey); err != nil {
@@ -85,15 +85,11 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
-	server, err := queries.LockOrganizationMCPServer(ctx, repo.LockOrganizationMCPServerParams{ID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
+	server, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
 	}
-	lockedTarget, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock GitHub App MCP destination").LogError(ctx, logger)
-	}
-	if lockedTarget != target {
+	if server.Url != target {
 		return nil, oops.E(oops.CodeBadRequest, nil, "MCP destination changed during verification; retry configuration")
 	}
 	var client repo.McpAuthClient

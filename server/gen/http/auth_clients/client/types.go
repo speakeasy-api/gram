@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	authclients "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -6482,6 +6484,28 @@ func ValidateGitHubAppConfigurationResponseBody(body *GitHubAppConfigurationResp
 	}
 	if body.UpstreamOrigin == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("upstream_origin", "body"))
+	}
+	if body.InstanceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_url", *body.InstanceURL, goa.FormatURI))
+	}
+	if body.InstanceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.instance_url", *body.InstanceURL, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
+	}
+	if body.InstanceURL != nil {
+		if utf8.RuneCountInString(*body.InstanceURL) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instance_url", *body.InstanceURL, utf8.RuneCountInString(*body.InstanceURL), 2048, false))
+		}
+	}
+	if body.UpstreamOrigin != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_origin", *body.UpstreamOrigin, goa.FormatURI))
+	}
+	if body.UpstreamOrigin != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.upstream_origin", *body.UpstreamOrigin, "^[hH][tT][tT][pP][sS]://(\\[[^\\[\\]/?#@\\s]+\\]|[^:/?#@\\[\\]\\s]+)(:[0-9]*)?/?$"))
+	}
+	if body.UpstreamOrigin != nil {
+		if utf8.RuneCountInString(*body.UpstreamOrigin) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.upstream_origin", *body.UpstreamOrigin, utf8.RuneCountInString(*body.UpstreamOrigin), 2048, false))
+		}
 	}
 	return
 }

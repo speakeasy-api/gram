@@ -236,7 +236,7 @@ INSERT INTO mcp_server_auth_clients (organization_id, project_id, mcp_server_id,
 SELECT ac.organization_id, @project_id::uuid, @mcp_server_id, ac.id, ac.attachment_scope, 'admin'
 FROM mcp_auth_clients ac
 WHERE ac.id = @auth_client_id AND ac.organization_id = @organization_id AND NOT ac.deleted
-ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET deleted_at = NULL, source = 'admin', updated_at = clock_timestamp();
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET source = 'admin', updated_at = clock_timestamp();
 
 -- name: ServerHasGitHubAppAuthClient :one
 SELECT EXISTS (
@@ -285,7 +285,7 @@ FROM mcp_auth_client_github_apps
 WHERE organization_id = @organization_id AND auth_client_id = ANY(@auth_client_ids::uuid[]);
 
 -- name: LockGitHubAppServerURL :one
-SELECT r.url FROM mcp_servers m
+SELECT m.id, m.project_id, r.url FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id AND NOT p.deleted
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
 WHERE m.id = @mcp_server_id AND NOT m.deleted

@@ -18,7 +18,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpsorigin"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1201,8 +1201,8 @@ func (p *Proxy) forwardRequest(
 
 	upstreamReq, err := http.NewRequestWithContext(forwardCtx, r.Method, p.RemoteURL, body)
 	if err == nil && p.CredentialOrigin != "" {
-		target := upstreamReq.URL
-		if target.Scheme != "https" || target.User != nil || "https://"+strings.TrimSuffix(strings.ToLower(target.Host), ":443") != p.CredentialOrigin {
+		origin, originErr := httpsorigin.FromURL(upstreamReq.URL.String())
+		if originErr != nil || origin != p.CredentialOrigin {
 			err = fmt.Errorf("upstream destination does not match the service account credential origin")
 		}
 	}
