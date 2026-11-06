@@ -215,12 +215,14 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		if member.typedAuthClient {
-			return s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+			return s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
 			})
 		}
-		return s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Attribution: consentRefreshAttribution(r, endpoint, challengeState), ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true})
+		return s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+			Attribution: consentRefreshAttribution(r, endpoint, challengeState), ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true})
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {

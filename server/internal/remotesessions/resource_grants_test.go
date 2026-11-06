@@ -7,14 +7,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -22,14 +25,8 @@ import (
 // compatibility application before the separately gated migration ships.
 func expandResourceGrantIndexes(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
 	t.Helper()
-	_, err := conn.Exec(ctx, `
- DROP INDEX IF EXISTS remote_sessions_subject_client_key;
- DROP INDEX IF EXISTS remote_sessions_subject_client_issuer_key;
- CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_resource_key
- ON remote_sessions (subject_urn, remote_session_client_id, resource) NULLS NOT DISTINCT WHERE deleted IS FALSE;
- CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_resource_key
- ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id, resource) NULLS NOT DISTINCT WHERE deleted IS FALSE;`)
-	require.NoError(t, err)
+	q := testrepo.New(conn)
+	require.NoError(t, q.ExpandRemoteSessionResourceIndexesFixture(ctx))
 }
 
 func TestRemoteSessionResourceGrants_Lifecycle(t *testing.T) {
@@ -131,7 +128,7 @@ func TestRemoteSessionResourceGrants_OldSchemaMigrationGatePreservesA(t *testing
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "resource-grants-old")
 	// Remain valid when this test is run after the later index migration too.
-	_, err := f.ti.conn.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key ON remote_sessions (subject_urn, remote_session_client_id) WHERE deleted IS FALSE`)
+	err := testrepo.New(f.ti.conn).CreateLegacyRemoteSessionSubjectClientIndexFixture(ctx)
 	require.NoError(t, err)
 	q := repo.New(f.ti.conn)
 	subject := urn.NewUserSubject("old-schema-user")
@@ -181,7 +178,7 @@ func TestRemoteSessionResourceGrants_RefreshOnlySelectedAudience(t *testing.T) {
 	require.True(t, refreshedA.UpdatedAt.Time.After(a.UpdatedAt.Time))
 }
 
-func TestRemoteSessionResourceGrants_LegacyNormalizationAndDuplicateRefusal(t *testing.T) {
+func TestRemoteSessionResourceGrants_LegacyNormalizationKeepsIdentity(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "resource-normalization")
 	expandResourceGrantIndexes(t, ctx, f.ti.conn)
@@ -203,17 +200,95 @@ func TestRemoteSessionResourceGrants_LegacyNormalizationAndDuplicateRefusal(t *t
 	states, err := f.mgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.organizationID, []uuid.UUID{f.clientID}, req.Resource)
 	require.NoError(t, err)
 	require.Equal(t, original.ID, states[f.clientID].ID)
-	// Distinct stored spellings that match the same routed audience must never
-	// be silently collapsed into one token, including by the readiness reader.
+	// Reauthorization for a slash-equivalent audience keeps the source identity,
+	// advances only its consent generation, and stores the new wire spelling.
 	params.Resource = conv.ToPGText(req.Resource)
-	duplicate, err := q.UpsertRemoteSession(ctx, params)
+	reconnected, err := q.UpsertRemoteSession(ctx, params)
 	require.NoError(t, err)
-	require.NotEqual(t, original.ID, duplicate.ID)
-	_, err = q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: f.clientID, Resource: req.Resource})
+	require.Equal(t, original.ID, reconnected.ID)
+	require.Equal(t, original.GrantGeneration+1, reconnected.GrantGeneration)
+	require.Equal(t, req.Resource, reconnected.Resource.String)
+	// The expanded index also prevents a writer from creating a second grant
+	// matching the same routed audience, without rewriting the saved value.
+	_, err = testrepo.New(f.ti.conn).InsertRemoteSessionResourceVariantFixture(ctx, testrepo.InsertRemoteSessionResourceVariantFixtureParams{SourceID: original.ID, Resource: original.Resource.String})
+	var duplicate *pgconn.PgError
+	require.ErrorAs(t, err, &duplicate)
+	require.Equal(t, "23505", duplicate.Code)
+}
+
+func TestRemoteSessionResourceGrants_FocusedMutationsNeverTouchSibling(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "resource-mutations")
+	expandResourceGrantIndexes(t, ctx, f.ti.conn)
+	subject := urn.NewUserSubject("resource-mutation-user")
+	q := repo.New(f.ti.conn)
+	consent := func(resource string) repo.RemoteSession {
+		t.Helper()
+		token, err := f.enc.Encrypt([]byte(resource))
+		require.NoError(t, err)
+		row, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, Resource: conv.ToPGText(resource), AccessTokenEncrypted: token, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+		require.NoError(t, err)
+		return row
+	}
+	a := consent("https://mutation-a.example/mcp")
+	b := consent("https://mutation-b.example/mcp")
+	n, err := f.mgr.SetRemoteSessionAutoRefresh(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, true)
+	require.Zero(t, n)
+	var refusal *oops.ShareableError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	n, err = f.mgr.DisconnectRemoteSession(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID)
+	require.Zero(t, n)
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	n, err = f.mgr.SetRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, b.Resource.String, true)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	retainedA, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: a.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, a, retainedA)
+	changedB, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.True(t, changedB.AutoRefresh)
+	require.Equal(t, b.UpdatedAt, changedB.UpdatedAt)
+	n, err = f.mgr.DisconnectRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, b.Resource.String)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	retainedA, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: a.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, a, retainedA)
+	_, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = f.mgr.ResolveAuthClientAccessTokens(ctx, req)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	states, err = f.mgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.organizationID, []uuid.UUID{f.clientID}, req.Resource)
+	// A focused request for an audience with no bound grant does not delete A.
+	n, err = f.mgr.DisconnectRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.signInA, f.clientID, "https://missing.example/mcp")
 	require.NoError(t, err)
-	require.Empty(t, states)
+	require.Zero(t, n)
+}
+
+func TestRemoteSessionResourceGrants_CallbackRefusalIsActionableAndPreservesA(t *testing.T) {
+	t.Parallel()
+	var original repo.RemoteSession
+	ctx, env, _, err := driveSyntheticLogin(t, "resource-migration-gate", scopelessToken,
+		withResource("https://callback-b.example/mcp"),
+		func(options *syntheticLoginOptions) {
+			options.beforeCallback = func(ctx context.Context, env syntheticExpiryEnv, signIn uuid.UUID) {
+				require.NoError(t, testrepo.New(env.db).CreateLegacyRemoteSessionSubjectClientIndexFixture(ctx))
+				encrypted, err := env.enc.Encrypt([]byte("callback-a-token"))
+				require.NoError(t, err)
+				original, err = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+					SubjectUrn: env.subject, UserSessionIssuerID: signIn, RemoteSessionClientID: env.clientID,
+					Resource: conv.ToPGText("https://callback-a.example/mcp"), AccessTokenEncrypted: encrypted,
+					AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{"read-a"},
+				})
+				require.NoError(t, err)
+			}
+		},
+	)
+	var refusal *oops.ShareableError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, oops.CodeFailedPrecondition, refusal.Code)
+	require.Contains(t, refusal.Error(), "existing connection was not replaced")
+	retained, err := env.q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: original.ID, SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	require.Equal(t, original, retained)
 }

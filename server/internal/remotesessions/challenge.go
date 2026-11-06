@@ -1372,7 +1372,18 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, orga
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
 func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
+	return m.DisconnectRemoteSessionForResource(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
+}
+
+// DisconnectRemoteSessionForResource disconnects only the matching bound audience.
+// It does not guess that a legacy unbound grant belongs to a focused resource.
+// Registration-only requests are refused when multiple grants exist.
+func (m *ChallengeManager) DisconnectRemoteSessionForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
+	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
+		return 0, err
+	}
 	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		Resource:              resource,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userSessionIssuerID,
@@ -1398,7 +1409,18 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
 func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
+	return m.SetRemoteSessionAutoRefreshForResource(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "", enabled)
+}
+
+// SetRemoteSessionAutoRefreshForResource changes one audience's preference without
+// touching its siblings or the refresh CAS timestamp. No legacy resource inference
+// is permitted for this mutation; an unqualified multi-grant request is refused.
+func (m *ChallengeManager) SetRemoteSessionAutoRefreshForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string, enabled bool) (int64, error) {
+	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
+		return 0, err
+	}
 	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
+		Resource:              resource,
 		AutoRefresh:           enabled,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
@@ -1410,6 +1432,20 @@ func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subj
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
 	}
 	return n, nil
+}
+
+func (m *ChallengeManager) requireUnambiguousSessionMutation(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) error {
+	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionMutationCandidates(ctx, remotesessions_repo.ListRemoteSessionMutationCandidatesParams{
+		SubjectUrn: subject, RemoteSessionClientID: clientID, UserSessionIssuerID: userSessionIssuerID,
+		ProjectID: projectID, OrganizationID: organizationID, Resource: resource,
+	})
+	if err != nil {
+		return fmt.Errorf("select resource connection for mutation: %w", err)
+	}
+	if len(rows) > 1 {
+		return oops.E(oops.CodeFailedPrecondition, nil, "multiple resource connections use this registration; choose a specific resource connection before changing it")
+	}
+	return nil
 }
 
 // BuildAuthorizationUrl mints a RemoteLoginState (with PKCE S256) for the
@@ -1656,6 +1692,8 @@ func (m *ChallengeManager) mintAuthorization(
 // organization's grant.
 var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
 
+var errRemoteSessionResourceCollision = errors.New("resource-qualified remote session collision")
+
 // storeRemoteSessionGrant records a consent for (subject, client, resource). A live
 // grant consented through another organization's sign-in is tombstoned first,
 // so the new row records the organization the consent was made in; otherwise
@@ -1674,7 +1712,7 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 	}
 	sess, err := q.UpsertRemoteSession(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sess, oops.E(oops.CodeFailedPrecondition, err, "this registration cannot retain another resource connection until the OAuth session migration is enabled; the existing connection was not replaced")
+		return sess, oops.E(oops.CodeFailedPrecondition, errors.Join(err, errRemoteSessionResourceCollision), "this registration cannot retain another resource connection until the OAuth session migration is enabled; the existing connection was not replaced")
 	}
 	if err != nil {
 		return sess, fmt.Errorf("upsert remote session: %w", err)
@@ -2157,6 +2195,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
+		if errors.Is(err, errRemoteSessionResourceCollision) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			return none, err
+		}
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)

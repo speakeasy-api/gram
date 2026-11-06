@@ -39,7 +39,8 @@ type AuthClientTokenRequest struct {
 	UserSessionIssuerID uuid.UUID
 	Subject             urn.SessionSubject
 	RegistrationID      uuid.UUID
-	// Resource is the selected server's upstream audience, not an authorization dimension.
+	// Resource selects the upstream token grant for the server's audience.
+	// The separate mcp:auth permission remains registration-scoped.
 	Resource     string
 	SkipUnusable bool
 

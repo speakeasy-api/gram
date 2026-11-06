@@ -10992,6 +10992,65 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 	return items, nil
 }
 
+const listRemoteSessionMutationCandidates = `-- name: ListRemoteSessionMutationCandidates :many
+SELECT s.id, s.resource
+FROM remote_sessions AS s
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = s.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $3
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
+  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+  AND ($6::text = '' OR rtrim(s.resource, '/') = rtrim($6::text, '/'))
+`
+
+type ListRemoteSessionMutationCandidatesParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	Resource              string
+}
+
+type ListRemoteSessionMutationCandidatesRow struct {
+	ID       uuid.UUID
+	Resource pgtype.Text
+}
+
+func (q *Queries) ListRemoteSessionMutationCandidates(ctx context.Context, arg ListRemoteSessionMutationCandidatesParams) ([]ListRemoteSessionMutationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionMutationCandidates,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionMutationCandidatesRow
+	for rows.Next() {
+		var i ListRemoteSessionMutationCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Resource); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesForSubject :many
 SELECT
   s.remote_session_client_id,
@@ -14747,6 +14806,12 @@ WHERE s.subject_urn = $2
   AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND ($7::text = '' OR rtrim(s.resource, '/') = rtrim($7::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND ($7::text = '' OR rtrim(matching.resource, '/') = rtrim($7::text, '/'))) = 1
   AND s.deleted IS FALSE
 `
 
@@ -14757,6 +14822,7 @@ type SetRemoteSessionAutoRefreshParams struct {
 	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 	OrganizationID        string
+	Resource              string
 }
 
 // Records the subject's consent-screen auto-refresh choice. Deliberately does
@@ -14767,8 +14833,8 @@ type SetRemoteSessionAutoRefreshParams struct {
 // project/org tenancy, mirroring
 // CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
 // cross tenant boundaries. The session's own user_session_issuer_id is
-// provenance only: this registration-wide preference applies to every resource
-// grant for the subject and client, regardless of which bound surface sets it.
+// provenance only. A resource-qualified request changes only that resource;
+// an unqualified request is refused when the registration is ambiguous.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
 		arg.AutoRefresh,
@@ -14777,6 +14843,7 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.Resource,
 	)
 	if err != nil {
 		return 0, err
@@ -15142,6 +15209,12 @@ WHERE s.subject_urn = $1
   AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND ($6::text = '' OR rtrim(s.resource, '/') = rtrim($6::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND ($6::text = '' OR rtrim(matching.resource, '/') = rtrim($6::text, '/'))) = 1
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -15152,6 +15225,7 @@ type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 	OrganizationID        string
+	Resource              string
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
@@ -15167,11 +15241,11 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 // (binding row, the issuer's project, and the client's own project/org
 // tenancy, mirroring CheckRemoteSessionClientBindingForUserSessionIssuer) so
 // the write cannot cross tenants. The session's own user_session_issuer_id is
-// provenance only: a disconnect from any bound surface destroys the shared
-// credential globally (the caller then attempts upstream revocation).
+// provenance only. Disconnect affects one resource grant; registration-only
+// requests do not guess among multiple resources.
 //
-// Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row. The
+// Returns the stored credentials it tombstones; the matching count caps that
+// at one row. The
 // user_session_issuers join constrains the *requesting* issuer, never the
 // grant's provenance issuer, so a grant minted through a now-soft-deleted
 // issuer stays reachable — and still RFC 7009'd — from any live bound surface.
@@ -15182,6 +15256,7 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.Resource,
 	)
 	if err != nil {
 		return nil, err
@@ -17475,7 +17550,34 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 }
 
 const upsertRemoteSessionGrant = `-- name: UpsertRemoteSessionGrant :one
-WITH inserted AS (
+WITH updated AS (
+UPDATE remote_sessions AS current SET
+    grant_generation = current.grant_generation + 1,
+    access_token_encrypted = $1,
+    access_expires_at = $2,
+    refresh_token_encrypted = $3,
+    authorization_expires_at = $4,
+    refresh_expires_at = $5,
+    scopes = $6,
+    resource = $7,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = $8,
+    upstream_email = $9,
+    upstream_display_name = $10,
+    identity_source = $11,
+    enrichment = $12,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    updated_at = clock_timestamp()
+WHERE current.subject_urn = $13 AND current.remote_session_client_id = $14
+    AND current.deleted IS FALSE
+    AND (current.resource IS NOT DISTINCT FROM $7 OR rtrim(current.resource, '/') = rtrim($7, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching WHERE matching.subject_urn = $13 AND matching.remote_session_client_id = $14
+    AND matching.deleted IS FALSE
+    AND (matching.resource IS NOT DISTINCT FROM $7 OR rtrim(matching.resource, '/') = rtrim($7, '/'))) = 1
+RETURNING current.id, current.grant_generation, current.subject_urn, current.user_session_issuer_id, current.remote_session_client_id, current.access_token_encrypted, current.access_expires_at, current.refresh_token_encrypted, current.authorization_expires_at, current.refresh_expires_at, current.scopes, current.resource, current.auto_refresh, current.last_refresh_attempt_at, current.last_used_at, current.upstream_subject, current.upstream_email, current.upstream_display_name, current.identity_source, current.enrichment, current.last_validated_at, current.validation_status, current.validation_reason, current.created_at, current.updated_at, current.deleted_at, current.deleted
+), inserted AS (
 INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
@@ -17494,7 +17596,10 @@ INSERT INTO remote_sessions (
     identity_source,
     enrichment
 )
-VALUES (
+SELECT
+    $13,
+    $15,
+    $14,
     $1,
     $2,
     $3,
@@ -17502,52 +17607,24 @@ VALUES (
     $5,
     $6,
     $7,
+    $16,
     $8,
     $9,
     $10,
     $11,
-    $12,
-    $13,
-    $14,
-    $15,
-    $16
-)
+    $12
+
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+  AND NOT EXISTS (SELECT 1 FROM remote_sessions existing WHERE existing.subject_urn = $13 AND existing.remote_session_client_id = $14
+    AND existing.deleted IS FALSE
+    AND (existing.resource IS NOT DISTINCT FROM $7 OR rtrim(existing.resource, '/') = rtrim($7, '/')))
 ON CONFLICT DO NOTHING
 RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
-), updated AS (
-UPDATE remote_sessions SET
-    grant_generation = remote_sessions.grant_generation + 1,
-    access_token_encrypted = $4,
-    access_expires_at = $5,
-    refresh_token_encrypted = $6,
-    authorization_expires_at = $7,
-    refresh_expires_at = $8,
-    scopes = $9,
-    resource = $10,
-    -- A new grant replaces the identity wholesale and resets observed validity.
-    upstream_subject = $12,
-    upstream_email = $13,
-    upstream_display_name = $14,
-    identity_source = $15,
-    enrichment = $16,
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL,
-    updated_at = clock_timestamp()
-WHERE subject_urn = $1
-  AND remote_session_client_id = $3
-  AND resource IS NOT DISTINCT FROM $10
-  AND deleted IS FALSE
-  AND NOT EXISTS (SELECT 1 FROM inserted)
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 )
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM inserted UNION ALL SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM updated
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM updated UNION ALL SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM inserted
 `
 
 type UpsertRemoteSessionGrantParams struct {
-	SubjectUrn             urn.SessionSubject
-	UserSessionIssuerID    uuid.UUID
-	RemoteSessionClientID  uuid.UUID
 	AccessTokenEncrypted   string
 	AccessExpiresAt        pgtype.Timestamptz
 	RefreshTokenEncrypted  pgtype.Text
@@ -17555,12 +17632,15 @@ type UpsertRemoteSessionGrantParams struct {
 	RefreshExpiresAt       pgtype.Timestamptz
 	Scopes                 []string
 	Resource               pgtype.Text
-	AutoRefresh            bool
 	UpstreamSubject        pgtype.Text
 	UpstreamEmail          pgtype.Text
 	UpstreamDisplayName    pgtype.Text
 	IdentitySource         pgtype.Text
 	Enrichment             []byte
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientID  uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+	AutoRefresh            bool
 }
 
 type UpsertRemoteSessionGrantRow struct {
@@ -17593,15 +17673,12 @@ type UpsertRemoteSessionGrantRow struct {
 	Deleted                bool
 }
 
-// Consent writes hold the client lock. A targetless conflict check supports
-// both index generations: an old-schema cross-resource collision returns no
-// row instead of overwriting the existing audience. Same-resource reconsent
-// advances its generation; ordinary refresh does not. Revocation stays a tombstone.
+// Consent writes hold the registration lock. Match the routing identity while
+// preserving the provider-facing resource spelling and the existing source ID.
+// Targetless conflict detection supports both index generations: old-schema
+// cross-resource reuse returns no row without replacing another audience.
 func (q *Queries) UpsertRemoteSessionGrant(ctx context.Context, arg UpsertRemoteSessionGrantParams) (UpsertRemoteSessionGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSessionGrant,
-		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
-		arg.RemoteSessionClientID,
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
@@ -17609,12 +17686,15 @@ func (q *Queries) UpsertRemoteSessionGrant(ctx context.Context, arg UpsertRemote
 		arg.RefreshExpiresAt,
 		arg.Scopes,
 		arg.Resource,
-		arg.AutoRefresh,
 		arg.UpstreamSubject,
 		arg.UpstreamEmail,
 		arg.UpstreamDisplayName,
 		arg.IdentitySource,
 		arg.Enrichment,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.AutoRefresh,
 	)
 	var i UpsertRemoteSessionGrantRow
 	err := row.Scan(

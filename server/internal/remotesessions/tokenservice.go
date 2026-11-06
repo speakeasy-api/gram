@@ -211,7 +211,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 	subject urn.SessionSubject,
 	resource string,
 ) (string, error) {
-	resolved, err := m.resolveUpstreamToken(ctx, attribution, clientID, subject, resource)
+	resolved, err := m.resolveUpstreamToken(ctx, attribution, clientID, subject, resource, true)
 	if errors.Is(err, ErrNoValidToken) {
 		return "", nil
 	}
@@ -231,6 +231,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
 	resource string,
+	resourceIsFallback bool,
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	// Workload credentials require a tenant-scoped owner lookup, just as
@@ -258,11 +259,11 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
-	if errors.Is(err, pgx.ErrNoRows) && resource != "" {
+	if resourceIsFallback && errors.Is(err, pgx.ErrNoRows) && resource != "" {
 		// This legacy primitive accepts a refresh fallback, not a selected-server
 		// audience. A singleton retains its stored resource; multi-resource state
 		// remains ambiguous. Typed requests use the strict tenant selector instead.
-		sess, err = remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+		sess, err = remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: ""})
 	}
 
 	switch {

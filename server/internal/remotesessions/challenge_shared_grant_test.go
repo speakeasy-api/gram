@@ -700,7 +700,7 @@ func newResourceCapturingRefreshHandler(refreshCount *atomic.Int64, captured *at
 // reconsent cannot overwrite a different audience's grant.
 func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantFixture, resource string) {
 	t.Helper()
-	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionResourceFixture(ctx, testrepo.SetRemoteSessionResourceFixtureParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID, Resource: conv.ToPGText(resource)}))
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionResourceByIDFixture(ctx, testrepo.SetRemoteSessionResourceByIDFixtureParams{ID: fx.session.ID, Resource: conv.ToPGText(resource)}))
 }
 
 // A persisted resource wins on explicit refresh: no derivation replaces it,

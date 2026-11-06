@@ -183,7 +183,8 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 			identityProviderRegistrations = append(identityProviderRegistrations, row.RemoteSessionClientID)
 			continue
 		case clientType == authz.AuthClientTypeRemoteSession:
-			req := remotesessions.AuthClientTokenRequest{
+			req := remotesessions.AuthClientTokenRequest{Resource: "",
+
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			}

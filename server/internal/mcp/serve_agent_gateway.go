@@ -262,7 +262,8 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	}
 	var resolved map[uuid.UUID]remotesessions.UpstreamToken
 	if mode == feature.AuthClientResolverEnforced {
-		resolved, err = s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+		resolved, err = s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+
 			ProjectID:           member.projectID,
 			OrganizationID:      gate.organizationID,
 			UserSessionIssuerID: issuer,
@@ -272,7 +273,8 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 			Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request),
 		})
 	} else {
-		resolved, err = s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Attribution: remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: issuer, Subject: subject, RegistrationID: clientID, SkipUnusable: false})
+		resolved, err = s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+			Attribution: remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: issuer, Subject: subject, RegistrationID: clientID, SkipUnusable: false})
 	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}

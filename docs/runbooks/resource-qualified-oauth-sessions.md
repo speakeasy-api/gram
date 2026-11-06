@@ -11,8 +11,10 @@ resource's current tokens and consent generation.
 
 - Consent writes hold the existing registration lock. Same-resource reconsent
   advances only that grant's generation and replaces its tokens and identity.
-  Consent for another resource inserts another session without changing the
-  first. Consent provenance and cross-organization retirement rules are unchanged.
+  Within the existing consent tenant, consent for another resource inserts
+  another session without changing the first. Cross-organization consent retains
+  the existing retirement rule: all of that subject/registration's grants from
+  another organization are tombstoned before the new tenant's grant is written.
 - Refresh and enrichment reload the exact source row. Refresh token persistence
   compares its row ID, subject, registration and timestamp, and never advances
   the consent generation. Revocation cannot be undone by an in-flight refresh.
@@ -21,12 +23,18 @@ resource's current tokens and consent generation.
   Shared registration revocation/rotation retains its existing scope.
 - Target-aware readers select the exact resource before considering a legacy
   unbound session, retaining established trailing-slash compatibility. Multiple
-  matching bound grants fail closed. Registration-only readers refuse ambiguous multi-resource
+  matching bound grants fail closed. Reconsent for a trailing-slash-equivalent
+  audience retains its source row while saving the new provider-facing spelling. Registration-only readers refuse ambiguous multi-resource
   state. Existing downstream audience/resource checks remain authoritative;
   unbound tokens do not bypass those checks.
 - Readiness, manual refresh and outage readers have `ForResource` methods.
   Registration-wide status intentionally omits a client with multiple grants;
-  target-specific surfaces must use the resource-qualified method.
+  target-specific surfaces must use the resource-qualified method. Focused
+  disconnect and auto-refresh preference mutations must use `ForResource` too:
+  they affect only a matching bound audience, never an inferred legacy NULL
+  resource. Unqualified multi-grant mutations return a failed precondition.
+  Verification uses the qualified status's row ID and CAS timestamp with the
+  existing enrichment/validation methods.
 
 ## Required deployment order
 
@@ -43,7 +51,8 @@ the index migration while old writers still use
    consent/status consumers use the resource-qualified interfaces. This is an
    explicit operational gate, not something migration tooling can infer.
 3. Apply the separately reviewed index migrations in order: first create the
-   resource-qualified `NULLS NOT DISTINCT` indexes while retaining the old
+   resource-qualified `NULLS NOT DISTINCT` indexes over the routing identity
+   (`rtrim(resource, '/')`), with `WHERE deleted IS FALSE`, while retaining the old
    indexes, then remove the old indexes only after the new indexes are valid.
    This avoids an interval with no grant uniqueness enforcement. NULL legacy
    resources remain unique. Both resources can then retain independent grants.

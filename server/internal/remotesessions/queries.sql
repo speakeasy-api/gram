@@ -1511,11 +1511,38 @@ WHERE s.subject_urn = @subject_urn
   AND (client_project.organization_id = @organization_id::text OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
 
 -- name: UpsertRemoteSessionGrant :one
--- Consent writes hold the client lock. A targetless conflict check supports
--- both index generations: an old-schema cross-resource collision returns no
--- row instead of overwriting the existing audience. Same-resource reconsent
--- advances its generation; ordinary refresh does not. Revocation stays a tombstone.
-WITH inserted AS (
+-- Consent writes hold the registration lock. Match the routing identity while
+-- preserving the provider-facing resource spelling and the existing source ID.
+-- Targetless conflict detection supports both index generations: old-schema
+-- cross-resource reuse returns no row without replacing another audience.
+WITH updated AS (
+UPDATE remote_sessions AS current SET
+    grant_generation = current.grant_generation + 1,
+    access_token_encrypted = @access_token_encrypted,
+    access_expires_at = @access_expires_at,
+    refresh_token_encrypted = @refresh_token_encrypted,
+    authorization_expires_at = @authorization_expires_at,
+    refresh_expires_at = @refresh_expires_at,
+    scopes = @scopes,
+    resource = @resource,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = @upstream_subject,
+    upstream_email = @upstream_email,
+    upstream_display_name = @upstream_display_name,
+    identity_source = @identity_source,
+    enrichment = @enrichment,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    updated_at = clock_timestamp()
+WHERE current.subject_urn = @subject_urn AND current.remote_session_client_id = @remote_session_client_id
+    AND current.deleted IS FALSE
+    AND (current.resource IS NOT DISTINCT FROM @resource OR rtrim(current.resource, '/') = rtrim(@resource, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching WHERE matching.subject_urn = @subject_urn AND matching.remote_session_client_id = @remote_session_client_id
+    AND matching.deleted IS FALSE
+    AND (matching.resource IS NOT DISTINCT FROM @resource OR rtrim(matching.resource, '/') = rtrim(@resource, '/'))) = 1
+RETURNING current.*
+), inserted AS (
 INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
@@ -1534,7 +1561,7 @@ INSERT INTO remote_sessions (
     identity_source,
     enrichment
 )
-VALUES (
+SELECT
     @subject_urn,
     @user_session_issuer_id,
     @remote_session_client_id,
@@ -1551,37 +1578,15 @@ VALUES (
     @upstream_display_name,
     @identity_source,
     @enrichment
-)
+
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+  AND NOT EXISTS (SELECT 1 FROM remote_sessions existing WHERE existing.subject_urn = @subject_urn AND existing.remote_session_client_id = @remote_session_client_id
+    AND existing.deleted IS FALSE
+    AND (existing.resource IS NOT DISTINCT FROM @resource OR rtrim(existing.resource, '/') = rtrim(@resource, '/')))
 ON CONFLICT DO NOTHING
 RETURNING *
-), updated AS (
-UPDATE remote_sessions SET
-    grant_generation = remote_sessions.grant_generation + 1,
-    access_token_encrypted = @access_token_encrypted,
-    access_expires_at = @access_expires_at,
-    refresh_token_encrypted = @refresh_token_encrypted,
-    authorization_expires_at = @authorization_expires_at,
-    refresh_expires_at = @refresh_expires_at,
-    scopes = @scopes,
-    resource = @resource,
-    -- A new grant replaces the identity wholesale and resets observed validity.
-    upstream_subject = @upstream_subject,
-    upstream_email = @upstream_email,
-    upstream_display_name = @upstream_display_name,
-    identity_source = @identity_source,
-    enrichment = @enrichment,
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL,
-    updated_at = clock_timestamp()
-WHERE subject_urn = @subject_urn
-  AND remote_session_client_id = @remote_session_client_id
-  AND resource IS NOT DISTINCT FROM @resource
-  AND deleted IS FALSE
-  AND NOT EXISTS (SELECT 1 FROM inserted)
-RETURNING *
 )
-SELECT * FROM inserted UNION ALL SELECT * FROM updated;
+SELECT * FROM updated UNION ALL SELECT * FROM inserted;
 
 -- name: UpdateRemoteSessionTokensIfUnchanged :one
 -- Compare-and-swap write for the refresh path. Update-only on purpose: an
@@ -2312,6 +2317,23 @@ WHERE s.id = @id
   AND c.deleted IS FALSE
 RETURNING s.*;
 
+-- name: ListRemoteSessionMutationCandidates :many
+SELECT s.id, s.resource
+FROM remote_sessions AS s
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = s.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = @user_session_issuer_id
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+  AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/'));
+
 -- name: SetRemoteSessionAutoRefresh :execrows
 -- Records the subject's consent-screen auto-refresh choice. Deliberately does
 -- NOT touch updated_at: that column doubles as the refresh CAS token-version
@@ -2321,8 +2343,8 @@ RETURNING s.*;
 -- project/org tenancy, mirroring
 -- CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
 -- cross tenant boundaries. The session's own user_session_issuer_id is
--- provenance only: this registration-wide preference applies to every resource
--- grant for the subject and client, regardless of which bound surface sets it.
+-- provenance only. A resource-qualified request changes only that resource;
+-- an unqualified request is refused when the registration is ambiguous.
 UPDATE remote_sessions AS s
 SET auto_refresh = @auto_refresh
 FROM remote_session_client_user_session_issuers AS link
@@ -2336,6 +2358,12 @@ WHERE s.subject_urn = @subject_urn
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND (@resource::text = '' OR rtrim(matching.resource, '/') = rtrim(@resource::text, '/'))) = 1
   AND s.deleted IS FALSE;
 
 -- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
@@ -2401,11 +2429,11 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- (binding row, the issuer's project, and the client's own project/org
 -- tenancy, mirroring CheckRemoteSessionClientBindingForUserSessionIssuer) so
 -- the write cannot cross tenants. The session's own user_session_issuer_id is
--- provenance only: a disconnect from any bound surface destroys the shared
--- credential globally (the caller then attempts upstream revocation).
+-- provenance only. Disconnect affects one resource grant; registration-only
+-- requests do not guess among multiple resources.
 --
--- Returns the stored credentials it tombstones; the partial unique index on
--- (subject_urn, remote_session_client_id) caps that at one row. The
+-- Returns the stored credentials it tombstones; the matching count caps that
+-- at one row. The
 -- user_session_issuers join constrains the *requesting* issuer, never the
 -- grant's provenance issuer, so a grant minted through a now-soft-deleted
 -- issuer stays reachable — and still RFC 7009'd — from any live bound surface.
@@ -2432,6 +2460,12 @@ WHERE s.subject_urn = @subject_urn
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND (@resource::text = '' OR rtrim(matching.resource, '/') = rtrim(@resource::text, '/'))) = 1
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 

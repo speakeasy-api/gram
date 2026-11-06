@@ -2601,3 +2601,29 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: ExpandRemoteSessionResourceIndexesFixture :exec
+-- Test-only model expansion, invoked only in the test's private cloned database.
+DO $resource_indexes$
+BEGIN
+    DROP INDEX IF EXISTS remote_sessions_subject_client_key;
+    DROP INDEX IF EXISTS remote_sessions_subject_client_issuer_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_resource_key
+        ON remote_sessions (subject_urn, remote_session_client_id, (rtrim(resource, '/'))) NULLS NOT DISTINCT WHERE deleted IS FALSE;
+    CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_resource_key
+        ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id, (rtrim(resource, '/'))) NULLS NOT DISTINCT WHERE deleted IS FALSE;
+END
+$resource_indexes$;
+
+-- name: CreateLegacyRemoteSessionSubjectClientIndexFixture :exec
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
+ON remote_sessions (subject_urn, remote_session_client_id) WHERE deleted IS FALSE;
+
+-- name: SetRemoteSessionResourceByIDFixture :exec
+UPDATE remote_sessions SET resource = @resource WHERE id = @id AND deleted IS FALSE;
+
+-- name: InsertRemoteSessionResourceVariantFixture :one
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, scopes, resource)
+SELECT source.subject_urn, source.user_session_issuer_id, source.remote_session_client_id, source.access_token_encrypted, source.access_expires_at, source.scopes, @resource::text
+FROM remote_sessions AS source WHERE source.id = @source_id AND source.deleted IS FALSE
+RETURNING remote_sessions.id;
