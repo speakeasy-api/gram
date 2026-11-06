@@ -461,8 +461,10 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 	}
 	app := mcpconnectionattempts.AppUnverified
 	switch what {
-	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.CodeAIToolBlocked:
-		app = mcpconnectionattempts.AppOf(clientID)
+	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDUnchecked)
+	case mcpconnectionattempts.CodeAIToolBlocked:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
 }
@@ -495,11 +497,11 @@ func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMc
 	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
-	what := mcpconnectionattempts.CodeAIToolCheckUnavailable
+	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDVerified
 	if reason == mcpmetrics.IDJAGRejectionClientMetadataUnavailable {
-		what = mcpconnectionattempts.CodeCIMDFetchFailed
+		what, check = mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.ClientIDUnchecked
 	}
-	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
+	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID, check)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
 }
 
 // recordRemoteSessionVerdict records the check of a provider sign-in on its
@@ -554,7 +556,7 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateContext, unavailable []unavailableMember) {
 	app := mcpconnectionattempts.AppUnverified
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		app = mcpconnectionattempts.AppOf(clientID)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified)
 	}
 	scope := mcpconnectionattempts.GatewayScope(gate.organizationID, gate.projectID, gate.metaServerID, app)
 	if gate.projectID == uuid.Nil {

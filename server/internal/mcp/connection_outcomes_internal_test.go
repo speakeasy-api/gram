@@ -54,7 +54,7 @@ func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
-			require.Equal(t, mcpconnectionattempts.AppOf(clientID).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDVerified).String(), row.AppKey)
 			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
 		})
 	}
@@ -219,6 +219,47 @@ func TestTokenClientRefusal(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable)
 	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
 	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
+}
+
+// Anyone can present a catalog client_id, so a row for a client that was never checked names no app.
+func TestTokenClientRows_UncheckedClientNamesNoFamily(t *testing.T) {
+	t.Parallel()
+
+	const claudeCode = "https://claude.ai/oauth/claude-code-client-metadata"
+	for _, tc := range []struct {
+		name   string
+		record func(*Service, *http.Request)
+		what   mcpconnectionattempts.Code
+		family string
+	}{
+		{"metadata fetch failed", func(s *Service, r *http.Request) {
+			s.recordTokenClientFailure(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+		}, mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.FamilyOther},
+		{"metadata invalid", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "cimd_metadata_invalid")
+		}, mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.FamilyOther},
+		{"admission denied", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "cimd_admission_denied")
+		}, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.FamilyOther},
+		{"blocked after client authentication", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "ai_tool_blocked")
+		}, mcpconnectionattempts.CodeAIToolBlocked, mcpconnectionattempts.FamilyClaudeCode},
+		{"block check failed after client authentication", func(s *Service, r *http.Request) {
+			s.recordTokenClientFailure(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+		}, mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.FamilyClaudeCode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := mcpconnectionattemptstest.New(t)
+			req := tokenRequest(t)
+			req.Header.Set("User-Agent", "Bun/1.4.4")
+			tc.record(&Service{connections: rec.Recorder}, req)
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.what)
+			require.Equal(t, "claude.ai", row.AppKey)
+			require.Equal(t, tc.family, row.ClientFamily)
+		})
+	}
 }
 
 func TestRecordListingFailures(t *testing.T) {

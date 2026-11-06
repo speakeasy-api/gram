@@ -183,7 +183,7 @@ type requestClient struct {
 	userAgent    string
 	forwardedFor string
 
-	// appFamily is what the row's catalog client_id proves.
+	// appFamily is what the row's verified catalog client_id proves.
 	appFamily string
 
 	// reported reads what the MCP session said about itself. It runs on the writer.
@@ -219,18 +219,29 @@ func ReportedClient(read func() (name, version string)) Option {
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
 	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: "", reported: nil}
+	// reportedVersion is the version of a session that reported a name no family knows.
+	reportedVersion := ""
 	if client.reported != nil {
-		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
+		name, version := client.reported()
+		row.ClientFamily, row.ClientVersion = classifyReported(name, version)
+		if name != "" && row.ClientFamily == "" {
+			reportedVersion = version
+		}
 	}
 	if genericFamily(row.ClientFamily) && client.present {
-		if family, version := classifyUserAgent(client.userAgent); row.ClientFamily == "" || !genericFamily(family) {
+		// A browser User-Agent is generic too, so it can't replace a name the session reported.
+		family, version := classifyUserAgent(client.userAgent)
+		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}
-	// A catalog client_id beats a runtime User-Agent like Claude Code's Bun/1.4.4, whose version isn't the app's.
+	// A verified catalog client_id beats a runtime User-Agent, whose version isn't the app's. An unnamed session's reported version is.
 	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
 		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
 		row.ClientFamily, row.ClientVersion = client.appFamily, ""
+		if validClientVersion(reportedVersion) {
+			row.ClientVersion = reportedVersion
+		}
 	}
 	if !client.present {
 		return

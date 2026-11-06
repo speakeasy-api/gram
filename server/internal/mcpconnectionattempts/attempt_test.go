@@ -76,7 +76,7 @@ func TestAppOf(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, AppOf(tc.clientID))
+			require.Equal(t, tc.want, AppOf(tc.clientID, ClientIDVerified))
 		})
 	}
 }
@@ -111,7 +111,7 @@ func TestAttempt_SurvivesSignInStateUnchanged(t *testing.T) {
 	t.Parallel()
 
 	for _, clientID := range []string{"https://client.example.com/m", "https://claude.ai/oauth/claude-code-client-metadata"} {
-		attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf(clientID)))
+		attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf(clientID, ClientIDVerified)))
 		raw, err := json.Marshal(signInState{ID: "s", Attempt: attempt})
 		require.NoError(t, err)
 
@@ -175,7 +175,7 @@ func TestAttempt_SurvivesTheRedisCache(t *testing.T) {
 	t.Parallel()
 
 	states := cache.NewTypedObjectCache[cachedSignInState](testenv.NewLogger(t), redisCache(t), cache.SuffixNone)
-	attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf("https://client.example.com/m")))
+	attempt := Begin(OrganizationGatewayScope("org-test", uuid.New(), AppOf("https://client.example.com/m", ClientIDVerified)))
 	id := uuid.NewString()
 	require.NoError(t, states.Store(t.Context(), cachedSignInState{ID: id, Attempt: attempt}))
 

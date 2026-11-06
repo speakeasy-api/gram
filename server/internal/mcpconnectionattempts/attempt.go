@@ -65,12 +65,23 @@ var (
 	AppOtherMetadataURL = App{"other_metadata_url", ""}
 )
 
-// AppOf returns the App of a validated client_id: the host of a catalog app's client
+// ClientIDCheck says whether Speakeasy resolved and admitted a client_id.
+type ClientIDCheck bool
+
+const (
+	// ClientIDVerified is a client_id Speakeasy resolved and admitted.
+	ClientIDVerified ClientIDCheck = true
+
+	// ClientIDUnchecked is a client_id that a refused or failed request only presented.
+	ClientIDUnchecked ClientIDCheck = false
+)
+
+// AppOf returns the App of a client_id: the host of a catalog app's client
 // metadata URL (or AppUnverified if that host matches a reserved app kind),
 // AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
 // the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept,
-// and only a catalog document names a family.
-func AppOf(clientID string) App {
+// and only a verified catalog client_id names a family: anyone can present one.
+func AppOf(clientID string, check ClientIDCheck) App {
 	if clientID == "" {
 		return AppFirstParty
 	}
@@ -86,6 +97,9 @@ func AppOf(clientID string) App {
 	case "", AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key:
 		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
+	}
+	if check != ClientIDVerified {
+		return App{host, ""}
 	}
 	return App{host, documentFamilies[preset.URL]}
 }

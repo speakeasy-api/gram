@@ -922,7 +922,7 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
 			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
-			require.Equal(t, mcpconnectionattempts.AppOf(ds.clientID).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(ds.clientID, mcpconnectionattempts.ClientIDVerified).String(), row.AppKey)
 			require.NotContains(t, row.AppKey, "/", "host only")
 			require.Len(t, rec.Rows(), 1)
 		})

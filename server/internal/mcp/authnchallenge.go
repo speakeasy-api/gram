@@ -1578,7 +1578,7 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 	if err != nil || a.CreatedAt.IsZero() {
 		return mcpconnectionattempts.NoAttempt
 	}
-	app := mcpconnectionattempts.AppOf(a.ClientID)
+	app := mcpconnectionattempts.AppOf(a.ClientID, mcpconnectionattempts.ClientIDVerified)
 	switch {
 	case a.WorkloadReconnect != nil:
 		app = mcpconnectionattempts.AppWorkload

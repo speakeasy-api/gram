@@ -216,8 +216,8 @@ func TestStampClient_CatalogClientID(t *testing.T) {
 		chatGPT    = "https://chatgpt.com/oauth/client.json"
 	)
 	for _, tc := range []struct {
-		name, clientID, userAgent, reported string
-		family, version                     string
+		name, clientID, userAgent, reported, reportedVersion string
+		family, version                                      string
 	}{
 		{name: "claude code token exchange", clientID: claudeCode, userAgent: "Bun/1.4.4", family: FamilyClaudeCode},
 		{name: "claude code user agent keeps its version", clientID: claudeCode, userAgent: "claude-code/2.1.318 (sdk-cli)", family: FamilyClaudeCode, version: "2.1.318"},
@@ -232,6 +232,9 @@ func TestStampClient_CatalogClientID(t *testing.T) {
 		{name: "reported name wins", clientID: claudeCode, userAgent: "Bun/1.4.4", reported: "codex-mcp-client", family: FamilyCodexCLI},
 		{name: "a generic reported name falls back to the user agent", clientID: claudeCode, userAgent: "codex-mcp-client/0.50.0", reported: "curl", family: FamilyCodexCLI, version: "0.50.0"},
 		{name: "a script borrowing claude code's client id stays a script", clientID: claudeCode, userAgent: "python-requests/2.32.0", family: FamilyScript, version: "2.32.0"},
+		{name: "a browser user agent keeps a reported generic name", clientID: claudeCode, userAgent: "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/141.0.0.0", reported: "curl", family: FamilyScript},
+		{name: "the catalog family keeps an unnamed session's version", clientID: claudeCode, userAgent: "Bun/1.4.4", reported: "Some Client", reportedVersion: "3.2.1", family: FamilyClaudeCode, version: "3.2.1"},
+		{name: "the catalog family drops a named script's version", clientID: claudeWeb, userAgent: "Bun/1.4.4", reported: "curl", reportedVersion: "8.7.1", family: FamilyClaudeAI},
 		{name: "registered client stays generic", clientID: "3fa85f64-5717-4562-b3fc-2c963f66afa6", userAgent: "Bun/1.4.4", family: FamilyOther},
 		{name: "unlisted metadata url stays generic", clientID: "https://client.example.com/m", userAgent: "node", family: FamilyScript},
 	} {
@@ -242,9 +245,9 @@ func TestStampClient_CatalogClientID(t *testing.T) {
 			req.Header.Set("User-Agent", tc.userAgent)
 			opts := []Option{FromRequest(req)}
 			if tc.reported != "" {
-				opts = append(opts, ReportedClient(func() (string, string) { return tc.reported, "" }))
+				opts = append(opts, ReportedClient(func() (string, string) { return tc.reported, tc.reportedVersion }))
 			}
-			scope := ServerScope("org-test", uuid.New(), uuid.New(), AppOf(tc.clientID))
+			scope := ServerScope("org-test", uuid.New(), uuid.New(), AppOf(tc.clientID, ClientIDVerified))
 			row, err := RowAt(Begin(scope), StepInboundToken, ResultCodeIssued, true, time.Now(), opts...)
 			require.NoError(t, err)
 			(&Recorder{}).stampClient(&row)
@@ -426,7 +429,7 @@ func TestNormalizers_HostileValues(t *testing.T) {
 	for _, value := range hostileUserAgents {
 		for _, input := range []string{value, "https://" + value, "https://" + value + "/path"} {
 			require.LessOrEqual(t, len(NormalizeProviderHost(input)), maxProviderHostBytes)
-			require.LessOrEqual(t, len(AppOf(input).String()), maxProviderHostBytes)
+			require.LessOrEqual(t, len(AppOf(input, ClientIDVerified).String()), maxProviderHostBytes)
 		}
 	}
 }
@@ -438,15 +441,29 @@ func FuzzNormalizers(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, value string) {
 		require.LessOrEqual(t, len(NormalizeProviderHost(value)), maxProviderHostBytes)
-		require.LessOrEqual(t, len(AppOf(value).String()), maxProviderHostBytes)
+		require.LessOrEqual(t, len(AppOf(value, ClientIDVerified).String()), maxProviderHostBytes)
 	})
+}
+
+// An unchecked catalog client_id keeps its host but names no family, so the request decides.
+func TestStampClient_UncheckedCatalogClientID(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/token", nil)
+	req.Header.Set("User-Agent", "Bun/1.4.4")
+	app := AppOf("https://claude.ai/oauth/claude-code-client-metadata", ClientIDUnchecked)
+	require.Equal(t, App{"claude.ai", ""}, app)
+	row, err := RowAt(Begin(ServerScope("org-test", uuid.New(), uuid.New(), app)), StepInboundToken, CodeCIMDFetchFailed, true, time.Now(), FromRequest(req))
+	require.NoError(t, err)
+	(&Recorder{}).stampClient(&row)
+	require.Equal(t, FamilyOther, row.ClientFamily)
 }
 
 // A row with no request still belongs to the app that started the attempt.
 func TestStampClient_CatalogFamilyWithoutRequest(t *testing.T) {
 	t.Parallel()
 
-	scope := ProviderSessionScope("org-test", uuid.New(), AppOf("https://claude.ai/oauth/claude-code-client-metadata"))
+	scope := ProviderSessionScope("org-test", uuid.New(), AppOf("https://claude.ai/oauth/claude-code-client-metadata", ClientIDVerified))
 	row, err := RowAt(Begin(scope), StepProviderRefresh, ResultRefreshed, true, time.Now())
 	require.NoError(t, err)
 	(&Recorder{}).stampClient(&row)
