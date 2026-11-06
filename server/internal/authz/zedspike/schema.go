@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Registry definitions are filled field by field while walking the schema.
 package zedspike
 
 import (

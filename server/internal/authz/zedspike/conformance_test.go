@@ -1,3 +1,4 @@
+//nolint:wrapcheck // Test evaluator errors pass through unchanged.
 package zedspike
 
 import (

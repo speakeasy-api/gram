@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Stub answers rely on zero-value fields.
 package zedspike
 
 import (

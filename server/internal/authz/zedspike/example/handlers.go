@@ -1,6 +1,7 @@
 // Package example shows what handler code looks like against the embedded
 // schema. The service and its stores are stand-ins; only the authz calls are
 // the point.
+//nolint:wrapcheck // The example shows bare authorization calls; errors pass through unchanged.
 package example
 
 import (

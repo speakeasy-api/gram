@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Catalogue entries list only the fields that differ from the zero value.
 package zedspike
 
 // Scope is a stored grant scope, as written in principal_grants.scope.

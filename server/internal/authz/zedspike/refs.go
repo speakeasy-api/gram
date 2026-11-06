@@ -1,3 +1,4 @@
+//nolint:exhaustruct // References set only the fields a check needs.
 package zedspike
 
 // Check is one permission on one resource, built only by the typed methods

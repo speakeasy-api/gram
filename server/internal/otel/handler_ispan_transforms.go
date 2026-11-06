@@ -210,6 +210,9 @@ func spanAnyValue(value otelattr.Value) (*otelv1.Span_AnyValue, error) {
 		return (&otelv1.Span_AnyValue_builder{
 			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
+	case otelattr.MAP:
+		// map values are newer than this transform and stay unsupported
+		return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
 	case otelattr.EMPTY:
 		return (&otelv1.Span_AnyValue_builder{}).Build(), nil
 	}

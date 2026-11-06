@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Relationships set only the fields a row carries.
 package zedspike
 
 import (

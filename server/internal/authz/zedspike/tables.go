@@ -1,3 +1,4 @@
+//nolint:exhaustruct,exhaustive // Lookup sets start empty and are filled from the schema.
 package zedspike
 
 import (
@@ -81,20 +82,20 @@ func checkTables(reg *Registry) []error {
 	}
 	for key := range Edges {
 		if !usedEdges[key] {
-			errs = append(errs, fmt.Errorf("Edges entry %s#%s matches no edge relation", key.Type, key.Relation))
+			errs = append(errs, fmt.Errorf("edges entry %s#%s matches no edge relation", key.Type, key.Relation))
 		}
 	}
 	for key := range Facts {
 		if !usedFacts[key] {
-			errs = append(errs, fmt.Errorf("Facts entry %s#%s matches no relation", key.Type, key.Relation))
+			errs = append(errs, fmt.Errorf("facts entry %s#%s matches no relation", key.Type, key.Relation))
 		}
 	}
 	for key, scope := range Answers {
 		if def := reg.Types[key.Type]; def == nil || def.Permissions[key.Permission] == nil {
-			errs = append(errs, fmt.Errorf("Answers names missing permission %s#%s", key.Type, key.Permission))
+			errs = append(errs, fmt.Errorf("answers names missing permission %s#%s", key.Type, key.Permission))
 		}
 		if _, ok := ScopeCatalogue[scope]; !ok {
-			errs = append(errs, fmt.Errorf("Answers maps %s#%s to unknown scope %s", key.Type, key.Permission, scope))
+			errs = append(errs, fmt.Errorf("answers maps %s#%s to unknown scope %s", key.Type, key.Permission, scope))
 		}
 	}
 	errs = append(errs, checkSelectorsConsumed(reg)...)
