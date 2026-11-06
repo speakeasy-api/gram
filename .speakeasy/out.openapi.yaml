@@ -103639,8 +103639,15 @@ components:
           items:
             $ref: '#/components/schemas/ServerClientAssociation'
           description: The server's associated upstream OAuth clients, oldest first.
+        required_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The clients bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.
       required:
         - associations
+        - required_client_ids
     ListServerHeadersResult:
       type: object
       properties:

@@ -614,5 +614,10 @@ var ServerClientAssociation = Type("ServerClientAssociation", func() {
 
 var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {
 	Attribute("associations", ArrayOf(ServerClientAssociation), "The server's associated upstream OAuth clients, oldest first.")
-	Required("associations")
+	Attribute("required_client_ids", ArrayOf(String), "The clients bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Required("associations", "required_client_ids")
 })

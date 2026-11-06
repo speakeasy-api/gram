@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -16,15 +17,27 @@ export type ListServerClientAssociationsResult = {
    * The server's associated upstream OAuth clients, oldest first.
    */
   associations: Array<ServerClientAssociation>;
+  /**
+   * The clients bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.
+   */
+  requiredClientIds: Array<string>;
 };
 
 /** @internal */
 export const ListServerClientAssociationsResult$inboundSchema: z.ZodMiniType<
   ListServerClientAssociationsResult,
   unknown
-> = z.object({
-  associations: z.array(ServerClientAssociation$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    associations: z.array(ServerClientAssociation$inboundSchema),
+    required_client_ids: z.array(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "required_client_ids": "requiredClientIds",
+    });
+  }),
+);
 
 export function listServerClientAssociationsResultFromJSON(
   jsonString: string,

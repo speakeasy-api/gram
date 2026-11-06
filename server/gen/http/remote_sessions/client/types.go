@@ -203,6 +203,11 @@ type GetServerIdentityImpactResponseBody struct {
 type ListServerClientAssociationsResponseBody struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociationResponseBody `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
+	// The clients bound to the server's user session issuer that its callers need
+	// to sign in through. These are its associated clients, or when it has none,
+	// the bound clients no other server claims and it has not explicitly detached.
+	// Empty when the server requires no upstream sign-in.
+	RequiredClientIds []string `form:"required_client_ids,omitempty" json:"required_client_ids,omitempty" xml:"required_client_ids,omitempty"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -4585,6 +4590,10 @@ func NewListServerClientAssociationsResultOK(body *ListServerClientAssociationsR
 		}
 		v.Associations[i] = unmarshalServerClientAssociationResponseBodyToRemotesessionsServerClientAssociation(val)
 	}
+	v.RequiredClientIds = make([]string, len(body.RequiredClientIds))
+	for i, val := range body.RequiredClientIds {
+		v.RequiredClientIds[i] = val
+	}
 
 	return v
 }
@@ -5550,12 +5559,18 @@ func ValidateListServerClientAssociationsResponseBody(body *ListServerClientAsso
 	if body.Associations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("associations", "body"))
 	}
+	if body.RequiredClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_client_ids", "body"))
+	}
 	for _, e := range body.Associations {
 		if e != nil {
 			if err2 := ValidateServerClientAssociationResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.RequiredClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.required_client_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

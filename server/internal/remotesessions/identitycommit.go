@@ -1174,8 +1174,9 @@ type boundClientsRequest struct {
 	ReplaceClient bool
 
 	// Leaving reports that the server is giving up User Identity altogether, so
-	// no client of its own stands in for the others and no choice between
-	// providers is ambiguous.
+	// no client of its own stands in for the others, no choice between providers
+	// is ambiguous, and an unclaimed client it would otherwise fall back to
+	// requiring has to go too.
 	Leaving bool
 }
 
@@ -1223,6 +1224,11 @@ type boundClientsDecision struct {
 // ReplaceClient says so: only credentials or a client the administrator named can
 // do that. A service account client is not one it can reuse, so it follows the
 // rule for a plan naming a different client.
+//
+// A server leaving User Identity also gives up the clients no server claims,
+// which its callers would otherwise fall back to needing. Its siblings on the
+// issuer may fall back to the same client, so unless the server is the issuer's
+// only consumer the client stays bound and only this server's detach is recorded.
 func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRequest) (boundClientsDecision, error) {
 	var decision boundClientsDecision
 	if req.MCPServerID == uuid.Nil {
@@ -1265,10 +1271,10 @@ func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRe
 	// The issuer's only consumer owns its bindings whether or not an association
 	// records it.
 	ownClient := func(id uuid.UUID) bool {
-		return use[id].AssociatedWithMcpServer || consumers.SoleConsumer
+		return use[id].AssociatedWithMcpServer || consumers.SoleConsumer || (req.Leaving && clientUnclaimed(use[id]))
 	}
 	sharedClient := func(id uuid.UUID) bool {
-		return len(use[id].OtherMcpServerIds) > 0 || consumers.ReadsBindings
+		return len(use[id].OtherMcpServerIds) > 0 || consumers.ReadsBindings || (!use[id].AssociatedWithMcpServer && !consumers.SoleConsumer)
 	}
 
 	if countProviderClients(req.Bound, req.ProviderID) > 1 {

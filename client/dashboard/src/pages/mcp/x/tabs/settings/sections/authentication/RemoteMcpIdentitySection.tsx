@@ -176,15 +176,12 @@ export function RemoteMcpIdentitySectionBody({
     undefined,
     { enabled: canRead, throwOnError: false },
   );
-  // The issuer's clients may belong to other servers sharing it. Only the ones
-  // associated with this server are its identity, so a panel that could save
-  // stays unresolved until it knows which those are. Without write access
-  // nothing can be saved, and the disabled choices are all there is to show.
-  const ownClientIds = new Set(
-    associationsQuery.data?.associations.map(
-      (association) => association.remoteSessionClientId,
-    ),
-  );
+  // The issuer's clients may belong to other servers sharing it. Its identity is
+  // the clients the server says its callers need, the same answer requests get,
+  // so a panel that could save stays unresolved until it knows which those are.
+  // Without write access nothing can be saved, and the disabled choices are all
+  // there is to show.
+  const ownClientIds = new Set(associationsQuery.data?.requiredClientIds);
   const ownClients = clients.filter((linked) => ownClientIds.has(linked.id));
   const associationsUnavailable =
     associationsQuery.isError || (canWrite && !canRead);
@@ -435,6 +432,13 @@ export function RemoteMcpIdentitySectionBody({
     if (!detachClientIds || !releaseClientIds) {
       throw new Error(
         "Couldn't check which clients this server uses. Reload and try again.",
+      );
+    }
+    // This panel showed a client to remove, so finding none means it is out of
+    // date. Carrying on would report success with sign-in still required.
+    if (detachClientIds.length === 0 && releaseClientIds.length === 0) {
+      throw new Error(
+        "This server's sign-in changed since this page loaded, so nothing was removed. Reload and try again.",
       );
     }
     for (const id of detachClientIds) {

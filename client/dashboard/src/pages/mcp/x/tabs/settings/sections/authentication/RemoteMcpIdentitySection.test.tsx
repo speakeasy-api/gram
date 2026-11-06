@@ -556,16 +556,18 @@ const target: AuthTarget = {
 
 beforeEach(() => {
   // Unless a test says otherwise, every client on the issuer is this server's.
-  mocks.associations.mockImplementation(() => ({
-    data: {
-      associations: (mocks.clients().items ?? []).map(
-        (client: { id: string }) => ({
+  mocks.associations.mockImplementation(() => {
+    const items: Array<{ id: string }> = mocks.clients().items ?? [];
+    return {
+      data: {
+        associations: items.map((client) => ({
           remoteSessionClientId: client.id,
           serverCount: 1,
-        }),
-      ),
-    },
-  }));
+        })),
+        requiredClientIds: items.map((client) => client.id),
+      },
+    };
+  });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -2099,7 +2101,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
         servers: [],
         hiddenServerCount: 0,
         detachClientIds: ["client-1"],
-        releaseClientIds: [],
       },
       isFetching: false,
       isError: false,
@@ -2182,13 +2183,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.associations.mockReturnValue({
       data: {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 2 }],
+        requiredClientIds: ["client-1"],
       },
     });
     mocks.impact.mockReturnValue({
       data: {
         servers: [],
         hiddenServerCount: 0,
-        detachClientIds: [],
         releaseClientIds: ["client-1"],
       },
       isFetching: false,
@@ -2215,6 +2216,147 @@ describe("RemoteMcpIdentitySectionBody", () => {
           },
         },
       }),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("shows and removes a client the server needs without an association", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "unclaimed-client",
+          clientId: "unclaimed",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.associations.mockReturnValue({
+      data: { associations: [], requiredClientIds: ["unclaimed-client"] },
+    });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        releaseClientIds: ["unclaimed-client"],
+      },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    const manual = screen.getByRole("radio", {
+      name: "Manual",
+      description: /static headers/,
+    });
+    expect(manual.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(manual);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.detachAssociation).toHaveBeenCalledWith({
+        request: {
+          detachServerClientAssociationRequestBody: {
+            mcpServerId: "mcp-server-1",
+            remoteSessionClientId: "unclaimed-client",
+          },
+        },
+      }),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("does not report success when turning off User Identity would remove nothing", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.impact.mockReturnValue({
+      data: { servers: [], hiddenServerCount: 0 },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        expect.stringContaining("nothing was removed"),
+      ),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.detachAssociation).not.toHaveBeenCalled();
+  });
+
+  it("does not trust the previous preview once a refresh of it fails", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        detachClientIds: ["client-1"],
+      },
+      isFetching: false,
+      isError: true,
+      error: new Error("preview failed"),
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        expect.stringContaining("Couldn't check which clients"),
+      ),
     );
     expect(mocks.detach).not.toHaveBeenCalled();
   });
@@ -2248,7 +2390,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       isError: false,
       error: null,
     });
-    mocks.associations.mockReturnValue({ data: { associations: [] } });
+    mocks.associations.mockReturnValue({
+      data: { associations: [], requiredClientIds: [] },
+    });
 
     renderIdentity();
 
@@ -2353,6 +2497,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.associations.mockReturnValue({
       data: {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 3 }],
+        requiredClientIds: ["client-1"],
       },
     });
 

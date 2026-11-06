@@ -561,16 +561,56 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution Re
 	return err
 }
 
-// ResolveServerAccessTokens resolves the caller's credentials for one proxied
-// MCP server that shares a user session issuer with other servers: only the
-// clients associated with mcpServerID are required, so a client another server
-// on the issuer signs in through cannot refuse this server's callers. Each
-// credential still routes to the backend by its recorded resource.
+// requiredServerClients decides which of the clients bound to the issuer an MCP
+// server's callers need. It is the one rule for this: the runtime enforces it and
+// the management API reports it, so settings cannot disagree with what callers
+// are asked for.
 //
 // A server with no associated client bound to the issuer needs the clients no
 // other server claims, so a client nothing explains stays fail-closed. When every
-// client belongs to another server this server has no upstream credential to
-// require, which is what a session records as a no-auth choice for it.
+// client belongs to another server, or the server explicitly detached the rest,
+// it has no upstream credential to require, which is what a session records as a
+// no-auth choice for it.
+func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, error) {
+	if len(clientIDs) == 0 {
+		return nil, nil
+	}
+	uses, err := q.DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
+		McpServerID:            mcpServerID,
+		OrganizationID:         organizationID,
+		UserSessionIssuerID:    userSessionIssuerID,
+		RemoteSessionClientIds: clientIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describe bound client use: %w", err)
+	}
+	var own, unclaimed []uuid.UUID
+	for _, use := range uses {
+		switch {
+		case use.AssociatedWithMcpServer:
+			own = append(own, use.RemoteSessionClientID)
+		case clientUnclaimed(use):
+			unclaimed = append(unclaimed, use.RemoteSessionClientID)
+		}
+	}
+	if len(own) == 0 {
+		return unclaimed, nil
+	}
+	return own, nil
+}
+
+// clientUnclaimed reports that nothing says whether a bound client is the
+// configured server's: it has no association, no other server has one, and the
+// server has not explicitly detached it.
+func clientUnclaimed(use remotesessions_repo.DescribeBoundClientUseRow) bool {
+	return !use.AssociatedWithMcpServer && len(use.OtherMcpServerIds) == 0 && !use.DetachedFromMcpServer
+}
+
+// ResolveServerAccessTokens resolves the caller's credentials for one proxied
+// MCP server that shares a user session issuer with other servers: only the
+// clients requiredServerClients names are required, so a client another server
+// on the issuer signs in through cannot refuse this server's callers. Each
+// credential still routes to the backend by its recorded resource.
 func (m *ChallengeManager) ResolveServerAccessTokens(
 	ctx context.Context,
 	attribution RefreshAttribution,
@@ -592,35 +632,17 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	for _, client := range clients {
 		ids = append(ids, client.ClientID)
 	}
-	uses, err := remotesessions_repo.New(m.db).DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
-		McpServerID:            mcpServerID,
-		OrganizationID:         organizationID,
-		UserSessionIssuerID:    userSessionIssuerID,
-		RemoteSessionClientIds: ids,
-	})
+	required, err := requiredServerClients(ctx, remotesessions_repo.New(m.db), organizationID, userSessionIssuerID, mcpServerID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("describe bound client use: %w", err)
+		return nil, err
 	}
-	use := make(map[uuid.UUID]remotesessions_repo.DescribeBoundClientUseRow, len(uses))
-	for _, row := range uses {
-		use[row.RemoteSessionClientID] = row
-	}
-	var own, unclaimed []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow
-	for _, client := range clients {
-		switch {
-		case use[client.ClientID].AssociatedWithMcpServer:
-			own = append(own, client)
-		case len(use[client.ClientID].OtherMcpServerIds) == 0:
-			unclaimed = append(unclaimed, client)
-		}
-	}
-	if len(own) == 0 {
-		own = unclaimed
-	}
-	if len(own) == 0 {
+	if len(required) == 0 {
 		return nil, nil
 	}
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, own, skipUnusable)
+	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return !slices.Contains(required, client.ClientID)
+	})
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP

@@ -18,9 +18,15 @@ export type SharedIssuerImpactState = {
   failed: boolean;
   /** Why the server refuses this change; the commit would refuse it too. */
   refusal?: string;
-  /** Clients only this server uses, which leaving User Identity unbinds. */
+  /**
+   * Clients only this server uses, which leaving User Identity unbinds.
+   * Undefined until a preview succeeds; the API omits an empty list.
+   */
   detachClientIds?: string[];
-  /** Clients others also use: leaving only removes this server's association. */
+  /**
+   * Clients others also use: leaving only removes this server's association.
+   * Undefined until a preview succeeds; the API omits an empty list.
+   */
   releaseClientIds?: string[];
 };
 
@@ -62,6 +68,8 @@ export function useSharedIssuerImpact(
   );
   if (!request) return NO_IMPACT;
   const refusal = refusalMessage(query.error);
+  // A failed refetch keeps the previous answer in data, which no longer counts.
+  const preview = query.isError ? undefined : query.data;
   return {
     servers: query.data?.servers ?? [],
     hiddenCount: query.data?.hiddenServerCount ?? 0,
@@ -69,8 +77,8 @@ export function useSharedIssuerImpact(
     pending: query.isFetching,
     failed: query.isError && refusal === undefined,
     refusal,
-    detachClientIds: query.data?.detachClientIds,
-    releaseClientIds: query.data?.releaseClientIds,
+    detachClientIds: preview && (preview.detachClientIds ?? []),
+    releaseClientIds: preview && (preview.releaseClientIds ?? []),
   };
 }
 

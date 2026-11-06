@@ -202,6 +202,11 @@ type GetServerIdentityImpactResponseBody struct {
 type ListServerClientAssociationsResponseBody struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociationResponseBody `form:"associations" json:"associations" xml:"associations"`
+	// The clients bound to the server's user session issuer that its callers need
+	// to sign in through. These are its associated clients, or when it has none,
+	// the bound clients no other server claims and it has not explicitly detached.
+	// Empty when the server requires no upstream sign-in.
+	RequiredClientIds []string `form:"required_client_ids" json:"required_client_ids" xml:"required_client_ids"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -3294,6 +3299,14 @@ func NewListServerClientAssociationsResponseBody(res *remotesessions.ListServerC
 		}
 	} else {
 		body.Associations = []*ServerClientAssociationResponseBody{}
+	}
+	if res.RequiredClientIds != nil {
+		body.RequiredClientIds = make([]string, len(res.RequiredClientIds))
+		for i, val := range res.RequiredClientIds {
+			body.RequiredClientIds[i] = val
+		}
+	} else {
+		body.RequiredClientIds = []string{}
 	}
 	return body
 }
