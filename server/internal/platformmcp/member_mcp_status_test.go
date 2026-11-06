@@ -23,6 +23,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -434,4 +435,54 @@ func TestMemberMCPQualifiedStatusDoesNotReadForeignTargets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, MCPConnectionStateNotApplicable, output.State)
 	require.Equal(t, MCPConnectionReasonPermissionRequired, output.Reason)
+}
+
+func TestMemberMCPConnectionStatusTunneledUnboundAndMissingUpstream(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "member_status_tunnel_unbound")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	tunnel, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{ID: uuid.New(), ProjectID: project.ID, Name: "Tunnel", KeyHash: "test-hash", KeyPrefix: "test", ResourceIdentifier: conv.ToPGText("https://tunnel.example.test/mcp")})
+	require.NoError(t, err)
+	baseURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	clientID, issuerID := uuid.New(), uuid.New()
+	target := memberMCPStatusTarget{projectID: project.ID, mcpID: uuid.New(), name: "Tunnel", endpointSlug: "tunnel", canRead: true, canConnect: true, userSessionIssuerID: uuid.New(), remoteSessionIssuerID: issuerID, tunneledMCPServerID: conv.ToNullUUID(tunnel.ID)}
+	for _, several := range []bool{false, true} {
+		client := remotesessions.Client{ID: clientID, RemoteSessionIssuerID: issuerID}
+		unbound := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}
+		reader := testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: unbound, authClients: []remotesessions.Client{client}, authStatuses: unbound}
+		service := NewPluginsService(conn, allowBudget(), "tunnel-unbound-status").withMemberMCPConnectionReader(reader).WithInstallLinks(baseURL, baseURL)
+		if several {
+			reader.authClients = append(reader.authClients, remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuerID})
+			service.withMemberMCPConnectionReader(reader)
+			target.associatedClients = map[uuid.UUID]bool{clientID: true}
+			flags := &feature.InMemory{}
+			flags.SetFlag(feature.FlagAuthClientResolver, principal.OrganizationID, true)
+			service.WithAuthClientResolver(flags)
+		}
+		output, err := service.memberConnectionStatus(ctx, principal, target)
+		require.NoError(t, err)
+		require.NotEqual(t, MCPConnectionStateActive, output.State, "an unbound grant cannot authorize a tunneled resource")
+		if !several {
+			require.Equal(t, MCPConnectionStateReauthorizationRequired, output.State)
+		}
+	}
+	for _, tunneled := range []bool{false, true} {
+		missing := target
+		missing.tunneledMCPServerID = uuid.NullUUID{}
+		missing.remoteMCPServerID = conv.ToNullUUID(uuid.New())
+		if tunneled {
+			missing.remoteMCPServerID = uuid.NullUUID{}
+			missing.tunneledMCPServerID = conv.ToNullUUID(uuid.New())
+		}
+		service := NewPluginsService(conn, allowBudget(), "missing-upstream-status").withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).WithInstallLinks(baseURL, baseURL)
+		output, err := service.memberConnectionStatus(ctx, principal, missing)
+		require.NoError(t, err)
+		require.Equal(t, MCPConnectionStateSetupRequired, output.State)
+		require.Equal(t, "upstream_unavailable", output.Reason)
+		require.Equal(t, "ask_administrator", output.NextAction)
+		require.Equal(t, missing.mcpID.String(), output.MCPID)
+	}
 }

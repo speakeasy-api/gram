@@ -191,6 +191,12 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 	}
 
 	resource, tunneled, err := s.memberMCPUpstreamResource(ctx, target)
+	if errors.Is(err, ErrMemberMCPStatusTargetNotFound) {
+		output.State = MCPConnectionStateSetupRequired
+		output.Reason = "upstream_unavailable"
+		output.NextAction = "ask_administrator"
+		return output, nil
+	}
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
@@ -215,7 +221,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 		}
 		for _, status := range statuses {
-			if status.Status == remotesessions.RemoteSessionActive && (!target.remoteMCPServerID.Valid || status.Resource != "") && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
+			if status.Status == remotesessions.RemoteSessionActive && ((!target.remoteMCPServerID.Valid && !target.tunneledMCPServerID.Valid) || status.Resource != "") && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
 				output.State = MCPConnectionStateActive
 				output.NextAction = "use_mcp"
 				return output, nil
@@ -256,14 +262,14 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 	}
 	status, ok := statuses[clientID]
-	if ok && target.remoteMCPServerID.Valid && status.Status == remotesessions.RemoteSessionActive && status.Resource == "" {
-		// Legacy unbound grants cannot authorize this remote audience.
+	if ok && (target.remoteMCPServerID.Valid || target.tunneledMCPServerID.Valid) && status.Status == remotesessions.RemoteSessionActive && status.Resource == "" {
+		// Legacy unbound grants cannot authorize this upstream audience.
 		output.State = MCPConnectionStateReauthorizationRequired
 		output.Reason = "resource_authorization_required"
 		output.NextAction = "reconnect"
 		return output, nil
 	}
-	if ok && status.Status == remotesessions.RemoteSessionActive && (!target.remoteMCPServerID.Valid || status.Resource != "") {
+	if ok && status.Status == remotesessions.RemoteSessionActive && ((!target.remoteMCPServerID.Valid && !target.tunneledMCPServerID.Valid) || status.Resource != "") {
 		// The runtime forwards an active interactive token even when validation rejected it, and never chains around it.
 		if status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
 			output.State = MCPConnectionStateActive

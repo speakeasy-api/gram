@@ -209,6 +209,9 @@ func (s *Service) probeRemoteSession(
 			return nil
 		}
 		authorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, chosenMetaMember{serverID: endpoint.McpServerID, projectID: endpoint.ProjectID})
+		if verifyHitStoreOutage(ctx, err) {
+			return fmt.Errorf("%w: authorize committed verification: %w", errValidationUnfinished, err)
+		}
 		if err != nil {
 			return fmt.Errorf("authorize committed verification: %w", err)
 		}
