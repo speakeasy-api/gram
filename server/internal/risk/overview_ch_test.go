@@ -1,6 +1,7 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // chOverviewFinding mirrors what the enriched FindingCHWriter writes for one
@@ -340,6 +342,90 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	}
 	require.Equal(t, int64(1), users[userEmail])
 	require.Equal(t, int64(1), users["Unknown user"])
+}
+
+func TestGetRiskUserBreakdownCountsOnlyLiveUserFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	active, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("User Breakdown Active")})
+	require.NoError(t, err)
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("User Breakdown Disabled"), Enabled: new(false)})
+	require.NoError(t, err)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("User Breakdown Deleted")})
+	require.NoError(t, err)
+
+	at := time.Now().UTC().Add(-time.Hour)
+	const targetUserID = "target-user"
+	finding := func(policyID, source, ruleID, externalUserID string) chrepo.RiskFindingRow {
+		row := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), at, source, ruleID, externalUserID)
+		row.RiskPolicyID = policyID
+		return row
+	}
+
+	secret := finding(active.ID, "gitleaks", "secret.github_pat", targetUserID)
+	// Agents report ids in whatever case they were configured with.
+	financial := finding(active.ID, "presidio", "pii.credit_card", strings.ToUpper(targetUserID))
+	dismissed := finding(active.ID, "gitleaks", "secret.dismissed", targetUserID)
+	dismissed.FalsePositiveAt = &at
+	excluded := finding(active.ID, "gitleaks", "secret.excluded", targetUserID)
+	excluded.ExcludedAt = &at
+	shadow := finding(active.ID, "gitleaks", "secret.shadow", targetUserID)
+	shadow.Shadow = true
+
+	dismissedLater := finding(active.ID, "gitleaks", "secret.dismissed_later", targetUserID)
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		dismissedLater,
+		secret,
+		secret, // a redelivered copy counts once
+		financial,
+		dismissed,
+		excluded,
+		shadow,
+		finding(active.ID, "gitleaks", "secret.other_user", "other-user"),
+		finding(disabled.ID, "gitleaks", "secret.disabled", targetUserID),
+		finding(deleted.ID, "gitleaks", "secret.deleted", targetUserID),
+	}))
+
+	// Fresh timestamp: the dismissal copy must sort after the finding copy.
+	dismissAt := time.Now().UTC()
+	require.NoError(t, chQueries.AppendFalsePositiveSuppression(ctx, orgID, projectID.String(),
+		chrepo.FormatCHTime(dismissAt), chrepo.FormatCHTime(dismissAt.Add(time.Microsecond)), "", []uuid.UUID{dismissedLater.ID}))
+
+	deletedPolicyID, err := uuid.Parse(deleted.ID)
+	require.NoError(t, err)
+	require.NoError(t, riskrepo.New(ti.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{
+		ID:        deletedPolicyID,
+		ProjectID: projectID,
+	}))
+
+	from := at.Add(-time.Hour).Format(time.RFC3339)
+	to := at.Add(time.Hour).Format(time.RFC3339)
+	result, err := ti.service.GetRiskUserBreakdown(ctx, &gen.GetRiskUserBreakdownPayload{
+		ExternalUserID: targetUserID,
+		From:           &from,
+		To:             &to,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(2), result.Findings)
+	require.Equal(t, []*gen.RiskOverviewCategory{
+		{Category: "financial", Findings: 1},
+		{Category: "secrets", Findings: 1},
+	}, result.Categories)
+	require.Equal(t, []*gen.RiskRuleBreakdownEntry{
+		{RuleID: "pii.credit_card", Source: "presidio", Findings: 1},
+		{RuleID: "secret.github_pat", Source: "gitleaks", Findings: 1},
+	}, result.Rules)
 }
 
 func TestRiskFindingsTTLRemovesExpiredRows(t *testing.T) { //nolint:paralleltest // OPTIMIZE mutates the ClickHouse table shared by this package's tests.
