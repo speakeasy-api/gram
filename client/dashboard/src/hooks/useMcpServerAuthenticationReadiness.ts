@@ -20,6 +20,11 @@ export interface McpServerAuthenticationReadiness {
   ready: boolean;
   /** Whether `ready` can still change once the identity queries settle. */
   loading: boolean;
+  /**
+   * Whether readiness cannot be known because an identity query failed. When
+   * true, `ready: false` means "unknown", not "the step is open".
+   */
+  unavailable: boolean;
   /** One line on the step's state, as the readiness bar shows it. */
   description: string;
   remoteIdentityMode: IdentityMode;
@@ -153,11 +158,17 @@ export function useMcpServerAuthenticationReadiness(
     (upstreamAuth === "loading" ||
       (enforcedIdentity
         ? upstreamAuthQuery.isPending
-        : isLoadingRemoteIdentity));
+        : isLoadingRemoteIdentity) ||
+      identityProbeStatus === "loading");
+  const unavailable =
+    isRemoteBacked &&
+    (upstreamAuth === "error" ||
+      (enforcedIdentity ? upstreamAuthQuery.isError : identityUnavailable));
 
   return {
     ready,
     loading,
+    unavailable,
     description,
     remoteIdentityMode,
     passThroughAuthorization,

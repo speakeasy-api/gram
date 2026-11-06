@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { SetupStepBanner } from "./SetupStepBanner";
 
-const readiness = vi.hoisted(() => ({ ready: false, loading: false }));
+const readiness = vi.hoisted(() => ({
+  ready: false,
+  loading: false,
+  unavailable: false,
+}));
 
 vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
   useMcpServerAuthenticationReadiness: () => readiness,
@@ -24,16 +28,27 @@ afterEach(() => {
   cleanup();
   readiness.ready = false;
   readiness.loading = false;
+  readiness.unavailable = false;
 });
 
 describe("SetupStepBanner", () => {
-  it("says which header to fill in when credentials are left", () => {
+  it("says to add the API key when credentials are left", () => {
     renderAt("?setup=credentials");
 
     expect(screen.getByText("One step left")).toBeTruthy();
     expect(
-      screen.getByText(/Add the API key Linear needs.*under Custom Headers/),
+      screen.getByText(/Add the API key Linear needs.*Enter it below/),
     ).toBeTruthy();
+  });
+
+  it("says to set up the OAuth client when the OAuth client is left", () => {
+    renderAt("?setup=oauth-client");
+
+    expect(screen.getByText("One step left")).toBeTruthy();
+    expect(
+      screen.getByText(/Set up the OAuth client Linear needs.*client details/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Sign in to Linear/)).toBeNull();
   });
 
   it("says to sign in when sign-in is left", () => {
@@ -60,6 +75,14 @@ describe("SetupStepBanner", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(/Sign in to Linear/)).toBeNull();
+  });
+
+  it("shows nothing when readiness is unavailable", () => {
+    readiness.unavailable = true;
+    renderAt("?setup=credentials");
+
+    expect(screen.queryByText("One step left")).toBeNull();
+    expect(screen.queryByText(/Add the API key/)).toBeNull();
   });
 
   it.each(["", "?setup=other"])(

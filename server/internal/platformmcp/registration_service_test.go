@@ -444,7 +444,7 @@ func TestRegistrationServiceDashboardSetupURLNamesTheOpenStep(t *testing.T) {
 		want       string
 	}{
 		{nextAction: nextActionSecureDashboardSetup, want: settings + "?setup=credentials#authentication"},
-		{nextAction: nextActionContinueDashboardSetup, want: settings + "?setup=sign-in#authentication"},
+		{nextAction: nextActionContinueDashboardSetup, want: settings + "?setup=oauth-client#authentication"},
 		{nextAction: nextActionConnectSignIn, want: settings + "?setup=sign-in#authentication"},
 		{nextAction: nextActionReady, want: settings + "#authentication"},
 		{nextAction: nextActionStartSetup, want: settings + "#authentication"},

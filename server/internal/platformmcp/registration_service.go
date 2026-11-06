@@ -363,7 +363,11 @@ func dashboardSetupStep(nextAction string) string {
 	switch nextAction {
 	case nextActionSecureDashboardSetup:
 		return "credentials"
-	case nextActionContinueDashboardSetup, nextActionConnectSignIn:
+	case nextActionContinueDashboardSetup:
+		// An administrator still has to configure the catalog server's OAuth
+		// client in the dashboard before anyone can sign in.
+		return "oauth-client"
+	case nextActionConnectSignIn:
 		return "sign-in"
 	default:
 		return ""
@@ -382,8 +386,8 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 		return "", ErrRegistrationUnavailable
 	}
 	settings := s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings")
-	// Both open steps, credentials and sign-in, live in the Authentication
-	// section; the step tells the page which one to explain.
+	// Every open step (credentials, OAuth client, sign-in) lives in the
+	// Authentication section; the step tells the page which one to explain.
 	if step := dashboardSetupStep(nextAction); step != "" {
 		settings.RawQuery = url.Values{"setup": {step}}.Encode()
 	}
