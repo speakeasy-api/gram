@@ -247,4 +247,22 @@ describe("isProjectWideSelector", () => {
       }),
     ).toBe(false);
   });
+
+  it("does not treat a disposition or a named resource as project-wide", () => {
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "p",
+        disposition: "read_only",
+      }),
+    ).toBe(false);
+    expect(
+      isProjectWideSelector({
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        projectId: "p",
+      }),
+    ).toBe(false);
+  });
 });
