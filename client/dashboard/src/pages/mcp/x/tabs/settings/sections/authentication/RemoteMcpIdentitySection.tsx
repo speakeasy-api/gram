@@ -177,21 +177,21 @@ export function RemoteMcpIdentitySectionBody({
     { enabled: canRead, throwOnError: false },
   );
   // The issuer's clients may belong to other servers sharing it. Only the ones
-  // associated with this server are its identity; without the answer, every
-  // client reads as this server's, as a commit's refusals still protect others.
-  const ownClientIds = associationsQuery.data
-    ? new Set(
-        associationsQuery.data.associations.map(
-          (association) => association.remoteSessionClientId,
-        ),
-      )
-    : null;
-  const ownClients = ownClientIds
-    ? clients.filter((linked) => ownClientIds.has(linked.id))
-    : clients;
+  // associated with this server are its identity, so a panel that could save
+  // stays unresolved until it knows which those are. Without write access
+  // nothing can be saved, and the disabled choices are all there is to show.
+  const ownClientIds = new Set(
+    associationsQuery.data?.associations.map(
+      (association) => association.remoteSessionClientId,
+    ),
+  );
+  const ownClients = clients.filter((linked) => ownClientIds.has(linked.id));
+  const associationsUnavailable =
+    associationsQuery.isError || (canWrite && !canRead);
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
-  const identityQueryError = headersQuery.isError || clientsError;
+  const identityQueryError =
+    headersQuery.isError || clientsError || associationsUnavailable;
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
@@ -636,7 +636,8 @@ export function RemoteMcpIdentitySectionBody({
     }
   };
 
-  const identityError = headersQuery.error ?? clientsQueryError;
+  const identityError =
+    headersQuery.error ?? clientsQueryError ?? associationsQuery.error;
   // A server that answers with a challenge has no business on No Identity, so
   // that card says so rather than a banner underneath the choice.
   const noneWarning =

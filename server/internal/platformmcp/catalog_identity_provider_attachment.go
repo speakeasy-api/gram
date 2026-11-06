@@ -343,13 +343,18 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		return none, false, nil
 	}
 	// An issuer keeps one client per provider, so several clients can still hold
-	// one match when servers sharing the issuer use different providers.
+	// one match when servers sharing the issuer use different providers. Two
+	// matches would be a choice this flow cannot make.
+	var matches []remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
 	for _, client := range clients {
 		if sameIssuerURL(client.IssuerUrl, issuerURL) {
-			return client, true, nil
+			matches = append(matches, client)
 		}
 	}
-	return none, false, ErrIdentityProviderAttachmentConflict
+	if len(matches) != 1 {
+		return none, false, ErrIdentityProviderAttachmentConflict
+	}
+	return matches[0], true, nil
 }
 
 // reusableIssuer resolves the project-owned issuer this attachment should reuse

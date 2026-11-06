@@ -2210,13 +2210,26 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(mocks.detachAssociation).toHaveBeenCalledWith({
         request: {
           detachServerClientAssociationRequestBody: {
-            mcpServerId: expect.any(String),
+            mcpServerId: "mcp-server-1",
             remoteSessionClientId: "client-1",
           },
         },
       }),
     );
     expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("stays unresolved when it cannot tell which clients are this server's", () => {
+    mocks.associations.mockReturnValue({
+      data: undefined,
+      isError: true,
+      error: new Error("associations failed"),
+    });
+
+    renderIdentity();
+
+    expect(screen.getByText("Identity is unavailable.")).toBeDefined();
+    expect(screen.queryByRole("radio", { name: /User Identity/ })).toBeNull();
   });
 
   it("does not treat another server's client on the issuer as this server's identity", () => {

@@ -1219,8 +1219,10 @@ type boundClientsDecision struct {
 //     use it move to the new one. It is refused when a consumer without an
 //     association shares the issuer, since nothing can say what it would lose.
 //
-// Asking for a client automatically never replaces one unless ReplaceClient says
-// so: only credentials or a client the administrator named can do that.
+// Asking for a client automatically never replaces a per-user client unless
+// ReplaceClient says so: only credentials or a client the administrator named can
+// do that. A service account client is not one it can reuse, so it follows the
+// rule for a plan naming a different client.
 func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRequest) (boundClientsDecision, error) {
 	var decision boundClientsDecision
 	if req.MCPServerID == uuid.Nil {
@@ -1321,8 +1323,14 @@ func (c *IdentityCommit) refuseUnconfirmedReplacement(ctx context.Context, q *mc
 	if !slices.Equal(confirmed, moved) {
 		return identityRefusal(ErrIdentityConflict, nil, replacementNotConfirmedMessage)
 	}
+	return refuseMovedServersOutsideProject(ctx, q, c.plan.Scope.ProjectID, moved)
+}
+
+// refuseMovedServersOutsideProject refuses a replacement that would move a server
+// in another project, which the commit's writer scope does not reach.
+func refuseMovedServersOutsideProject(ctx context.Context, q *mcpserversrepo.Queries, projectID uuid.UUID, moved []uuid.UUID) error {
 	for _, serverID := range moved {
-		if _, err := q.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: c.plan.Scope.ProjectID}); errors.Is(err, pgx.ErrNoRows) {
+		if _, err := q.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID}); errors.Is(err, pgx.ErrNoRows) {
 			return identityRefusal(ErrIdentityConflict, err, replacementOtherProjectMessage)
 		} else if err != nil {
 			return fmt.Errorf("get mcp server using replaced client: %w", err)

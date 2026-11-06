@@ -439,6 +439,9 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		if decision.reuse {
 			change.added = nil
 		}
+		if err := refuseMovedServersOutsideProject(ctx, mcpserversrepo.New(s.db), projectID, decision.moved); err != nil {
+			return err
+		}
 		change.moved = decision.moved
 		for _, client := range decision.detach {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {

@@ -156,8 +156,8 @@ func TestCommitReusesTheProvidersBoundClient(t *testing.T) {
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
 
-// Asking for a client automatically never replaces one, even the server's own:
-// only credentials or a client the administrator names can do that.
+// Asking for a client automatically never replaces a per-user client, even the
+// server's own: only credentials or a client the administrator names can do that.
 func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	t.Parallel()
 
@@ -578,8 +578,7 @@ func TestCommitExplicitReplaceRefusesAClientAGatewayMayUse(t *testing.T) {
 }
 
 // A server in another project is outside the commit's writer scope, so its
-// client is not replaced from here, and the preview cannot be confirmed either
-// way without naming it.
+// client is not replaced from here, and the preview refuses it the same way.
 func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 	t.Parallel()
 
@@ -599,10 +598,16 @@ func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 		require.Equal(t, int64(1), rows)
 	}
 
+	preview := impactPayload(issuer, &target, "replace", &provider, nil)
+	preview.ReplaceClient = new(true)
+	_, err := ti.service.GetServerIdentityImpact(ctx, preview)
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "another project")
+
 	payload := manualExistingProviderIdentityPayload(target, provider, "replace-project-new-client")
 	payload.ReplaceClient = new(true)
 	payload.ReplaceClientServerIds = []string{other.String()}
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	_, err = ti.service.CommitServerIdentityConfiguration(ctx, payload)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorContains(t, err, "another project")
 	requireClientBound(t, ctx, ti, client, issuer, true)
