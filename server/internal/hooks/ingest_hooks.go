@@ -113,6 +113,22 @@ const toolResultFinishReasonError = "error"
 // event that carries no error text.
 const toolFailedWithoutErrorContent = "The tool call failed without an error message."
 
+// toolCompletedWithoutOutputContent is the result stored for a completed tool
+// call that reported no output, so the call reads as complete rather than as
+// still running.
+const toolCompletedWithoutOutputContent = "The tool call returned no output."
+
+// isEmptyJSONValue reports whether content is missing or a JSON value that
+// carries nothing: an empty string, object or array, or null.
+func isEmptyJSONValue(content string) bool {
+	switch strings.TrimSpace(content) {
+	case "", `""`, "{}", "[]", "null":
+		return true
+	default:
+		return false
+	}
+}
+
 func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
 }
@@ -1703,13 +1719,14 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	case "tool.completed", "tool.failed":
 		failed := strings.TrimSpace(payload.Event.Type) == "tool.failed"
 		content := canonicalToolResultContent(payload)
-		if failed && strings.TrimSpace(content) == "" {
-			// A failure is an outcome even without an error text: without a
-			// result row the call would read as still running.
+		// A result is an outcome even without text: without a result row the
+		// call would read as still running. An error that is present but
+		// empty ("", {}, [] or null) says no more than a missing one.
+		if failed && isEmptyJSONValue(content) {
 			content = marshalToJSON(toolFailedWithoutErrorContent)
 		}
 		if strings.TrimSpace(content) == "" {
-			return false, nil
+			content = marshalToJSON(toolCompletedWithoutOutputContent)
 		}
 		msg = baseMsg("tool", content)
 		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
