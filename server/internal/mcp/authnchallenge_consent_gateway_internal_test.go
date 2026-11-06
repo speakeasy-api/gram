@@ -253,10 +253,13 @@ func TestMemberAuthFailure_AgentAsksOwner(t *testing.T) {
 	require.ErrorContains(t, memberAuthFailure(member, memberDial{ownerReconnect: none}), "Ask your administrator to reconnect it")
 	// A self client's credential is the administrator's, not the owner's.
 	require.ErrorContains(t, memberAuthFailure(member, memberDial{clientCredential: true, ownerReconnect: owner}), "contact the MCP server administrator")
-	// Configured headers are not set at the agent's sign-in step either.
-	configured := memberAuthFailure(member, memberDial{configuredHeaders: true, ownerReconnect: owner})
-	require.ErrorContains(t, configured, "Ask your administrator to reconnect it")
+	// Configured headers are not set at the agent's sign-in step either, so
+	// with no agent token sent the owner cannot fix the refusal.
+	configured := memberAuthFailure(member, memberDial{anonymous: true, configuredHeaders: true, ownerReconnect: owner})
+	require.ErrorContains(t, configured, "Ask your administrator to connect it")
 	require.NotContains(t, configured.Error(), "Ask its owner")
+	// With the agent's token sent beside them, the refusal is the token's.
+	require.ErrorContains(t, memberAuthFailure(member, memberDial{configuredHeaders: true, ownerReconnect: owner}), "Ask its owner, Maya Chen, to open "+link+" and reconnect it")
 }
 
 // Only the shared path's agent credential refusal becomes the owner's
