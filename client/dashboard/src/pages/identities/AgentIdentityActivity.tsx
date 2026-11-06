@@ -142,6 +142,14 @@ export function AgentIdentityAudit({
   );
 }
 
+/**
+ * Scopes an agent's checks list leaves out. An agent records one
+ * org:hooks_ingest check for every hook event it sends, thousands in a single
+ * run, and they buried every check that says what the agent may reach. They
+ * are left out on the server, so the total does not count them either.
+ */
+export const HIDDEN_AGENT_CHECK_SCOPES = ["org:hooks_ingest"];
+
 export function AgentIdentityChallenges({
   agent,
 }: {
@@ -151,7 +159,13 @@ export function AgentIdentityChallenges({
   const routes = useOrgRoutes();
   const principalUrn = `agent:${agent.id}`;
   const query = useChallenges(
-    { principalUrn, from, to, limit: 25 },
+    {
+      principalUrn,
+      excludeScopes: HIDDEN_AGENT_CHECK_SCOPES,
+      from,
+      to,
+      limit: 25,
+    },
     undefined,
     { throwOnError: false },
   );

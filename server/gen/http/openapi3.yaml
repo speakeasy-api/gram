@@ -10242,6 +10242,16 @@ paths:
                     description: Filter by scope.
                     type: string
                 - allowEmptyValue: true
+                  description: Leave out checks of these scopes, from the rows and from the total.
+                  in: query
+                  name: exclude_scopes
+                  schema:
+                    description: Leave out checks of these scopes, from the rows and from the total.
+                    items:
+                        type: string
+                    maxItems: 20
+                    type: array
+                - allowEmptyValue: true
                   description: Filter to a specific project.
                   in: query
                   name: project_id
