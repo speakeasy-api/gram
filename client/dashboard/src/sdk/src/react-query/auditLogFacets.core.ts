@@ -14,6 +14,7 @@ import { RequestOptions } from "../lib/sdks.js";
 import { ListAuditLogFacetsResult } from "../models/components/listauditlogfacetsresult.js";
 import {
   ListAuditLogFacetsQueryParamCategory,
+  ListAuditLogFacetsQueryParamOrigin,
   ListAuditLogFacetsRequest,
   ListAuditLogFacetsSecurity,
 } from "../models/operations/listauditlogfacets.js";
@@ -50,6 +51,7 @@ export function buildAuditLogFacetsQuery(
     queryKey: queryKeyAuditLogFacets({
       projectSlug: request?.projectSlug,
       category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -81,6 +83,7 @@ export function queryKeyAuditLogFacets(
   parameters: {
     projectSlug?: string | undefined;
     category?: ListAuditLogFacetsQueryParamCategory | undefined;
+    origin?: ListAuditLogFacetsQueryParamOrigin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

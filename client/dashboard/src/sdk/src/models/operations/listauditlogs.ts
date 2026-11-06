@@ -30,6 +30,18 @@ export const QueryParamCategory = {
  */
 export type QueryParamCategory = ClosedEnum<typeof QueryParamCategory>;
 
+/**
+ * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export const QueryParamOrigin = {
+  User: "user",
+  System: "system",
+} as const;
+/**
+ * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export type QueryParamOrigin = ClosedEnum<typeof QueryParamOrigin>;
+
 export type ListAuditLogsRequest = {
   /**
    * The cursor for paginating through audit logs.
@@ -75,6 +87,10 @@ export type ListAuditLogsRequest = {
    * Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.
    */
   category?: QueryParamCategory | undefined;
+  /**
+   * Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+   */
+  origin?: QueryParamOrigin | undefined;
   /**
    * API Key header
    */
@@ -126,6 +142,11 @@ export const QueryParamCategory$outboundSchema: z.ZodMiniEnum<
 > = z.enum(QueryParamCategory);
 
 /** @internal */
+export const QueryParamOrigin$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamOrigin
+> = z.enum(QueryParamOrigin);
+
+/** @internal */
 export type ListAuditLogsRequest$Outbound = {
   cursor?: string | undefined;
   project_slug?: string | undefined;
@@ -138,6 +159,7 @@ export type ListAuditLogsRequest$Outbound = {
   from?: string | undefined;
   to?: string | undefined;
   category: string;
+  origin?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -159,6 +181,7 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     category: z._default(QueryParamCategory$outboundSchema, "configuration"),
+    origin: z.optional(QueryParamOrigin$outboundSchema),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

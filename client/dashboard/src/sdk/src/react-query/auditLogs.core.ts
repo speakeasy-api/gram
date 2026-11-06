@@ -16,6 +16,7 @@ import {
   ListAuditLogsResponse,
   ListAuditLogsSecurity,
   QueryParamCategory,
+  QueryParamOrigin,
 } from "../models/operations/listauditlogs.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -91,6 +92,7 @@ export function buildAuditLogsQuery(
       from: request?.from,
       to: request?.to,
       category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -140,6 +142,7 @@ export function buildAuditLogsInfiniteQuery(
       from: request?.from,
       to: request?.to,
       category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -188,6 +191,7 @@ export function queryKeyAuditLogs(
     from?: Date | undefined;
     to?: Date | undefined;
     category?: QueryParamCategory | undefined;
+    origin?: QueryParamOrigin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
@@ -208,6 +212,7 @@ export function queryKeyAuditLogsInfinite(
     from?: Date | undefined;
     to?: Date | undefined;
     category?: QueryParamCategory | undefined;
+    origin?: QueryParamOrigin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

@@ -31,6 +31,13 @@ import {
   formatActingSurfaceLabel,
   isNotableActingSurface,
 } from "@/lib/audit-surfaces";
+import {
+  auditViewQuery,
+  parseAuditView,
+  VIEW_EMPTY,
+  VIEW_INSIGHTS,
+  VIEW_OPTIONS,
+} from "@/lib/audit-views";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -332,30 +339,10 @@ function AuditLogRow({
   );
 }
 
-type AuditCategory = "configuration" | "security";
-
-const CATEGORY_OPTIONS: {
-  value: AuditCategory;
-  label: string;
-  tooltip: string;
-}[] = [
-  {
-    value: "configuration",
-    label: "Configuration",
-    tooltip: "Changes people and the Speakeasy team made to settings",
-  },
-  {
-    value: "security",
-    label: "Security activity",
-    tooltip:
-      "Machine access, such as an agent's runtime admitting its workload identity",
-  },
-];
-
 /**
- * A collapsed run of consecutive security entries by one actor, typically an
- * agent's runtime admitting and withdrawing its workload identity on every
- * start and teardown. Expanding it shows each entry.
+ * A collapsed run of consecutive entries by one actor, typically an agent's
+ * runtime admitting its workload identity on every start, or a background job
+ * publishing plugins. Expanding it shows each entry.
  */
 function ActorRunRow({
   run,
@@ -365,6 +352,7 @@ function ActorRunRow({
   projectSlug,
   timestampMode,
   highlightMatch,
+  eventNoun,
   children,
 }: {
   run: ActorRun;
@@ -374,6 +362,7 @@ function ActorRunRow({
   projectSlug?: string;
   timestampMode: "utc" | "local";
   highlightMatch?: (text: string) => React.ReactNode;
+  eventNoun: string;
   children: ReactNode;
 }) {
   const latest = run.logs[0]!;
@@ -393,7 +382,7 @@ function ActorRunRow({
             />
           </StrongName>{" "}
           <span className="text-muted-foreground">
-            {run.logs.length} security events
+            {run.logs.length} {eventNoun}
           </span>
           <button
             type="button"
@@ -562,11 +551,14 @@ function OrgAuditLogsInner() {
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
-  const [selectedCategory, setSelectedCategory] = useQueryState("category", {
-    defaultValue: "configuration",
+  const [selectedView, setSelectedView] = useQueryState("category", {
+    defaultValue: "changes",
   });
-  const category: AuditCategory =
-    selectedCategory === "security" ? "security" : "configuration";
+  const view = parseAuditView(selectedView);
+  const { category, origin } = auditViewQuery(view);
+  // Security and system entries arrive in bursts from one actor, so those
+  // views collapse consecutive entries by actor.
+  const groupsRuns = view === "security" || view === "system";
 
   const tsMode = (timestampMode === "local" ? "local" : "utc") as
     | "utc"
@@ -582,6 +574,7 @@ function OrgAuditLogsInner() {
     projectSlug:
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
     category,
+    origin,
   });
 
   const actionOptions = useMemo(
@@ -617,6 +610,7 @@ function OrgAuditLogsInner() {
     actorId: selectedActor === "all" ? undefined : selectedActor,
     actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
     category,
+    origin,
   });
 
   const logs = useMemo(
@@ -630,24 +624,20 @@ function OrgAuditLogsInner() {
     [logs, tsMode],
   );
 
-  // Security entries from one actor arrive in bursts (a runtime writes one on
-  // every start and teardown), so each day groups consecutive entries by actor.
-  // Configuration changes stay one row each.
   const dateRuns = useMemo(
     () =>
       dateGroups.map((group) => ({
         ...group,
-        runs:
-          category === "security"
-            ? groupConsecutiveByActor(group.logs)
-            : group.logs.map((log) => ({
-                key: log.id,
-                actorId: log.actorId,
-                actorType: log.actorType,
-                logs: [log],
-              })),
+        runs: groupsRuns
+          ? groupConsecutiveByActor(group.logs)
+          : group.logs.map((log) => ({
+              key: log.id,
+              actorId: log.actorId,
+              actorType: log.actorType,
+              logs: [log],
+            })),
       })),
-    [dateGroups, category],
+    [dateGroups, groupsRuns],
   );
   const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -681,11 +671,7 @@ function OrgAuditLogsInner() {
         `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
       );
     }
-    parts.push(
-      category === "security"
-        ? "Showing security activity: machine access such as agents' runtimes admitting their workload identity."
-        : "Showing configuration changes.",
-    );
+    parts.push(VIEW_INSIGHTS[view]);
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
       const firstDate = dateGroups[0]!.date!;
@@ -702,7 +688,7 @@ function OrgAuditLogsInner() {
     selectedAction,
     selectedActor,
     selectedSurface,
-    category,
+    view,
     logs.length,
     dateGroups,
     tsMode,
@@ -986,17 +972,17 @@ function OrgAuditLogsInner() {
           <Page.Toolbar>
             <Page.Toolbar.Leading>
               <SegmentedControl
-                ariaLabel="Audit log category"
-                value={category}
+                ariaLabel="Audit log view"
+                value={view}
                 onChange={(value) => {
-                  // Actions, actors and surfaces differ between categories, so
-                  // a filter chosen in one would leave the other empty.
-                  void setSelectedCategory(value);
+                  // Actions, actors and surfaces differ between views, so a
+                  // filter chosen in one could leave another empty.
+                  void setSelectedView(value);
                   clearFilterValue("action");
                   clearFilterValue("actor");
                   clearFilterValue("surface");
                 }}
-                options={CATEGORY_OPTIONS}
+                options={VIEW_OPTIONS}
               />
             </Page.Toolbar.Leading>
             <Page.Toolbar.Search
@@ -1123,17 +1109,11 @@ function OrgAuditLogsInner() {
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Text className="font-medium">
-                  {category === "security"
-                    ? "No security activity found"
-                    : "No audit logs found"}
-                </Text>
+                <Text className="font-medium">{VIEW_EMPTY[view].title}</Text>
                 <Text muted small>
                   {hasActiveFilters
                     ? "No audit logs match the selected filters."
-                    : category === "security"
-                      ? "Machine access appears here, such as an agent's runtime admitting its workload identity."
-                      : "Activity will appear here as changes are made across your organization."}
+                    : VIEW_EMPTY[view].description}
                 </Text>
               </div>
             ) : (
@@ -1175,6 +1155,11 @@ function OrgAuditLogsInner() {
                         <ActorRunRow
                           key={run.key}
                           run={run}
+                          eventNoun={
+                            view === "security"
+                              ? "security events"
+                              : "system events"
+                          }
                           expanded={expandedRuns.has(run.key)}
                           onToggle={() => {
                             // Collapsing the run that holds the selected entry

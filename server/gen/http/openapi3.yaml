@@ -23982,6 +23982,16 @@ paths:
                         - security
                     type: string
                 - allowEmptyValue: true
+                  description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                  in: query
+                  name: origin
+                  schema:
+                    description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -24095,6 +24105,16 @@ paths:
                     enum:
                         - configuration
                         - security
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                  in: query
+                  name: origin
+                  schema:
+                    description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -114210,6 +114230,12 @@ components:
                     enum:
                         - configuration
                         - security
+                origin:
+                    type: string
+                    description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -114261,6 +114287,12 @@ components:
                     type: string
                     description: Inclusive start of the window to list changes from. Omit for the whole history.
                     format: date-time
+                origin:
+                    type: string
+                    description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                 project_slug:
                     type: string
                     description: Project slug to filter audit logs to a specific project.
