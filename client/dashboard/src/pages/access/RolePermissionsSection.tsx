@@ -100,7 +100,7 @@ export function RolePermissionsSection({
    */
   mcpAccessCount?: number | null;
 }): JSX.Element {
-  const [tab, setTab] = useState("mcp");
+  const [chosenTab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
@@ -113,6 +113,11 @@ export function RolePermissionsSection({
       .filter((group) => group.scopes.length > 0);
   const mcpGroups = groupsWith(isMcpAccessScope);
   const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
+  // A subject whose servers are chosen elsewhere (an agent's are chosen in
+  // its setup flow) has no MCP access to give here, so it gets no tab that
+  // could only ever be empty.
+  const hasMcpTab = mcpGroups.length > 0 || !!renderMcpAccess;
+  const tab = hasMcpTab ? chosenTab : "organization";
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -156,9 +161,11 @@ export function RolePermissionsSection({
         <Tabs value={tab} onValueChange={setTab} className="gap-0">
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
-              <PageTabsTrigger value="mcp">
-                {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
-              </PageTabsTrigger>
+              {hasMcpTab && (
+                <PageTabsTrigger value="mcp">
+                  {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
+                </PageTabsTrigger>
+              )}
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})
               </PageTabsTrigger>

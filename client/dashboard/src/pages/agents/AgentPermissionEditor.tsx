@@ -23,6 +23,7 @@ import {
   agentPolicyUnrestrictedLabel,
   diffAgentPolicyGrants,
   invalidateAgentPolicy,
+  isAgentPolicyEditorScope,
   isAgentPolicyNarrowable,
 } from "./agent-policy-grants";
 import { useAgentPolicyScopes } from "./useAgentPolicyScopes";
@@ -58,6 +59,7 @@ export function AgentPermissionEditor({
   const scope = policyScopes.find((item) => item.slug === editingScope);
   const groups: ScopeGroup[] = [];
   for (const definition of policyScopes) {
+    if (!isAgentPolicyEditorScope(definition.slug)) continue;
     if (view.preservedScopes.includes(definition.slug)) continue;
     const copy = categoryCopy(definition.category ?? definition.resourceType);
     const existing = groups.find((group) => group.label === copy.label);
@@ -197,7 +199,8 @@ export function AgentPermissionEditor({
           <Dialog.Title>Edit permissions</Dialog.Title>
           <Dialog.Description>
             Choose the permissions {agent.name} can use and the projects or
-            resources they apply to.
+            resources they apply to. The MCP servers it connects to are edited
+            in their own section.
           </Dialog.Description>
         </Dialog.Header>
         {view.preservedScopes.length > 0 && (

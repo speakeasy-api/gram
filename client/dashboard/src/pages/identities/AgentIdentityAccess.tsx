@@ -7,6 +7,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
+import { CONNECT_SCOPE } from "@/pages/agents/agentPolicyEdit";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
   agentPolicyUnrestrictedLabel,
@@ -294,6 +295,92 @@ function useAuthGrantNames(grants: AgentPolicyGrant[]): AuthGrantNames {
   };
 }
 
+/** One scope's grants, each with what it reaches and how it is narrowed. */
+function ScopeGrants({
+  agentId,
+  scope,
+  grants,
+  maps,
+  authNames,
+}: {
+  agentId: string;
+  scope: string;
+  grants: AgentPolicyGrant[];
+  maps: ReturnType<typeof useResourceLinkMaps>;
+  authNames: AuthGrantNames;
+}): JSX.Element {
+  const { orgSlug } = useSlugs();
+  const { catalogue } = useAgentPolicyScopes();
+  // `Text` with no children is a loading skeleton, so a scope the catalogue
+  // does not describe (e.g. `mcp:blocked_*`, or any scope while it loads)
+  // must skip the line rather than pass `undefined`.
+  const entry = catalogue.get(scope);
+  const description = entry?.description ?? LOCKED_SCOPE_DESCRIPTIONS[scope];
+  return (
+    <div className="border-border space-y-1 border-b px-4 py-3 last:border-b-0">
+      {/* "Run inference (inference:execute)", as scopeTitle reads; the slug
+          keeps its own span so it stays monospaced. */}
+      <Text>
+        {entry?.label ? `${entry.label} (` : ""}
+        <span className="font-mono">{scope}</span>
+        {entry?.label ? ")" : ""}
+      </Text>
+      {description && (
+        <Text small muted>
+          {description}
+        </Text>
+      )}
+      <ul className="marker:text-muted-foreground list-disc space-y-1 pt-1 pl-5">
+        {orderGrants(scope, grants, authNames).map((grant) => {
+          const { selector } = grant;
+          const narrowing = agentSelectorNarrowing(
+            selector,
+            selector.projectId
+              ? maps.projectMap.get(selector.projectId)?.name
+              : undefined,
+          );
+          return (
+            <li key={grant.id} className="pl-1">
+              <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
+                {selector.resourceKind === "mcp_auth_client" ? (
+                  <AuthGrantLabel parts={authGrantParts(selector, authNames)} />
+                ) : selector.resourceId === ANY_RESOURCE ? (
+                  <Text small>{wildcardGrantLabel(selector)}</Text>
+                ) : (
+                  <ResourceLink
+                    challenge={{
+                      resourceKind: selector.resourceKind,
+                      resourceId: selector.resourceId,
+                      projectId: selector.projectId,
+                    }}
+                    orgSlug={orgSlug ?? ""}
+                    {...maps}
+                  />
+                )}
+                {narrowing && (
+                  <Text small muted className="break-words">
+                    {narrowing}
+                  </Text>
+                )}
+                {/* A server the agent signs in to with a person's own
+                    connection is used on that person's behalf. */}
+                {grant.scope === CONNECT_SCOPE &&
+                  selector.resourceKind === "mcp" &&
+                  selector.resourceId !== ANY_RESOURCE && (
+                    <GrantOnBehalfOf
+                      agentId={agentId}
+                      resourceId={selector.resourceId}
+                    />
+                  )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function AgentIdentityPermissions({
   agent,
 }: {
@@ -301,6 +388,7 @@ export function AgentIdentityPermissions({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
+  const routes = useRoutes();
   const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
@@ -313,18 +401,22 @@ export function AgentIdentityPermissions({
     retry: false,
     throwOnError: false,
   });
-  const { orgSlug } = useSlugs();
-  const { catalogue, isError: catalogueError } = useAgentPolicyScopes();
+  const { isError: catalogueError } = useAgentPolicyScopes();
   // Credential restrictions are listed and edited in their own panel.
-  const rows = canRead
+  const visible = canRead
     ? (grants.data ?? []).filter(
         (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
       )
     : [];
+  // The servers the agent reaches come first, in a section of their own:
+  // they decide what it can do at all, and they are edited in the agent's
+  // setup flow, beside the sign-in each server needs.
+  const servers = visible.filter((grant) => grant.scope === CONNECT_SCOPE);
+  const rows = visible.filter((grant) => grant.scope !== CONNECT_SCOPE);
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
   const maps = useResourceLinkMaps(
-    rows.some(
+    visible.some(
       ({ selector }) =>
         selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
     ),
@@ -340,7 +432,9 @@ export function AgentIdentityPermissions({
   } else if (rows.length === 0) {
     content = (
       <IdentityPanelEmpty>
-        No permissions configured for this agent.
+        {servers.length > 0
+          ? "No other permissions configured for this agent."
+          : "No permissions configured for this agent."}
       </IdentityPanelEmpty>
     );
   } else {
@@ -361,113 +455,85 @@ export function AgentIdentityPermissions({
             shown.
           </Text>
         )}
-        {[...byScope].map(([scope, grants]) => {
-          // `Text` with no children is a loading skeleton, so a scope the
-          // catalogue does not describe (e.g. `mcp:blocked_*`, or any scope
-          // while it loads) must skip the line rather than pass `undefined`.
-          const entry = catalogue.get(scope);
-          const description =
-            entry?.description ?? LOCKED_SCOPE_DESCRIPTIONS[scope];
-          return (
-            <div
-              key={scope}
-              className="border-border space-y-1 border-b px-4 py-3 last:border-b-0"
-            >
-              {/* "Run inference (inference:execute)", as scopeTitle reads;
-                  the slug keeps its own span so it stays monospaced. */}
-              <Text>
-                {entry?.label ? `${entry.label} (` : ""}
-                <span className="font-mono">{scope}</span>
-                {entry?.label ? ")" : ""}
-              </Text>
-              {description && (
-                <Text small muted>
-                  {description}
-                </Text>
-              )}
-              <ul className="marker:text-muted-foreground list-disc space-y-1 pt-1 pl-5">
-                {orderGrants(scope, grants, authNames).map((grant) => {
-                  const { selector } = grant;
-                  const narrowing = agentSelectorNarrowing(
-                    selector,
-                    selector.projectId
-                      ? maps.projectMap.get(selector.projectId)?.name
-                      : undefined,
-                  );
-                  return (
-                    <li key={grant.id} className="pl-1">
-                      <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
-                        {selector.resourceKind === "mcp_auth_client" ? (
-                          <AuthGrantLabel
-                            parts={authGrantParts(selector, authNames)}
-                          />
-                        ) : selector.resourceId === ANY_RESOURCE ? (
-                          <Text small>{wildcardGrantLabel(selector)}</Text>
-                        ) : (
-                          <ResourceLink
-                            challenge={{
-                              resourceKind: selector.resourceKind,
-                              resourceId: selector.resourceId,
-                              projectId: selector.projectId,
-                            }}
-                            orgSlug={orgSlug ?? ""}
-                            {...maps}
-                          />
-                        )}
-                        {narrowing && (
-                          <Text small muted className="break-words">
-                            {narrowing}
-                          </Text>
-                        )}
-                        {/* A server the agent signs in to with a person's
-                            own connection is used on that person's behalf. */}
-                        {grant.scope === "mcp:connect" &&
-                          selector.resourceKind === "mcp" &&
-                          selector.resourceId !== ANY_RESOURCE && (
-                            <GrantOnBehalfOf
-                              agentId={agent.id}
-                              resourceId={selector.resourceId}
-                            />
-                          )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          );
-        })}
+        {[...byScope].map(([scope, scopeGrants]) => (
+          <ScopeGrants
+            key={scope}
+            agentId={agent.id}
+            scope={scope}
+            grants={scopeGrants}
+            maps={maps}
+            authNames={authNames}
+          />
+        ))}
       </>
     );
   }
+  // One panel says when the policy cannot be read or loaded; a second one
+  // saying the same thing adds nothing.
+  const showServers = canRead && !(grants.isError && visible.length === 0);
   return (
-    <IdentityPanel
-      title="Agent permissions"
-      action={
-        canRead && grants.data && !grants.isError ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setEditing(true)}
-          >
-            Edit permissions
-          </Button>
-        ) : undefined
-      }
-      loading={canRead && grants.isLoading}
-      error={canRead && grants.isError && rows.length === 0}
-      refreshFailed={canRead && grants.isError && rows.length > 0}
-      onRetry={() => void grants.refetch()}
-      footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
-    >
-      {content}
-      {editing && canRead && grants.data && (
-        <AgentPermissionEditor
-          agent={agent}
-          grants={grants.data}
-          onClose={() => setEditing(false)}
-        />
+    <>
+      {showServers && (
+        <IdentityPanel
+          title="MCP servers"
+          action={
+            <Button asChild variant="secondary" size="sm">
+              {/* The setup flow's server step, where servers are picked
+                  together with how the agent signs in to each. */}
+              <Link
+                to={`${routes.identities.agents.edit.href(agent.id)}?step=1`}
+              >
+                Edit servers
+              </Link>
+            </Button>
+          }
+          loading={grants.isLoading}
+          refreshFailed={grants.isError && visible.length > 0}
+          onRetry={() => void grants.refetch()}
+        >
+          {servers.length === 0 ? (
+            <IdentityPanelEmpty>
+              This agent cannot connect to any MCP server.
+            </IdentityPanelEmpty>
+          ) : (
+            <ScopeGrants
+              agentId={agent.id}
+              scope={CONNECT_SCOPE}
+              grants={servers}
+              maps={maps}
+              authNames={authNames}
+            />
+          )}
+        </IdentityPanel>
       )}
-    </IdentityPanel>
+      <IdentityPanel
+        title={servers.length > 0 ? "Other permissions" : "Agent permissions"}
+        action={
+          canRead && grants.data && !grants.isError ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditing(true)}
+            >
+              Edit permissions
+            </Button>
+          ) : undefined
+        }
+        loading={canRead && grants.isLoading}
+        error={canRead && grants.isError && visible.length === 0}
+        refreshFailed={canRead && grants.isError && visible.length > 0}
+        onRetry={() => void grants.refetch()}
+        footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
+      >
+        {content}
+        {editing && canRead && grants.data && (
+          <AgentPermissionEditor
+            agent={agent}
+            grants={grants.data}
+            onClose={() => setEditing(false)}
+          />
+        )}
+      </IdentityPanel>
+    </>
   );
 }
