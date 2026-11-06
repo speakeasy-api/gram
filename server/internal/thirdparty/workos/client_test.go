@@ -998,13 +998,14 @@ func TestRoleClient_CreateOrganizationMembership_RefreshesRoles(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				membership := usermanagement.OrganizationMembership{ID: "mem_1", UserID: "user_1", OrganizationID: "org_1", Role: common.RoleResponse{Slug: tc.createRole}}
-				switch r.Method {
-				case http.MethodPost:
+				const membershipsPath = "/user_management/organization_memberships"
+				switch r.Method + " " + r.URL.Path {
+				case http.MethodPost + " " + membershipsPath:
 					if tc.createRole == "" {
 						http.Error(w, "create refused", http.StatusBadRequest)
 						return
 					}
-				case http.MethodGet:
+				case http.MethodGet + " " + membershipsPath + "/mem_1":
 					reads++
 					if tc.readStatus != 0 {
 						http.Error(w, "read refused", tc.readStatus)
@@ -1013,7 +1014,7 @@ func TestRoleClient_CreateOrganizationMembership_RefreshesRoles(t *testing.T) {
 					for _, slug := range tc.freshRoles {
 						membership.Roles = append(membership.Roles, common.RoleResponse{Slug: slug})
 					}
-				case http.MethodPut:
+				case http.MethodPut + " " + membershipsPath + "/mem_1":
 					updates++
 					if tc.updateStatus != 0 {
 						http.Error(w, "update refused", tc.updateStatus)
@@ -1027,6 +1028,9 @@ func TestRoleClient_CreateOrganizationMembership_RefreshesRoles(t *testing.T) {
 					for _, slug := range opts.RoleSlugs {
 						membership.Roles = append(membership.Roles, common.RoleResponse{Slug: slug})
 					}
+				default:
+					http.Error(w, "unexpected request "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+					return
 				}
 				writeJSON(w, membership)
 			}))
