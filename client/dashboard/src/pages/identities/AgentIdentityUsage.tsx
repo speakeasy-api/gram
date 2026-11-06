@@ -10,6 +10,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { telemetryReadRetry } from "@/components/observe/telemetryReadRetry";
 import { useUser } from "@/contexts/Auth";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -74,6 +75,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const targets = useQuery({
@@ -85,6 +87,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const series = useQuery({
@@ -96,6 +99,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
 
@@ -258,6 +262,7 @@ function AgentCredentialUsePanel({
         }),
       ),
     enabled: canViewToolLogs,
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
 

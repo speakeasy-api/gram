@@ -2429,6 +2429,11 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
 			FirstSeenUnixNano:        0,
@@ -2803,6 +2808,11 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		return &OverviewSummary{
 			TotalChats:               0,
 			ResolvedChats:            0,
@@ -3797,6 +3807,11 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		// Return empty metrics if no rows
 		return &MetricsSummaryRow{
 			FirstSeenUnixNano:        0,
@@ -4320,6 +4335,25 @@ type ToolUsageTraceSummary struct {
 }
 
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
+// ToolUsageFilterOptionGroups names the option groups a filter options read
+// returns. Users covers the agents and the people agents acted for too.
+type ToolUsageFilterOptionGroups struct {
+	HostedServers bool
+	ShadowServers bool
+	Gateways      bool
+	Users         bool
+	Clients       bool
+}
+
+// AllToolUsageFilterOptionGroups reads every option group.
+var AllToolUsageFilterOptionGroups = ToolUsageFilterOptionGroups{
+	HostedServers: true,
+	ShadowServers: true,
+	Gateways:      true,
+	Users:         true,
+	Clients:       true,
+}
+
 type ToolUsageFilterOptions struct {
 	HostedServers []ToolUsageHostedServerFilterOptionRow
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
@@ -4552,7 +4586,11 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 // group narrowed by its own selection would offer nothing but what is already
 // picked, so the reader could never add a second value; narrowed by the others
 // it answers "which of these still have calls, given everything else".
-func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageFilterOptions, error) {
+//
+// Only the groups in groups are read. Each group is a full pass over the
+// window, and a page that shows no user facet (an identity's own Tool logs)
+// still paid for the two widest ones on every load.
+func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams, groups ToolUsageFilterOptionGroups) (*ToolUsageFilterOptions, error) {
 	serverArg := arg
 	serverArg.HostedToolsetSlugs = nil
 	serverArg.MCPServerIDs = nil
@@ -4577,38 +4615,48 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	// writes a distinct field of options.
 	var options ToolUsageFilterOptions
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		var err error
-		options.HostedServers, err = q.getToolUsageHostedServerFilterOptions(egCtx, serverArg)
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, serverArg)
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		options.Gateways, err = q.getToolUsageGatewayFilterOptions(egCtx, serverArg)
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, userArg)
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, userArg)
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		options.Clients, err = q.getToolUsageClientFilterOptions(egCtx, clientArg)
-		return err
-	})
+	if groups.HostedServers {
+		eg.Go(func() error {
+			var err error
+			options.HostedServers, err = q.getToolUsageHostedServerFilterOptions(egCtx, serverArg)
+			return err
+		})
+	}
+	if groups.ShadowServers {
+		eg.Go(func() error {
+			var err error
+			options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, serverArg)
+			return err
+		})
+	}
+	if groups.Gateways {
+		eg.Go(func() error {
+			var err error
+			options.Gateways, err = q.getToolUsageGatewayFilterOptions(egCtx, serverArg)
+			return err
+		})
+	}
+	if groups.Users {
+		eg.Go(func() error {
+			var err error
+			options.Users, err = q.getToolUsageUserFilterOptions(egCtx, userArg)
+			return err
+		})
+		eg.Go(func() error {
+			var err error
+			options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, userArg)
+			return err
+		})
+	}
+	if groups.Clients {
+		eg.Go(func() error {
+			var err error
+			options.Clients, err = q.getToolUsageClientFilterOptions(egCtx, clientArg)
+			return err
+		})
+	}
 	var agents []ToolUsageUserFilterOptionRow
-	if splitAgents {
+	if groups.Users && splitAgents {
 		eg.Go(func() error {
 			var err error
 			agents, err = q.getToolUsageUserFilterOptions(egCtx, agentArg)
@@ -4619,7 +4667,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		return nil, fmt.Errorf("tool usage filter option queries: %w", err)
 	}
 
-	if splitAgents {
+	if groups.Users && splitAgents {
 		users := make([]ToolUsageUserFilterOptionRow, 0, len(options.Users)+len(agents))
 		for _, row := range options.Users {
 			if row.UserKind != ToolUsageUserKindAgentID {
@@ -4732,6 +4780,56 @@ func toolUsageAgentFilter(agentIDs []string) squirrel.Sqlizer {
 		squirrel.Eq{"user_kind": ToolUsageUserKindAgentID},
 		squirrel.Eq{"user_key": agentIDs},
 	}
+}
+
+// toolUsageAgentScope returns the agents a read is pinned to, or nil when its
+// identity filter can select a trace that no agent made.
+//
+// A trace is an agent's when max(agent_id) over its summary rows is that
+// agent, so every trace either filter keeps has a row naming one of these
+// agents. AgentIDs is ANDed with the user filter and pins the read by itself.
+// A user filter pins it only when every selector is an agent: an email, an id
+// or an authorizer selects traces that carry no agent at all.
+func toolUsageAgentScope(userFilters []ToolUsageUserFilter, authorizerUserIDs []string, agentIDs []string) []string {
+	if len(agentIDs) > 0 {
+		return agentIDs
+	}
+	if len(userFilters) == 0 || len(authorizerUserIDs) > 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(userFilters))
+	for _, filter := range userFilters {
+		if filter.Kind != ToolUsageUserKindAgentID {
+			return nil
+		}
+		keys = append(keys, filter.Key)
+	}
+	return keys
+}
+
+// withToolUsageAgentTraces narrows a grouped trace_summaries read to the
+// traces of the given agents before it groups. Without it an agent's page
+// grouped every trace the project recorded in the window, then kept the
+// agent's few: on a busy project that ran past ClickHouse's 60 second
+// max_execution_time. The subquery reads four narrow columns, and the trace
+// ids it returns prune the outer read by its (gram_project_id, trace_id) key.
+// It keeps every summary row of a matching trace, so a sibling row that names
+// no agent still folds into the trace's aggregates. The caller still applies
+// the exact identity filter over the grouped rows.
+func withToolUsageAgentTraces(sb squirrel.SelectBuilder, projectID string, timeStart, timeEnd int64, agentIDs []string) (squirrel.SelectBuilder, error) {
+	if len(agentIDs) == 0 {
+		return sb, nil
+	}
+	sub := sq.Select("trace_id").
+		From("trace_summaries").
+		Where("gram_project_id = ?", projectID).
+		Where(squirrel.Eq{"agent_id": agentIDs})
+	sub = withTraceWindowScanBounds(sub, "start_time_unix_nano", timeStart, timeEnd)
+	subSQL, subArgs, err := sub.ToSql()
+	if err != nil {
+		return sb, fmt.Errorf("building agent trace filter: %w", err)
+	}
+	return sb.Where("trace_id IN ("+subSQL+")", subArgs...), nil
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -4894,6 +4992,11 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return ToolUsageTotalsRow{}, err
+		}
 		return ToolUsageTotalsRow{
 			EventCount:    0,
 			SuccessCount:  0,
@@ -6023,6 +6126,10 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	groupedSB, err := withToolUsageAgentTraces(groupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, toolUsageAgentScope(arg.UserFilters, arg.AuthorizerUserIDs, arg.AgentIDs))
+	if err != nil {
+		return "", nil, err
+	}
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -6802,6 +6909,16 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	agentScope := toolUsageAgentScope(arg.UserFilters, arg.AuthorizerUserIDs, arg.AgentIDs)
+	directGroupedSB, err := withToolUsageAgentTraces(directGroupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, agentScope)
+	if err != nil {
+		return "", nil, err
+	}
+	hookGroupedSB, err = withToolUsageAgentTraces(hookGroupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, agentScope)
+	if err != nil {
+		return "", nil, err
+	}
 
 	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
 	if err != nil {
@@ -8303,6 +8420,11 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	defer rows.Close()
 
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		return &ActiveCounts{
 			ActiveServersCount: 0,
 			ActiveUsersCount:   0,
@@ -8388,6 +8510,11 @@ func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopSer
 	}
 	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
+		// A query that fails while it runs (a ClickHouse timeout or memory
+		// limit) ends the rows early: an error, not an empty result.
+		if err := rows.Err(); err != nil {
+			return 0, fmt.Errorf("reading active server count rows: %w", err)
+		}
 		return 0, nil
 	}
 	var count uint64
