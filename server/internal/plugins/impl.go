@@ -1553,6 +1553,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
+	cfg.InstallRoute = InstallRouteDownload
 
 	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
@@ -1792,6 +1793,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				MarketplaceName:  "",
 				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
 				BrowserLogin:     false,
+				InstallRoute:     InstallRouteMarketplace,
 				InstallFailOpen:  false,
 			}
 			observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
@@ -3658,6 +3660,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		HooksOrgName:     "",
 		IsDefaultProject: s.isDefaultProject(ctx, projectID),
 		BrowserLogin:     false,
+		InstallRoute:     InstallRouteMarketplace,
 		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)

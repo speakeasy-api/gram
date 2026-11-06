@@ -93,6 +93,11 @@ type metaMember struct {
 	// nil for a hosted member, which matches clients by authorization server
 	// instead.
 	associatedClients map[uuid.UUID]bool
+
+	// typedRegistrations reports that associatedClients is exactly the
+	// registrations the member offers through typed auth clients, so its
+	// derived authorization server says nothing about how it signs in.
+	typedRegistrations bool
 }
 
 // memberStatus is the list_servers connection state. Hosted members execute
@@ -504,6 +509,7 @@ func (s *Service) admitMetaMembers(
 			upstreamUnavailable:        nil,
 			typedAuthClient:            false,
 			associatedClients:          nil,
+			typedRegistrations:         false,
 		})
 	}
 

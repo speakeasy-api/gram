@@ -340,9 +340,9 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						}
 					}
 				}
-				// Before enforcement the direct endpoint keeps the issuer-wide
-				// resolution, which a sibling server's client still constrains.
-				if state == "live" || state == "owner_block" || state == "credential_block" || (state == "sibling_issuer_client" && mode == "enforced") {
+				// A sibling server's client on the same issuer never constrains this
+				// server's own endpoint, whatever the enforcement mode.
+				if state == "live" || state == "owner_block" || state == "credential_block" || state == "sibling_issuer_client" {
 					// The same key on the server's own endpoint must reach the
 					// gateway's decision: a block the gateway enforces cannot be
 					// bypassed by calling the server directly.
