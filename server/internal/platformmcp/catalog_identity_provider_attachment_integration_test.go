@@ -578,7 +578,15 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	service := attachmentTestService(t, conn)
-	shared := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	// Catalog registrations require the issuer's organization tenancy too,
+	// matching the issuer created by the production registration flow.
+	sharedIssuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: project.ID, OrganizationID: conv.ToPGText(principal.OrganizationID),
+		Slug: "shared-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+	shared := sharedIssuer.ID
 	serverID := attachmentTestMCPServer(t, conn, project.ID, shared)
 	// A second server keeps the issuer shared, so its binding proves nothing
 	// about this server and no association is captured from it.
