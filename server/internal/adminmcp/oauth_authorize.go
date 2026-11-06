@@ -31,7 +31,13 @@ import (
 const staffChallengePrefix = "adminMCPChallenge:"
 const staffBrowserProofCookie = "__Host-admin-mcp-proof"
 const staffCodeLifetime = 10 * time.Minute
-const staffAuthorizationLifetime = 24 * time.Hour
+
+// staffInactivityTimeout is how long a connection survives without a token
+// refresh. It matches the admin session inactivity timeout, so a connection
+// and the browser session behind it lapse together. Refreshing restarts it,
+// and there is no absolute limit: live staff verification ends a connection
+// when the staff member loses access.
+const staffInactivityTimeout = 48 * time.Hour
 
 type staffChallenge struct {
 	ID            string    `json:"id"`
@@ -331,7 +337,7 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 		Subject: urn.NewUserSubject(staff.OIDCSubject).String(), ClientID: challenge.ClientID,
 		SessionEnc: encryptedSession, ResourceURI: s.resource, Scopes: scopes,
 		CodeHash: staffTokenHash(code), CodeChallenge: challenge.CodeChallenge, RedirectURI: challenge.RedirectURI,
-		ExpiresAt: now.Add(staffAuthorizationLifetime), GrantExpires: now.Add(staffCodeLifetime),
+		ExpiresAt: now.Add(staffInactivityTimeout), GrantExpires: now.Add(staffCodeLifetime),
 	}
 	if err := s.store.Authorize(r.Context(), input); err != nil {
 		if errors.Is(err, errStaffGrant) {

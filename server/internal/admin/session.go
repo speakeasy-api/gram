@@ -29,11 +29,11 @@ func SessionMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// adminSessionTTL is how long an admin session record is kept in the cache
-// before it is evicted. The record is refreshed (cache write) on every
-// request so an active admin member's session stays alive; an inactive
-// session is eventually reclaimed.
-const adminSessionTTL = 24 * time.Hour
+// adminSessionTTL is the inactivity timeout for an admin session. Each write of
+// the record restarts it, and using a session rewrites the record whenever its
+// hourly OIDC access token is refreshed, so the timeout runs from the last
+// refresh rather than the last request.
+const adminSessionTTL = 48 * time.Hour
 
 // Session is the server-side record for an OIDC-authenticated admin user.
 // The access and refresh tokens are stored encrypted so the cache contents are
