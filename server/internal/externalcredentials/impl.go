@@ -65,6 +65,10 @@ type Service struct {
 	sessions        auth.PlatformAdminEntitlementReader
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
+
+	// grantPrincipal is the IAM member customers grant, already validated by
+	// ParseCustomerGrantPrincipal. Empty reports the ambient identity.
+	grantPrincipal string
 }
 
 var (
@@ -85,6 +89,7 @@ func NewService(
 	gcpIdentity *gcpauth.Identity,
 	productFeatures *productfeatures.Client,
 	verifyStore ratelimit.Store,
+	grantPrincipal string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("externalcredentials"))
 
@@ -101,6 +106,7 @@ func NewService(
 		verifyLimiter: ratelimit.New(verifyStore, "external-credential-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		grantPrincipal: grantPrincipal,
 	}
 }
 
@@ -803,7 +809,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 	}, nil
 }
 
-// GetGcpSetupInfo reports the service account a customer must grant impersonation
+// GetGcpSetupInfo reports the principal a customer must grant impersonation
 // rights to. It is deliberately readable before any credential exists, because
 // making that grant is a precondition of creating one at all.
 func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupInfoPayload) (*gen.GcpSetupInfo, error) {
@@ -821,6 +827,7 @@ func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupI
 	}
 
 	return &gen.GcpSetupInfo{
+		PrincipalMember:     conv.PtrEmpty(grantPrincipalMember(s.grantPrincipal, gramSA)),
 		ServiceAccountEmail: conv.PtrEmpty(gramSA),
 		RequiredRole:        impersonationRole,
 	}, nil

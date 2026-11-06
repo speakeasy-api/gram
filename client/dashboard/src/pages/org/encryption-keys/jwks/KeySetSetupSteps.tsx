@@ -39,7 +39,9 @@ import {
   keyRingInstructions,
   isKeyVersionResourceName,
   keyVersionResourceName,
+  memberEmail,
   serviceAccountEmail,
+  speakeasyPrincipalMember,
   type SetupInstructions,
   type SetupMethod,
   type SetupValues,
@@ -179,7 +181,7 @@ export function KeySetSetupSteps({
   );
   const setupValues: SetupValues = {
     ...values,
-    speakeasyPrincipal: setupInfo.data?.serviceAccountEmail ?? "",
+    speakeasyPrincipal: speakeasyPrincipalMember(setupInfo.data ?? {}),
     serviceAccountEmail: usingExisting
       ? chosenCredential.data?.impersonateServiceAccount
       : (emailEdit ?? undefined),
@@ -388,7 +390,7 @@ export function KeySetSetupSteps({
   const canFinish =
     connected && keyReady && setName.trim() !== "" && !finishing;
 
-  const principal = setupInfo.data?.serviceAccountEmail;
+  const principal = memberEmail(setupValues.speakeasyPrincipal);
   // Numbered by what is shown: choosing or reusing an account is one step,
   // setting one up is two.
   const accountSteps = choosingCredential || usingExisting ? 1 : 2;
@@ -542,7 +544,7 @@ export function KeySetSetupSteps({
                 {principal ? (
                   <div className="flex flex-col gap-1">
                     <Text muted small>
-                      Speakeasy&apos;s service account
+                      Speakeasy&apos;s principal
                     </Text>
                     <div className="bg-muted/50 flex items-center justify-between gap-2 px-3 py-2 font-mono text-xs">
                       <code className="break-all">{principal}</code>
@@ -556,8 +558,8 @@ export function KeySetSetupSteps({
                   />
                 ) : (
                   <Text muted small>
-                    This environment can&apos;t report Speakeasy&apos;s service
-                    account, so the instructions show SPEAKEASY_PRINCIPAL.
+                    This environment can&apos;t report Speakeasy&apos;s
+                    principal, so the instructions show SPEAKEASY_PRINCIPAL.
                     Contact support for the principal to grant.
                   </Text>
                 )}

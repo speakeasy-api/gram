@@ -88,7 +88,7 @@ var CreateAwsIamCredentialForm = Type("CreateAwsIamCredentialForm", func() {
 // rather than a customer's — see CreatePlatformGcpIamCredentialForm.
 var CreateGcpIamCredentialForm = Type("CreateGcpIamCredentialForm", func() {
 	Attribute("name", String, "A human-readable name for the credential.")
-	Attribute("impersonate_service_account", String, "The service account in your project that Speakeasy impersonates. Grant Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.")
+	Attribute("impersonate_service_account", String, "The service account in your project that Speakeasy impersonates. Grant the principal_member reported by externalCredentials.getGcpSetupInfo roles/iam.serviceAccountTokenCreator on it.")
 
 	Required("name", "impersonate_service_account")
 })
@@ -120,7 +120,8 @@ var VerifyCredentialResult = Type("VerifyCredentialResult", func() {
 var GcpSetupInfo = Type("GcpSetupInfo", func() {
 	Description("What the customer must grant in their own GCP project before Speakeasy can impersonate a service account there.")
 
-	Attribute("service_account_email", String, "Speakeasy's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).")
+	Attribute("principal_member", String, "The IAM member to grant roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate, with its type prefix: group:<email> or serviceAccount:<email>. Use it verbatim in IAM policy bindings. It is the only Speakeasy principal a customer grants; a group fronts Speakeasy's service account so the account can change without customers updating grants. Empty when the running environment cannot report one.")
+	Attribute("service_account_email", String, "Speakeasy's own runtime service account. Grant principal_member instead: it may be a group that contains this account. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).")
 	Attribute("required_role", String, "The IAM role to grant Speakeasy's service account on the target service account.")
 
 	Required("required_role")

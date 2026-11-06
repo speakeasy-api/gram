@@ -156,6 +156,14 @@ func newTestServiceWithLogs(t *testing.T) (context.Context, *testInstance, *logC
 func newTestServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithGrantPrincipal(t, logger, "")
+}
+
+// newTestServiceWithGrantPrincipal builds the service with a configured
+// customer grant principal; "" reports the ambient identity.
+func newTestServiceWithGrantPrincipal(t *testing.T, logger *slog.Logger, grantPrincipal string) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -200,7 +208,7 @@ func newTestServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Contex
 	// paths; the default answers impersonation and ambient offline.
 	gcpResolver := gcpauth.NewStubResolver()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	svc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpauth.NewIdentity(gcpResolver), features, ratelimit.NewRedisStore(redisClient))
+	svc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpauth.NewIdentity(gcpResolver), features, ratelimit.NewRedisStore(redisClient), grantPrincipal)
 
 	ti := &testInstance{
 		service:     svc,

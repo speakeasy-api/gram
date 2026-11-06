@@ -2,6 +2,10 @@ package gram
 
 import "github.com/urfave/cli/v2"
 
+// gcpCustomerGrantPrincipalFlag names the one Speakeasy principal customers
+// grant on their GCP service accounts.
+const gcpCustomerGrantPrincipalFlag = "gcp-customer-grant-principal"
+
 func gcpFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
@@ -15,6 +19,11 @@ func gcpFlags() []cli.Flag {
 			// Not DefaultText: an empty value is what tells newKMSSigningClients to
 			// use its own default, so the default lives there rather than here.
 			EnvVars: []string{"GRAM_LOCAL_KMS_SIGNING_ALGORITHM"},
+		},
+		&cli.StringFlag{
+			Name:    gcpCustomerGrantPrincipalFlag,
+			Usage:   "IAM member customers grant roles/iam.serviceAccountTokenCreator on their GCP service accounts, with its prefix: group:<email> (a group fronting Speakeasy's service account) or serviceAccount:<email>. Unset reports the ambient service account.",
+			EnvVars: []string{"GRAM_GCP_CUSTOMER_GRANT_PRINCIPAL"},
 		},
 		&cli.StringFlag{
 			Name:    "pubsub-emulator-host",

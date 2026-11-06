@@ -3,6 +3,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useGcpSetupInfo } from "@gram/client/react-query/gcpSetupInfo";
 import { Stack } from "@/components/ui/Stack";
+import {
+  memberEmail,
+  speakeasyPrincipalMember,
+} from "@/pages/org/encryption-keys/jwks/gcpSetupSnippets";
 
 // GcpGrantInstructions shows the grant a customer has to make in their own GCP
 // project before Speakeasy can impersonate a service account there. It is rendered
@@ -26,29 +30,30 @@ export function GcpGrantInstructions(): JSX.Element {
   if (isError) {
     return (
       <Text small muted>
-        Could not load Speakeasy's service account. Reload to try again.
+        Could not load Speakeasy's principal. Reload to try again.
       </Text>
     );
   }
 
+  // A group fronts Speakeasy's service account, so the grant names whichever
+  // member the server reports.
+  const principal = memberEmail(speakeasyPrincipalMember(data ?? {}));
+
   return (
     <Stack gap={2}>
       <Text small muted>
-        Grant Speakeasy's service account the{" "}
+        Grant Speakeasy's principal the{" "}
         <span className="font-mono">
           {data?.requiredRole ?? "roles/iam.serviceAccountTokenCreator"}
         </span>{" "}
         role on the service account you want Speakeasy to impersonate.
       </Text>
-      {data?.serviceAccountEmail ? (
-        <GrantValue
-          label="Speakeasy service account"
-          value={data.serviceAccountEmail}
-        />
+      {principal ? (
+        <GrantValue label="Speakeasy principal" value={principal} />
       ) : (
         <Text small muted>
-          This environment cannot report Speakeasy's service account. Contact
-          support for the principal to grant.
+          This environment cannot report Speakeasy's principal. Contact support
+          for the principal to grant.
         </Text>
       )}
     </Stack>

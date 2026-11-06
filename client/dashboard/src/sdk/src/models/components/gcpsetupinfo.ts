@@ -13,11 +13,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type GcpSetupInfo = {
   /**
+   * The IAM member to grant roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate, with its type prefix: group:<email> or serviceAccount:<email>. Use it verbatim in IAM policy bindings. It is the only Speakeasy principal a customer grants; a group fronts Speakeasy's service account so the account can change without customers updating grants. Empty when the running environment cannot report one.
+   */
+  principalMember?: string | undefined;
+  /**
    * The IAM role to grant Speakeasy's service account on the target service account.
    */
   requiredRole: string;
   /**
-   * Speakeasy's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
+   * Speakeasy's own runtime service account. Grant principal_member instead: it may be a group that contains this account. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
    */
   serviceAccountEmail?: string | undefined;
 };
@@ -26,11 +30,13 @@ export type GcpSetupInfo = {
 export const GcpSetupInfo$inboundSchema: z.ZodMiniType<GcpSetupInfo, unknown> =
   z.pipe(
     z.object({
+      principal_member: z.optional(z.string()),
       required_role: z.string(),
       service_account_email: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
+        "principal_member": "principalMember",
         "required_role": "requiredRole",
         "service_account_email": "serviceAccountEmail",
       });

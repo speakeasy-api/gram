@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   hasBlankResourceField,
   impersonationInstructions,
+  memberEmail,
+  speakeasyPrincipalMember,
   isKeyVersionResourceName,
   keyRingInstructions,
   keyVersionResourceName,
@@ -12,7 +14,8 @@ import {
 const values: SetupValues = {
   projectId: "acme-prod",
   accountId: "speakeasy-signer",
-  speakeasyPrincipal: "speakeasy@example.iam.gserviceaccount.com",
+  speakeasyPrincipal:
+    "serviceAccount:speakeasy@example.iam.gserviceaccount.com",
   location: "global",
   keyRing: "speakeasy",
   keyName: "speakeasy-signing",
@@ -145,5 +148,56 @@ describe("isKeyVersionResourceName", () => {
     ]) {
       expect(isKeyVersionResourceName(name)).toBe(false);
     }
+  });
+});
+
+describe("impersonationInstructions", () => {
+  const group = {
+    ...values,
+    speakeasyPrincipal: "group:speakeasy-kms@example.com",
+  };
+
+  it("grants a group member verbatim in gcloud and Terraform", () => {
+    for (const method of ["gcloud", "terraform"] as const) {
+      const out = text(impersonationInstructions(method, group));
+      expect(out).toContain('"group:speakeasy-kms@example.com"');
+      expect(out).not.toContain("serviceAccount:speakeasy-kms");
+    }
+  });
+
+  it("names the group's email in the console steps", () => {
+    const out = text(impersonationInstructions("console", group));
+    expect(out).toContain("Add speakeasy-kms@example.com as the principal");
+    expect(out).not.toContain("group:");
+  });
+
+  it("keeps a service account member as is", () => {
+    expect(text(impersonationInstructions("gcloud", values))).toContain(
+      '--member="serviceAccount:speakeasy@example.iam.gserviceaccount.com"',
+    );
+  });
+});
+
+describe("speakeasyPrincipalMember", () => {
+  it("prefers the server's member", () => {
+    expect(
+      speakeasyPrincipalMember({
+        principalMember: "group:speakeasy-kms@example.com",
+        serviceAccountEmail: "gram@example.iam.gserviceaccount.com",
+      }),
+    ).toBe("group:speakeasy-kms@example.com");
+  });
+
+  it("falls back to the service account for servers without a member", () => {
+    expect(
+      speakeasyPrincipalMember({
+        serviceAccountEmail: "gram@example.iam.gserviceaccount.com",
+      }),
+    ).toBe("serviceAccount:gram@example.iam.gserviceaccount.com");
+  });
+
+  it("is empty when nothing is reported", () => {
+    expect(speakeasyPrincipalMember({})).toBe("");
+    expect(memberEmail("")).toBe("");
   });
 });
