@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Approve the Changesets version pull request and add it to the merge queue.
-# The token has to be a different GitHub App than gram-bot, which opened the
-# pull request. GitHub rejects a self-approval.
 set -euo pipefail
 
 REPO=${REPO:?repository is required}
@@ -32,7 +29,7 @@ fi
 
 # shellcheck disable=SC2016 # GraphQL variables are not shell variables
 pr=$(gh api graphql \
-  -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { id isInMergeQueue reviewDecision headRefOid } } }' \
+  -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { id isInMergeQueue reviewDecision } } }' \
   -f owner="${REPO%%/*}" \
   -f name="${REPO#*/}" \
   -F number="$number" \
@@ -46,22 +43,17 @@ if [[ "$review" == "CHANGES_REQUESTED" ]]; then
   echo "Pull request #${number} has changes requested." >&2
   exit 1
 fi
-sha=$(echo "$pr" | jq -r .headRefOid)
 pr_id=$(echo "$pr" | jq -r .id)
 
 # gh pr checks --required reports success when a ruleset check has not been
-# posted yet, so this looks up the three checks by name.
-check_status() {
-  local json="$1" name="$2"
-  echo "$json" | jq -r --arg n "$name" 'map(select(.name == $n)) | sort_by(.startedAt) | last | .bucket // "missing"'
-}
-
-# Returns 0 when all three are green, 1 when one failed, 2 while any are still running.
+# posted yet, so this looks up the three checks by name. Returns 0 when all
+# three are green, 1 when one failed, 2 while any are still running.
 required_checks() {
   local json name bucket missing=0
   json=$(gh pr checks "$number" --repo "$REPO" --json name,bucket,startedAt)
   for name in "CI Gate" "Lint PR Title and Changesets" "Tag branch changes"; do
-    bucket=$(check_status "$json" "$name")
+    # shellcheck disable=SC2016 # $n is a jq variable
+    bucket=$(echo "$json" | jq -r --arg n "$name" 'map(select(.name == $n)) | sort_by(.startedAt) | last | .bucket // "missing"')
     case "$bucket" in
       pass) echo "Required check green: ${name}" ;;
       fail|cancel)
@@ -80,42 +72,33 @@ required_checks() {
   return 2
 }
 
-rc=0
-required_checks || rc=$?
-if [[ "$DRY_RUN" == "true" ]]; then
-  echo "Dry run: pull request #${number} at ${sha} (review=${review})."
-  if [[ "$rc" -eq 0 ]]; then
-    echo "Dry run: would approve, if needed, and add it to the merge queue."
-  elif [[ "$rc" -eq 1 ]]; then
-    echo "Dry run: a required check failed. Would not approve."
-  else
-    echo "Dry run: required checks are still running. The real run waits, then approves and queues."
-  fi
-  exit 0
-fi
-if [[ "$rc" -eq 1 ]]; then
-  exit 1
-fi
 deadline=$((SECONDS + 1800))
-while [[ "$rc" -ne 0 ]]; do
-  if (( SECONDS >= deadline )); then
-    echo "Required checks were still running after 30 minutes on ${sha}." >&2
-    exit 1
-  fi
-  sleep 60
-  current=$(gh pr view "$number" --repo "$REPO" --json headRefOid,reviewDecision)
-  sha=$(echo "$current" | jq -r .headRefOid)
-  review=$(echo "$current" | jq -r .reviewDecision)
-  if [[ "$review" == "CHANGES_REQUESTED" ]]; then
-    echo "Pull request #${number} has changes requested." >&2
-    exit 1
-  fi
+while true; do
   rc=0
   required_checks || rc=$?
+  if [[ "$rc" -eq 0 || "$DRY_RUN" == "true" ]]; then
+    break
+  fi
   if [[ "$rc" -eq 1 ]]; then
     exit 1
   fi
+  if (( SECONDS >= deadline )); then
+    echo "Required checks were still running after 30 minutes." >&2
+    exit 1
+  fi
+  sleep 60
 done
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "Dry run: stopping."
+  exit 0
+fi
+current=$(gh pr view "$number" --repo "$REPO" --json headRefOid,reviewDecision)
+sha=$(echo "$current" | jq -r .headRefOid)
+review=$(echo "$current" | jq -r .reviewDecision)
+if [[ "$review" == "CHANGES_REQUESTED" ]]; then
+  echo "Pull request #${number} has changes requested." >&2
+  exit 1
+fi
 
 if [[ "$review" != "APPROVED" ]]; then
   gh api "repos/${REPO}/pulls/${number}/reviews" \
