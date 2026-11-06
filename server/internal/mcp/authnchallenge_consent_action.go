@@ -175,8 +175,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	actionResource := func(client remotesessions.Client) (uuid.UUID, string, error) {
 		projectID := endpoint.clientProjectID(client)
-		if !endpoint.MetaMcpServerID.Valid || focusServer == "" {
+		if !endpoint.MetaMcpServerID.Valid {
 			return projectID, "", nil
+		}
+		if focusServer == "" {
+			return uuid.Nil, "", oops.E(oops.CodeBadRequest, nil, "Choose a gateway member before changing its connection.").LogWarn(ctx, logger)
 		}
 		resource, member, err := s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, focusServer)
 		if err != nil {
@@ -468,6 +471,7 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if rerr != nil {
 		if errors.Is(rerr, errConsentMemberTarget) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail("gateway_member_target_unavailable"))
 			return "", false, oops.E(oops.CodeBadRequest, rerr, "Connection is not available for this gateway member.").LogWarn(ctx, logger)
 		}
 

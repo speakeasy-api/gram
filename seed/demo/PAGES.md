@@ -161,12 +161,14 @@ upstream client. Each binding retains its source session’s exact ID, not a cop
 its credential. Both release agents belong to the first demo member; the original three
 agent lifecycle fixtures remain unchanged.
 Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
-Attachment and validation-state fixtures carry the seeded server’s persisted upstream resource, so resource-qualified connection status does not borrow another server’s grant.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
 and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
 display-only, not a live OAuth integration. All IDs reuse `Spec.NameSeed` and
 retarget with the tenant.
+Attachment and validation-state fixtures carry the seeded server’s persisted
+upstream resource, so resource-qualified connection status does not borrow another
+server’s grant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
 The wizard separates **MCP selection** from **MCP authentication**. The latter
 shows selected servers with compact shared/personal/expired/missing summaries

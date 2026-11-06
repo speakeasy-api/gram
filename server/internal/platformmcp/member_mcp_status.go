@@ -190,7 +190,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 
-	resource, _, err := s.memberMCPUpstreamResource(ctx, target)
+	resource, tunneled, err := s.memberMCPUpstreamResource(ctx, target)
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
@@ -280,7 +280,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		output.Reason = memberMCPReauthorizationReason(status, s.now())
 		output.NextAction = "reconnect"
 	}
-	if _, err := s.memberMCPChainedStatus(ctx, principal, target, clients[0], &output); err != nil {
+	if _, err := s.memberMCPChainedStatus(ctx, principal, target, clients[0], &output, resource, tunneled); err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
 	return output, nil
@@ -289,8 +289,8 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 // memberMCPChainedStatus applies identity chaining to output when it serves
 // the target's upstream: active on a usable chained credential, otherwise the
 // first call through the server obtains access and Connect stays a fallback.
-func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client, output *GetMyMCPConnectionStatusOutput) (bool, error) {
-	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target, chosen)
+func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client, output *GetMyMCPConnectionStatusOutput, resource string, tunneled bool) (bool, error) {
+	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target, chosen, resource, tunneled)
 	switch {
 	case err != nil:
 		return false, err
@@ -385,17 +385,9 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 // credential is usable now. It resolves the upstream as the MCP runtime does
 // and never acquires a token, through the one client the caller's sign-in
 // chooses for it.
-func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client) (bool, bool, error) {
+func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client, upstream string, tunneled bool) (bool, bool, error) {
 	if s.identityChaining == nil {
 		return false, false, nil
-	}
-
-	upstream, tunneled, err := s.memberMCPUpstreamResource(ctx, target)
-	if errors.Is(err, ErrMemberMCPStatusTargetNotFound) {
-		return false, false, nil
-	}
-	if err != nil {
-		return false, false, err
 	}
 
 	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}

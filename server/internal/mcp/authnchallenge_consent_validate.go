@@ -171,6 +171,7 @@ func (s *Service) probeRemoteSession(
 			}
 		}
 		if matches != 1 {
+			logger.WarnContext(ctx, "committed grant verification skipped: no unique admitted member")
 			return nil
 		}
 	}

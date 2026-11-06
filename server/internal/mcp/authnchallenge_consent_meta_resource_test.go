@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -833,8 +834,10 @@ func TestServeConsentAction_MetaMCPFocusedForeignMemberFailsClosed(t *testing.T)
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "focused-foreign-client", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	recorder := recordConnections(t, fx.ti)
 	fx.server = "not-a-member"
 	requireConnectActionFailsClosed(t, fx, clientID, oops.CodeBadRequest)
+	recorder.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInvalidRequest)
 }
 
 func TestServeConsent_MetaMCPSharedRegistrationCardsAreMemberQualified(t *testing.T) {
@@ -943,7 +946,35 @@ func TestServeConsentAction_MemberLifecycleAcrossResourceIndexShapes(t *testing.
 					require.False(t, read(b)[clientID].AutoRefresh)
 				}
 			}
+			for _, action := range []string{"disconnect", "refresh"} {
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {action}, "client_id": {clientID.String()}}
+				request := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				err := fx.ti.service.ServeConsentAction(httptest.NewRecorder(), request, fx.endpoint)
+				var refusal *oops.ShareableError
+				require.ErrorAs(t, err, &refusal)
+				require.Equal(t, oops.CodeBadRequest, refusal.Code)
+				require.Equal(t, before, read(a), "focus-less gateway actions must not choose the remaining A grant")
+			}
+
 			require.Empty(t, read(b))
 		})
+	}
+}
+
+func TestServeConsent_TunneledMemberWithoutResourceDoesNotBreakFocusedCards(t *testing.T) {
+	t.Parallel()
+	ctx, fx, metaID := seedMetaConsentEndpoint(t, "missing-tunnel-resource")
+	registerPageClient(t, ctx, fx)
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "missing-tunnel-client", "", []uuid.UUID{fx.shared})
+	issuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "remote-a", "https://remote-a.example.test/mcp", issuer, 0)
+	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "tunnel-b", "", issuer, 1)
+	for _, slug := range []string{"remote-a", "tunnel-b"} {
+		fx.server = slug
+		code, page, _ := render(t, fx)
+		require.Equal(t, http.StatusOK, code)
+		require.Contains(t, page, clientID.String())
+		require.NotContains(t, page, "Service connected")
 	}
 }
