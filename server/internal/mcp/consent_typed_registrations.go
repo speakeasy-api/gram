@@ -103,18 +103,11 @@ func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *Resol
 		if err != nil {
 			return nil, err
 		}
-		ids := make([]uuid.UUID, 0, len(members))
 		for _, member := range members {
-			if member.backend == metaMemberBackendProxied {
-				ids = append(ids, member.serverID)
+			if !member.typedRegistrations {
+				continue
 			}
-		}
-		offered, err := s.typedOfferedRegistrations(ctx, endpoint.OrganizationID, ids)
-		if err != nil {
-			return nil, err
-		}
-		for _, member := range members {
-			for _, id := range offered[member.serverID] {
+			for id := range member.associatedClients {
 				if _, ok := projects[id]; !ok {
 					projects[id] = member.projectID
 				}

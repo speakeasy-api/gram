@@ -40,14 +40,36 @@ func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
 	}
 	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	f.enforce()
+	members := []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
+	require.NoError(t, f.service.withTypedMemberRegistrations(t.Context(), f.orgID, members))
 	calls := 0
 	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
 		calls++
-		return []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}, nil
+		return members, nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{f.registration: f.projectID}, typed)
 	require.Equal(t, 1, calls)
+}
+
+func TestTypedConsentRegistrationsReuseMemberSnapshot(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_consent_snapshot")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.enforce()
+	registration, legacyRegistration := uuid.New(), uuid.New()
+	members := []metaMember{
+		{projectID: uuid.New(), associatedClients: map[uuid.UUID]bool{legacyRegistration: true}},
+		{projectID: f.projectID, typedRegistrations: true, associatedClients: map[uuid.UUID]bool{registration: true}},
+		{projectID: uuid.New(), typedRegistrations: true, associatedClients: map[uuid.UUID]bool{registration: true}},
+	}
+	endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, MetaMcpServerID: validUUID(uuid.New())}
+	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
+		return members, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{registration: f.projectID}, typed, "reuse only typed registrations; the first member owns a shared registration's project")
 }
 
 // Where typed auth client resolution is enforced, a proxied member is matched

@@ -11,10 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -27,15 +29,21 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	const upstream = "https://typed-member.example.com/mcp"
 	for _, tc := range []struct {
-		name       string
-		typed      bool
-		associated bool
-		signInLink bool
-		hosted     bool
-		wantTyped  bool
-		wantErr    string
+		name            string
+		orgGateway      bool
+		orgClient       bool
+		resourceDisplay bool
+		typed           bool
+		associated      bool
+		signInLink      bool
+		hosted          bool
+		wantTyped       bool
+		wantErr         string
 	}{
-		{name: "typed offer alone", typed: true, wantTyped: true},
+		{name: "typed offer alone", typed: true, resourceDisplay: true, wantTyped: true},
+		{name: "organization gateway typed offer", orgGateway: true, typed: true, resourceDisplay: true, wantTyped: true},
+		{name: "organization gateway organization client", orgGateway: true, orgClient: true, typed: true, signInLink: true, wantTyped: true},
+		{name: "organization gateway older association only", orgGateway: true, associated: true, signInLink: true, wantErr: "unknown remote session client"},
 		{name: "typed offer linked to the sign-in", typed: true, signInLink: true, wantTyped: true},
 		{name: "typed offer with an older association", typed: true, associated: true, signInLink: true, wantTyped: true},
 		{name: "older association without a typed offer", associated: true, signInLink: true, wantErr: "unknown remote session client"},
@@ -48,11 +56,31 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 			require.NoError(t, err)
 			fx.ti.service.SetAuthClientPermission(func() bool { return true })
 
+			if tc.orgGateway {
+				fx.endpoint.RouteBase = mcproute.OrganizationGateway
+				fx.endpoint.ProjectID = uuid.Nil
+				state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+				require.NoError(t, err)
+				state.Endpoint.RouteBase = fx.endpoint.RouteBase
+				require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+			}
+
 			var signIns []uuid.UUID
 			if tc.signInLink {
 				signIns = []uuid.UUID{fx.shared}
 			}
 			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "", signIns)
+			if tc.orgClient {
+				q := remotesessionsrepo.New(fx.ti.conn)
+				client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+					OrganizationID:        conv.ToPGText(fx.orgID),
+					RemoteSessionIssuerID: clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, registration),
+					ClientID:              "org-client-" + uuid.NewString(),
+				})
+				require.NoError(t, err)
+				registration = client.ID
+				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: fx.shared}))
+			}
 			member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "typed-gw-member-"+uuid.NewString()[:8], upstream, uuid.NullUUID{}, 0)
 			seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), member.mcpServerID)
 			if tc.associated {
@@ -68,6 +96,30 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 			if tc.hosted {
 				hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 1, "public")
 				stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, hosted.serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, registration)))
+			}
+
+			if tc.resourceDisplay {
+				_, err := remotesessionsrepo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+					ID: registration, ProjectID: fx.projectID, OrganizationID: fx.orgID,
+					ResourceIdentifier: conv.ToPGText(upstream), ResourceName: "Typed member resource",
+					ResourcePolicyUri: "https://typed-member.example.com/policy",
+				})
+				require.NoError(t, err)
+				code, html, _ := render(t, fx)
+				require.Equal(t, http.StatusOK, code, html)
+				require.Contains(t, html, "Typed member resource")
+				require.Contains(t, html, `href="https://typed-member.example.com/policy"`)
+			}
+			if tc.orgClient {
+				// No grant exists: validation must find the typed offer's project,
+				// then report the missing credential rather than an unserved client.
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"validate"}, "client_id": {registration.String()}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				w := httptest.NewRecorder()
+				require.NoError(t, fx.ti.service.ServeConsentAction(w, req, fx.endpoint))
+				require.Equal(t, http.StatusSeeOther, w.Code)
+				require.Contains(t, w.Header().Get("Location"), "validate_failed="+registration.String())
 			}
 
 			if tc.wantErr != "" {
@@ -88,6 +140,8 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 			}
 			require.Equal(t, upstream, loc.Query().Get("resource"), "the grant is qualified to the member offering the registration")
 			require.NotNil(t, state.TypedAuthorization)
+			require.Equal(t, fx.projectID, state.ProjectID)
+			require.Equal(t, fx.endpoint.RouteBase, state.RouteBase)
 			require.Equal(t, member.mcpServerID, state.TypedAuthorization.ServerID)
 			require.Equal(t, registration, state.TypedAuthorization.RemoteSessionClientID)
 		})
