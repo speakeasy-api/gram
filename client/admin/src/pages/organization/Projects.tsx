@@ -17,6 +17,7 @@ import {
   organizationQuery,
 } from "@/lib/adminQueries";
 import {
+  errorMessage,
   getProjectRedeployPreview,
   redeployProject,
   type AdminOrganization,
@@ -37,6 +38,10 @@ function projectsMessage(isPending: boolean, isError: boolean): string {
 
 const projectColumn = createColumnHelper<DataTableFeatures, AdminProject>();
 
+function countedLine(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
 function RedeployDetails({
   preview,
 }: {
@@ -50,10 +55,34 @@ function RedeployDetails({
           {preview.active_deployment_id}
         </span>
       </li>
-      <li>{preview.openapi_assets} OpenAPI sources are processed again</li>
-      <li>{preview.function_assets} function sources redeploy their runners</li>
-      <li>{preview.packages} packages carry over</li>
-      <li>{preview.external_mcps} external MCP sources are dropped</li>
+      <li>
+        {countedLine(
+          preview.openapi_assets,
+          "OpenAPI source is processed again",
+          "OpenAPI sources are processed again",
+        )}
+      </li>
+      <li>
+        {countedLine(
+          preview.function_assets,
+          "function source redeploys its runner",
+          "function sources redeploy their runners",
+        )}
+      </li>
+      <li>
+        {countedLine(
+          preview.packages,
+          "package carries over",
+          "packages carry over",
+        )}
+      </li>
+      <li>
+        {countedLine(
+          preview.external_mcps,
+          "external MCP source is dropped",
+          "external MCP sources are dropped",
+        )}
+      </li>
       <li>The customer sees this in their deployments and audit log</li>
     </ul>
   );
@@ -98,9 +127,7 @@ function RedeployProjectButton({
       });
       toast.success("Redeploy started", { description: result.deployment_id });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to redeploy",
-      );
+      toast.error(errorMessage(error));
     }
   };
 
