@@ -159,6 +159,8 @@ func TestInboundRefresh_Expired(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeFailed), row.Outcome, "expiry is not a policy")
+	require.Equal(t, "failed", row.StepResult)
 }
 
 // A client that authenticated and sent a spent or unknown token gets a row; the limiter bounds it.

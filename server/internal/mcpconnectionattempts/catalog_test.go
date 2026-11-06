@@ -120,6 +120,7 @@ var frozenCodes = []string{
 	"connection_catalog_expired",
 	"tunnel_at_capacity",
 	"caller_credential_missing",
+	"refresh_token_client_mismatch",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -278,6 +279,9 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
+		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
+		{CodeEndpointNotAgentAddressable, WhoAdmin, []string{"server or gateway", "agent"}, []string{"ask for it to be allowed"}},
+		{CodeRefreshTokenClientMismatch, WhoApp, []string{"different app"}, []string{"connect to the server again"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {
@@ -323,6 +327,19 @@ func TestRecorder_StoresWhoFixesFromTheCatalog(t *testing.T) {
 		require.Equal(t, string(want.who), who)
 		require.Equal(t, string(OutcomeFailed), outcome)
 		require.Equal(t, resultFailed.String(), result)
+	}
+}
+
+// Expiry and revocation are not policies, so their step result is failed.
+func TestCatalog_ExpiryAndRevocationAreFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []Code{CodeRefreshTokenExpired, CodeSignInRevoked} {
+		meaning, ok := MeaningOf(code.String())
+		require.True(t, ok, code)
+		require.Equal(t, OutcomeFailed, meaning.Outcome, code)
+		require.Equal(t, resultFailed, meaning.result, code)
+		require.Equal(t, WhoPerson, meaning.WhoFixes, code)
 	}
 }
 

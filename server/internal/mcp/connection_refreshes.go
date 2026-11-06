@@ -93,14 +93,20 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
 	case "refresh_token_resource_mismatch", "resource_mismatch":
 		return mcpconnectionattempts.CodeResourceMismatch, true
-	case "refresh_token_unknown_or_already_used", "refresh_token_client_mismatch":
+	case "refresh_token_unknown_or_already_used":
 		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
+	case "refresh_token_client_mismatch":
+		return mcpconnectionattempts.CodeRefreshTokenClientMismatch, true
 	case "refresh_token_expired":
 		return mcpconnectionattempts.CodeRefreshTokenExpired, true
 	case "sign_in_revoked":
 		return mcpconnectionattempts.CodeSignInRevoked, true
-	case "agent_credential_invalid", "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
+	case "refresh_token_revoked", "refresh_token_replay_rejected", "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
+	case "agent_credential_invalid":
+		return mcpconnectionattempts.CodeConnectionChanged, true
+	case "tool_selection_malformed", "refresh_token_replay_session_mismatch":
+		return mcpconnectionattempts.CodeInternalError, true
 	case "agent_not_admitted":
 		return mcpconnectionattempts.CodeSubjectNotAdmitted, true
 	case "agent_admission_misconfigured":

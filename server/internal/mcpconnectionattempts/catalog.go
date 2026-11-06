@@ -198,13 +198,13 @@ var (
 	CodeCanceled                 = define("canceled", OutcomeDeclined, WhoPerson, "The sign-in was canceled.", "Connect again if you still want access.")
 
 	// Enterprise-managed sign-in to Speakeasy.
-	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this kind of connection.", "Ask for it to be allowed.")
+	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This server or gateway does not accept agent connections.", "Connect the agent to a server that accepts agents.")
 	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask for this identity to be allowed.")
 	CodeClientNotCIMD                  = define("client_not_cimd", OutcomeBlocked, WhoApp, "This app cannot use this kind of sign-in.", "Use an app that publishes its details at a public address.")
 	CodeSubjectNotProvisioned          = define("subject_not_provisioned", OutcomeBlocked, WhoAdmin, "This account is not set up in the organization's directory.", "Ask to be added to the directory and the organization.")
 	CodeInvalidRequest                 = define("invalid_request", OutcomeFailed, WhoApp, "The app sent a request we could not understand.", "Update the app, or report the problem to its makers.")
 	CodeResourceNotAvailable           = define("resource_not_available", OutcomeFailed, WhoAdmin, "This account has no server it can use here.", "Ask for access to a server.")
-	CodeAssertionInvalid               = define("assertion_invalid", OutcomeFailed, WhoApp, "The sign-in proof was not accepted.", "Try again. If it keeps failing, check the sign-in setup.")
+	CodeAssertionInvalid               = define("assertion_invalid", OutcomeFailed, WhoApp, "The app's sign-in proof was not accepted.", "Try again. If it keeps failing, the app needs fixing.")
 	CodeAssertionOther                 = define("assertion_other", OutcomeFailed, WhoSpeakeasy, "The sign-in proof was refused for a reason we have not named yet.", "Report this so we can give it a clear reason.")
 	CodeUpstreamCredentialChoice       = define("upstream_credential_choice", OutcomeFailed, WhoApp, "The app asked for a server sign-in this organization does not accept.", "Update the app. If that does not help, ask your admin.")
 	CodeUpstreamSignInNotSetUp         = define("upstream_sign_in_not_set_up", OutcomeFailed, WhoAdmin, "This server's sign-in with the service is not set up.", "Set up the service's sign-in for this server.")
@@ -264,8 +264,8 @@ var (
 
 	// Refresh.
 	CodeRefreshedUnverified              = defineResult("refreshed_unverified", ResultRefreshed, OutcomeConnected, WhoAdmin, "The sign-in was renewed, but the service could not be checked.", "If tool calls fail, check the service's connection.")
-	CodeRefreshTokenExpired              = define("refresh_token_expired", OutcomeBlocked, WhoPerson, "Your sign-in reached its time limit.", "Connect to the server again.")
-	CodeSignInRevoked                    = define("sign_in_revoked", OutcomeBlocked, WhoPerson, "Your sign-in was ended.", "Connect again. If it keeps happening, ask your admin.")
+	CodeRefreshTokenExpired              = define("refresh_token_expired", OutcomeFailed, WhoPerson, "Your sign-in reached its time limit.", "Connect to the server again.")
+	CodeSignInRevoked                    = define("sign_in_revoked", OutcomeFailed, WhoPerson, "Your sign-in was ended.", "Connect again. If it keeps happening, ask your admin.")
 	CodeRefreshTokenRevoked              = define("refresh_token_revoked", OutcomeFailed, WhoPerson, "This connection was ended.", "Connect to the server again.")
 	CodeRefreshTokenUnknownOrAlreadyUsed = define("refresh_token_unknown_or_already_used", OutcomeFailed, WhoPerson, "The app used an old or unknown sign-in.", "Connect to the server again.")
 	CodeUpstreamReconnectRequired        = define("upstream_reconnect_required", OutcomeFailed, WhoPerson, "Your connection to the service needs renewing.", "Reconnect to the service.")
@@ -287,4 +287,7 @@ var (
 	CodeNeedsSignIn        = defineResult("needs_sign_in", resultNeedsSignIn, OutcomeBlocked, WhoPerson, "You need to sign in to this service.", "Connect to the service.")
 	CodeConsentNotApproved = defineResult("consent_not_approved", resultNeedsConsent, OutcomeBlocked, WhoPerson, "This server needs your approval for this connection.", "Connect again and approve the server.")
 	CodeCatalogTooLarge    = define("catalog_too_large", OutcomeFailed, WhoAdmin, "The tools for this connection are too large to approve.", "Choose fewer tools if you can, or ask for some to be removed.")
+
+	// Refresh, the app's fault.
+	CodeRefreshTokenClientMismatch = define("refresh_token_client_mismatch", OutcomeFailed, WhoApp, "The app sent a sign-in that belongs to a different app.", "Update the app, or report the problem to its makers.")
 )
