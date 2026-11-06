@@ -995,6 +995,28 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;
 
+-- name: ListMemberRolePrincipalsByWorkosUsers :many
+-- The roles several members hold, in one read, for a role save that works
+-- out what each member it assigns gains.
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = ANY(@workos_user_ids::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn;
+
 -- name: ListMemberRolePrincipalsByUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,

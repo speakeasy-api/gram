@@ -68,3 +68,59 @@ func TestSensitiveScopesAdded(t *testing.T) {
 		})
 	}
 }
+
+func TestSensitiveScopesWidened(t *testing.T) {
+	t.Parallel()
+
+	restricted := func(scope authz.Scope) authz.ScopeCoverage {
+		return authz.ScopeCoverage{Scope: scope, Unrestricted: false}
+	}
+	everywhere := func(scope authz.Scope) authz.ScopeCoverage {
+		return authz.ScopeCoverage{Scope: scope, Unrestricted: true}
+	}
+
+	tests := []struct {
+		name   string
+		before []authz.ScopeCoverage
+		after  []authz.ScopeCoverage
+		want   []string
+	}{
+		{
+			name:   "held on one project, now everywhere",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead), everywhere(authz.ScopeLogRead)},
+			want:   []string{"log:read"},
+		},
+		{
+			name:   "held everywhere, another restricted grant adds nothing",
+			before: []authz.ScopeCoverage{everywhere(authz.ScopeLogRead)},
+			after:  []authz.ScopeCoverage{everywhere(authz.ScopeLogRead), restricted(authz.ScopeLogRead)},
+			want:   nil,
+		},
+		{
+			name:   "held on one project, now on another too",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeLogRead)},
+			want:   nil,
+		},
+		{
+			name:   "not held before counts whatever its breadth",
+			before: nil,
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead)},
+			want:   []string{"chat:read"},
+		},
+		{
+			name:   "an unrestricted broader scope widens what it implies",
+			before: []authz.ScopeCoverage{restricted(authz.ScopeChatRead)},
+			after:  []authz.ScopeCoverage{restricted(authz.ScopeChatRead), everywhere(authz.ScopeChatWrite)},
+			want:   []string{"chat:read", "chat:write"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, authz.SensitiveScopesWidened(tt.before, tt.after))
+		})
+	}
+}

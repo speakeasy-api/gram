@@ -336,10 +336,18 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	return scoped, nil
 }
 
-// ScopesGrantedTx lists, without duplicates, the scopes the principals hold
-// grants for. It reads inside the caller's transaction so a membership change
-// can be compared with the state it replaces.
-func ScopesGrantedTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) ([]Scope, error) {
+// ScopeCoverage says how widely a principal holds one scope: on every
+// resource of its kind, or only on the ones its grants name.
+type ScopeCoverage struct {
+	Scope        Scope
+	Unrestricted bool
+}
+
+// ScopeCoverageTx reads, in one query, which scopes each principal holds
+// grants for and whether any of those grants names every resource. It reads
+// inside the caller's transaction so a membership change can be compared with
+// the state it replaces. Principals without grants have no entry.
+func ScopeCoverageTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) (map[string][]ScopeCoverage, error) {
 	if len(principalURNs) == 0 {
 		return nil, nil
 	}
@@ -350,17 +358,30 @@ func ScopesGrantedTx(ctx context.Context, dbtx repo.DBTX, orgID string, principa
 	if err != nil {
 		return nil, fmt.Errorf("list grants for principals: %w", err)
 	}
-	seen := make(map[Scope]struct{}, len(rows))
-	scopes := make([]Scope, 0, len(rows))
-	for _, row := range rows {
-		scope := Scope(row.Scope)
-		if _, ok := seen[scope]; ok {
-			continue
-		}
-		seen[scope] = struct{}{}
-		scopes = append(scopes, scope)
+	type key struct {
+		principal string
+		scope     Scope
 	}
-	return scopes, nil
+	index := make(map[key]int, len(rows))
+	coverage := make(map[string][]ScopeCoverage)
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		principal := row.PrincipalUrn.String()
+		scope := Scope(row.Scope)
+		held := coverage[principal]
+		at, ok := index[key{principal, scope}]
+		if !ok {
+			at = len(held)
+			index[key{principal, scope}] = at
+			held = append(held, ScopeCoverage{Scope: scope, Unrestricted: false})
+		}
+		held[at].Unrestricted = held[at].Unrestricted || selector.CoversEveryResource()
+		coverage[principal] = held
+	}
+	return coverage, nil
 }
 
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {

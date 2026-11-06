@@ -2954,6 +2954,59 @@ func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg 
 	return items, nil
 }
 
+const listMemberRolePrincipalsByWorkosUsers = `-- name: ListMemberRolePrincipalsByWorkosUsers :many
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = ANY($2::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn
+`
+
+type ListMemberRolePrincipalsByWorkosUsersParams struct {
+	OrganizationID string
+	WorkosUserIds  []string
+}
+
+type ListMemberRolePrincipalsByWorkosUsersRow struct {
+	WorkosUserID string
+	PrincipalUrn string
+}
+
+// The roles several members hold, in one read, for a role save that works
+// out what each member it assigns gains.
+func (q *Queries) ListMemberRolePrincipalsByWorkosUsers(ctx context.Context, arg ListMemberRolePrincipalsByWorkosUsersParams) ([]ListMemberRolePrincipalsByWorkosUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByWorkosUsers, arg.OrganizationID, arg.WorkosUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByWorkosUsersRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByWorkosUsersRow
+		if err := rows.Scan(&i.WorkosUserID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRoleAssignmentRecordsByWorkosUser = `-- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
   id,

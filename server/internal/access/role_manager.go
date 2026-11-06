@@ -659,10 +659,16 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		}
 	}
 
+	// The members are resolved once, for what they gain and for the write.
+	memberTargets, err := r.memberAssignmentTargetsTx(ctx, tx, gramOrgID, payload.MemberIds)
+	if err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, err
+	}
+
 	// What the members and agents this save assigns gain by holding the role,
 	// read before the assignments are written so a principal that already
 	// holds it adds nothing.
-	assignedSensitive, err := r.sensitiveScopesForNewHoldersTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, payload.MemberIds, payload.AgentIds)
+	assignedSensitive, err := r.sensitiveScopesForNewHoldersTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, updatedGrants, memberTargets, payload.AgentIds)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, err
 	}
@@ -676,7 +682,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	if payload.MemberIds != nil || payload.AgentIds != nil {
 		if payload.MemberIds != nil {
 			var memberSyncs []workosSync
-			if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, payload.MemberIds); err != nil {
+			if _, memberSyncs, err = r.assignMemberTargetsToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, memberTargets); err != nil {
 				return RoleUpdateResult{}, RoleReconciliation{}, err
 			}
 			workosSyncs = append(workosSyncs, memberSyncs...)
@@ -1174,13 +1180,6 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member roles").LogError(ctx, r.logger)
 	}
 	slices.Sort(roleIDs)
-	existingRolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
-		OrganizationID: gramOrgID,
-		WorkosUserID:   connected.WorkosID.String,
-	})
-	if err != nil {
-		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member role principals").LogError(ctx, r.logger)
-	}
 	if validate != nil {
 		state := MemberRoleState{
 			MemberID:         connected.ID,
@@ -1208,7 +1207,25 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		linkRepaired = repaired > 0
 	}
 	afterRoleIDs := slices.Clone(roleIDs)
+	// What the member gains by holding the role, read before the assignment
+	// is written. A repaired link changes no role, so it adds nothing.
+	var sensitiveAdded []string
 	if !alreadyAssigned {
+		existingRolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+			OrganizationID: gramOrgID,
+			WorkosUserID:   connected.WorkosID.String,
+		})
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member role principals").LogError(ctx, r.logger)
+		}
+		heldBefore := make([]string, 0, len(existingRolePrincipals))
+		for _, rp := range existingRolePrincipals {
+			heldBefore = append(heldBefore, rp.PrincipalUrn)
+		}
+		sensitiveAdded, err = r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, heldBefore, append(slices.Clone(heldBefore), role.PrincipalURN))
+		if err != nil {
+			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+		}
 		inserted, err := repo.New(tx).UpsertOrganizationRoleAssignment(ctx, repo.UpsertOrganizationRoleAssignmentParams{
 			OrganizationID:     gramOrgID,
 			WorkosUserID:       connected.WorkosID.String,
@@ -1258,18 +1275,6 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	before := *after
 	before.RoleIds = slices.Clone(roleIDs)
-	beforePrincipals := make([]string, 0, len(existingRolePrincipals))
-	for _, rp := range existingRolePrincipals {
-		beforePrincipals = append(beforePrincipals, rp.PrincipalUrn)
-	}
-	afterPrincipals := beforePrincipals
-	if !alreadyAssigned {
-		afterPrincipals = append(slices.Clone(beforePrincipals), role.PrincipalURN)
-	}
-	sensitiveAdded, err := r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, beforePrincipals, afterPrincipals)
-	if err != nil {
-		return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
-	}
 	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
 		OrganizationID:       gramOrgID,
 		Actor:                actor.Principal,
@@ -1736,7 +1741,14 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 	if err != nil {
 		return 0, nil, err
 	}
+	return r.assignMemberTargetsToRoleTx(ctx, dbtx, gramOrgID, roleSlug, targets)
+}
 
+// assignMemberTargetsToRoleTx gives the role to members already resolved by
+// memberAssignmentTargetsTx, so a caller that needs the targets for its own
+// reads resolves them once.
+func (r *RoleManager) assignMemberTargetsToRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID, roleSlug string, targets []memberAssignmentTarget) (int, []workosSync, error) {
+	targets = slices.Clone(targets)
 	slices.SortFunc(targets, func(a, b memberAssignmentTarget) int { return strings.Compare(a.WorkosUserID, b.WorkosUserID) })
 	assignedCount := 0
 	workosSyncs := make([]workosSync, 0, len(targets))
@@ -1925,47 +1937,79 @@ func grantScopes(grants []*gen.RoleGrant) []authz.Scope {
 	return scopes
 }
 
+// grantCoverage reads how widely a role's grants hold each scope. A grant
+// without selectors is the API's form of an unrestricted one; a stored
+// wildcard selector reads the same.
+func grantCoverage(grants []*gen.RoleGrant) []authz.ScopeCoverage {
+	coverage := make([]authz.ScopeCoverage, 0, len(grants))
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		unrestricted := grant.Selectors == nil
+		for _, selector := range grant.Selectors {
+			if selector != nil && genSelectorToAuthz(selector).CoversEveryResource() {
+				unrestricted = true
+			}
+		}
+		coverage = append(coverage, authz.ScopeCoverage{Scope: authz.Scope(grant.Scope), Unrestricted: unrestricted})
+	}
+	return coverage
+}
+
+// coverageOf concatenates what the listed principals hold.
+func coverageOf(byPrincipal map[string][]authz.ScopeCoverage, principals []string) []authz.ScopeCoverage {
+	var coverage []authz.ScopeCoverage
+	for _, principal := range principals {
+		coverage = append(coverage, byPrincipal[principal]...)
+	}
+	return coverage
+}
+
 // sensitiveScopesAddedTx names the sensitive scopes the roles in after grant
-// that the roles in before did not, read inside the membership transaction.
+// that the roles in before did not, or grant everywhere where before held
+// them only on some resources. Read inside the membership transaction, in one
+// query over both sets.
 func (r *RoleManager) sensitiveScopesAddedTx(ctx context.Context, tx pgx.Tx, orgID string, before, after []string) ([]string, error) {
-	beforeScopes, err := authz.ScopesGrantedTx(ctx, tx, orgID, before)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list grants before role change").LogError(ctx, r.logger)
+	principals := slices.Clone(before)
+	for _, principal := range after {
+		if !slices.Contains(principals, principal) {
+			principals = append(principals, principal)
+		}
 	}
-	afterScopes, err := authz.ScopesGrantedTx(ctx, tx, orgID, after)
+	coverage, err := authz.ScopeCoverageTx(ctx, tx, orgID, principals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list grants after role change").LogError(ctx, r.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants around role change").LogError(ctx, r.logger)
 	}
-	return authz.SensitiveScopesAdded(beforeScopes, afterScopes), nil
+	return authz.SensitiveScopesWidened(coverageOf(coverage, before), coverageOf(coverage, after)), nil
 }
 
 // sensitiveScopesForNewHoldersTx names the sensitive scopes the members and
 // agents a role save assigns gain by holding it, merged across every principal
 // that did not already hold the role. It reads memberships before the save
-// writes them, so re-saving a role's existing holders reports nothing.
-func (r *RoleManager) sensitiveScopesForNewHoldersTx(ctx context.Context, tx pgx.Tx, orgID, roleURN string, memberIDs, agentIDs []string) ([]string, error) {
+// writes them, so re-saving a role's existing holders reports nothing and
+// costs no grant reads. roleGrants are the role's grants after the save.
+func (r *RoleManager) sensitiveScopesForNewHoldersTx(ctx context.Context, tx pgx.Tx, orgID, roleURN string, roleGrants []*gen.RoleGrant, members []memberAssignmentTarget, agentIDs []string) ([]string, error) {
+	// The roles each holder has today, one read per kind of holder.
 	var heldBefore [][]string
-	if len(memberIDs) > 0 {
-		targets, err := r.memberAssignmentTargetsTx(ctx, tx, orgID, memberIDs)
-		if err != nil {
-			return nil, err
+	if len(members) > 0 {
+		workosIDs := make([]string, 0, len(members))
+		for _, member := range members {
+			workosIDs = append(workosIDs, member.WorkosUserID)
 		}
-		for _, target := range targets {
-			if target.WorkosUserID == "" {
-				continue
-			}
-			rows, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
-				OrganizationID: orgID,
-				WorkosUserID:   target.WorkosUserID,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "list member roles before assignment").LogError(ctx, r.logger)
-			}
-			held := make([]string, 0, len(rows))
-			for _, row := range rows {
-				held = append(held, row.PrincipalUrn)
-			}
-			heldBefore = append(heldBefore, held)
+		rows, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUsers(ctx, repo.ListMemberRolePrincipalsByWorkosUsersParams{
+			OrganizationID: orgID,
+			WorkosUserIds:  workosIDs,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list member roles before assignment").LogError(ctx, r.logger)
+		}
+		byMember := make(map[string][]string, len(members))
+		for _, row := range rows {
+			byMember[row.WorkosUserID] = append(byMember[row.WorkosUserID], row.PrincipalUrn)
+		}
+		for _, member := range members {
+			heldBefore = append(heldBefore, byMember[member.WorkosUserID])
 		}
 	}
 	if len(agentIDs) > 0 {
@@ -1989,16 +2033,35 @@ func (r *RoleManager) sensitiveScopesForNewHoldersTx(ctx context.Context, tx pgx
 		}
 	}
 
-	perHolder := make([][]string, 0, len(heldBefore))
+	// Only holders the save adds gain anything.
+	var newHolders [][]string
+	var principals []string
 	for _, held := range heldBefore {
 		if slices.Contains(held, roleURN) {
 			continue
 		}
-		scopes, err := r.sensitiveScopesAddedTx(ctx, tx, orgID, held, append(slices.Clone(held), roleURN))
-		if err != nil {
-			return nil, err
+		newHolders = append(newHolders, held)
+		for _, principal := range held {
+			if !slices.Contains(principals, principal) {
+				principals = append(principals, principal)
+			}
 		}
-		perHolder = append(perHolder, scopes)
+	}
+	if len(newHolders) == 0 {
+		return nil, nil
+	}
+
+	// What every new holder's current roles grant, in one read, against the
+	// role's own grants as the save leaves them.
+	coverage, err := authz.ScopeCoverageTx(ctx, tx, orgID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants before assignment").LogError(ctx, r.logger)
+	}
+	role := grantCoverage(roleGrants)
+	perHolder := make([][]string, 0, len(newHolders))
+	for _, held := range newHolders {
+		before := coverageOf(coverage, held)
+		perHolder = append(perHolder, authz.SensitiveScopesWidened(before, append(slices.Clone(before), role...)))
 	}
 	return mergeSensitiveScopes(perHolder...), nil
 }

@@ -370,6 +370,26 @@ func (s Selector) IsRestricted() bool {
 	return kind != WildcardResource || id != WildcardResource
 }
 
+// CoversEveryResource reports whether the selector names every resource of
+// its kind: a wildcard resource id and no narrowing dimension such as a
+// project, tool or server URL. Unlike IsRestricted, a wildcard confined to one
+// resource kind still counts, since that is how an unrestricted grant of a
+// scope is stored.
+func (s Selector) CoversEveryResource() bool {
+	for selectorKey, value := range s {
+		switch selectorKey {
+		case SelectorKeyResourceKind:
+		case SelectorKeyResourceID:
+			if value != WildcardResource {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // SelectorFromRow parses the selectors JSONB column into a Selector.
 func SelectorFromRow(selectors []byte) (Selector, error) {
 	var sel Selector
