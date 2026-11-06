@@ -122,12 +122,9 @@ func TestRunWriteOnRunsOnTheCallersConnection(t *testing.T) {
 	require.Equal(t, callerPID, writePID)
 }
 
-func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
+func TestAttachWritesRequiresDependencies(t *testing.T) {
 	t.Parallel()
-	oauth := &StaffOAuth{runner: &writeRunner{}}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateGlobalIssuer: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	require.ErrorContains(t, AttachWrites(&Runtime{}, oauth, deps, writes), "not implemented")
 	require.ErrorContains(t, AttachWrites(&Runtime{}, &StaffOAuth{}, deps, WriteConfig{}), "not configured")
 }
 
@@ -135,14 +132,10 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 // now the only thing between an agent and a customer-visible change.
 func TestEveryWriteToolAsksForConfirmation(t *testing.T) {
 	t.Parallel()
-	operations := map[WriteOperation]bool{} //nolint:exhaustive // Filled from AllWriteOperations below.
-	for _, op := range AllWriteOperations {
-		operations[op] = op.implemented()
-	}
 	runtime := NewRuntime(nil, "")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	_, err := runtime.server.Connect(t.Context(), serverTransport, nil)
@@ -165,17 +158,7 @@ func TestEveryWriteToolAsksForConfirmation(t *testing.T) {
 		require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
 		require.True(t, *tool.Annotations.DestructiveHint, tool.Name)
 	}
-	require.Equal(t, implementedWriteCount(), writeTools)
-}
-
-func implementedWriteCount() int {
-	count := 0
-	for _, op := range AllWriteOperations {
-		if op.implemented() {
-			count++
-		}
-	}
-	return count
+	require.Equal(t, len(AllWriteOperations), writeTools)
 }
 
 func TestServerInstructionsRequireExplicitConfirmation(t *testing.T) {
@@ -205,7 +188,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 			if tc.attached {
 				oauth := &StaffOAuth{runner: &writeRunner{}}
-				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.
+				config := WriteConfig{Enabled: tc.enabled}
 				require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 			}
 			request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_admin_context","arguments":{}}}`))
@@ -217,7 +200,9 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			require.Equal(t, 200, response.Code)
 			body := response.Body.String()
 			if tc.granted && tc.enabled && tc.attached {
-				require.Contains(t, body, `"available_write_operations":["set_organization_chat_analysis_settings"]`)
+				require.Contains(t, body, `"available_write_operations":["set_organization_feature",`)
+				require.Contains(t, body, "set_organization_chat_analysis_settings")
+				require.NotContains(t, body, "upload_platform_image", "a write missing its dependency is not reported")
 				require.Contains(t, body, `"read_only":false`)
 			} else {
 				require.Contains(t, body, `"available_write_operations":[]`)

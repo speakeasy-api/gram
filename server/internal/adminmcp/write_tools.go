@@ -250,7 +250,7 @@ func (t *writeTools) implements(op WriteOperation) bool {
 
 func registerWriteTools(server *mcp.Server, tools *writeTools) {
 	for _, op := range AllWriteOperations {
-		if writer := tools.writers[op]; writer != nil && tools.writes.OperationEnabled(op) {
+		if writer := tools.writers[op]; writer != nil && tools.writes.Enabled {
 			writer.register(server)
 		}
 	}
@@ -265,9 +265,9 @@ type WriteDependencies struct {
 	ImageUploads PlatformImageUploader
 }
 
-// AttachWrites registers the implemented write operations. Switching on an
-// operation that has no implementation is a startup error, so a misconfigured
-// server cannot expose an unreviewed write.
+// AttachWrites exposes every write operation this server implements while
+// writes are switched on. An operation whose optional dependency is unavailable
+// is left out.
 func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, writes WriteConfig) error {
 	if runtime == nil || oauth == nil || oauth.runner == nil || deps.Features == nil || deps.Registry == nil {
 		return errors.New("staff write tools are not configured")
@@ -292,14 +292,9 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 	}
-	for _, op := range writes.EnabledOperations() {
-		if !tools.implements(op) {
-			return fmt.Errorf("admin MCP write operation %q is not implemented", op)
-		}
-	}
 	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)
-	if tools.uploads != nil && writes.OperationEnabled(OperationUploadPlatformImage) {
+	if tools.uploads != nil && writes.Enabled {
 		registerImageUploadTool(runtime.server, tools.uploads, writes)
 	}
 	return nil

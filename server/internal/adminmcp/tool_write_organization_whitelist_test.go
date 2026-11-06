@@ -26,7 +26,7 @@ func newOrganizationWhitelistFixture(t *testing.T, name string) writeFixture {
 }
 
 func newOrganizationWhitelistWriter(f writeFixture) *organizationWhitelistWriter {
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationWhitelist: true}} //nolint:exhaustive // Only whitelisting is enabled.
+	writes := WriteConfig{Enabled: true}
 	return &organizationWhitelistWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes}
 }
 
@@ -181,7 +181,7 @@ func TestOrganizationWhitelistRequiresAuthority(t *testing.T) {
 	writer := &organizationWhitelistWriter{}
 	_, err := writer.apply(t.Context(), OrganizationWhitelistInput{})
 	require.ErrorIs(t, err, ErrWriteDisabled)
-	writer.writes = WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationWhitelist: true}} //nolint:exhaustive // Only whitelisting is enabled.
+	writer.writes = WriteConfig{Enabled: true}
 	_, err = writer.apply(t.Context(), OrganizationWhitelistInput{})
 	require.ErrorIs(t, err, ErrWriteIdentity)
 	_, err = writer.apply(writePrincipalContext(t, []string{ScopeRead}), OrganizationWhitelistInput{})

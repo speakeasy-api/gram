@@ -21,18 +21,12 @@ import (
 // implemented write operation attached, following every page.
 func listAllAdminTools(t *testing.T) []json.RawMessage {
 	t.Helper()
-	operations := make(map[WriteOperation]bool)
-	for _, op := range AllWriteOperations {
-		if op.implemented() {
-			operations[op] = true
-		}
-	}
 	principal := staffPrincipal()
 	principal.Scopes = append(principal.Scopes, ScopeWrite)
 	runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	handler := runtime.Handler()
 
 	tools := []json.RawMessage{}
