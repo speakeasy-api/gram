@@ -1,3 +1,11 @@
+import { toast } from "sonner";
+import {
+  buildServerGuardrailRequest,
+  effectiveAction,
+} from "@/pages/security/server-guardrails/server-guardrail-policy";
+import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
+import { useDetectorMode } from "@/pages/security/use-detector-mode";
+import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies";
 import {
   useCallback,
   useEffect,
@@ -21,7 +29,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { useListMCPCatalog } from "./hooks";
-import { isSnowflakeCatalogServer } from "./snowflake-install";
+import {
+  readSnowflakeHandoff,
+  type SnowflakeHandoff,
+  isSnowflakeCatalogServer,
+} from "./snowflake-install";
 import { SetupContext } from "./provider-setup/setup-context";
 import {
   reduce,
@@ -73,7 +85,10 @@ export default function SnowflakeCatalogSetup(): JSX.Element {
   if (rollout !== "enabled" || !entry || !isSnowflakeCatalogServer(entry))
     return <Navigate to={routes.mcp.catalog.href()} replace />;
   return (
-    <RequireScope scope={["project:read", "mcp:write"]} level="page">
+    <RequireScope
+      scope={["project:read", "mcp:write", "project:write"]}
+      level="page"
+    >
       <SnowflakeCatalogFlow />
     </RequireScope>
   );
@@ -92,17 +107,31 @@ export function SnowflakeCatalogFlow(): JSX.Element {
     project.id,
     "catalog:com.snowflake/cortex-mcp",
   );
-  return <CatalogDraft key={key} storageKey={key} />;
+  const routes = useRoutes();
+  const handoff = readSnowflakeHandoff(key);
+  if (!handoff)
+    return (
+      <Navigate
+        to={routes.mcp.catalog.detail.href(
+          encodeURIComponent("com.snowflake/cortex-mcp"),
+        )}
+        replace
+      />
+    );
+  return <CatalogDraft key={key} storageKey={key} handoff={handoff} />;
 }
 function readCheckpoint(key: string): {
   remoteId?: string;
   serverId?: string;
   sourceFingerprint?: string;
+  guardrailAttempted?: boolean;
 } {
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
     if (!value || typeof value !== "object") return {};
     return {
+      guardrailAttempted:
+        "guardrailAttempted" in value && value.guardrailAttempted === true,
       sourceFingerprint:
         "sourceFingerprint" in value &&
         typeof value.sourceFingerprint === "string"
@@ -121,7 +150,14 @@ function readCheckpoint(key: string): {
     return {};
   }
 }
-function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
+function CatalogDraft({
+  storageKey,
+  handoff,
+}: {
+  storageKey: string;
+  handoff: SnowflakeHandoff;
+}): JSX.Element {
+  const detectorMode = useDetectorMode();
   const sdk = useSdkClient(),
     routes = useRoutes(),
     navigate = useNavigate();
@@ -196,6 +232,33 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
     }
     checkpoint.current.sourceFingerprint = fingerprint;
     remember();
+    if (
+      handoff.guardrail &&
+      !handoff.customize &&
+      !checkpoint.current.guardrailAttempted
+    ) {
+      // As in the catalog installer, policy failure leaves the accepted source
+      // intact. The existing Guardrails tab is the recovery path.
+      checkpoint.current.guardrailAttempted = true;
+      remember();
+      try {
+        await sdk.risk.policies.create({
+          createRiskPolicyRequestBody: buildServerGuardrailRequest(
+            handoff.guardrail,
+            {
+              mcpServerIds: [id],
+              name: `${handoff.name} guardrail`,
+              mode: detectorMode,
+            },
+          ),
+        });
+      } catch {
+        toast.warning(
+          "Snowflake was added, but its risk policy couldn’t be created. Retry from the server’s Guardrails tab.",
+        );
+      }
+      void invalidateAllRiskListPolicies(cache).catch(() => undefined);
+    }
     setServerUrl(upstream.url);
     setServer(target);
   };
@@ -249,11 +312,25 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
     // The next catalog Add starts a new setup, rather than reopening this one.
     sessionStorage.removeItem(storageKey);
     sessionStorage.removeItem(checkpointKey);
+    sessionStorage.removeItem(`${storageKey}:handoff`);
     void navigate(
-      routes.mcp.details.overview.href(mcpServerRouteParam(server)),
+      handoff.customize
+        ? routes.policyCenter.new.href() +
+            policyNewPrefillQuery({
+              mcpServerIds: [server.id],
+              ...(handoff.guardrail
+                ? {
+                    categories: handoff.guardrail.categories,
+                    action: effectiveAction(handoff.guardrail),
+                    score: handoff.guardrail.score,
+                  }
+                : {}),
+              name: `${handoff.name} guardrail`,
+            })
+        : routes.mcp.details.overview.href(mcpServerRouteParam(server)),
       { replace: true },
     );
-  }, [s.screen, server, storageKey, checkpointKey, navigate, routes]);
+  }, [s.screen, server, storageKey, checkpointKey, navigate, routes, handoff]);
 
   const install = async () => {
     if (busy.current || pending) return;
@@ -272,7 +349,7 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
       if (!checkpoint.current.remoteId) {
         const remote = await sdk.remoteMcp.createServer({
           createServerForm: {
-            name: "Snowflake",
+            name: handoff.name,
             url: connection.url,
             transportType: "streamable-http",
           },
@@ -284,7 +361,7 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
       if (!checkpoint.current.serverId) {
         const created = await sdk.mcpServers.create({
           createMcpServerForm: {
-            name: "Snowflake",
+            name: handoff.name,
             remoteMcpServerId: checkpoint.current.remoteId,
             visibility: "disabled",
           },
@@ -317,6 +394,7 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
         server={server}
         serverUrl={serverUrl}
         saveOnMount={saveOnMount}
+        serverName={handoff.name}
       />
     );
   return (
@@ -356,7 +434,7 @@ function CatalogDraft({ storageKey }: { storageKey: string }): JSX.Element {
         },
       }}
     >
-      <SetupBody serverName="Snowflake" serverUrl="" />
+      <SetupBody serverName={handoff.name} serverUrl="" />
     </SetupContext>
   );
 }
@@ -366,12 +444,14 @@ function InstalledDraft({
   server,
   serverUrl,
   saveOnMount,
+  serverName,
 }: {
   s: State;
   dispatch: Dispatch<Action>;
   server: McpServer;
   serverUrl: string;
   saveOnMount: boolean;
+  serverName: string;
 }): JSX.Element {
   const current = useGetMcpServer({ id: server.id }, undefined, {
     throwOnError: false,
@@ -404,7 +484,7 @@ function InstalledDraft({
         },
       }}
     >
-      <SetupBody serverName="Snowflake" serverUrl={serverUrl} />
+      <SetupBody serverName={serverName} serverUrl={serverUrl} />
     </SetupContext>
   );
 }

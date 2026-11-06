@@ -1,3 +1,9 @@
+import { toast } from "sonner";
+import {
+  isSnowflakeCatalogServer,
+  writeSnowflakeHandoff,
+} from "./snowflake-install";
+import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
@@ -21,7 +27,7 @@ import {
 } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
@@ -208,12 +214,57 @@ export function AddServerDialog({
   // Guardrails are an interactive step (there is nobody to draft a policy in a
   // headless or auto-started install) and follow the policy admin permission.
   const organization = useOrganization();
+  const project = useProject();
+  const session = useSession();
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const releaseState = useRemoteMcpInstallWorkflow({
     servers: enrichedServers,
     beforeInstall,
+    deferSetup: (configs, options) => {
+      const config = configs[0];
+      if (
+        providerSetupRollout === "disabled" ||
+        !openProviderSetup ||
+        !open ||
+        headless ||
+        autoStartInstall ||
+        configs.length !== 1 ||
+        !config ||
+        config.identityMode !== "user" ||
+        !isSnowflakeCatalogServer(config.server)
+      )
+        return false;
+      if (providerSetupRollout === "loading") return true;
+      const key = providerProgressKey(
+        "snowflake",
+        session.user.id,
+        organization.id,
+        project.id,
+        "catalog:com.snowflake/cortex-mcp",
+      );
+      if (
+        !writeSnowflakeHandoff(key, {
+          name: config.name,
+          guardrail: options.guardrail ?? options.customize,
+          customize: !!options.customize,
+        })
+      ) {
+        toast.error(
+          "Couldn’t open Snowflake setup. Allow browser storage and try again.",
+        );
+        return true;
+      }
+      setupHandoffRef.current = true;
+      onOpenChange(false);
+      void navigate(
+        routes.mcp.catalog.detail.setup.href(
+          encodeURIComponent(config.server.registrySpecifier),
+        ),
+      );
+      return true;
+    },
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:

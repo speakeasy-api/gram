@@ -1,5 +1,3 @@
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
-import { isSnowflakeCatalogServer } from "./snowflake-install";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
@@ -156,19 +154,7 @@ function CatalogInner() {
   // One server at a time: the card's own Add button opens the install dialog
   // for that server. The dialog still takes a list, so a future bulk path can
   // reuse it unchanged.
-  const setupRollout = useProviderSetupRollout();
   const handleAdd = (server: CatalogServer) => {
-    if (setupRollout !== "disabled" && isSnowflakeCatalogServer(server)) {
-      void navigate(
-        routes.mcp.catalog.detail.setup.href(
-          encodeURIComponent(server.registrySpecifier),
-        ) +
-          (attachToGatewayId
-            ? `?attachToGateway=${encodeURIComponent(attachToGatewayId)}`
-            : ""),
-      );
-      return;
-    }
     setAddingServers([server]);
   };
 

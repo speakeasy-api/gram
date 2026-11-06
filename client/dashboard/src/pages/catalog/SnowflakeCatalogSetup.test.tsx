@@ -1,7 +1,9 @@
+import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
+import { writeSnowflakeHandoff } from "./snowflake-install";
 import { StrictMode } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SnowflakeCatalogFlow } from "./SnowflakeCatalogSetup";
 import { useSetup } from "./provider-setup/setup-context";
@@ -21,6 +23,7 @@ const api = vi.hoisted(() => ({
   live: vi.fn(),
   member: vi.fn(),
   members: vi.fn(),
+  policy: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
@@ -29,15 +32,23 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
+    risk: { policies: { create: api.policy } },
     remoteMcp: { createServer: api.remote, getServer: api.upstream },
     mcpServers: { create: api.create, get: api.get },
     metaMcp: { addMember: api.member, listMembers: api.members },
   }),
   useSlugs: () => ({ orgSlug: "example" }),
 }));
+vi.mock("@/pages/security/use-detector-mode", () => ({
+  useDetectorMode: () => "presidio",
+}));
+vi.mock("@gram/client/react-query/riskListPolicies", () => ({
+  invalidateAllRiskListPolicies: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
+      catalog: { detail: { href: () => "/catalog/snowflake" } },
       details: {
         overview: { href: () => "/overview" },
         settings: { href: () => "/settings" },
@@ -127,11 +138,15 @@ function seedCredentials() {
   });
   saveProviderProgress(key, s);
 }
+function Location() {
+  return <output aria-label="Location">{useLocation().pathname}</output>;
+}
 function show() {
   return render(
     <StrictMode>
       <MemoryRouter>
         <SnowflakeCatalogFlow />
+        <Location />
       </MemoryRouter>
     </StrictMode>,
   );
@@ -139,12 +154,14 @@ function show() {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+  writeSnowflakeHandoff(key, { name: "Snowflake" });
   api.remote.mockResolvedValue({ id: "remote" });
   api.create.mockResolvedValue(server);
   api.get.mockResolvedValue(server);
   api.upstream.mockResolvedValue({ url });
   api.endpoint.mockResolvedValue({ slug: "example-mcp" });
   api.members.mockResolvedValue({ members: [] });
+  api.policy.mockResolvedValue({ id: "policy" });
 });
 afterEach(cleanup);
 async function credentials() {
@@ -154,6 +171,17 @@ async function credentials() {
   return user;
 }
 describe("Snowflake catalog draft lifecycle (mocked API)", () => {
+  it("requires the modal’s User Identity handoff before opening draft setup", async () => {
+    sessionStorage.removeItem(key + ":handoff");
+    show();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Location").textContent).toBe(
+        "/catalog/snowflake",
+      ),
+    );
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+  });
   it("opens the setup plan and collects values without probing or installing", async () => {
     show();
     expect(screen.getByText("begin")).toBeDefined();
@@ -292,5 +320,77 @@ describe("Snowflake catalog draft lifecycle (mocked API)", () => {
       },
     });
     expect(api.next).not.toHaveBeenCalled();
+  });
+  it("preserves the name entered in the existing modal", async () => {
+    writeSnowflakeHandoff(key, { name: "Snowflake connection" });
+    seedCredentials();
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.remote).toHaveBeenCalledWith({
+      createServerForm: {
+        name: "Snowflake connection",
+        url,
+        transportType: "streamable-http",
+      },
+    });
+    expect(api.create.mock.lastCall?.[0].createMcpServerForm.name).toBe(
+      "Snowflake connection",
+    );
+  });
+  it("applies a selected guardrail to the actual server before saving credentials", async () => {
+    writeSnowflakeHandoff(key, {
+      name: "Snowflake",
+      guardrail: catalogPresetState([]),
+    });
+    seedCredentials();
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.policy).toHaveBeenCalledOnce();
+    expect(api.policy.mock.lastCall?.[0]).toMatchObject({
+      createRiskPolicyRequestBody: {
+        name: "Snowflake guardrail",
+        mcpScope: { allServers: false, servers: [{ mcpServerId: "server" }] },
+      },
+    });
+    expect(api.create.mock.invocationCallOrder[0]).toBeLessThan(
+      api.policy.mock.invocationCallOrder[0]!,
+    );
+    expect(api.policy.mock.invocationCallOrder[0]).toBeLessThan(
+      api.next.mock.invocationCallOrder[0]!,
+    );
+  });
+  it("does not create a policy when the existing customize action was selected", async () => {
+    writeSnowflakeHandoff(key, {
+      name: "Snowflake",
+      guardrail: catalogPresetState([]),
+      customize: true,
+    });
+    seedCredentials();
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.policy).not.toHaveBeenCalled();
+  });
+  it("keeps the accepted server and continues setup if the optional policy fails", async () => {
+    writeSnowflakeHandoff(key, {
+      name: "Snowflake",
+      guardrail: catalogPresetState([]),
+    });
+    seedCredentials();
+    api.policy.mockRejectedValueOnce(new Error("Policy unavailable"));
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.remote).toHaveBeenCalledOnce();
+    expect(api.create).toHaveBeenCalledOnce();
+    expect(
+      JSON.parse(sessionStorage.getItem(key + ":installation") ?? "null"),
+    ).toMatchObject({ serverId: "server", guardrailAttempted: true });
   });
 });
