@@ -2866,7 +2866,13 @@ SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE b.project_id = $1 AND b.organization_id = $2
   AND b.principal_id = $3 AND b.user_session_issuer_id = $4
   AND b.id = $5 AND b.revoked_at IS NULL
-RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation
+RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation,
+  -- The account the connection signed in as, for the detach audit entry.
+  COALESCE((
+    SELECT COALESCE(s.upstream_email, s.upstream_display_name)
+    FROM remote_sessions AS s
+    WHERE s.id = b.remote_session_id
+  ), '')::text AS upstream_account
 `
 
 type DetachPrincipalRemoteSessionBindingParams struct {
@@ -2881,6 +2887,7 @@ type DetachPrincipalRemoteSessionBindingRow struct {
 	RemoteSessionID       uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	GrantGeneration       int64
+	UpstreamAccount       string
 }
 
 func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg DetachPrincipalRemoteSessionBindingParams) (DetachPrincipalRemoteSessionBindingRow, error) {
@@ -2892,7 +2899,12 @@ func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg D
 		arg.ID,
 	)
 	var i DetachPrincipalRemoteSessionBindingRow
-	err := row.Scan(&i.RemoteSessionID, &i.RemoteSessionClientID, &i.GrantGeneration)
+	err := row.Scan(
+		&i.RemoteSessionID,
+		&i.RemoteSessionClientID,
+		&i.GrantGeneration,
+		&i.UpstreamAccount,
+	)
 	return i, err
 }
 
@@ -3121,6 +3133,26 @@ func (q *Queries) GetActiveRemoteSessionInTenant(ctx context.Context, arg GetAct
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getBindingAgentName = `-- name: GetBindingAgentName :one
+SELECT name
+FROM agents
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type GetBindingAgentNameParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The name of the agent a connection is attached to, for its audit entry.
+func (q *Queries) GetBindingAgentName(ctx context.Context, arg GetBindingAgentNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, getBindingAgentName, arg.ID, arg.OrganizationID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getClientCredentialsGrantClient = `-- name: GetClientCredentialsGrantClient :one

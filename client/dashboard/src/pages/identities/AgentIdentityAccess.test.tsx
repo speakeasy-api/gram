@@ -86,6 +86,13 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "example" }),
 }));
+// Whom the agent acts for is read from its connections; here it only matters
+// which rows ask.
+vi.mock("./GrantOnBehalfOf", () => ({
+  GrantOnBehalfOf: ({ resourceId }: { resourceId: string }) => (
+    <span>{`on behalf of, for ${resourceId}`}</span>
+  ),
+}));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
     projectMap: new Map([
@@ -200,6 +207,7 @@ describe("Agent profile permissions", () => {
         /Project: Example project.*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,
       ),
     ).toBeTruthy();
+    expect(screen.getByText("on behalf of, for server_example")).toBeTruthy();
     expect(mocks.list).toHaveBeenCalledWith({ agentId: agent.id }, undefined, {
       signal: expect.any(AbortSignal),
     });
@@ -226,6 +234,7 @@ describe("Agent profile permissions", () => {
     expect(screen.getAllByText("Whole organization")).toHaveLength(1);
     expect(screen.getByText("All resources")).toBeTruthy();
     expect(screen.getByText("Project: Example project")).toBeTruthy();
+    expect(screen.queryByText(/^on behalf of/)).toBeNull();
   });
   // A wildcard project constrains nothing; an empty one still narrows.
   it.each([
