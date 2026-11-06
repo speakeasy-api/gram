@@ -39,8 +39,8 @@ const (
 	consentInventoryMaxTools = 1000
 
 	// gatewayInventoryMaxTools bounds a gateway's combined member inventory.
-	// Consent capture and gateway serving share it, so a gateway that can
-	// serve its tools can also be approved.
+	// Consent capture and gateway serving share it. Approval is also bounded
+	// by the 16 MiB connection catalog limit on the whole captured draft.
 	gatewayInventoryMaxTools = 10000
 
 	// consentInventoryMaxNameBytes bounds a single upstream tool name.
