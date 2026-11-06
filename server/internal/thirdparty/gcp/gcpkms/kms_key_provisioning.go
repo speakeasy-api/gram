@@ -237,7 +237,7 @@ func disableKeyVersion(ctx context.Context, client *kms.KeyManagementClient, ver
 	})
 	if status.Code(err) == codes.FailedPrecondition {
 		version, getErr := client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
-		if getErr == nil && cannotSign(version.GetState()) {
+		if getErr == nil && cannotUseVersion(version.GetState()) {
 			return nil
 		}
 	}
@@ -248,9 +248,9 @@ func disableKeyVersion(ctx context.Context, client *kms.KeyManagementClient, ver
 	return nil
 }
 
-// cannotSign reports whether a version in state can no longer sign, encrypt
-// or decrypt.
-func cannotSign(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
+// cannotUseVersion reports whether a version in state can no longer sign,
+// encrypt or decrypt.
+func cannotUseVersion(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
 	return state == kmspb.CryptoKeyVersion_DISABLED || state == kmspb.CryptoKeyVersion_DESTROY_SCHEDULED || state == kmspb.CryptoKeyVersion_DESTROYED
 }
 

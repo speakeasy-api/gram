@@ -41,8 +41,29 @@ func publishLocalKeyFile(path string, doc []byte) error {
 	if err := os.Link(tmpName, path); err != nil {
 		return errors.Join(fmt.Errorf("publish persistent local key: %w", err), os.Remove(tmpName))
 	}
-	if err := os.Remove(tmpName); err != nil {
-		return fmt.Errorf("remove persistent local key temporary file: %w", err)
+	// The key is published, so a leftover temporary name is only a second link
+	// to it and must not fail startup.
+	_ = os.Remove(tmpName)
+
+	// Sync the directory so a crash cannot lose the new link and leave the next
+	// start to generate a different key.
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("sync persistent local key directory: %w", err)
+	}
+
+	return nil
+}
+
+func syncDir(dir string) error {
+	handle, err := os.Open(dir) //nolint:gosec // dir is the application-selected local-development key directory.
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	if err := handle.Sync(); err != nil {
+		return errors.Join(fmt.Errorf("sync: %w", err), handle.Close())
+	}
+	if err := handle.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
 	}
 
 	return nil
