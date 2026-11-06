@@ -34,6 +34,7 @@ vi.mock("@/hooks/useProviderSetupRollout", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
+  useSession: () => ({ user: { id: "person-1" } }),
   useOrganization: () => ({ id: "org-1", slug: "acme" }),
 }));
 
@@ -158,6 +159,7 @@ function mockConfigureWorkflow(selectedServer = server): void {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   mocks.providerSetup = "enabled";
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
@@ -671,6 +673,7 @@ describe.each([
       expect(mocks.navigate).not.toHaveBeenCalled();
       expect(mocks.onOpenChange).not.toHaveBeenCalled();
       if (status === "loading") {
+        sessionStorage.clear();
         mocks.providerSetup = "enabled";
         view.rerender(content());
         await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
@@ -759,3 +762,126 @@ it.each([{ headless: true }, { autoStartInstall: true }])(
     expect(mocks.navigate).not.toHaveBeenCalled();
   },
 );
+
+describe("Snowflake keeps the existing identity modal", () => {
+  const snowflake = {
+    ...server,
+    registrySpecifier: "com.snowflake/cortex-mcp",
+    title: "Snowflake",
+    supportsDcr: false,
+    remotes: [
+      {
+        transportType: "streamable-http" as const,
+        url: "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
+      },
+    ],
+  };
+  function configure(identityMode: "user" | "agent" | "none") {
+    mocks.hasScope.mockReturnValue(true);
+    mockConfigureWorkflow(snowflake);
+    const state = mocks.workflow();
+    state.serverConfigs[0].identityMode = identityMode;
+    state.serverConfigs[0].name = "Snowflake connection";
+    mocks.startInstall.mockImplementation(async () => {
+      const options = mocks.workflow.mock.calls.at(-1)![0];
+      options.deferSetup(state.serverConfigs, {});
+    });
+    return state;
+  }
+  function show() {
+    return render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[snowflake]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+  }
+  afterEach(() => {
+    mocks.startInstall.mockReset();
+  });
+  it("shows the existing modal with identity choices and no Snowflake connection fields", async () => {
+    configure("none");
+    show();
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(
+      screen.getByRole("radio", { name: /Shared credential/ }),
+    ).toBeDefined();
+    expect(screen.getByRole("radio", { name: /Manual/ })).toBeDefined();
+    expect(screen.queryByLabelText(/Public.*hostname/)).toBeNull();
+    expect(screen.queryByLabelText(/MCP database/)).toBeNull();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+  it("opens setup only when the User Identity install action is submitted, retaining the name", async () => {
+    configure("user");
+    show();
+    const button = await screen.findByRole("button", {
+      name: "Add to Project",
+    });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        "/acme/projects/default/mcp/catalog/com.snowflake%2Fcortex-mcp/setup",
+      ),
+    );
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+    const saved = JSON.parse(
+      sessionStorage.getItem(
+        "provider-setup:snowflake:v1:person-1:org-1:project-1:catalog%3Acom.snowflake%2Fcortex-mcp:handoff",
+      ) ?? "null",
+    );
+    expect(saved).toMatchObject({
+      identityMode: "user",
+      name: "Snowflake connection",
+    });
+  });
+  it.each(["none", "agent"] as const)(
+    "does not open setup for %s identity",
+    async (mode) => {
+      const state = configure("none");
+      show();
+      await screen.findByRole("radio", { name: /User Identity/ });
+      const options = mocks.workflow.mock.calls.at(-1)![0];
+      state.serverConfigs[0].identityMode = mode;
+      expect(options.deferSetup(state.serverConfigs, {})).toBe(false);
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    },
+  );
+  it("retains the existing optional guardrail selection in the deferred handoff", async () => {
+    const state = configure("user");
+    show();
+    await screen.findByRole("radio", { name: /User Identity/ });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    expect(
+      options.deferSetup(state.serverConfigs, {
+        guardrail: catalogPresetState([]),
+      }),
+    ).toBe(true);
+    const saved = JSON.parse(
+      sessionStorage.getItem(
+        "provider-setup:snowflake:v1:person-1:org-1:project-1:catalog%3Acom.snowflake%2Fcortex-mcp:handoff",
+      ) ?? "null",
+    );
+    expect(saved.guardrail.categories).toEqual(["secrets", "pii"]);
+  });
+  it.each(["loading", "disabled"] as const)(
+    "never opens setup while rollout is %s",
+    async (rollout) => {
+      const state = configure("user");
+      mocks.providerSetup = rollout;
+      show();
+      await screen.findByRole("radio", { name: /User Identity/ });
+      const options = mocks.workflow.mock.calls.at(-1)![0];
+      expect(options.deferSetup(state.serverConfigs, {})).toBe(
+        rollout === "loading",
+      );
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    },
+  );
+});
