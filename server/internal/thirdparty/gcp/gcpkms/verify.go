@@ -59,6 +59,11 @@ const (
 	// corruption or a provider fault rather than a configuration problem.
 	ReasonSignatureInvalid VerifyReason = "signature_invalid"
 
+	// ReasonRoundTripFailed means the key encrypted, but decrypting the result
+	// did not return the probe payload. This should not happen; treat it as
+	// corruption or a provider fault rather than a configuration problem.
+	ReasonRoundTripFailed VerifyReason = "round_trip_failed"
+
 	// ReasonUnavailable means the probe could not complete for a transient
 	// reason: a timeout, a rate limit, or KMS being briefly unreachable. It is
 	// the one reason worth retrying; every other failure is stable.
@@ -157,6 +162,11 @@ func ReasonForError(err error) VerifyReason {
 		return ReasonInvalidResourceName
 	case errors.Is(err, ErrUnsupportedAlgorithm):
 		return ReasonUnsupportedAlgorithm
+	case errors.Is(err, ErrKeyVersionDisabled):
+		return ReasonKeyUnusable
+	case errors.Is(err, ErrEncryptionResponseInvalid):
+		// An integrity failure on the wire is worth retrying.
+		return ReasonUnavailable
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		// A bare context error carries no gRPC status, so without this it would
 		// fall through to ReasonUnexpected and callers would not retry something
