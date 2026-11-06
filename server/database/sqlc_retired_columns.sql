@@ -13,3 +13,6 @@ ALTER TABLE toolsets DROP COLUMN mcp_is_public;
 ALTER TABLE toolsets DROP COLUMN mcp_enabled;
 ALTER TABLE toolsets DROP COLUMN custom_domain_id;
 ALTER TABLE toolsets DROP COLUMN user_session_issuer_id;
+
+-- No longer read since Anthropic inference hooks evaluate only the latest exchange (DNO-1390). GetChat selects c.*.
+ALTER TABLE chats DROP COLUMN inference_accepted_checkpoint;
