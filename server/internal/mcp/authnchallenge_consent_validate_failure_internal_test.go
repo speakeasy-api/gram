@@ -41,6 +41,7 @@ func TestClassifyCheckFailure(t *testing.T) {
 		{name: "token resolution invariant", err: invariant, code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonCheckFailed},
 		{name: "binding check bug", err: oops.E(oops.CodeUnexpected, errors.New("bad query"), "check remote session client binding for validation"), code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonCheckFailed},
 		{name: "store outage", err: oops.E(oops.CodeUnexpected, redis.ErrClosed, "resolve upstream token projects for validation"), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonCheckUnavailable},
+		{name: "private network only", err: oops.E(oops.CodeForbidden, errClientOffNetwork, "This server is only available on your company network."), code: mcpconnectionattempts.CodeNetworkDenied, page: oauthui.ReasonCheckNetworkDenied},
 		{name: "unroutable", err: oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here."), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin},
 		{name: "client misconfigured", err: fmt.Errorf("resolve: %w", remotesessions.ErrRemoteSessionMisconfigured), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin},
 		{name: "card not connected or expired", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: nil}, "Reconnect this service."), code: mcpconnectionattempts.CodeInvalidRemoteSession, page: oauthui.ReasonDefault},
@@ -48,7 +49,7 @@ func TestClassifyCheckFailure(t *testing.T) {
 		{name: "card status unreadable", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: redis.ErrClosed}, "x"), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonDefault},
 		{name: "card client misconfigured", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: remotesessions.ErrRemoteSessionMisconfigured}, "x"), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonDefault},
 		{name: "card token unobtainable", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: errors.New("grant is stored but its token could not be obtained")}, "x"), code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonDefault},
-		{name: "provider outage", err: memberConnectionError{errors.New("down"), mcpconnectionattempts.CodeProviderUnavailable}, code: mcpconnectionattempts.CodeProviderUnavailable, page: oauthui.ReasonCheckProviderUnavailable},
+		{name: "provider outage", err: memberConnectionError{errors.New("down"), mcpconnectionattempts.CodeProviderUnavailable}, code: mcpconnectionattempts.CodeProviderUnavailable, page: oauthui.ReasonDefault},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

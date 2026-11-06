@@ -85,9 +85,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "check-unavailable"}}
             Speakeasy couldn't check this server's connection right now. This is
             a problem on our side, not something you did.
-            {{else if eq .Kind "check-provider-unavailable"}}
-            The service this server uses isn't available right now, so Speakeasy
-            couldn't check the connection. This isn't something you did.
+            {{else if eq .Kind "check-network-denied"}}
+            This server is only available on your company network.
+            {{else if eq .Kind "sign-in-required"}}
+            Your sign-in service needs you to sign in again before
+            {{template "client" .}} can connect to {{template "server" .}}.
             {{else if eq .Kind "check-needs-admin"}}
             This server's connection isn't set up correctly, so Speakeasy couldn't
             check it.
@@ -143,9 +145,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "check-unavailable"}}
           Try again shortly. If it keeps happening, share the technical details
           below with Speakeasy support.
-          {{else if eq .Kind "check-provider-unavailable"}}
-          Try again shortly. If it keeps happening, share the technical details
-          below with your IT administrators.
+          {{else if eq .Kind "check-network-denied"}}
+          Connect from your company network, then check again. If you need it
+          from elsewhere, ask your IT administrators.
+          {{else if eq .Kind "sign-in-required"}}
+          Start connecting again, and sign in when your sign-in service asks.
           {{else if eq .Kind "check-needs-admin"}}
           Ask your IT administrators to check this server's connection settings.
           Share the technical details below with them.

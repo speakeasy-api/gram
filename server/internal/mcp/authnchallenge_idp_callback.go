@@ -280,15 +280,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
 			}
-			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
+			label := oautherr.RegisteredCodeLabel(idpErr)
+			failure := firstPartyIDPFailureOf(label)
+			t.Refuse(ctx, failure.what, mcpconnectionattempts.Detail(label))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-			// The provider refused, not us: keep its registered code where an admin can read it.
-			message := "sign-in provider returned an error"
-			if oautherr.IsIETFRegisteredCode(idpErr) {
-				message += ": " + idpErr
+			refusal := oops.E(failure.code, nil, "sign-in provider returned an error: %s", label)
+			if failure.code == oops.CodeUnexpected {
+				refusal = refusal.LogError(ctx, logger)
+			} else {
+				refusal = refusal.LogWarn(ctx, logger)
 			}
-			return oops.E(oops.CodeBadRequest, nil, "%s", message).LogWarn(ctx, logger)
+			return fmt.Errorf("finish sign-in: %w", oops.WithBrowserReason(refusal, failure.page))
 		}
 		issuer, err := s.issuerURL(endpoint, baseURL)
 		if err != nil {
@@ -649,4 +652,33 @@ func (s *Service) federatedCallbackRejectReason(r *http.Request, state *AuthnCha
 		return "expired"
 	}
 	return ""
+}
+
+// firstPartyIDPFailure is what a sign-in service's error means on a first-party
+// sign-in: its row and its page, decided together.
+type firstPartyIDPFailure struct {
+	// what is the row's reason.
+	what mcpconnectionattempts.Code
+
+	// code sets the page's status.
+	code oops.Code
+
+	// page explains it.
+	page oauthui.Reason
+}
+
+// firstPartyIDPFailureOf classifies a sign-in service's error code (RFC 6749 §4.1.2.1,
+// OpenID Connect Core §3.1.2.6). Speakeasy sends the request, so a request the
+// service calls malformed is ours to fix.
+func firstPartyIDPFailureOf(label string) firstPartyIDPFailure {
+	switch label {
+	case oautherr.CodeServerError, oautherr.CodeTemporarilyUnavailable:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeIDPTransientFailure, code: oops.CodeUnavailable, page: oauthui.ReasonProviderUnavailable}
+	case oautherr.CodeInvalidRequest, oautherr.CodeUnauthorizedClient, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeInternalError, code: oops.CodeUnexpected, page: oauthui.ReasonDefault}
+	case oautherr.OIDCCodeLoginRequired, oautherr.OIDCCodeConsentRequired, oautherr.OIDCCodeInteractionRequired, oautherr.OIDCCodeAccountSelectionRequired:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeReauthenticationRequired, code: oops.CodeBadRequest, page: oauthui.ReasonSignInRequired}
+	default:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeSignInProviderError, code: oops.CodeBadRequest, page: oauthui.ReasonDefault}
+	}
 }

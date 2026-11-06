@@ -94,6 +94,8 @@ func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
 			code = checkFailureCode(ctx, refusal.cause)
 		}
 		return checkFailure{code: code, page: oauthui.ReasonDefault}, code != (mcpconnectionattempts.Code{})
+	case errors.Is(err, errClientOffNetwork):
+		return checkFailure{code: mcpconnectionattempts.CodeNetworkDenied, page: oauthui.ReasonCheckNetworkDenied}, true
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return checkFailure{code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin}, true
 	}
@@ -125,20 +127,19 @@ func checkFailureBrowserError(ctx context.Context, err error) error {
 	return err
 }
 
-// checkFailurePage suggests retrying only for an outage. A party the page has no wording for gets the generic page.
+// checkFailurePage suggests retrying only for our outage. A party no failed check reaches this page for gets the generic page.
 func checkFailurePage(code mcpconnectionattempts.Code) oauthui.Reason {
 	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
 	switch meaning.WhoFixes {
 	case mcpconnectionattempts.WhoAdmin:
 		return oauthui.ReasonCheckNeedsAdmin
-	case mcpconnectionattempts.WhoProvider:
-		return oauthui.ReasonCheckProviderUnavailable
 	case mcpconnectionattempts.WhoSpeakeasy:
 		if code == mcpconnectionattempts.CodeInternalError {
 			return oauthui.ReasonCheckFailed
 		}
 		return oauthui.ReasonCheckUnavailable
-	case mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoNobody:
+	case mcpconnectionattempts.WhoProvider, mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoNobody:
+		// Provider outages show on the card; no failed check reaches this page for these parties.
 		return oauthui.ReasonDefault
 	default:
 		return oauthui.ReasonDefault
@@ -222,6 +223,9 @@ func (s *Service) probeRemoteSession(
 	}()
 
 	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
+	if errors.Is(err, errClientOffNetwork) {
+		return oops.E(oops.CodeForbidden, err, "This server is only available on your company network.").LogWarn(ctx, logger)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
 	}

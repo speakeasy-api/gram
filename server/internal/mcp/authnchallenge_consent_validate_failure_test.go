@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -191,25 +192,43 @@ func TestServeConsentAction_ValidateRefreshFailureWritesOneRow(t *testing.T) {
 	require.Empty(t, checkRows(rec), "the check adds no second row")
 }
 
-// A first-party sign-in the provider refused is the provider's: no fault page, and its code stays in the details.
-func TestHandleIDPCallback_FirstPartyProviderErrorIsTheProviders(t *testing.T) {
+// A first-party sign-in service's error is classified by its code: the page and the row agree, and neither names an MCP client.
+func TestHandleIDPCallback_FirstPartyProviderErrors(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, memberMock())
-	rec := recordConnections(t, ti)
-	challengeID := seedIDPCallbackChallenge(t, ctx, ti)
-	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
-	require.NoError(t, err)
-	state.FlowID = uuid.NewString()
-	state.FirstParty = true
-	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	for _, tc := range []struct {
+		idpErr string
+		status int
+		says   string
+		what   mcpconnectionattempts.Code
+	}{
+		{"server_error", http.StatusServiceUnavailable, "Try connecting again shortly.", mcpconnectionattempts.CodeIDPTransientFailure},
+		{"temporarily_unavailable", http.StatusServiceUnavailable, "Try connecting again shortly.", mcpconnectionattempts.CodeIDPTransientFailure},
+		{"invalid_request", http.StatusInternalServerError, "This is a problem on our side", mcpconnectionattempts.CodeInternalError},
+		{"login_required", http.StatusBadRequest, "Your sign-in service needs you to sign in again", mcpconnectionattempts.CodeReauthenticationRequired},
+		{"made_up_by_caller", http.StatusBadRequest, "sign-in provider returned an error: unregistered", mcpconnectionattempts.CodeSignInProviderError},
+	} {
+		t.Run(tc.idpErr, func(t *testing.T) {
+			t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+url.Values{"state": {challengeID}, "error": {"server_error"}}.Encode(), nil).WithContext(ctx)
-	w := httptest.NewRecorder()
-	oops.BrowserErrHandle(testenv.NewLogger(t), ti.service.HandleIDPCallback).ServeHTTP(w, req)
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	page := strings.ReplaceAll(strings.Join(strings.Fields(w.Body.String()), " "), "&#39;", "'")
-	require.Contains(t, page, "sign-in provider returned an error: server_error")
-	require.NotContains(t, page, "problem on our side")
-	rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSignInProviderError)
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, memberMock())
+			rec := recordConnections(t, ti)
+			challengeID := seedIDPCallbackChallenge(t, ctx, ti)
+			state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+			require.NoError(t, err)
+			state.FlowID = uuid.NewString()
+			state.FirstParty = true
+			require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+			req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+url.Values{"state": {challengeID}, "error": {tc.idpErr}}.Encode(), nil).WithContext(ctx)
+			w := httptest.NewRecorder()
+			oops.BrowserErrHandle(testenv.NewLogger(t), ti.service.HandleIDPCallback).ServeHTTP(w, req)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
+			page := strings.ReplaceAll(strings.Join(strings.Fields(w.Body.String()), " "), "&#39;", "'")
+			require.Contains(t, page, tc.says)
+			require.NotContains(t, strings.ToLower(page), "your mcp client")
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, tc.what)
+			require.Equal(t, oautherr.RegisteredCodeLabel(tc.idpErr), row.SubReason)
+		})
+	}
 }
