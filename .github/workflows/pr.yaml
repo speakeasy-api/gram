@@ -2339,14 +2339,11 @@ jobs:
         if: steps.lookup.outputs.cache-hit != 'true'
         run: aube install --frozen-lockfile
 
-      - name: Restore compatible module transforms
+      # Start from source, never restore consumer transforms into this trusted
+      # writer. The lookup above only checks existence and downloads no code.
+      - name: Start with fresh module transforms
         if: steps.lookup.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules/.vitest-cache
-          key: ${{ steps.daily-key.outputs.key }}
-          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+        run: rm -rf node_modules/.vitest-cache
 
       # Use the real test commands/configs, not a second transformation pipeline.
       # A failed warm-up never publishes and cannot suppress consumer tests.

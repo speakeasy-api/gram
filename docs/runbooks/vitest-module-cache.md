@@ -11,7 +11,8 @@ Blacksmith transparently serves `actions/cache`. With branch-protected caches,
 a queue ref's saved entry is not a shared cache for later queue refs. The
 `vitest-module-cache` job publishes a trusted `refs/heads/main` entry after a
 client-affecting main push. It checks out the push's exact SHA; it never downloads
-PR artifacts or checks out PR code. Branch protection remains enabled.
+PR artifacts or checks out PR code. The workflow does not change backend branch
+protection; verify that setting before relying on cross-ref restores.
 
 The producer uses the same runner class, Node installation, dependency install,
 working directories and dashboard/admin test commands as consumers. It shares the
@@ -23,8 +24,9 @@ consumer restore/save failures remain non-blocking.
 ## Bounded publishing and races
 
 The producer first does a lookup-only check for `<prefix>main-YYYY-MM-DD` (UTC).
-An exact hit skips dependency installation and both suites. Otherwise it restores
-an older compatible entry, runs both suites and saves the daily entry. Thus there
+An exact hit skips dependency installation and both suites. Otherwise it starts with no restored module transforms, runs both suites and saves
+the daily entry. The producer never promotes consumer-generated transformed code,
+even if backend scope protection is misconfigured. Thus there
 is at most one successful warm-up per UTC day **per compatibility prefix**, not
 one full-suite run on every main push. Failed attempts can retry on later pushes.
 Checkout, Mise setup and lookup still cost time on cache-hit pushes.
@@ -65,7 +67,7 @@ The original reproduction is confirmed in GitHub logs:
 | Queue job                                                                                       | Dashboard / admin                   | Restore / save evidence               |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------- |
 | [128108368422](https://github.com/speakeasy-api/gram/actions/runs/42280580704/job/128108368422) | 260.13s / 56.63s (Vitest durations) | Miss 19:33:51 UTC; saved 19:39:15 UTC |
-| [128116178275](https://github.com/speakeasy-api/gram/actions/runs/42282826999/job/128116178275) | 208s / 56s (GitHub steps)           | Miss 19:49:17 UTC; save step 2s       |
+| [128116178275](https://github.com/speakeasy-api/gram/actions/runs/42282826999/job/128116178275) | 206.85s / 55.67s (Vitest durations) | Miss 19:49:17 UTC; save step 2s       |
 
 Both queue refs had identical Linux/X64, Node v24.22.2 and configuration prefixes.
 The old workflow's `verify == false` on pushes prevented a main-scoped producer.
@@ -93,8 +95,10 @@ in the cost calculation. The old same-ref benchmark is not cross-ref evidence.
 
 1. In Blacksmith, inspect the repository's Branch Protected Caches setting and
    cache inventory (key, version, scope, architecture and transparent-cache flag).
-   Keep protection enabled. The CLI supports:
-   `blacksmith cache list --repo speakeasy-api/gram --search vitest-modules-blacksmith-v1 --format json`.
+   Keep protection enabled. The [documented CLI](https://docs.blacksmith.sh/blacksmith-cli/cache) supports
+   the following command (not executed during this investigation):
+   `blacksmith cache list --repo speakeasy-api/gram --search vitest-modules-blacksmith-v1 --per-page 100 --page 1 --format json`.
+   Increment `--page` until all matching entries have been inspected.
 2. Record the successful main producer's run/job URL, exact revision, compatibility
    prefix, `refs/heads/main` scope and cache version. Check that metadata is saved.
 3. Observe **two distinct normal merge-queue refs** with that compatible prefix
