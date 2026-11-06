@@ -34,9 +34,10 @@ const staffCodeLifetime = 10 * time.Minute
 
 // staffInactivityTimeout is how long a connection survives without a token
 // refresh. It matches the admin session inactivity timeout, so a connection
-// and the browser session behind it lapse together. Refreshing restarts it,
-// and there is no absolute limit: live staff verification ends a connection
-// when the staff member loses access.
+// and the browser session behind it lapse together. Refreshing restarts it.
+// The connection has no absolute limit of its own: live staff verification
+// ends it when the staff member loses access or the linked admin session
+// reaches its maximum lifetime.
 const staffInactivityTimeout = 48 * time.Hour
 
 type staffChallenge struct {

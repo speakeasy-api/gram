@@ -35,6 +35,12 @@ func SessionMiddleware(next http.Handler) http.Handler {
 // refresh rather than the last request.
 const adminSessionTTL = 48 * time.Hour
 
+// adminSessionMaxLifetime caps a session's age however active it stays, so
+// staff sign in with the OIDC provider at least this often. Staff Admin MCP
+// connections depend on the session they were authorized with, so they end
+// with it.
+const adminSessionMaxLifetime = 45 * 24 * time.Hour
+
 // Session is the server-side record for an OIDC-authenticated admin user.
 // The access and refresh tokens are stored encrypted so the cache contents are
 // not directly usable if exposed.
@@ -60,8 +66,18 @@ func (s Session) CacheKey() string {
 	return AdminSessionCacheKey(s.SessionID)
 }
 
+// TTL restarts the inactivity timeout without outliving the session's maximum
+// lifetime. Verifier.Authorize enforces that lifetime on every use.
 func (s Session) TTL() time.Duration {
+	if remaining := time.Until(s.CreatedAt.Add(adminSessionMaxLifetime)); remaining > 0 && remaining < adminSessionTTL {
+		return remaining
+	}
 	return adminSessionTTL
+}
+
+// Expired reports whether the session has reached its maximum lifetime.
+func (s Session) Expired(now time.Time) bool {
+	return !now.Before(s.CreatedAt.Add(adminSessionMaxLifetime))
 }
 
 // newSessionID returns a URL-safe random identifier used as the opaque value
