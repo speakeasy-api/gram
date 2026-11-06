@@ -3,6 +3,7 @@ package hooks
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -341,8 +342,10 @@ func TestAHPPromptAttachmentBoundaryCorrelation(t *testing.T) {
 			if order == "concurrent" {
 				responses := make(chan []byte, len(events))
 				for _, e := range events {
+					r := ahpHTTPRequest(t, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
 					go func() {
-						w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+						w := httptest.NewRecorder()
+						h.ServeHTTP(w, r)
 						responses <- w.Body.Bytes()
 					}()
 				}
@@ -436,8 +439,10 @@ func TestAHPAttachmentOnlyInitialBoundaryCorrelation(t *testing.T) {
 			if order == "concurrent" {
 				responses := make(chan []byte, len(events))
 				for _, e := range events {
+					r := ahpHTTPRequest(t, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
 					go func() {
-						w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+						w := httptest.NewRecorder()
+						h.ServeHTTP(w, r)
 						responses <- w.Body.Bytes()
 					}()
 				}
