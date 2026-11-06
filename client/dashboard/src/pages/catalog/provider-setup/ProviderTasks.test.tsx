@@ -198,15 +198,20 @@ function SalesforceFixture({
   integration = "native",
   path = "own",
   salesforceServer = "sobject-reads",
+  saved = false,
+  savedTokenEndpointAuthMethod,
 }: {
   step: string;
   integration?: string;
   path?: string;
   salesforceServer?: string;
+  saved?: boolean;
+  savedTokenEndpointAuthMethod?: string;
 }) {
   const [s, dispatch] = useReducer(reduce, {
     ...initialState("salesforce"),
     step,
+    saved,
     values: {
       ...initialState("salesforce").values,
       integration,
@@ -215,7 +220,13 @@ function SalesforceFixture({
     },
   });
   return (
-    <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+    <SetupContext
+      value={{
+        s,
+        dispatch,
+        live: connectionFixture(dispatch, { savedTokenEndpointAuthMethod }),
+      }}
+    >
       <ProviderTask serverName="Salesforce" />
     </SetupContext>
   );
@@ -223,10 +234,35 @@ function SalesforceFixture({
 it("shows both Salesforce connection choices and the hosted instance field", async () => {
   const user = userEvent.setup();
   render(<SalesforceFixture step="choices" />);
+  expect(
+    screen.getByRole("radio", { name: "Salesforce native MCP" }),
+  ).toBeDefined();
+  expect(screen.getByLabelText("Salesforce server")).toBeDefined();
   await user.click(screen.getByText("Speakeasy-hosted Salesforce CRM"));
   expect(screen.getByLabelText("Salesforce instance URL")).toBeDefined();
   expect(screen.queryByLabelText("Salesforce server")).toBeNull();
 });
+it.each([
+  ["none", "", "No secret required"],
+  ["client_secret_post", "••••••••", "Paste Client Secret"],
+  [undefined, "", "Secret status unavailable"],
+])(
+  "presents the saved hosted secret according to auth method %s",
+  (method, value, placeholder) => {
+    render(
+      <SalesforceFixture
+        step="credentials"
+        integration="hosted"
+        saved
+        savedTokenEndpointAuthMethod={method}
+      />,
+    );
+    const secret = screen.getByLabelText("Client Secret (optional)");
+    expect(secret).toHaveProperty("disabled", true);
+    expect(secret).toHaveProperty("value", value);
+    expect(secret.getAttribute("placeholder")).toBe(placeholder);
+  },
+);
 it.each([
   ["data360", "Data 360", /Data 360 license/, /View Data 360/],
   [

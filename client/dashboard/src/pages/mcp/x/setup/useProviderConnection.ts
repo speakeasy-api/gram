@@ -1,4 +1,8 @@
-import { salesforceConnection } from "@/pages/catalog/provider-setup/salesforce";
+import {
+  salesforceConnection,
+  salesforceSelectionForUrl,
+} from "@/pages/catalog/provider-setup/salesforce";
+import { salesforceSourceFingerprint } from "./provider-setup";
 import { invalidateRemoteMcpSourceViews } from "../tabs/settings/sections/sourceInvalidation";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
 import { useServerClientConfiguration } from "@/lib/remote-identity/queries/useServerClientConfiguration";
@@ -94,6 +98,7 @@ export type ProviderConnection = {
   loading: boolean;
   callbackUrl?: string;
   savedClientId?: string;
+  savedTokenEndpointAuthMethod?: string;
   recovery?: "signin" | "credentials" | "settings" | "permissions";
   retryLoad: () => void;
   cancelSignIn: () => void;
@@ -188,7 +193,55 @@ export function useProviderConnection(
   } = useOAuthPopup(() => checkOnReturn.current());
   const generation = useRef(0);
   const hydrated = useRef(false);
-  const appliedSource = useRef(source);
+  const appliedSource = useRef(source ? { ...source } : undefined);
+  const observedSource = useRef({ ...source, id: server.remoteMcpServerId });
+  useEffect(() => {
+    if (providerKey !== "salesforce" || !source) return;
+    const previous = observedSource.current;
+    const id = server.remoteMcpServerId;
+    const changed =
+      previous.id !== id ||
+      previous.url !== source.url ||
+      (previous.instanceUrl ?? "") !== (source.instanceUrl ?? "");
+    if (changed) {
+      observedSource.current = { ...source, id };
+      const applied = appliedSource.current;
+      // URL and header queries can refresh separately after our own writes.
+      const ownRefresh =
+        previous.id === id &&
+        applied &&
+        [previous.url, applied.url].includes(source.url) &&
+        [previous.instanceUrl ?? "", applied.instanceUrl ?? ""].includes(
+          source.instanceUrl ?? "",
+        );
+      if (!ownRefresh) {
+        appliedSource.current = { ...source };
+        dispatch({
+          type: "source",
+          values: {
+            ...salesforceSelectionForUrl(source.url),
+            instanceUrl: source.instanceUrl ?? "",
+          },
+          sourceFingerprint: salesforceSourceFingerprint(id, source),
+        });
+        return;
+      }
+    }
+    if (!s.sourceFingerprint && appliedSource.current)
+      dispatch({
+        type: "connection",
+        sourceFingerprint: salesforceSourceFingerprint(
+          id,
+          appliedSource.current,
+        ),
+      });
+  }, [
+    providerKey,
+    server.remoteMcpServerId,
+    source,
+    s.sourceFingerprint,
+    dispatch,
+  ]);
   useEffect(
     () => () => {
       generation.current++;
@@ -399,21 +452,37 @@ export function useProviderConnection(
             });
         } else if (instance)
           await sdk.remoteMcp.deleteServerHeader({ id: instance.id });
+        if (generation.current !== run) throw new ConfigurationChanged();
         // Retain completed writes so a failed later operation can be retried.
         appliedSource.current = {
           ...expected,
           instanceUrl: selected.instanceUrl ?? "",
         };
+        dispatch({
+          type: "connection",
+          sourceFingerprint: salesforceSourceFingerprint(
+            id,
+            appliedSource.current,
+          ),
+        });
       }
       if (generation.current !== run) throw new ConfigurationChanged();
       if (changeUrl) {
         await sdk.remoteMcp.updateServer({
           updateServerForm: { id, url: selected.url },
         });
+        if (generation.current !== run) throw new ConfigurationChanged();
         appliedSource.current = {
           url: selected.url,
           instanceUrl: selected.instanceUrl ?? "",
         };
+        dispatch({
+          type: "connection",
+          sourceFingerprint: salesforceSourceFingerprint(
+            id,
+            appliedSource.current,
+          ),
+        });
       }
       if (generation.current !== run) throw new ConfigurationChanged();
     },
@@ -425,6 +494,7 @@ export function useProviderConnection(
       server.environmentId,
       server.userSessionIssuerId,
       sdk,
+      dispatch,
     ],
   );
 
@@ -984,5 +1054,6 @@ export function useProviderConnection(
     loading: status.isLoading || status.isError,
     callbackUrl: status.data?.client.callbackUrl,
     savedClientId: status.data?.client.clientId,
+    savedTokenEndpointAuthMethod: status.data?.client.tokenEndpointAuthMethod,
   };
 }

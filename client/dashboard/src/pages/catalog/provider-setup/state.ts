@@ -34,6 +34,7 @@ export type State = {
   showSecret: boolean;
   configChanged: boolean;
   accessChosen: boolean;
+  sourceFingerprint?: string;
 };
 export function initialState(provider: Provider): State {
   return {
@@ -146,7 +147,9 @@ export type Action =
       authorized?: boolean;
       tested?: boolean;
       configChanged?: boolean;
+      sourceFingerprint?: string;
     }
+  | { type: "source"; values: Partial<Values>; sourceFingerprint: string }
   | { type: "field"; field: FieldName; value: string; source?: "configuration" }
   | { type: "goto"; step: string; correction?: boolean }
   | { type: "next" }
@@ -163,6 +166,22 @@ export function reduce(s: State, a: Action): State {
         tested: a.tested ?? s.tested,
         configChanged:
           a.tested === true ? false : (a.configChanged ?? s.configChanged),
+        sourceFingerprint: a.sourceFingerprint ?? s.sourceFingerprint,
+      };
+    case "source":
+      return {
+        ...s,
+        values: { ...s.values, ...a.values, clientId: "", clientSecret: "" },
+        sourceFingerprint: a.sourceFingerprint,
+        step: "choices",
+        screen: "setup",
+        done: [],
+        errors: {},
+        saved: false,
+        authorized: false,
+        tested: false,
+        returnToTest: false,
+        showSecret: false,
       };
     case "field": {
       if (s.values[a.field] === a.value) return s;

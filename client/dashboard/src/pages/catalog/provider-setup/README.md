@@ -50,7 +50,7 @@ Use the explicit mappings in `salesforce.ts` for all seven native choices. Data 
 
 Keep prerequisites specific to the selected server: Data 360 licensing/API version/permissions, Headless 360 beta/API availability, and Tableau Next setup/asset access. Activation is an instruction followed by the actual connection test; the page does not detect licenses, permissions, or activation.
 
-Source writes must reject wrapper drift, conflicting Authorization headers, dynamic/secret or duplicate instance headers, and changes to a source shared by another server. Preserve retryable partial writes and persisted `configurationPending`: a failed credential replacement must not rehydrate an older client as successfully saved. Provider slugs include the issuer so switching environments or instances can create distinct bindings.
+Source writes must reject wrapper drift, conflicting Authorization headers, dynamic/secret or duplicate instance headers, and changes to a source shared by another server. Preserve retryable partial writes and persisted `configurationPending`: a failed credential replacement must not rehydrate an older client as successfully saved. Pending drafts are bound to the source ID, URL, and instance; external source changes return to the current connection choices, while completed partial writes advance the draft baseline for retry. Provider slugs include the issuer so switching environments or instances can create distinct bindings.
 
 The support-assisted branch remains visibly unavailable with a correction action. Wiring it requires an installation URL, a support handoff, and an established completion contract. Keep those requirements separate from the own-app connection flow.
 

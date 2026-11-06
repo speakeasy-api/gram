@@ -39,6 +39,7 @@ import {
   setupProviderForUrl,
   loadProviderProgress,
   saveProviderProgress,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -112,15 +113,28 @@ function SalesforceSetupEntry({
     undefined,
     { throwOnError: false },
   );
-  if (headers.isPending) return <Skeleton className="h-64 w-full" />;
+  if (headers.isPending)
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Skeleton className="h-64 w-full" />
+        </Page.Body>
+      </Page>
+    );
   if (headers.isError)
     return (
-      <Alert variant="error">
-        Couldn’t load Salesforce connection configuration.{" "}
-        <Button variant="secondary" onClick={() => void headers.refetch()}>
-          <Button.Text>Retry</Button.Text>
-        </Button>
-      </Alert>
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Alert variant="error">
+            Couldn’t load Salesforce connection configuration.{" "}
+            <Button variant="secondary" onClick={() => void headers.refetch()}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </Alert>
+        </Page.Body>
+      </Page>
     );
   const instanceUrl =
     headers.data.headers.find(
@@ -200,7 +214,17 @@ function RetainedProviderSetup({
 }): JSX.Element {
   const navigate = useNavigate();
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    return loadProviderProgress(provider, key, initialValues);
+    return loadProviderProgress(
+      provider,
+      key,
+      initialValues,
+      provider === "salesforce"
+        ? salesforceSourceFingerprint(mcpServer.remoteMcpServerId, {
+            url: serverUrl,
+            instanceUrl: sourceInstance,
+          })
+        : undefined,
+    );
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
