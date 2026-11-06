@@ -82,19 +82,21 @@ func TestAuditService_ListFacets_FiltersByOrigin(t *testing.T) {
 
 	systemFacets, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{Origin: new("system")})
 	require.NoError(t, err)
-	require.Len(t, systemFacets.Actions, 1)
-	require.Equal(t, "plugin:publish", systemFacets.Actions[0].Value)
-	require.Len(t, systemFacets.Surfaces, 1)
-	require.Equal(t, "system", systemFacets.Surfaces[0].Value)
+	require.Equal(t, []string{"plugin:publish"}, facetValues(systemFacets.Actions))
+	require.Equal(t, []string{"system:plugin-publisher"}, facetValues(systemFacets.Actors))
+	require.Equal(t, []string{"system"}, facetValues(systemFacets.Surfaces))
 
 	userFacets, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{Origin: new("user")})
 	require.NoError(t, err)
-	actions := make([]string, 0, len(userFacets.Actions))
-	for _, option := range userFacets.Actions {
-		actions = append(actions, option.Value)
+	require.ElementsMatch(t, []string{"project:update", "toolset:update"}, facetValues(userFacets.Actions))
+	require.ElementsMatch(t, []string{"user:alice", "user:bob"}, facetValues(userFacets.Actors))
+	require.ElementsMatch(t, []string{"dashboard", "unknown"}, facetValues(userFacets.Surfaces))
+}
+
+func facetValues(options []*gen.AuditLogFacetOption) []string {
+	values := make([]string, 0, len(options))
+	for _, option := range options {
+		values = append(values, option.Value)
 	}
-	require.ElementsMatch(t, []string{"project:update", "toolset:update"}, actions)
-	for _, option := range userFacets.Surfaces {
-		require.NotEqual(t, "system", option.Value)
-	}
+	return values
 }
