@@ -36,6 +36,9 @@ const (
 	// attemptEndingTimeout bounds one claim of an attempt's ending.
 	attemptEndingTimeout = 5 * time.Second
 
+	// memberStatusTimeout bounds the consent page's member status check; past it every row is written.
+	memberStatusTimeout = time.Second
+
 	// maxPendingAttemptEndings bounds claims waiting on a slow Redis.
 	maxPendingAttemptEndings = 256
 )
@@ -283,6 +286,8 @@ func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger,
 	if !ok || len(dropped) == 0 {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
 	var recorded []recordedMember
 	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
 		kept := recorded[:0]
@@ -305,6 +310,8 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	if !ok || attempt.IsZero() || len(statuses) == 0 {
 		return statuses
 	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
 	var changed []memberStatus
 	var recorded []recordedMember
 	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
