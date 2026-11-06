@@ -1,5 +1,6 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
-import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { buildToolOutcomeTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { useOtherSeriesColor } from "@/components/chart/useSeriesColors";
 import { IdentityLink } from "@/components/identity-link";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
@@ -103,18 +104,18 @@ export function AgentIdentityUsage({
   // every render, so the chart was rebuilt each time regardless.
   const timeSeries = series.data?.targetTimeSeries;
   const points = useMemo(() => timeSeries ?? [], [timeSeries]);
+  // Split by outcome in the colors the Tool logs timeline below uses for the
+  // same calls. Stacked by source, unlabelled, its blue and pink read as
+  // success and failure; Top sources beside it already splits the calls by
+  // source.
+  const pendingColor = useOtherSeriesColor();
   const chart = useMemo(
-    () =>
-      buildToolUsageTimeSeries(
-        points,
-        (point) => point.targetLabel || point.targetId,
-        from,
-        to,
-      ),
-    [points, from, to],
+    () => buildToolOutcomeTimeSeries(points, from, to, pendingColor),
+    [points, from, to, pendingColor],
   );
   const rows = targets.data?.targets ?? [];
   const calls = totals.data?.totals?.eventCount ?? 0;
+  const failed = totals.data?.totals?.failureCount ?? 0;
 
   return (
     <>
@@ -122,7 +123,9 @@ export function AgentIdentityUsage({
         title="Tool calls"
         footer={
           calls > 0
-            ? `${calls.toLocaleString()} calls in this period, by source`
+            ? `${calls.toLocaleString()} calls in this period${
+                failed > 0 ? `, ${failed.toLocaleString()} failed` : ""
+              }`
             : undefined
         }
         // The footer's count comes from `totals`, so its failure has to reach
@@ -151,6 +154,9 @@ export function AgentIdentityUsage({
               bucketMs={chart.bucketMs}
               tooltipLabels={chart.tooltipLabels}
               datasets={chart.datasets}
+              // A legend names each outcome, so color is never the only
+              // signal.
+              expanded
             />
           </div>
         )}

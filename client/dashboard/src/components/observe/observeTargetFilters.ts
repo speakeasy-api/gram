@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type {
   FilterChip,
   ObserveStatusFilterValue,
@@ -63,17 +64,17 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   /** The dot a row with this status carries, so the two agree on sight. */
   dotClassName: string;
 }> = [
-  { label: "Error", value: "error", dotClassName: "bg-rose-500" },
-  { label: "Success", value: "success", dotClassName: "bg-emerald-500" },
-  // Amber, not red: a denial is the policy working, not the call failing, and
+  { label: "Error", value: "error", dotClassName: "bg-destructive-default" },
+  { label: "Success", value: "success", dotClassName: "bg-success-default" },
+  // Orange, not red: a denial is the policy working, not the call failing, and
   // a reader scanning for breakage should not be pulled to it.
-  { label: "Blocked", value: "blocked", dotClassName: "bg-amber-500" },
+  { label: "Blocked", value: "blocked", dotClassName: "bg-warning-default" },
   // The filter matches every call with no result: still running (Pending)
   // or long ended without one (Unknown).
   {
     label: "Pending or unknown",
     value: "pending",
-    dotClassName: "bg-muted-foreground/30",
+    dotClassName: PENDING_DOT_CLASS,
   },
 ];
 
