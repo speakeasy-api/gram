@@ -344,9 +344,16 @@ func TestRefreshNow_UnstoredOutageRecordStillNamesTheProvider(t *testing.T) {
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), outageRecordFaultCache{Cache: testenv.NewMemoryCache(), key: remotesessions.RefreshOutageKey(session), failSet: true, failGet: false})
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+	attribution := remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR))
 
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.True(t, remotesessions.RefreshFailureRecorded(err))
+	row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err), "the connect page can't see it")
 	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(err))
 }
@@ -357,11 +364,18 @@ func TestRefreshNow_CooldownWithUnreadableOutageRecordRecordsTheProviderOutage(t
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), outageRecordFaultCache{Cache: testenv.NewMemoryCache(), key: remotesessions.RefreshOutageKey(session), failSet: false, failGet: true})
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+	attribution := remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR))
 
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Len(t, rec.Rows(), 1)
 
-	_, deferred := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	_, deferred := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
+	require.Len(t, rec.Rows(), 1, "the deferred call made no POST, so the refresher writes no row; its caller records the outage")
+	require.False(t, remotesessions.RefreshFailureRecorded(deferred))
 	var failure *remotesessions.RefreshError
 	require.ErrorAs(t, deferred, &failure)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
