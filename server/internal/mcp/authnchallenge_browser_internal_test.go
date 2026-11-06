@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -187,7 +188,9 @@ func firstPartyReviewState(t *testing.T, response http.ResponseWriter) AuthnChal
 	state.AuthorizerImpersonated = new(false)
 	state.CodeReconnect = &CodeReconnectBinding{UserID: state.Subject.ID, Server: "tracker", ServerID: uuid.New(), ExpiresAt: time.Now().Add(time.Minute), CatalogID: uuid.New(), ReviewReady: true}
 	if response != nil {
-		require.NoError(t, bindConsentBrowser(response, &state))
+		cookie, err := bindConsentBrowser(&state)
+		require.NoError(t, err)
+		http.SetCookie(response, cookie)
 	}
 	return state
 }
@@ -274,4 +277,41 @@ func TestFirstPartyChallengeWithoutRecordedBinding(t *testing.T) {
 	bound := firstPartyReviewState(t, httptest.NewRecorder())
 	require.Error(t, validateChallengeBrowser(req, bound, false), "a bound challenge never falls back to the unbound check")
 	require.NoError(t, validateChallengeBrowser(req, bound, true), "callback hosts never held the consent cookie")
+}
+
+func TestFirstPartyConsentMCPRejectsAnotherBrowser(t *testing.T) {
+	t.Parallel()
+	for _, cookie := range []string{"none", "wrong"} {
+		t.Run(cookie, func(t *testing.T) {
+			t.Parallel()
+			s := browserTestService(t)
+			owner := httptest.NewRecorder()
+			state := firstPartyReviewState(t, owner)
+			require.NoError(t, s.authnChallengeCache.Store(t.Context(), state))
+			ownerCookies := owner.Result().Cookies()
+			require.Len(t, ownerCookies, 1)
+			// The private ingress origin skips the custom-domain lockdown lookup.
+			ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePrivateNetwork, BaseURL: "https://private.example.ts.net"})
+			endpoint := &ResolvedMcpEndpoint{Slug: "test", RouteBase: mcproute.MCP, McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+			request := func(cookie *http.Cookie) *http.Request {
+				req := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://private.example.ts.net/mcp/test/connect/mcp", strings.NewReader(`{}`))
+				req.Header.Set(consentStateHeader, state.ID)
+				req.Header.Set(consentCSRFHeader, state.CSRFToken)
+				req.Header.Set(consentAttemptHeader, uuid.NewString())
+				if cookie != nil {
+					req.AddCookie(cookie)
+				}
+				return req
+			}
+			var other *http.Cookie
+			if cookie == "wrong" {
+				other = &http.Cookie{Name: ownerCookies[0].Name, Value: "another-browser"}
+			}
+			require.ErrorContains(t, s.ServeConsentMCP(httptest.NewRecorder(), request(other), endpoint), "invalid consent browser binding")
+			require.NoError(t, validateChallengeBrowser(request(ownerCookies[0]), state, false))
+			err := s.ServeConsentMCP(httptest.NewRecorder(), request(ownerCookies[0]), endpoint)
+			require.Error(t, err, "this fixture has no endpoint to serve")
+			require.NotContains(t, err.Error(), "invalid consent browser binding", "the owner passes the browser check")
+		})
+	}
 }

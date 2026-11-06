@@ -295,10 +295,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 
 	if endpoint.servingSharedAuthorizationServer() != nil {
-		if err := bindConsentBrowser(w, &challengeState); err != nil {
+		cookie, err := bindConsentBrowser(&challengeState)
+		if err != nil {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
 		}
+		http.SetCookie(w, cookie)
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

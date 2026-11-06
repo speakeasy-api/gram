@@ -144,11 +144,8 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	// ConsentBrowserHash binds the consent page to the browser that started
-	// the flow, independently of IdP callback cookies: automatic approval on
-	// a shared authorization request, and every consent request of a
-	// non-federated first-party challenge. Empty on first-party challenges
-	// minted before that binding existed.
+	// ConsentBrowserHash binds consent to the browser that started the flow, apart from
+	// IdP callback cookies. Empty on first-party challenges minted before it existed.
 	ConsentBrowserHash string `json:"consent_browser_hash,omitempty"`
 
 	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
