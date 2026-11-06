@@ -29,6 +29,10 @@ type Error struct {
 	// 200, since Slack reports most refusals in the body of a 200 response.
 	StatusCode int
 
+	// Needed names the OAuth scope Slack asked for when it refused a call with
+	// missing_scope, e.g. "channels:read". It is empty for every other refusal.
+	Needed string
+
 	// message is the rendered error text, fixed at construction so the two
 	// refusal shapes (non-200 status, ok=false envelope) each keep their own
 	// wording.
@@ -57,15 +61,17 @@ func newStatusError(method string, statusCode int, body []byte) *Error {
 		Method:     method,
 		Code:       "",
 		StatusCode: statusCode,
+		Needed:     "",
 		message:    fmt.Sprintf("slack %s returned %d: %s", method, statusCode, string(body)),
 	}
 }
 
-func newEnvelopeError(method string, statusCode int, envelope ResponseEnvelope) *Error {
+func newEnvelopeError(method string, statusCode int, envelope ResponseEnvelope, needed string) *Error {
 	return &Error{
 		Method:     method,
 		Code:       envelope.Error,
 		StatusCode: statusCode,
+		Needed:     needed,
 		message:    fmt.Sprintf("slack %s: %s", method, errorDetails(envelope)),
 	}
 }
