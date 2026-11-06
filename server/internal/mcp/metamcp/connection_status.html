@@ -107,11 +107,13 @@
         state.className = "warn";
         state.textContent = s.status === "not_connected" ? "Not signed in" : (s.detail || "Needs attention");
         li.append(state);
-        if (data.connectUrl) {
+        // An agent cannot sign in itself: its owner reconnects on the agent's page.
+        const link = data.connectUrl || (data.owner && data.owner.reconnectUrl);
+        if (link) {
           const btn = document.createElement("button");
-          btn.textContent = "Connect";
-          btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
-            state.textContent = "Open " + data.connectUrl + " in your browser";
+          btn.textContent = data.connectUrl ? "Connect" : "Reconnect";
+          btn.onclick = () => request("ui/open-link", { url: link }).catch(() => {
+            state.textContent = "Open " + link + " in your browser";
           });
           li.append(btn);
         }
@@ -124,6 +126,7 @@
     const hint = document.getElementById("hint");
     hint.textContent = needsConsent ? "Reconnect this gateway in your AI app to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
+      : needs > 0 && data.owner && !data.connectUrl ? `This agent cannot sign in itself. ${data.owner.name ? data.owner.name + ", its owner," : "Its owner"} reconnects these servers.`
       : needs > 0 ? "After signing in, ask again to refresh this list."
       : "Ask again shortly to refresh this list.";
     hint.hidden = !consented && !needsConsent && needs === 0 && unavailable === 0;

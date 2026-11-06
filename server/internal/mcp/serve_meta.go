@@ -119,6 +119,9 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// agentOwner, on an agent gateway, builds the link the agent's owner
+	// opens to reconnect a member the agent cannot use; nil elsewhere.
+	agentOwner *agentOwnerReconnect
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
 	skillsOverMCP *bool
@@ -901,6 +904,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion:   request.resolution,
 		connectURL:        connectURL,
+		agentOwner:        s.newAgentOwnerReconnect(ctx, logger, metaServer.OrganizationID, membership.agentID),
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}

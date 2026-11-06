@@ -163,3 +163,31 @@ func TestConnectionStatusView_PreservesOutageAndConsentHints(t *testing.T) {
 	require.Contains(t, ConnectionStatusHTML, `: needs > 0 ? "After signing in, ask again to refresh this list."`)
 	require.Contains(t, ConnectionStatusHTML, `: "Ask again shortly to refresh this list."`)
 }
+
+// An agent cannot sign in itself: its gateway names the owner who reconnects
+// the server and the page they do it on, never a gateway administrator.
+func TestConnectionStatusText_AgentOwnerReconnects(t *testing.T) {
+	t.Parallel()
+
+	link := "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	result := ConnectionStatusResult{
+		ConnectURL: "",
+		Servers: []ConnectionStatusServer{
+			{Slug: "linear", Name: "Linear", Status: SignInError, Detail: "needs re-authentication"},
+		},
+		Owner: &ConnectionStatusOwner{Name: "Maya Chen", ReconnectURL: link},
+	}
+	text := result.Text()
+	require.Contains(t, text, "- Linear: needs attention (needs re-authentication)")
+	require.Contains(t, text, "Ask its owner, Maya Chen, to open "+link+" and reconnect them, then call connection_status again to refresh.")
+	require.NotContains(t, text, "administrator")
+	require.NotContains(t, text, "sign-in page")
+
+	result.Owner = &ConnectionStatusOwner{Name: "", ReconnectURL: ""}
+	text = result.Text()
+	require.Contains(t, text, "Ask its owner to reconnect them in Speakeasy")
+	require.NotContains(t, text, "administrator")
+
+	result.Owner = nil
+	require.Contains(t, result.Text(), "ask the gateway's administrator", "a gateway with no agent keeps its wording")
+}

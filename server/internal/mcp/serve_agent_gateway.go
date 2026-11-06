@@ -190,7 +190,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 				usable = usable || token.Token != "" || token.SessionUnavailable()
 			}
 			if !usable {
-				return nil, agentMemberCredentialError(member)
+				return nil, gate.agentMemberReconnectError(member)
 			}
 		}
 		return tokens, err
@@ -281,11 +281,11 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
 	if err != nil {
-		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentMemberReconnectError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {
-		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentMemberReconnectError(member), resolveFailureHappened(err)}
 	}
 	return resolved, nil
 }
@@ -295,8 +295,14 @@ func agentMemberCredentialError(member metaMember) error {
 }
 
 func agentServerCredentialError(slug string) error {
-	return &metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}
+	return agentCredentialError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}}
 }
+
+// agentCredentialError is an agent's connection to a server that is missing,
+// unusable or not permitted, which the agent's owner fixes rather than a retry.
+type agentCredentialError struct{ *metaMemberError }
+
+func (e agentCredentialError) Unwrap() error { return e.metaMemberError }
 
 // authorizeAgentMemberClient checks the existing catalog and the exact attached
 // source before acquiring a legacy agent credential. It does not create a choice
@@ -304,7 +310,8 @@ func agentServerCredentialError(slug string) error {
 // same owner-sensitive permit as selected members. It also names the auth
 // client and connection owner a permitted use serves, for the call's log row.
 func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, contextvalues.UpstreamCredential, error) {
-	return s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
+	connection, credential, err := s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
+	return connection, credential, gate.withAgentMemberReconnect(member, err)
 }
 
 // agentServerClients lists the OAuth registrations that serve the target
