@@ -29956,7 +29956,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-tool-usage-traces: List target-aware MCP and tool usage traces`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-filter-options: Get filter options for target-aware MCP and tool usage metrics`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-activity: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.`)
-	fmt.Fprintln(os.Stderr, `    get-org-mcp-server-activity: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned, so total_tool_calls equals recent_tool_calls and lookback_days equals recent_window_days.`)
+	fmt.Fprintln(os.Stderr, `    get-org-mcp-server-activity: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.`)
 	fmt.Fprintln(os.Stderr, `    list-hooks-traces: List hook traces aggregated by trace_id with user information`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -30841,7 +30841,7 @@ func telemetryGetOrgMcpServerActivityUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned, so total_tool_calls equals recent_tool_calls and lookback_days equals recent_window_days.`)
+	fmt.Fprintln(os.Stderr, `Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

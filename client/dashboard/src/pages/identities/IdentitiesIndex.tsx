@@ -710,8 +710,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     (agentsEnabled && agentsQuery.isError);
   const retryRoster = () => {
     if (membersQuery.isError) void membersQuery.refetch();
-    if (rolesQuery.isError) void rolesQuery.refetch();
-    if (usageQuery.isError) void usageQuery.refetch();
+    if (peopleShown && rolesQuery.isError) void rolesQuery.refetch();
+    if (peopleShown && usageQuery.isError) void usageQuery.refetch();
     if (agentsEnabled && agentsQuery.isError) void agentsQuery.refetch();
   };
 

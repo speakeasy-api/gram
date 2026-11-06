@@ -1090,7 +1090,7 @@ var _ = Service("telemetry", func() {
 	})
 
 	Method("getOrgMcpServerActivity", func() {
-		Description("Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned, so total_tool_calls equals recent_tool_calls and lookback_days equals recent_window_days.")
+		Description("Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.")
 
 		// Session-only, like mcpServers.listForOrg: an org-wide read has no
 		// project selector, and API-key auth is not RBAC-enforced.
@@ -3112,7 +3112,7 @@ var ProjectMcpServerActivity = Type("ProjectMcpServerActivity", func() {
 })
 
 var GetOrgMcpServerActivityResult = Type("GetOrgMcpServerActivityResult", func() {
-	Description("Recent MCP server activity across the organization. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.")
+	Description("Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.")
 
 	Attribute("projects", ArrayOf(ProjectMcpServerActivity), "One entry per readable project whose activity was read")
 	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")

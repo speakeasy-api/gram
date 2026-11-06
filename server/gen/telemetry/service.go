@@ -122,8 +122,7 @@ type Service interface {
 	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
 	// Get recent per-MCP-server tool-call activity for every project in the
 	// organization the caller can read, in one request. Only the recent window is
-	// scanned, so total_tool_calls equals recent_tool_calls and lookback_days
-	// equals recent_window_days.
+	// scanned.
 	GetOrgMcpServerActivity(context.Context, *GetOrgMcpServerActivityPayload) (res *GetOrgMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)

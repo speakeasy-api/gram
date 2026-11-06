@@ -372,7 +372,7 @@ export class Telemetry extends ClientSDK {
    * getOrgMcpServerActivity telemetry
    *
    * @remarks
-   * Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned, so total_tool_calls equals recent_tool_calls and lookback_days equals recent_window_days.
+   * Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
    */
   async getOrgMcpServerActivity(
     request: GetOrgMcpServerActivityRequest,

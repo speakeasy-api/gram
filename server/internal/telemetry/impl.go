@@ -4090,7 +4090,11 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	recentWindowDays := min(max(payload.RecentWindowDays, 1), mcpServerActivityLookbackDays)
+	recentWindowDays := payload.RecentWindowDays
+	if recentWindowDays <= 0 {
+		recentWindowDays = 14
+	}
+	recentWindowDays = min(recentWindowDays, mcpServerActivityLookbackDays)
 	result := &telem_gen.GetOrgMcpServerActivityResult{
 		Projects:         []*telem_gen.ProjectMcpServerActivity{},
 		RecentWindowDays: recentWindowDays,

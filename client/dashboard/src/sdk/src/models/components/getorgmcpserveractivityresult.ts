@@ -13,7 +13,7 @@ import {
 } from "./projectmcpserveractivity.js";
 
 /**
- * Recent MCP server activity across the organization. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
+ * Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
  */
 export type GetOrgMcpServerActivityResult = {
   /**

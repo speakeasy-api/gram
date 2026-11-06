@@ -230,10 +230,6 @@ it("keeps agents visible and refetches their permissions when the RBAC override 
   expect(screen.getByText("New agent identity")).toBeTruthy();
 });
 
-// Ported from the agent-management page's tests when that page was retired.
-// A support session is reading on someone else's behalf, and an agent's
-// management API answers to the owner — so the roster does not read it at all
-// rather than reading it as the person being supported.
 it("does not read the people roster on the agents roster", async () => {
   mocks.agents.mockResolvedValue({ items: [] });
   setup("", "agent");
@@ -242,6 +238,10 @@ it("does not read the people roster on the agents roster", async () => {
   expect(mocks.coverage).not.toHaveBeenCalled();
 });
 
+// Ported from the agent-management page's tests when that page was retired.
+// A support session is reading on someone else's behalf, and an agent's
+// management API answers to the owner — so the roster does not read it at all
+// rather than reading it as the person being supported.
 it("does not read agents in an organization override session", async () => {
   mocks.session = {
     user: { id: "user_example" },

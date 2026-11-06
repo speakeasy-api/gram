@@ -72544,7 +72544,7 @@ paths:
         type: query
   /rpc/telemetry.getOrgMcpServerActivity:
     post:
-      description: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned, so total_tool_calls equals recent_tool_calls and lookback_days equals recent_window_days.
+      description: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
       operationId: getOrgMcpServerActivity
       parameters:
         - allowEmptyValue: true
@@ -99087,7 +99087,7 @@ components:
           type: integer
           description: The recent-activity window size in days that was applied
           format: int64
-      description: Recent MCP server activity across the organization. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
+      description: Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
       required:
         - projects
         - recent_window_days

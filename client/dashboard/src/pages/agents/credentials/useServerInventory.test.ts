@@ -30,6 +30,7 @@ vi.mock("@tanstack/react-query", () => ({
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ user: { id: "user" } }),
   useOrganization: () => ({
     projects: [{ id: "project", name: "Example project", slug: "example" }],
   }),

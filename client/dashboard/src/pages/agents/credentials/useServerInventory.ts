@@ -1,7 +1,7 @@
 import { firstPartyConnectUrl, getServerURL } from "@/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
 import { isKnownEnumValue } from "@/lib/enum";
 import { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
@@ -71,11 +71,13 @@ export function useServerInventory({
   lookupOnly?: boolean;
 } = {}): ServerInventory {
   const organization = useOrganization();
+  const { user } = useSession();
   const sdk = useSdkClient();
   // One org-wide read rather than one per project: an organization with many
   // projects otherwise sent a burst of parallel telemetry reads.
   const activity = useQuery({
-    queryKey: ["agent-server-activity", organization.id],
+    // Per caller: the server filters it to the projects they can read.
+    queryKey: ["agent-server-activity", organization.id, user.id],
     queryFn: ({ signal }) =>
       sdk.telemetry.getOrgMcpServerActivity(
         { getMcpServerActivityPayload: { recentWindowDays: 1 } },
