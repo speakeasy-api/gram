@@ -91,6 +91,9 @@ const (
 	ambiguousCurrentProviderMessage      = "this MCP server's user session issuer is bound to more than one Remote Identity Provider; remove the extra clients from the Remote Identity Provider settings before changing it"
 	clientTakenMessage                   = "a remote session client is already bound to this user session issuer for the same remote session issuer"
 	providerClientInUseMessage           = "this Remote Identity Provider already has a client on this server's User Identity issuer, and each issuer keeps one client per provider. Use the existing client instead"
+	replacementNotConfirmedMessage       = "the MCP servers using this client changed; review them and save again"
+	replacementReadsBindingsMessage      = "a gateway or a server that is not directly Remote MCP-backed shares this User Identity issuer and may use this client, so it cannot be replaced from here. Assign this server a dedicated issuer instead"
+	replacementOtherProjectMessage       = "an MCP server in another project uses this client, so it cannot be replaced from here. Assign this server a dedicated issuer instead"
 )
 
 // IdentityError is a refusal whose Message is safe to show the caller. Kind is
@@ -210,9 +213,21 @@ type IdentityPlan struct {
 	// issuer: ReplaceBound or ReuseBound.
 	Bound BoundPolicy
 
+	// Replacement, with ReplaceBound, is the administrator's explicit choice to
+	// replace the plan's provider's bound client; nil reuses or refuses instead.
+	Replacement *ClientReplacement
+
 	// ResourceDisplay, when set, stores RFC 9728 display members on the bound
 	// client.
 	ResourceDisplay *ResourceDisplay
+}
+
+// ClientReplacement confirms replacing the client of the plan's provider.
+type ClientReplacement struct {
+	// ServerIDs lists exactly the other MCP servers the administrator was told
+	// use the client. They move to the new client, and the commit is refused if
+	// the list no longer matches.
+	ServerIDs []uuid.UUID
 }
 
 // ProviderChoice is the Remote Identity Provider a plan configures.
@@ -508,8 +523,13 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 			ProviderID:          c.provider.ID,
 			Keep:                c.plan.Client.keep(),
 			RegistersClient:     c.plan.Client.kind == clientRegister,
+			ReplaceClient:       c.plan.Replacement != nil,
+			Leaving:             false,
 		})
 		if err != nil {
+			return err
+		}
+		if err := c.refuseUnconfirmedReplacement(ctx, mcpserversrepo.New(c.committer.db), decision); err != nil {
 			return err
 		}
 		c.reusable = decision.reuse
@@ -819,6 +839,9 @@ func (c *IdentityCommit) Lock(ctx context.Context, tx *IdentityTx) error {
 	if tx.commit != c {
 		return fmt.Errorf("%w: identity transaction belongs to another commit", ErrIdentityStepOrder)
 	}
+	if err := c.lockMovedServers(ctx, tx); err != nil {
+		return err
+	}
 	err := lockUserSessionIssuers(ctx, tx.tx, tx.q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, []uuid.UUID{c.plan.UserSessionIssuerID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return identityRefusal(ErrIdentityNotFound, err, "user session issuer not found")
@@ -853,6 +876,25 @@ func (c *IdentityCommit) Lock(ctx context.Context, tx *IdentityTx) error {
 		}
 	}
 	c.locked = true
+	return nil
+}
+
+// lockMovedServers locks the servers a replacement moves, before the issuer as
+// server rows always are, in id order so two replacements agree.
+func (c *IdentityCommit) lockMovedServers(ctx context.Context, tx *IdentityTx) error {
+	if c.plan.Replacement == nil {
+		return nil
+	}
+	serverIDs := slices.Clone(c.plan.Replacement.ServerIDs)
+	slices.SortFunc(serverIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	q := mcpserversrepo.New(tx.tx)
+	for _, serverID := range serverIDs {
+		if _, err := q.LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: c.plan.Scope.ProjectID}); errors.Is(err, pgx.ErrNoRows) {
+			return identityRefusal(ErrIdentityConflict, err, replacementOtherProjectMessage)
+		} else if err != nil {
+			return fmt.Errorf("lock mcp server using replaced client: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -912,6 +954,7 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 
 	var client repo.RemoteSessionClient
 	var attached []uuid.UUID
+	var moved []uuid.UUID
 	reused := false
 	switch c.plan.Bound {
 	case ReplaceBound:
@@ -927,12 +970,23 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 			ProviderID:          c.provider.ID,
 			Keep:                c.plan.Client.keep(),
 			RegistersClient:     c.plan.Client.kind == clientRegister,
+			ReplaceClient:       c.plan.Replacement != nil,
+			Leaving:             false,
 		})
 		if err != nil {
 			return err
 		}
+		if err := c.refuseUnconfirmedReplacement(ctx, mcpserversrepo.New(tx.tx), decision); err != nil {
+			return err
+		}
+		moved = decision.moved
 		for _, current := range decision.detach {
 			if err := c.detachClient(ctx, tx, current); err != nil {
+				return err
+			}
+		}
+		if len(moved) > 0 {
+			if err := c.releaseMovedServers(ctx, tx, decision); err != nil {
 				return err
 			}
 		}
@@ -1004,10 +1058,24 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		if associated == 0 {
 			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
 		}
+		for _, serverID := range moved {
+			movedAssociated, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+				OrganizationID:        c.plan.Scope.OrganizationID,
+				RemoteSessionClientID: client.ID,
+				McpServerID:           serverID,
+				ProjectID:             c.plan.Scope.ProjectID,
+			})
+			if err != nil {
+				return fmt.Errorf("move mcp server to replacement client: %w", err)
+			}
+			if movedAssociated == 0 {
+				return identityRefusal(ErrIdentityConflict, nil, replacementNotConfirmedMessage)
+			}
+		}
 		// Begin acquired the full writer scope before the binding/association
 		// mutations. Synchronize typed clients and both OAuth and EMA copies
 		// under those locks; taking that scope here would be too late.
-		if err := authclientbackfill.SyncServerAssociations(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx.tx, c.plan.Scope.OrganizationID, append([]uuid.UUID{c.plan.MCPServerID}, moved...)...); err != nil {
 			return fmt.Errorf("sync mcp server auth clients: %w", err)
 		}
 	}
@@ -1100,6 +1168,15 @@ type boundClientsRequest struct {
 	// RegistersClient reports that the plan asks for a client automatically,
 	// without naming one or supplying credentials.
 	RegistersClient bool
+
+	// ReplaceClient reports the administrator's explicit choice to replace the
+	// plan's provider's bound client.
+	ReplaceClient bool
+
+	// Leaving reports that the server is giving up User Identity altogether, so
+	// no client of its own stands in for the others and no choice between
+	// providers is ambiguous.
+	Leaving bool
 }
 
 // boundClientsDecision is what a commit does with the clients bound to the user
@@ -1116,6 +1193,14 @@ type boundClientsDecision struct {
 	// reuse reports that the plan's provider already has a client on the issuer
 	// and the commit uses it rather than making another.
 	reuse bool
+
+	// moved lists the other MCP servers that use a client being replaced, which
+	// move to the new client.
+	moved []uuid.UUID
+
+	// replaced is the client being replaced, whose servers are in moved; uuid.Nil
+	// when none is.
+	replaced uuid.UUID
 }
 
 // decideBoundClients decides what changing one MCP server to the plan's client
@@ -1130,9 +1215,12 @@ type boundClientsDecision struct {
 //     different client replaces it only when this server alone uses it, since an
 //     issuer keeps one client per provider. Otherwise the plan is refused,
 //     because the choice between them is the administrator's.
+//   - ReplaceClient is that choice: the client is replaced and the servers that
+//     use it move to the new one. It is refused when a consumer without an
+//     association shares the issuer, since nothing can say what it would lose.
 //
-// Asking for a client automatically never replaces one: only credentials or a
-// client the administrator named can do that.
+// Asking for a client automatically never replaces one unless ReplaceClient says
+// so: only credentials or a client the administrator named can do that.
 func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRequest) (boundClientsDecision, error) {
 	var decision boundClientsDecision
 	if req.MCPServerID == uuid.Nil {
@@ -1188,7 +1276,16 @@ func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRe
 	for _, client := range req.Bound {
 		switch {
 		case client.ID == req.Keep:
-		case client.RemoteSessionIssuerID == req.ProviderID && req.RegistersClient:
+		case client.RemoteSessionIssuerID == req.ProviderID && req.ReplaceClient:
+			if consumers.ReadsBindings {
+				return boundClientsDecision{}, identityRefusal(ErrIdentityConflict, nil, replacementReadsBindingsMessage)
+			}
+			decision.detach = append(decision.detach, client)
+			decision.moved = use[client.ID].OtherMcpServerIds
+			decision.replaced = client.ID
+		case client.RemoteSessionIssuerID == req.ProviderID && req.RegistersClient && CredentialOwner(client.CredentialOwner) != CredentialOwnerSelf:
+			// A service account client is one credential every caller shares, so
+			// it does not serve a server asking for per-user sign-in.
 			decision.reuse = true
 		case client.RemoteSessionIssuerID == req.ProviderID:
 			if !ownClient(client.ID) || sharedClient(client.ID) {
@@ -1199,7 +1296,7 @@ func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRe
 		case sharedClient(client.ID):
 			decision.release = append(decision.release, client)
 		default:
-			if detachProvider != uuid.Nil && detachProvider != client.RemoteSessionIssuerID {
+			if !req.Leaving && detachProvider != uuid.Nil && detachProvider != client.RemoteSessionIssuerID {
 				return boundClientsDecision{}, identityRefusal(ErrIdentityConflict, nil, ambiguousCurrentProviderMessage)
 			}
 			detachProvider = client.RemoteSessionIssuerID
@@ -1207,6 +1304,72 @@ func decideBoundClients(ctx context.Context, q *repo.Queries, req boundClientsRe
 		}
 	}
 	return decision, nil
+}
+
+// refuseUnconfirmedReplacement refuses a replacement unless the administrator
+// confirmed exactly the servers it moves, and they are all in the project the
+// commit's writer scope covers.
+func (c *IdentityCommit) refuseUnconfirmedReplacement(ctx context.Context, q *mcpserversrepo.Queries, decision boundClientsDecision) error {
+	if c.plan.Replacement == nil {
+		return nil
+	}
+	confirmed := slices.Clone(c.plan.Replacement.ServerIDs)
+	moved := slices.Clone(decision.moved)
+	compare := func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) }
+	slices.SortFunc(confirmed, compare)
+	slices.SortFunc(moved, compare)
+	if !slices.Equal(confirmed, moved) {
+		return identityRefusal(ErrIdentityConflict, nil, replacementNotConfirmedMessage)
+	}
+	for _, serverID := range moved {
+		if _, err := q.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: c.plan.Scope.ProjectID}); errors.Is(err, pgx.ErrNoRows) {
+			return identityRefusal(ErrIdentityConflict, err, replacementOtherProjectMessage)
+		} else if err != nil {
+			return fmt.Errorf("get mcp server using replaced client: %w", err)
+		}
+	}
+	return nil
+}
+
+// releaseMovedServers removes the associations a detached client can no longer
+// serve, in the transaction so the moved servers never hold both clients, and
+// records each server the replacement took the client from.
+func (c *IdentityCommit) releaseMovedServers(ctx context.Context, tx *IdentityTx, decision boundClientsDecision) error {
+	if _, err := upstreamclientsrepo.New(tx.tx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: decision.replaced,
+		OrganizationID:        c.plan.Scope.OrganizationID,
+	}); err != nil {
+		return fmt.Errorf("prune replaced client associations: %w", err)
+	}
+	replaced, err := tx.q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      c.plan.Scope.ProjectID,
+		OrganizationID: c.plan.Scope.OrganizationID,
+		ID:             decision.replaced,
+	})
+	if err != nil {
+		return fmt.Errorf("get replaced client: %w", err)
+	}
+	q := mcpserversrepo.New(tx.tx)
+	for _, serverID := range decision.moved {
+		server, err := q.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: c.plan.Scope.ProjectID})
+		if err != nil {
+			return fmt.Errorf("get moved mcp server: %w", err)
+		}
+		if err := c.committer.audit.LogRemoteSessionClientDetachMcpServer(ctx, tx.tx, audit.LogRemoteSessionClientDetachMcpServerEvent{
+			OrganizationID:         c.plan.Scope.OrganizationID,
+			ProjectID:              c.plan.Scope.ProjectID,
+			Actor:                  c.plan.Scope.Actor,
+			ActorDisplayName:       c.plan.Scope.ActorDisplayName,
+			ActorSlug:              nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(replaced.RemoteSessionClient.ID),
+			ClientID:               replaced.RemoteSessionClient.ClientID,
+			McpServerURN:           urn.NewMcpServer(server.ID),
+			McpServerName:          conv.FromPGTextOrEmpty[string](server.Name),
+		}); err != nil {
+			return fmt.Errorf("audit moved mcp server: %w", err)
+		}
+	}
+	return nil
 }
 
 // releaseClient removes the configured server's association with a client that
@@ -1409,9 +1572,15 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 		if err != nil {
 			return fmt.Errorf("recheck bound client use: %w", err)
 		}
+		var confirmed []uuid.UUID
+		if c.plan.Replacement != nil {
+			confirmed = c.plan.Replacement.ServerIDs
+		}
 		for _, use := range uses {
-			if len(use.OtherMcpServerIds) > 0 {
-				return identityRefusal(ErrIdentityConflict, nil, "another MCP server started using this client while saving; retry")
+			for _, serverID := range use.OtherMcpServerIds {
+				if !slices.Contains(confirmed, serverID) {
+					return identityRefusal(ErrIdentityConflict, nil, "another MCP server started using this client while saving; retry")
+				}
 			}
 		}
 	}

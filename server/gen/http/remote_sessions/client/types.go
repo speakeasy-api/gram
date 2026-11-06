@@ -79,6 +79,17 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool `form:"replace_client,omitempty" json:"replace_client,omitempty" xml:"replace_client,omitempty"`
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string `form:"replace_client_server_ids,omitempty" json:"replace_client_server_ids,omitempty" xml:"replace_client_server_ids,omitempty"`
 }
 
 // DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
@@ -178,6 +189,13 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string `form:"detach_client_ids,omitempty" json:"detach_client_ids,omitempty" xml:"detach_client_ids,omitempty"`
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string `form:"release_client_ids,omitempty" json:"release_client_ids,omitempty" xml:"release_client_ids,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -3199,12 +3217,19 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 		ClientMode:         p.ClientMode,
 		ExistingClientID:   p.ExistingClientID,
 		RegistrationMethod: p.RegistrationMethod,
+		ReplaceClient:      p.ReplaceClient,
 	}
 	if p.CreateProvider != nil {
 		body.CreateProvider = marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody(p.CreateProvider)
 	}
 	if p.ClientConfiguration != nil {
 		body.ClientConfiguration = marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody(p.ClientConfiguration)
+	}
+	if p.ReplaceClientServerIds != nil {
+		body.ReplaceClientServerIds = make([]string, len(p.ReplaceClientServerIds))
+		for i, val := range p.ReplaceClientServerIds {
+			body.ReplaceClientServerIds[i] = val
+		}
 	}
 	return body
 }
@@ -4382,6 +4407,18 @@ func NewGetServerIdentityImpactServerIdentityImpactResultOK(body *GetServerIdent
 		}
 		v.Servers[i] = unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer(val)
 	}
+	if body.DetachClientIds != nil {
+		v.DetachClientIds = make([]string, len(body.DetachClientIds))
+		for i, val := range body.DetachClientIds {
+			v.DetachClientIds[i] = val
+		}
+	}
+	if body.ReleaseClientIds != nil {
+		v.ReleaseClientIds = make([]string, len(body.ReleaseClientIds))
+		for i, val := range body.ReleaseClientIds {
+			v.ReleaseClientIds[i] = val
+		}
+	}
 
 	return v
 }
@@ -5497,6 +5534,12 @@ func ValidateGetServerIdentityImpactResponseBody(body *GetServerIdentityImpactRe
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.DetachClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.detach_client_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.ReleaseClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.release_client_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

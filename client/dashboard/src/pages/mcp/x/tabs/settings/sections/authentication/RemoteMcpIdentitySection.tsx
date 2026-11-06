@@ -81,7 +81,6 @@ import {
 import {
   invalidateSharedIssuerImpact,
   needsSharedIssuerConfirm,
-  planLeavingUserIdentity,
   sharedIssuerChangeBlocked,
   useSharedIssuerImpact,
 } from "@/lib/remote-identity/model/upstreamRepointing";
@@ -169,16 +168,37 @@ export function RemoteMcpIdentitySectionBody({
     siblingsQuery.isError ||
     !canWrite;
   const headers = headersQuery.data?.headers ?? [];
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    { enabled: canRead, throwOnError: false },
+  );
+  // The issuer's clients may belong to other servers sharing it. Only the ones
+  // associated with this server are its identity; without the answer, every
+  // client reads as this server's, as a commit's refusals still protect others.
+  const ownClientIds = associationsQuery.data
+    ? new Set(
+        associationsQuery.data.associations.map(
+          (association) => association.remoteSessionClientId,
+        ),
+      )
+    : null;
+  const ownClients = ownClientIds
+    ? clients.filter((linked) => ownClientIds.has(linked.id))
+    : clients;
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
   const identityQueryError = headersQuery.isError || clientsError;
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
-  const selfClient = clients.find(
+  const selfClient = ownClients.find(
     (linked) => linked.credentialOwner === "self",
   );
-  const subjectClients = clients.filter(
+  const subjectClients = ownClients.filter(
     (linked) => linked.credentialOwner !== "self",
   );
   const actualMode = identityQueryError
@@ -187,7 +207,10 @@ export function RemoteMcpIdentitySectionBody({
       ? "agent"
       : deriveIdentityMode(subjectClients.length, headers);
   const loading =
-    headersQuery.isLoading || clientsLoading || siblingsQuery.isLoading;
+    headersQuery.isLoading ||
+    clientsLoading ||
+    siblingsQuery.isLoading ||
+    associationsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
   // Raised by Save when it would remove an existing identity, which is the
@@ -251,20 +274,6 @@ export function RemoteMcpIdentitySectionBody({
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
-  // mcp:write satisfies mcp:read, but a read block applies independently.
-  const canRead =
-    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
-  const associationsQuery = useServerClientAssociations(
-    { mcpServerId: target.permissionResourceId },
-    undefined,
-    {
-      enabled:
-        canRead &&
-        identityResolved &&
-        (selectedMode === "user" || actualMode === "user"),
-      throwOnError: false,
-    },
-  );
   // Other servers using this server's client: rotating or replacing the
   // client changes their sign-in too.
   const connectedAssociation = associationsQuery.data?.associations.find(
@@ -406,9 +415,13 @@ export function RemoteMcpIdentitySectionBody({
         userDraft.choice === "existing"
           ? (userDraft.existingClientId ?? undefined)
           : undefined,
+      replaceClient: userDraft.cleared ? true : undefined,
     };
   }
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
+  const replaceClientServerIds = sharedIssuerImpact.servers
+    .filter((server) => server.impact === "resignin")
+    .map((server) => server.id);
   const repointLookupPending = sharedIssuerImpact.pending;
   const needsConfirm =
     destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
@@ -416,14 +429,15 @@ export function RemoteMcpIdentitySectionBody({
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
     if (!userSessionIssuerId) return false;
-    const associations = associationsQuery.data?.associations;
-    if (!associations) {
+    // The preview runs the commit's decision, so this removes exactly what the
+    // confirmation described.
+    const { detachClientIds, releaseClientIds } = sharedIssuerImpact;
+    if (!detachClientIds || !releaseClientIds) {
       throw new Error(
         "Couldn't check which clients this server uses. Reload and try again.",
       );
     }
-    const plan = planLeavingUserIdentity(clients, associations);
-    for (const id of plan.unbind) {
+    for (const id of detachClientIds) {
       await detachIssuer.mutateAsync({
         // The generated detach request reuses the attach form's field name;
         // the endpoint it posts to is what distinguishes them.
@@ -435,7 +449,7 @@ export function RemoteMcpIdentitySectionBody({
         },
       });
     }
-    for (const remoteSessionClientId of plan.release) {
+    for (const remoteSessionClientId of releaseClientIds) {
       await detachAssociation.mutateAsync({
         request: {
           detachServerClientAssociationRequestBody: {
@@ -559,7 +573,7 @@ export function RemoteMcpIdentitySectionBody({
         // Bind the client before dropping the credential, so a failed commit
         // never leaves the server with no identity; the client outranks the
         // header while both exist.
-        if (!(await userDraft.save())) return;
+        if (!(await userDraft.save(replaceClientServerIds))) return;
         await removeAgentCredential();
       } else {
         if (leavingAgent) await removeAgentCredential();
@@ -581,7 +595,7 @@ export function RemoteMcpIdentitySectionBody({
           (actualMode !== "user" || userDraft.canSave)
         ) {
           // A pin or header edit alone must not recommit the connected client.
-          await userDraft.save();
+          await userDraft.save(replaceClientServerIds);
         }
       }
       // A signing key client made for the Service Account choice and left

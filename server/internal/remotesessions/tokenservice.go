@@ -50,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -568,9 +567,10 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution Re
 // on the issuer signs in through cannot refuse this server's callers. Each
 // credential still routes to the backend by its recorded resource.
 //
-// A server with no associated client bound to the issuer resolves every client
-// the issuer binds, as ResolveAccessTokens does, so a server whose clients are
-// unknown stays fail-closed rather than calling its upstream with no credential.
+// A server with no associated client bound to the issuer needs the clients no
+// other server claims, so a client nothing explains stays fail-closed. When every
+// client belongs to another server this server has no upstream credential to
+// require, which is what a session records as a no-auth choice for it.
 func (m *ChallengeManager) ResolveServerAccessTokens(
 	ctx context.Context,
 	attribution RefreshAttribution,
@@ -588,23 +588,37 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	if len(clients) == 0 {
 		return nil, nil
 	}
-	associated, err := upstreamclientsrepo.New(m.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
-		McpServerIds:   []uuid.UUID{mcpServerID},
-		OrganizationID: organizationID,
+	ids := make([]uuid.UUID, 0, len(clients))
+	for _, client := range clients {
+		ids = append(ids, client.ClientID)
+	}
+	uses, err := remotesessions_repo.New(m.db).DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
+		McpServerID:            mcpServerID,
+		OrganizationID:         organizationID,
+		UserSessionIssuerID:    userSessionIssuerID,
+		RemoteSessionClientIds: ids,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list server associated clients: %w", err)
+		return nil, fmt.Errorf("describe bound client use: %w", err)
 	}
-	own := make([]remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, 0, len(associated))
+	use := make(map[uuid.UUID]remotesessions_repo.DescribeBoundClientUseRow, len(uses))
+	for _, row := range uses {
+		use[row.RemoteSessionClientID] = row
+	}
+	var own, unclaimed []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow
 	for _, client := range clients {
-		if slices.ContainsFunc(associated, func(row upstreamclientsrepo.ListServerAssociatedClientsRow) bool {
-			return row.RemoteSessionClientID == client.ClientID
-		}) {
+		switch {
+		case use[client.ClientID].AssociatedWithMcpServer:
 			own = append(own, client)
+		case len(use[client.ClientID].OtherMcpServerIds) == 0:
+			unclaimed = append(unclaimed, client)
 		}
 	}
 	if len(own) == 0 {
-		own = clients
+		own = unclaimed
+	}
+	if len(own) == 0 {
+		return nil, nil
 	}
 	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, own, skipUnusable)
 }

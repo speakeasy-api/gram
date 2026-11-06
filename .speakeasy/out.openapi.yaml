@@ -58381,6 +58381,13 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.
+          in: query
+          name: replace_client
+          schema:
+            description: Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.
+            type: boolean
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -92405,6 +92412,15 @@ components:
           enum:
             - cimd
             - dcr
+        replace_client:
+          type: boolean
+          description: Replace the selected provider's client already bound to the user session issuer, rather than reuse it or be refused. Everyone signed in through the old client must sign in again, on this server and every other server that uses it. The other servers move to the new client. Refused when a gateway or a server that is not directly Remote MCP-backed shares the issuer, or when a server using the client is in another project.
+        replace_client_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.
         target_server_only:
           type: boolean
           description: Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
@@ -114402,10 +114418,22 @@ components:
     ServerIdentityImpactResult:
       type: object
       properties:
+        detach_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With change detach and mcp_server_id, the clients only that server uses, which leaving User Identity unbinds from the issuer.
         hidden_server_count:
           type: integer
           description: MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.
           format: int64
+        release_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With change detach and mcp_server_id, the clients other consumers also use. They stay bound, and leaving User Identity only removes that server's association with them.
         servers:
           type: array
           items:

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -45,6 +46,7 @@ type impactClient struct {
 	id              uuid.UUID
 	projectID       uuid.NullUUID
 	providerID      uuid.UUID
+	credentialOwner string
 	providerDeleted bool
 }
 
@@ -61,6 +63,17 @@ type identityChange struct {
 	// scopedToServer reports a change decided for one server, which leaves every
 	// client another server uses bound.
 	scopedToServer bool
+
+	// moved lists the servers an explicit client replacement moves to the new
+	// client, whose people must sign in again.
+	moved []uuid.UUID
+
+	// detachClients lists the clients a server giving up User Identity unbinds.
+	detachClients []uuid.UUID
+
+	// releaseClients lists the clients that server stops using, which stay bound
+	// for others.
+	releaseClients []uuid.UUID
 }
 
 // impactOf classifies what the change does to a server in projectID, or ""
@@ -185,16 +198,20 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list clients bound to user session issuer").LogError(ctx, logger)
 	}
-	change := identityChange{bound: make([]impactClient, 0, len(boundRows)), removed: map[uuid.UUID]bool{}, added: nil, scopedToServer: false}
+	change := identityChange{bound: make([]impactClient, 0, len(boundRows)), removed: map[uuid.UUID]bool{}, added: nil, scopedToServer: false, moved: nil, detachClients: nil, releaseClients: nil}
 	for _, row := range boundRows {
-		change.bound = append(change.bound, impactClient{id: row.ID, projectID: row.ProjectID, providerID: row.RemoteSessionIssuerID, providerDeleted: row.ProviderDeleted})
+		change.bound = append(change.bound, impactClient{id: row.ID, projectID: row.ProjectID, providerID: row.RemoteSessionIssuerID, credentialOwner: row.CredentialOwner, providerDeleted: row.ProviderDeleted})
 	}
 
 	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
 	}
-	if err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
+	replaceClient := conv.PtrValOr(payload.ReplaceClient, false)
+	if replaceClient && (!targetID.Valid || payload.Change != identityChangeReplace) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "replace_client needs mcp_server_id and change replace").LogError(ctx, logger)
+	}
+	if err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, replaceClient, &change); err != nil {
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
@@ -216,6 +233,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	// Touching an organization-level client counts every unreadable server on
 	// the issuer, so the count does not reveal which hidden projects it affects.
 	countAllHidden := change.touchesOrgClient()
+	listed := make(map[uuid.UUID]bool, len(change.moved))
 	var candidates []*gen.ServerIdentityImpactServer
 	checks := []authz.Check{}
 	for _, row := range servers {
@@ -228,6 +246,10 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		// whatever the issuer's bindings derive.
 		if change.scopedToServer && row.RemoteMcpServerID.Valid {
 			impact = ""
+		}
+		if slices.Contains(change.moved, row.ID) {
+			impact = identityImpactResignin
+			listed[row.ID] = true
 		}
 		if impact == "" && !countAllHidden {
 			continue
@@ -264,13 +286,21 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
-	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0}
+	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: uuidStrings(change.detachClients), ReleaseClientIds: uuidStrings(change.releaseClients)}
 	for i, candidate := range candidates {
 		switch {
 		case !readable[i]:
 			result.HiddenServerCount++
 		case candidate.Impact != "":
 			result.Servers = append(result.Servers, candidate)
+		}
+	}
+	// A server using the client through a gateway or another issuer is not on
+	// this issuer's list, so it cannot be named. Counting it stops the change
+	// being confirmed against a list the commit would refuse.
+	for _, serverID := range change.moved {
+		if !listed[serverID] {
+			result.HiddenServerCount++
 		}
 	}
 	return result, nil
@@ -307,11 +337,11 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 // clients. Made from a server, detaching unbinds only the clients that server
 // alone uses; made without one, every client the caller's project sees. It
 // applies the writes' org-wide binding refusal.
-func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerID uuid.UUID, targetID uuid.NullUUID, userIssuerOrgLevel, orgAdmin bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
+func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerID uuid.UUID, targetID uuid.NullUUID, userIssuerOrgLevel, orgAdmin bool, kind string, providerID, clientID uuid.NullUUID, replaceClient bool, change *identityChange) error {
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
-			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID}) //nolint:exhaustruct // Only the fields decideBoundClients reads.
+			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID, CredentialOwner: client.credentialOwner}) //nolint:exhaustruct // Only the fields decideBoundClients reads.
 		}
 	}
 	change.scopedToServer = targetID.Valid && kind != identityChangeAttach
@@ -328,11 +358,19 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 				ProviderID:          uuid.New(),
 				Keep:                uuid.Nil,
 				RegistersClient:     false,
+				ReplaceClient:       false,
+				Leaving:             true,
 			})
 			if err != nil {
 				return err
 			}
 			detached = decision.detach
+			for _, client := range decision.detach {
+				change.detachClients = append(change.detachClients, client.ID)
+			}
+			for _, client := range decision.release {
+				change.releaseClients = append(change.releaseClients, client.ID)
+			}
 		}
 		for _, client := range detached {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
@@ -347,7 +385,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	}
 
 	// A new client is the caller project's; a new provider matches no stored one.
-	added := impactClient{id: uuid.New(), projectID: uuid.NullUUID{UUID: projectID, Valid: true}, providerID: uuid.New(), providerDeleted: false}
+	added := impactClient{id: uuid.New(), projectID: uuid.NullUUID{UUID: projectID, Valid: true}, providerID: uuid.New(), credentialOwner: "", providerDeleted: false}
 	if providerID.Valid {
 		added.providerID = providerID.UUID
 	}
@@ -366,7 +404,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		if providerID.Valid && existing.RemoteSessionClient.RemoteSessionIssuerID != providerID.UUID {
 			return identityRefusal(ErrIdentityInvalid, nil, "existing client does not belong to the selected provider")
 		}
-		added = impactClient{id: existing.RemoteSessionClient.ID, projectID: existing.RemoteSessionClient.ProjectID, providerID: existing.RemoteSessionClient.RemoteSessionIssuerID, providerDeleted: false}
+		added = impactClient{id: existing.RemoteSessionClient.ID, projectID: existing.RemoteSessionClient.ProjectID, providerID: existing.RemoteSessionClient.RemoteSessionIssuerID, credentialOwner: existing.RemoteSessionClient.CredentialOwner, providerDeleted: false}
 	}
 	alreadyBound := false
 	for _, client := range change.bound {
@@ -392,6 +430,8 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 			ProviderID:          conv.Ternary(providerID.Valid || clientID.Valid, added.providerID, uuid.Nil),
 			Keep:                conv.Ternary(clientID.Valid, added.id, uuid.Nil),
 			RegistersClient:     !clientID.Valid,
+			ReplaceClient:       replaceClient,
+			Leaving:             false,
 		})
 		if err != nil {
 			return err
@@ -399,6 +439,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		if decision.reuse {
 			change.added = nil
 		}
+		change.moved = decision.moved
 		for _, client := range decision.detach {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err
@@ -407,6 +448,14 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		}
 	}
 	return nil
+}
+
+func uuidStrings(ids []uuid.UUID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return out
 }
 
 func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {

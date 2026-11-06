@@ -78,6 +78,17 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool `form:"replace_client,omitempty" json:"replace_client,omitempty" xml:"replace_client,omitempty"`
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string `form:"replace_client_server_ids,omitempty" json:"replace_client_server_ids,omitempty" xml:"replace_client_server_ids,omitempty"`
 }
 
 // DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
@@ -177,6 +188,13 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string `form:"detach_client_ids,omitempty" json:"detach_client_ids,omitempty" xml:"detach_client_ids,omitempty"`
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string `form:"release_client_ids,omitempty" json:"release_client_ids,omitempty" xml:"release_client_ids,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -3245,6 +3263,18 @@ func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityIm
 	} else {
 		body.Servers = []*ServerIdentityImpactServerResponseBody{}
 	}
+	if res.DetachClientIds != nil {
+		body.DetachClientIds = make([]string, len(res.DetachClientIds))
+		for i, val := range res.DetachClientIds {
+			body.DetachClientIds[i] = val
+		}
+	}
+	if res.ReleaseClientIds != nil {
+		body.ReleaseClientIds = make([]string, len(res.ReleaseClientIds))
+		for i, val := range res.ReleaseClientIds {
+			body.ReleaseClientIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5314,12 +5344,19 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 		ClientMode:         *body.ClientMode,
 		ExistingClientID:   body.ExistingClientID,
 		RegistrationMethod: body.RegistrationMethod,
+		ReplaceClient:      body.ReplaceClient,
 	}
 	if body.CreateProvider != nil {
 		v.CreateProvider = unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
 	}
 	if body.ClientConfiguration != nil {
 		v.ClientConfiguration = unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(body.ClientConfiguration)
+	}
+	if body.ReplaceClientServerIds != nil {
+		v.ReplaceClientServerIds = make([]string, len(body.ReplaceClientServerIds))
+		for i, val := range body.ReplaceClientServerIds {
+			v.ReplaceClientServerIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -5330,13 +5367,14 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 
 // NewGetServerIdentityImpactPayload builds a remoteSessions service
 // getServerIdentityImpact endpoint payload.
-func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, replaceClient *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
 	v := &remotesessions.GetServerIdentityImpactPayload{}
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.McpServerID = mcpServerID
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.ReplaceClient = replaceClient
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -5556,6 +5594,9 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
+	}
+	for _, e := range body.ReplaceClientServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.replace_client_server_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

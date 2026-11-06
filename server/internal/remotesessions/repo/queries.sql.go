@@ -8543,7 +8543,7 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 }
 
 const listOrganizationClientsForUserSessionIssuer = `-- name: ListOrganizationClientsForUserSessionIssuer :many
-SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+SELECT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
@@ -8568,6 +8568,7 @@ type ListOrganizationClientsForUserSessionIssuerRow struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.NullUUID
 	RemoteSessionIssuerID uuid.UUID
+	CredentialOwner       string
 	ProviderDeleted       bool
 }
 
@@ -8591,6 +8592,7 @@ func (q *Queries) ListOrganizationClientsForUserSessionIssuer(ctx context.Contex
 			&i.ID,
 			&i.ProjectID,
 			&i.RemoteSessionIssuerID,
+			&i.CredentialOwner,
 			&i.ProviderDeleted,
 		); err != nil {
 			return nil, err

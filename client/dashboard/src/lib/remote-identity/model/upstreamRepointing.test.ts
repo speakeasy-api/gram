@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   groupByImpact,
   needsSharedIssuerConfirm,
-  planLeavingUserIdentity,
   sharedIssuerChangeBlocked,
 } from "./upstreamRepointing";
 
@@ -49,27 +48,6 @@ describe("sharedIssuerChangeBlocked", () => {
     expect(sharedIssuerChangeBlocked({ ...quiet, failed: true })).toBe(false);
     expect(sharedIssuerChangeBlocked({ ...quiet, hiddenCount: 1 })).toBe(true);
     expect(sharedIssuerChangeBlocked({ ...quiet, refusal: "no" })).toBe(true);
-  });
-});
-
-describe("planLeavingUserIdentity", () => {
-  it("only touches the server's own clients", () => {
-    expect(
-      planLeavingUserIdentity(
-        [{ id: "only-this" }, { id: "shared" }, { id: "another-server" }],
-        [
-          { remoteSessionClientId: "only-this", serverCount: 1 },
-          { remoteSessionClientId: "shared", serverCount: 2 },
-        ],
-      ),
-    ).toEqual({ unbind: ["only-this"], release: ["shared"] });
-  });
-
-  it("leaves every client alone for a server with no associations", () => {
-    expect(planLeavingUserIdentity([{ id: "another-server" }], [])).toEqual({
-      unbind: [],
-      release: [],
-    });
   });
 });
 

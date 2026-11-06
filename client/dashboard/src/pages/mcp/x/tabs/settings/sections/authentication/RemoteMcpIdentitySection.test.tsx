@@ -555,7 +555,17 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
-  mocks.associations.mockReturnValue({ data: { associations: [] } });
+  // Unless a test says otherwise, every client on the issuer is this server's.
+  mocks.associations.mockImplementation(() => ({
+    data: {
+      associations: (mocks.clients().items ?? []).map(
+        (client: { id: string }) => ({
+          remoteSessionClientId: client.id,
+          serverCount: 1,
+        }),
+      ),
+    },
+  }));
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -2084,10 +2094,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       },
     });
-    mocks.associations.mockReturnValue({
+    mocks.impact.mockReturnValue({
       data: {
-        associations: [{ remoteSessionClientId: "client-1", serverCount: 1 }],
+        servers: [],
+        hiddenServerCount: 0,
+        detachClientIds: ["client-1"],
+        releaseClientIds: [],
       },
+      isFetching: false,
+      isError: false,
+      error: null,
     });
 
     renderIdentity();
@@ -2168,6 +2184,17 @@ describe("RemoteMcpIdentitySectionBody", () => {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 2 }],
       },
     });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        detachClientIds: [],
+        releaseClientIds: ["client-1"],
+      },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
 
     renderIdentity();
     fireEvent.click(
@@ -2190,6 +2217,36 @@ describe("RemoteMcpIdentitySectionBody", () => {
       }),
     );
     expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("does not treat another server's client on the issuer as this server's identity", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-of-another-server",
+          clientId: "other-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-2",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.associations.mockReturnValue({ data: { associations: [] } });
+
+    renderIdentity();
+
+    expect(
+      screen.queryByRole("button", { name: "Clear connection" }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("radio", { name: "Manual", description: /static headers/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows a connected client with its sign-ins, scopes and settings", () => {
@@ -2358,6 +2415,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
           clientMode: "auto",
+          replaceClient: true,
+          replaceClientServerIds: [],
         }),
       }),
     );

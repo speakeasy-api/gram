@@ -18,6 +18,10 @@ export type SharedIssuerImpactState = {
   failed: boolean;
   /** Why the server refuses this change; the commit would refuse it too. */
   refusal?: string;
+  /** Clients only this server uses, which leaving User Identity unbinds. */
+  detachClientIds?: string[];
+  /** Clients others also use: leaving only removes this server's association. */
+  releaseClientIds?: string[];
 };
 
 const NO_IMPACT: SharedIssuerImpactState = {
@@ -65,39 +69,9 @@ export function useSharedIssuerImpact(
     pending: query.isFetching,
     failed: query.isError && refusal === undefined,
     refusal,
+    detachClientIds: query.data?.detachClientIds,
+    releaseClientIds: query.data?.releaseClientIds,
   };
-}
-
-/** What turning off User Identity on one server does to the issuer's clients. */
-export type LeavingUserIdentityPlan = {
-  /** Clients only this server uses, which are unbound from the issuer. */
-  unbind: string[];
-  /** Clients other servers also use: only this server stops using them. */
-  release: string[];
-};
-
-/**
- * Turning off User Identity on a server only touches that server's own clients.
- * A client on the issuer with no association to this server belongs to another
- * server, and one associated with several servers stays bound for the others.
- */
-export function planLeavingUserIdentity(
-  clients: ReadonlyArray<{ id: string }>,
-  associations: ReadonlyArray<{
-    remoteSessionClientId: string;
-    serverCount: number;
-  }>,
-): LeavingUserIdentityPlan {
-  const plan: LeavingUserIdentityPlan = { unbind: [], release: [] };
-  for (const client of clients) {
-    const association = associations.find(
-      (candidate) => candidate.remoteSessionClientId === client.id,
-    );
-    if (!association) continue;
-    if (association.serverCount > 1) plan.release.push(client.id);
-    else plan.unbind.push(client.id);
-  }
-  return plan;
 }
 
 /** Drops cached previews once a binding change lands. */

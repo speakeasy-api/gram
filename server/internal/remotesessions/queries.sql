@@ -5871,7 +5871,7 @@ ORDER BY p.name, s.id;
 -- ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
 -- in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
 -- keeps them; provider_deleted drops them from the derivation only.
-SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+SELECT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
