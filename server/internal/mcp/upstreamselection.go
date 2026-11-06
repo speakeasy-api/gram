@@ -1254,11 +1254,13 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 // derived authorization server. A member with no associated client that
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.
+// A member whose clients are its typed registrations signs in only through
+// those.
 func memberNeedsSignIn(member metaMember) bool {
 	if len(member.associatedClients) > 0 {
 		return true
 	}
-	return member.remoteSessionIssuerID.Valid
+	return !member.typedRegistrations && member.remoteSessionIssuerID.Valid
 }
 
 // agentKeyMemberChoices serves the agent gateway members an agent key was set
