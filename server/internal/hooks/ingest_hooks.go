@@ -105,6 +105,14 @@ const (
 // instead, and are distinguished by isExplicitSkillActivation.
 const eventTypeSkillActivated = "skill.activated"
 
+// toolResultFinishReasonError marks the chat row of a tool.failed result, so
+// a transcript reader can tell a failed call from one that returned output.
+const toolResultFinishReasonError = "error"
+
+// toolFailedWithoutErrorContent is the result recorded for a tool.failed
+// event that carries no error text.
+const toolFailedWithoutErrorContent = "The tool call failed without an error message."
+
 func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
 }
@@ -1693,12 +1701,23 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		// recognized as a stand-in; seed the surface placeholder instead.
 		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
+		failed := strings.TrimSpace(payload.Event.Type) == "tool.failed"
 		content := canonicalToolResultContent(payload)
+		if failed && strings.TrimSpace(content) == "" {
+			// A failure is an outcome even without an error text: without a
+			// result row the call would read as still running.
+			content = marshalToJSON(toolFailedWithoutErrorContent)
+		}
 		if strings.TrimSpace(content) == "" {
 			return false, nil
 		}
 		msg = baseMsg("tool", content)
 		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
+		if failed {
+			// The result content is the error, which reads like any output;
+			// the finish reason is what tells a reader the call failed.
+			msg.FinishReason = conv.ToPGText(toolResultFinishReasonError)
+		}
 		titleContent = content
 	default:
 		return false, nil

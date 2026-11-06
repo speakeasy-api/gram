@@ -67,6 +67,7 @@ import {
   type MessageRow,
   type PromptAttachment,
   type SearchFieldKey,
+  type ToolResultStatus,
   type ToolRow,
   toolResultStatus,
   type TranscriptRow,
@@ -833,6 +834,15 @@ function toSectionRisk(
   return { matches, results: [...matchingResults.values()] };
 }
 
+// Spell out the statuses whose icon alone could be mistaken for another: a
+// dashed circle for a call with no result yet, a question mark for one that
+// ended without a result, and a red cross for a failure.
+const TOOL_STATUS_LABELS: Partial<Record<ToolResultStatus, string>> = {
+  error: "Failed",
+  pending: "Pending",
+  unknown: "Unknown",
+};
+
 function ToolRowView({
   row,
   ctx,
@@ -866,6 +876,7 @@ function ToolRowView({
   const result = row.resultMessage
     ? messageText(row.resultMessage.content)
     : undefined;
+  const status = toolResultStatus(row);
 
   const { callResults, resultResults } = toolResults(row, ctx);
   const flagged =
@@ -953,7 +964,8 @@ function ToolRowView({
         name={name}
         request={request}
         result={result}
-        status={toolResultStatus(row)}
+        status={status}
+        statusLabel={TOOL_STATUS_LABELS[status]}
         defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
@@ -1004,9 +1016,10 @@ const ToolGroupView = memo(function ToolGroupView({
     () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
     [group.rows, ctx],
   );
-  const statuses = group.rows.map(toolResultStatus);
+  const statuses = group.rows.map((row) => toolResultStatus(row));
   const failedCount = statuses.filter((status) => status === "error").length;
-  // Failure takes precedence, but a successful result must not hide active work.
+  // Failure takes precedence, but a successful result must not hide active
+  // work or a call whose outcome is unknown.
   const status =
     failedCount > 0
       ? "error"
@@ -1014,7 +1027,9 @@ const ToolGroupView = memo(function ToolGroupView({
         ? "running"
         : statuses.includes("pending")
           ? "pending"
-          : "complete";
+          : statuses.includes("unknown")
+            ? "unknown"
+            : "complete";
   const forceOpen = flaggedCount > 0 || activeRowId != null;
   const count = group.rows.length;
   const title =

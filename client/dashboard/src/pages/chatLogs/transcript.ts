@@ -10,6 +10,7 @@ import {
   splitLeadingEnvelopes,
   stripLeadingEnvelopes,
 } from "@/lib/harnessEnvelopes";
+import { isStalePendingToolCall } from "@/lib/toolCallStatus";
 
 type MessageEntryType = Extract<
   TraceEntryType,
@@ -136,15 +137,35 @@ export interface ToolRow {
   generation: number;
 }
 
-/** Interpret the retained Kit patch without changing its lossless output text.
- * Require the patch discriminator and matching call ID, not an arbitrary
- * tool's JSON output containing a field named status.
+export type ToolResultStatus =
+  | "complete"
+  | "error"
+  | "running"
+  | "pending"
+  | "unknown";
+
+/** The status of a tool row. A call with no result is never a success: it is
+ * pending while it may still run, and unknown once it is too old to be
+ * running. A hook-captured failure carries the "error" finish reason. For a
+ * Kit result, interpret the retained patch without changing its lossless
+ * output text. Require the patch discriminator and matching call ID, not an
+ * arbitrary tool's JSON output containing a field named status.
  */
 export function toolResultStatus(
   row: ToolRow,
-): "complete" | "error" | "running" | "pending" {
+  nowMs: number = Date.now(),
+): ToolResultStatus {
   const message = row.resultMessage;
-  if (!message) return "complete";
+  if (!message) {
+    const startedAt = row.callMessage?.createdAt;
+    if (
+      startedAt &&
+      isStalePendingToolCall(new Date(startedAt).getTime(), nowMs)
+    )
+      return "unknown";
+    return "pending";
+  }
+  if (message.finishReason === "error") return "error";
   try {
     const patch: unknown = JSON.parse(joinedTextParts(message.content));
     if (

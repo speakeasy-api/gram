@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import { ChatTranscript, type TranscriptPagination } from "./ChatTranscript";
 import { buildTranscript, type DisplayItem } from "./transcript";
+import { STALE_PENDING_TOOL_CALL_MS } from "@/lib/toolCallStatus";
 
 // Layout has no viewport in happy-dom. Keep the real transcript and ToolUI;
 // only make every virtual row visible and isolate unrelated risk actions.
@@ -201,6 +202,90 @@ describe("Kit tool result status", () => {
     show(result(content));
     expect(screen.getByRole("img", { name: "Tool complete" })).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Tool error" })).toBeNull();
+  });
+});
+
+describe("hook tool result status", () => {
+  function call(createdAt: Date): ChatMessage {
+    return {
+      id: "invocation",
+      role: "assistant",
+      seq: 1,
+      generation: 0,
+      model: "",
+      content: null,
+      createdAt,
+      toolCalls: JSON.stringify([
+        {
+          id: "call",
+          type: "function",
+          function: { name: "mcp__speakeasy__execute_tool", arguments: "{}" },
+        },
+      ]),
+    };
+  }
+  function showCall(messages: ChatMessage[]) {
+    const rows = buildTranscript(messages);
+    return render(
+      <ChatTranscript
+        items={rows.map((row) => ({ type: "row", id: row.id, row }))}
+        ctx={{ dimNonRisk: false }}
+        pagination={pagination}
+      />,
+    );
+  }
+
+  it("renders a hook failure as failed, with its error as the output", () => {
+    showCall([
+      call(new Date()),
+      {
+        ...result('{"content":[{"type":"text","text":"MCP error -32603"}]}'),
+        finishReason: "error",
+      },
+    ]);
+    expect(screen.getByRole("img", { name: "Tool error" }).className).toContain(
+      "text-destructive",
+    );
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+    // The error is the call's output: the row has content to expand.
+    expect(
+      screen
+        .getByRole("button", { name: /execute_tool/ })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("renders a call with no result yet as pending, never complete", () => {
+    showCall([call(new Date())]);
+    expect(screen.getByRole("img", { name: "Tool pending" })).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+  });
+
+  it("renders a call with no result for a long time as unknown", () => {
+    showCall([call(new Date(Date.now() - STALE_PENDING_TOOL_CALL_MS))]);
+    expect(screen.getByRole("img", { name: "Tool unknown" })).toBeTruthy();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Tool complete" })).toBeNull();
+  });
+
+  it("shows a group with an unanswered call as not complete", () => {
+    const rows = buildTranscript([
+      call(new Date(0)),
+      { ...result("ok"), id: "other", toolCallId: "other-call" },
+    ]).filter((row) => row.kind === "tool");
+    render(
+      <ChatTranscript
+        items={[{ type: "toolGroup", id: "group", rows }]}
+        ctx={{ dimNonRisk: false }}
+        pagination={pagination}
+      />,
+    );
+    const header = screen.getByRole("button", { name: /Executed/ });
+    expect(
+      within(header).getByRole("img", { name: "Tool unknown" }),
+    ).toBeTruthy();
   });
 });
 
