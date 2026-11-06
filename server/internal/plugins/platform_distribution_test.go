@@ -82,11 +82,15 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 						expectedTools = tc.versions[latest]
 					}
 					found := false
+					grantResource := "*"
 					for _, candidate := range inventory {
 						if candidate.ID != targetID {
 							continue
 						}
 						found = true
+						if entrypoint == "eligible" {
+							grantResource = candidate.ResourceID.String()
+						}
 						require.ElementsMatch(t, expectedTools, candidate.ToolUrns, "inventory loads latest live contents without a per-candidate query")
 					}
 					require.True(t, found, "platform-containing rows remain available for removal reconciliation")
@@ -102,7 +106,7 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 					}
 					principal, err := urn.ParsePrincipal(role)
 					require.NoError(t, err)
-					selectors, err := authz.NewSelector(authz.ScopeMCPConnect, "*").MarshalJSON()
+					selectors, err := authz.NewSelector(authz.ScopeMCPConnect, grantResource).MarshalJSON()
 					require.NoError(t, err)
 					_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 					require.NoError(t, err)

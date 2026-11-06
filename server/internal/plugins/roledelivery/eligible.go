@@ -3,14 +3,19 @@ package roledelivery
 import (
 	"context"
 	"fmt"
+	"slices"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 // Eligible delivers only the backend whose eligibility just changed. Existing
 // role audiences supply access; replay never restores removed membership.
+// Only grants naming the server deliver it here: a role allowed to use every
+// server would otherwise pull each newly enabled one into its plugins.
 // Callers hold project admission before any plugin locks and enqueue publication.
 func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID uuid.UUID, guard *admission.Guard) (bool, error) {
 	candidates, err := servers(ctx, tx, org, projectID)
@@ -45,6 +50,9 @@ func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID
 		if err != nil {
 			return false, err
 		}
+		for role, g := range grants {
+			grants[role] = withoutUntargetedUse(g)
+		}
 		yes, err := supplied(grants, *selected)
 		if err != nil {
 			return false, err
@@ -59,4 +67,15 @@ func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID
 		changed = changed || did
 	}
 	return changed, nil
+}
+
+// withoutUntargetedUse drops Use grants that don't name a specific server.
+// Exclusions are kept so a block still wins over a targeted grant.
+func withoutUntargetedUse(grants []authz.Grant) []authz.Grant {
+	return slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
+		if g.Scope != authz.ScopeMCPConnect && g.Scope != authz.ScopeRoot {
+			return false
+		}
+		return g.Selector.ResourceID() == authz.WildcardResource
+	})
 }
