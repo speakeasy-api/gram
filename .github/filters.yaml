@@ -100,6 +100,7 @@ db-migrations:
 
 agent-checks:
   - ".github/**"
+  - ".gitattributes"
   - "e2e/flows/**"
   - "e2e/flows.config.ts"
   - "mise.toml"

@@ -20,6 +20,9 @@ fi
 mkdir -p e2e/.flows
 verdict_file="e2e/.flows/${flow}-verdict.json"
 
+# Pre-approved commands are the exact ones the prompt names; only the browser
+# takes arguments, and only in this flow's session. A wildcard such as
+# `git diff:*` would also allow `git diff --output=<any path>`.
 {
     cat <<EOF
 # Heal the flow check \`${flow}\`
@@ -45,7 +48,7 @@ Finish with exactly one line of JSON and nothing after it:
 EOF
 } | claude -p \
     --tools "Bash,Read,Write,Edit,Glob,Grep" \
-    --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/.flows/**),Bash(mise run playwright:*),Bash(mise run test:flows:*),Bash(git diff:*),Bash(aube run -F @gram/e2e type-check)" \
+    --allowedTools "Read,Glob,Grep,Edit(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/flows/${flow}/flow.spec.ts),Write(./e2e/.flows/**),Bash(mise run playwright -s=${flow}:*),Bash(mise run test:flows flows/${flow}/),Bash(git diff origin/main...HEAD -- client/ e2e/flows/),Bash(aube run -F @gram/e2e type-check)" \
     --max-turns 80 |
     tee "e2e/.flows/${flow}-transcript.txt" |
     tail -n 1 >"$verdict_file"

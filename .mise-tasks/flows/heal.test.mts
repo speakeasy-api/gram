@@ -72,8 +72,12 @@ function heal(
     root,
     args: read("claude.args")?.split("\n").filter(Boolean),
     prompt: read("claude.stdin"),
-    verdictFile: read("e2e/.flows/catalog-connect-verdict.json"),
-    transcript: read("e2e/.flows/catalog-connect-transcript.txt"),
+    verdictFile:
+      flow === undefined ? undefined : read(`e2e/.flows/${flow}-verdict.json`),
+    transcript:
+      flow === undefined
+        ? undefined
+        : read(`e2e/.flows/${flow}-transcript.txt`),
   };
 }
 
@@ -185,12 +189,45 @@ test("pre-approves only the commands the prompt names", () => {
   );
   const bash = allowed.filter((t) => t.startsWith("Bash"));
   assert.deepEqual(bash, [
-    "Bash(mise run playwright:*)",
-    "Bash(mise run test:flows:*)",
-    "Bash(git diff:*)",
+    "Bash(mise run playwright -s=catalog-connect:*)",
+    "Bash(mise run test:flows flows/catalog-connect/)",
+    "Bash(git diff origin/main...HEAD -- client/ e2e/flows/)",
     "Bash(aube run -F @gram/e2e type-check)",
   ]);
   assert.ok(!allowed.includes("Bash"), "no unscoped Bash");
+});
+
+test("only the browser rule takes arguments, and only in the flow's session", () => {
+  const allowed = flag(heal("catalog-connect").args, "--allowedTools").split(
+    ",",
+  );
+  const wildcards = allowed.filter(
+    (t) => t.startsWith("Bash(") && t.includes("*"),
+  );
+  assert.deepEqual(wildcards, [
+    "Bash(mise run playwright -s=catalog-connect:*)",
+  ]);
+  for (const t of allowed) {
+    assert.doesNotMatch(t, /^Bash\(git [^)]*\*/, "git takes no free arguments");
+  }
+});
+
+test("the rules follow the flow being healed", () => {
+  const r = heal("server-from-source", {
+    flows: ["server-from-source"],
+    reply:
+      '{"flow":"server-from-source","verdict":"broken","step":"1","summary":"x"}\\n',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const allowed = flag(r.args, "--allowedTools");
+  assert.match(allowed, /Bash\(mise run playwright -s=server-from-source:\*\)/);
+  assert.match(
+    allowed,
+    /Bash\(mise run test:flows flows\/server-from-source\/\)/,
+  );
+  assert.doesNotMatch(allowed, /catalog-connect/);
+  assert.match(r.verdictFile!, /"flow":"server-from-source"/);
+  assert.ok(r.transcript);
 });
 
 test("never skips permission checks", () => {
@@ -222,14 +259,18 @@ test("every command in the prompt is pre-approved", () => {
   const allowed = flag(r.args, "--allowedTools").split(",");
   const prefixes = allowed
     .filter((t) => t.startsWith("Bash("))
-    .map((t) => t.slice(5, -1).replace(/:\*$/, ""));
+    .map((t) => t.slice(5, -1));
+  const approved = (c: string) =>
+    prefixes.some((p) =>
+      p.endsWith(":*") ? c.startsWith(p.slice(0, -2) + " ") : c === p,
+    );
   const commands = [...r.prompt!.matchAll(/^- [^:]+: `([^`]+)`/gm)].map(
     (m) => m[1]!,
   );
   assert.ok(commands.length >= 4);
   for (const c of commands) {
     assert.ok(
-      prefixes.some((p) => c.startsWith(p)),
+      approved(c.replace(" <command>", " open")),
       `not pre-approved: ${c}`,
     );
   }

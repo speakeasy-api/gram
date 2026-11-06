@@ -56,7 +56,7 @@ EOF
     cat .github/prompts/magellan-explore.md
 } | claude -p \
     --tools "Bash,Read,Write,Edit,Glob,Grep" \
-    --allowedTools "Read,Glob,Grep,Write(./${run_dir}/out/**),Edit(./${run_dir}/out/**),Bash(mise run playwright:*)" \
+    --allowedTools "Read,Glob,Grep,Write(./${run_dir}/out/**),Edit(./${run_dir}/out/**),Bash(mise run playwright -s=${session}:*)" \
     --max-turns 200 >"$run_dir/transcript.txt" 2>&1 ||
     echo "the agent exited with an error; see $run_dir/transcript.txt" >&2
 

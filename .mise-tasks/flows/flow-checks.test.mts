@@ -21,6 +21,18 @@ const [, frontmatterText, body] = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(
   source,
 )!;
 
+// PyYAML, as pr.yaml's `changes` job already uses to read filters.yaml: the
+// runners ship it (python3-yaml), and this task runs before any workspace
+// packages are installed.
+const hasPyYAML =
+  spawnSync("python3", ["-c", "import yaml"], { encoding: "utf8" }).status ===
+  0;
+if (!hasPyYAML) {
+  throw new Error(
+    "These tests read YAML with PyYAML. Install it: `python3 -m pip install pyyaml` or `apt-get install python3-yaml`.",
+  );
+}
+
 function yaml(text: string): any {
   return JSON.parse(
     execFileSync(
@@ -73,16 +85,18 @@ suite("triggers and permissions", () => {
     assert.ok(fm["timeout-minutes"] > 0 && fm["timeout-minutes"] <= 60);
   });
 
-  for (const path of [
-    ".github/prompts/heal-flow.md",
-    ".github/workflows/flow-checks.*",
-    "e2e/flows/**",
-    "client/dashboard/**",
-  ]) {
-    test(`runs when ${path} changes`, () => {
-      assert.ok(fm.on.pull_request.paths.includes(path));
-    });
-  }
+  test("watches exactly the files the check depends on", () => {
+    assert.deepEqual(fm.on.pull_request.paths, [
+      "client/dashboard/**",
+      "e2e/flows/**",
+      "e2e/flows.config.ts",
+      ".mise-tasks/test/flows.sh",
+      ".mise-tasks/flows/**",
+      ".mise-tasks/zero/env-deps.mts",
+      ".github/prompts/heal-flow.md",
+      ".github/workflows/flow-checks.*",
+    ]);
+  });
 
   test("every watched path exists", () => {
     for (const p of fm.on.pull_request.paths as string[]) {

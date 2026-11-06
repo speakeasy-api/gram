@@ -603,7 +603,14 @@ suite("describe", () => {
   });
 
   test("puts every agent field inside a code block", () => {
-    for (const value of [f.route, f.expected, f.actual, f.evidence, f.story!]) {
+    for (const value of [
+      f.route,
+      ...f.steps,
+      f.expected,
+      f.actual,
+      f.evidence,
+      f.story!,
+    ]) {
       const at = body.indexOf(value);
       assert.notEqual(at, -1);
       const before = body.slice(0, at);

@@ -244,7 +244,7 @@ test("pre-approves writes to this run's output only, and the browser", () => {
     "Grep",
     `Write(${out})`,
     `Edit(${out})`,
-    "Bash(mise run playwright:*)",
+    `Bash(mise run playwright -s=magellan-${r.runs[0]}:*)`,
   ]);
 });
 
