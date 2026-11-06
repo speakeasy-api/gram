@@ -16,7 +16,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { SkeletonParagraph } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -502,13 +502,21 @@ function SignalDetailContent({
                   }
                 />
                 <div className="bg-card border p-4">
-                  <SignalTimeline
-                    sparkline={signal.sparkline}
-                    from={from}
-                    to={to}
-                    color={SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)]}
-                    height={240}
-                  />
+                  {/* A range change keeps the previous response on screen until
+                      the new one lands, and its buckets belong to the old
+                      window — plotting them against the new one would shift
+                      every bar. Hold the chart's height instead. */}
+                  {signalsQuery.isPlaceholderData ? (
+                    <Skeleton className="h-[240px] w-full" />
+                  ) : (
+                    <SignalTimeline
+                      sparkline={signal.sparkline}
+                      from={from}
+                      to={to}
+                      color={SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)]}
+                      height={240}
+                    />
+                  )}
                 </div>
               </section>
 
