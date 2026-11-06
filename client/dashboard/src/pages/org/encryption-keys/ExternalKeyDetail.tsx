@@ -159,7 +159,7 @@ export default function ExternalKeyDetail(): JSX.Element {
                 <OverviewTab key={externalKey.id} externalKey={externalKey} />
               )}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading external key">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />
@@ -184,7 +184,7 @@ export default function ExternalKeyDetail(): JSX.Element {
                 </RequireScope>
               )}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading external key">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />

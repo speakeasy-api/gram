@@ -241,7 +241,7 @@ function PlaygroundMcpAppRenderer({
   if (resourceQuery.isLoading) {
     return (
       <div className="border-border border-t px-4 py-4">
-        <Skeleton className="h-32 w-full" />
+        <Skeleton label="Loading MCP app resource" className="h-32 w-full" />
       </div>
     );
   }

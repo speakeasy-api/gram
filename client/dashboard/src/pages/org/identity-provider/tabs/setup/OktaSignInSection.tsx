@@ -242,7 +242,7 @@ function SignInPublicKey({ setId }: { setId: string }): JSX.Element {
   const jwk = activePublicJwk(keysQuery.data?.keys ?? []);
   if (keysQuery.isPending) {
     return (
-      <Skeleton>
+      <Skeleton label="Loading the public key">
         <div className="h-4 w-40" />
         <div className="h-40 w-full" />
       </Skeleton>

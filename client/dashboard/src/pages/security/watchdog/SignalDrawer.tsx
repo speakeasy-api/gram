@@ -594,7 +594,9 @@ export function SignalDrawer({
                           </Text>
                           {!rationaleSignal && <RevealAllToggle />}
                         </div>
-                        {evidenceQuery.isLoading && <SkeletonParagraph />}
+                        {evidenceQuery.isLoading && (
+                          <SkeletonParagraph label="Loading evidence" />
+                        )}
                         {evidenceQuery.isError && (
                           <div className="flex items-center gap-2">
                             <Text small muted>

@@ -465,7 +465,7 @@ function DialogOptionsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Skeleton>
+      <Skeleton label="Loading servers">
         <div className="h-7 w-full" />
         <div className="h-7 w-full" />
         <div className="h-7 w-full" />

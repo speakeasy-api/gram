@@ -156,7 +156,7 @@ export default function ExternalCredentialDetail(): JSX.Element {
             <TabsContent value="overview" className="mt-0">
               {credential && <OverviewTab credential={credential} />}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading external credential">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />
@@ -181,7 +181,7 @@ export default function ExternalCredentialDetail(): JSX.Element {
                 </RequireScope>
               )}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading external credential">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />

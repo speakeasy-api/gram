@@ -279,7 +279,11 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   if (!systemPrompt) {
     return (
-      <div className="flex h-full flex-col justify-between gap-4 p-4">
+      <div
+        role="status"
+        aria-label="Loading assistant setup"
+        className="flex h-full flex-col justify-between gap-4 p-4"
+      >
         <div className="mx-auto w-full max-w-2xl space-y-3 pt-12">
           <Skeleton className="h-6 w-64" />
           <Skeleton className="h-4 w-96 max-w-full" />

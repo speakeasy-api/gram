@@ -38,7 +38,7 @@ export default function DeploymentsPage(): JSX.Element {
       description="Each push deploys every source in the project together, so a deployment is the version its sources and tools arrive in."
       belowHeader={<McpTabs active="deployments" />}
     >
-      <Suspense fallback={<SkeletonTable />}>
+      <Suspense fallback={<SkeletonTable label="Loading deployments" />}>
         <DeploymentsTable />
       </Suspense>
     </ResourceListPage>

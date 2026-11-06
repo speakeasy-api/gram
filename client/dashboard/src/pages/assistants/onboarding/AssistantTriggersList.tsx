@@ -163,7 +163,7 @@ function TriggerTraffic({
   if (isLoading) {
     return (
       <div className="border-border border-t px-3 py-2">
-        <Skeleton>
+        <Skeleton label="Loading trigger events">
           <div className="h-5 w-full" />
           <div className="h-5 w-full" />
         </Skeleton>

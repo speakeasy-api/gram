@@ -366,7 +366,9 @@ function DefaultMcpServerControl({
 
   let content: React.ReactNode;
   if (serversQuery.isLoading) {
-    content = <Skeleton className="h-9 w-full max-w-xl" />;
+    content = (
+      <Skeleton label="Loading MCP servers" className="h-9 w-full max-w-xl" />
+    );
   } else if (servers.length === 0) {
     content = (
       <div className="border-border border border-dashed p-4">
@@ -1135,7 +1137,10 @@ function OrgDomainsInner() {
               will delete the associated ingress and TLS certificate.
             </Text>
             {domainEndpointsQuery.isLoading ? (
-              <Skeleton className="h-5 w-64" />
+              <Skeleton
+                label="Checking for MCP endpoints under this domain"
+                className="h-5 w-64"
+              />
             ) : impactedEndpoints.length > 0 ? (
               <div className="space-y-2">
                 <Text variant="body" className="font-semibold">

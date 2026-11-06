@@ -154,7 +154,7 @@ export function RemoveAssignmentDialog({
             permissions that role grants across the organization.
           </Text>
           {audience.isLoading || roles.isLoading ? (
-            <Skeleton>
+            <Skeleton label="Loading roles with access">
               <div className="h-8 w-full" />
               <div className="h-8 w-full" />
               <div className="h-8 w-full" />

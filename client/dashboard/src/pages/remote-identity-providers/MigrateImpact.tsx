@@ -165,7 +165,7 @@ export function MigrateImpact({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Skeleton>
+      <Skeleton label="Checking impact">
         <div className="h-4 w-72" />
         <div className="h-4 w-56" />
       </Skeleton>

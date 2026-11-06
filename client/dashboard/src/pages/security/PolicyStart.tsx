@@ -416,11 +416,13 @@ function UseCaseTable({
           </Button>
         </div>
       ) : isLoading ? (
-        Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="border-b p-4">
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ))
+        <div role="status" aria-label="Loading use cases">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="border-b p-4">
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ))}
+        </div>
       ) : (
         presets.map((preset) => {
           // The Shadow AI use case follows the project's one slot: it opens

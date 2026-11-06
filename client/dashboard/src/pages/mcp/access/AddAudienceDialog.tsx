@@ -95,7 +95,7 @@ export function AddAudienceDialog({
 
         <div className="py-2">
           {isLoading ? (
-            <Skeleton className="h-9 w-full" />
+            <Skeleton label="Loading audience options" className="h-9 w-full" />
           ) : isError ? (
             <div className="flex flex-col items-start gap-2">
               <Text muted small>

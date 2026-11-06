@@ -97,7 +97,7 @@ export function SigningKeysTab({
   }
 
   if (setsPending || keysPending) {
-    return <SkeletonTable />;
+    return <SkeletonTable label="Loading signing keys" />;
   }
 
   const dependents: Dependent[] = sets.flatMap((set, index) => {

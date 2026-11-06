@@ -252,7 +252,7 @@ function ConsolidateImpact({
   }
   if (isLoading || !preflight) {
     return (
-      <Skeleton>
+      <Skeleton label="Checking what changes">
         <div className="h-4 w-64" />
         <div className="h-4 w-48" />
       </Skeleton>

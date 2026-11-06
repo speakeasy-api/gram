@@ -184,7 +184,7 @@ export function ExclusionsTab({
 
   let body: ReactNode;
   if (isLoading) {
-    body = <SkeletonTable />;
+    body = <SkeletonTable label="Loading exclusions" />;
   } else if (exclusions.length === 0) {
     body = (
       <ExclusionsEmptyState

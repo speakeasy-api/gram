@@ -61,7 +61,9 @@ export function UserSessionIssuerField({
 
   let control: JSX.Element;
   if (isLoading) {
-    control = <Skeleton className="h-9 w-64" />;
+    control = (
+      <Skeleton label="Loading user session issuers" className="h-9 w-64" />
+    );
   } else if (isError) {
     control = (
       <FieldError>

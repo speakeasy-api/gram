@@ -18,7 +18,7 @@ export function ToolCallsView({
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton>
+        <Skeleton label="Loading tool call logs">
           <div className="h-10 w-full" />
           <div className="h-10 w-full" />
           <div className="h-10 w-full" />

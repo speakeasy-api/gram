@@ -139,7 +139,7 @@ export default function JsonWebKeySetDetail(): JSX.Element {
             <TabsContent value="overview" className="mt-0">
               {set && <OverviewTab key={set.id} set={set} />}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading key set">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />
@@ -150,7 +150,7 @@ export default function JsonWebKeySetDetail(): JSX.Element {
               {/* Keyed so the revoked toggle and any open dialog reset when
                   navigating from one set straight to another. */}
               {set && <KeysTab key={set.id} set={set} />}
-              {isLoading && <SkeletonTable />}
+              {isLoading && <SkeletonTable label="Loading keys" />}
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               {set && (
@@ -167,7 +167,7 @@ export default function JsonWebKeySetDetail(): JSX.Element {
                 </RequireScope>
               )}
               {isLoading && (
-                <Skeleton>
+                <Skeleton label="Loading key set">
                   <div className="h-5 w-48" />
                   <div className="h-5 w-96" />
                   <div className="h-5 w-64" />

@@ -187,7 +187,11 @@ export function GrantAccessDialog({
         )}
 
         {isLoading && (
-          <div role="status" aria-label="Loading roles" className="space-y-2">
+          <div
+            role="status"
+            aria-label="Loading members, roles and permissions"
+            className="space-y-2"
+          >
             <Skeleton className="h-14 w-full" />
             <Skeleton className="h-14 w-full" />
             <Skeleton className="h-14 w-full" />

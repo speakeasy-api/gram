@@ -2621,7 +2621,7 @@ function SessionReview({
             />
           ) : chatsLoading ? (
             <div className="p-3">
-              <Skeleton>
+              <Skeleton label="Loading sessions">
                 <div className="h-12 w-full" />
                 <div className="h-12 w-full" />
                 <div className="h-12 w-full" />
@@ -3090,7 +3090,7 @@ function SessionTranscript({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {transcript.isLoading ? (
             <div className="p-6">
-              <SkeletonParagraph />
+              <SkeletonParagraph label="Loading transcript" />
             </div>
           ) : transcript.isError ? (
             <Text small muted className="block p-6 text-center">

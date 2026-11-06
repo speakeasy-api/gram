@@ -157,7 +157,7 @@ function BackingCredential({
   if (isLoading) {
     return (
       <InfoField label="External credential">
-        <Skeleton className="h-5 w-48" />
+        <Skeleton label="Loading external credential" className="h-5 w-48" />
       </InfoField>
     );
   }

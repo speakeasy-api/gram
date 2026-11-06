@@ -85,7 +85,7 @@ export function CreateMarketplaceStep({
     >
       <div className="space-y-4">
         {isLoading ? (
-          <Skeleton className="h-28 w-full" />
+          <Skeleton label="Loading marketplace" className="h-28 w-full" />
         ) : isConnected && publishStatus ? (
           <MarketplaceCard
             publishStatus={publishStatus}

@@ -588,10 +588,19 @@ function ModifyRemoteIdentityProviderSheetBody({
         )}
 
         {isLoadingClient ? (
-          <Skeleton>
-            <div className="h-9 w-full" />
-            <div className="h-9 w-full" />
-          </Skeleton>
+          <div className="border-t pt-6">
+            <Skeleton label="Loading client credentials">
+              <div className="h-5 w-48" />
+              <div className="h-10 w-full" />
+              <div className="h-16 w-full" />
+              <div className="h-4 w-20" />
+              <div className="h-5 w-64" />
+              <div className="h-4 w-40" />
+              <div className="h-9 w-full" />
+              <div className="h-4 w-40" />
+              <div className="h-9 w-full" />
+            </Skeleton>
+          </div>
         ) : (
           <ClientCredentialsFields
             clientId={primaryClient?.clientId ?? ""}

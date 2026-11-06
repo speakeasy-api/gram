@@ -91,7 +91,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
-        <Skeleton className="h-4 w-48" />
+        <Skeleton label="Loading spans" className="h-4 w-48" />
       </div>
     );
   }

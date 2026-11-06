@@ -968,7 +968,10 @@ export function TriggersPanel(): JSX.Element {
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
-            <SkeletonTable />
+            <SkeletonTable
+              label="Loading triggers"
+              columns={["1fr", "2fr", "1fr", "0.8fr", "1fr"]}
+            />
           ) : triggers.length === 0 ? (
             <TriggersEmptyState onCreate={openCreate} projectId={project.id} />
           ) : (

@@ -1108,7 +1108,7 @@ function OrgAuditLogsInner() {
           >
             {isLoading ? (
               <div className="p-4">
-                <Skeleton>
+                <Skeleton label="Loading audit logs">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-10 w-full" />
                   ))}

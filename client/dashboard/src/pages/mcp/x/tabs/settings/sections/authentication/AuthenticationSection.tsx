@@ -318,7 +318,7 @@ function IdentityProviderSetupField({
 function AuthenticationLoadingField() {
   return (
     <AuthRow label="Authentication">
-      <Skeleton className="h-5 w-48" />
+      <Skeleton label="Loading authentication" className="h-5 w-48" />
     </AuthRow>
   );
 }

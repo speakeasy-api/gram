@@ -447,7 +447,11 @@ export function DistributeServersStep({
               )}
 
               {isLoading ? (
-                <div className="mt-3 grid grid-cols-2 gap-3">
+                <div
+                  role="status"
+                  aria-label="Loading MCP servers"
+                  className="mt-3 grid grid-cols-2 gap-3"
+                >
                   {Array.from({ length: 4 }, (_, i) => (
                     <Skeleton key={i} className="h-[118px] w-full" />
                   ))}

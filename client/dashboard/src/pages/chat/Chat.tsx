@@ -742,7 +742,7 @@ function ChatHomeCompactRecents(): ReactElement {
       </div>
       {loading ? (
         <div className="px-3">
-          <Skeleton>
+          <Skeleton label="Loading conversations">
             <div className="h-5 w-full" />
             <div className="h-5 w-full" />
             <div className="h-5 w-full" />
@@ -775,7 +775,7 @@ function RecentsBody({
   if (loading) {
     return (
       <div className="px-3">
-        <Skeleton>
+        <Skeleton label="Loading conversations">
           <div className="h-5 w-full" />
           <div className="h-5 w-full" />
           <div className="h-5 w-full" />
@@ -1088,7 +1088,7 @@ function ConversationBody({
 function ConversationSkeleton(): ReactElement {
   return (
     <div className="mx-auto h-full w-full max-w-3xl p-6">
-      <Skeleton>
+      <Skeleton label="Loading conversation">
         <div className="h-10 w-1/2 self-end" />
         <div className="h-24 w-full" />
         <div className="h-10 w-1/3 self-end" />

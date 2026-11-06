@@ -145,9 +145,14 @@ export function AssistantDraftPanel(): JSX.Element {
       </div>
 
       {!a ? (
-        <div className="flex-1 space-y-4 px-4 py-4">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-5 w-48" />
+        <div
+          role="status"
+          aria-label="Loading assistant"
+          aria-busy="true"
+          className="flex-1 space-y-4 px-4 py-4"
+        >
+          <Skeleton className="h-8 w-64 max-w-full" />
+          <Skeleton className="h-5 w-48 max-w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
         </div>

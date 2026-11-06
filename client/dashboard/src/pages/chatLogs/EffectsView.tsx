@@ -540,8 +540,8 @@ export function EffectsView({
 
   if (isLoading) {
     return (
-      <div className="p-4">
-        <Skeleton>
+      <div className="flex-1 p-4">
+        <Skeleton label="Loading messages">
           <div className="h-12 w-full" />
           <div className="h-12 w-full" />
           <div className="h-12 w-full" />

@@ -706,7 +706,9 @@ export function AttachRemoteIdentityProviderSheet({
   ) : null;
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
-    clientSectionBody = <Skeleton className="h-9 w-full" />;
+    clientSectionBody = (
+      <Skeleton label="Loading clients" className="h-9 w-full" />
+    );
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
       <Stack gap={4}>

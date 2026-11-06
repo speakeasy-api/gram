@@ -79,7 +79,7 @@ export function ResourceAuditFeed({
 
   if (!enabled || isPending) {
     return (
-      <Skeleton>
+      <Skeleton label="Loading activity">
         <div className="h-12 w-full" />
         <div className="h-12 w-full" />
         <div className="h-12 w-full" />

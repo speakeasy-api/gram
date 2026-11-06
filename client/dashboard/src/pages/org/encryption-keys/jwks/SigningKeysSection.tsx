@@ -104,7 +104,7 @@ function SetTable({
   }
 
   if (isPending) {
-    return <SkeletonTable />;
+    return <SkeletonTable label="Loading signing keys" />;
   }
 
   if (sets.length === 0) {

@@ -192,7 +192,7 @@ function McpServersSection({
 
   let body: JSX.Element;
   if (query.isPending) {
-    body = <SkeletonTable />;
+    body = <SkeletonTable label="Loading MCP servers" />;
   } else if (query.isError && servers.length === 0) {
     body = (
       <InlineEmptyState

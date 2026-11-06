@@ -164,7 +164,7 @@ function SessionListResult({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Skeleton>
+      <Skeleton label="Loading sessions">
         <div className="h-12 w-full" />
         <div className="h-12 w-full" />
         <div className="h-12 w-full" />

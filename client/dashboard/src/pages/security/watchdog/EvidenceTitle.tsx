@@ -176,7 +176,12 @@ export function FlaggedMessage({
     );
   }
   if (message.loading) {
-    return <Spinner className="text-muted-foreground mr-0" />;
+    return (
+      <Spinner
+        className="text-muted-foreground mr-0"
+        label="Loading flagged message"
+      />
+    );
   }
   return <FlaggedMessageBody message={message} chatId={chatId} />;
 }

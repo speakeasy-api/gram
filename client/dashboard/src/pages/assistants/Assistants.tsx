@@ -212,7 +212,11 @@ function AssistantsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div
+        role="status"
+        aria-label="Loading assistants"
+        className="grid grid-cols-1 gap-6 xl:grid-cols-2"
+      >
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-48 w-full" />
       </div>

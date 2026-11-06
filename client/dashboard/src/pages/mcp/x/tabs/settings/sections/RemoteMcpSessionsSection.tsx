@@ -40,7 +40,7 @@ export function RemoteMcpSessionsSection({
   if (loading) {
     sessionControls = (
       <SettingsSection.Body>
-        <Skeleton>
+        <Skeleton label="Loading session settings">
           <div className="h-5 w-48" />
           <div className="h-9 w-full max-w-md" />
         </Skeleton>

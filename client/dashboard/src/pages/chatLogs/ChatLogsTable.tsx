@@ -863,7 +863,9 @@ export function ChatLogsTable({
   ];
 
   if (isLoading && chats.length === 0) {
-    return <SkeletonTable />;
+    return (
+      <SkeletonTable label="Loading traces" className="bg-card border-none" />
+    );
   }
 
   if (error) {

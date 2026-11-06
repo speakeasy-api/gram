@@ -492,7 +492,7 @@ export function AddServerDialog({
             <Dialog.Description>Fetching server details...</Dialog.Description>
           </Dialog.Header>
           <div className="py-4">
-            <Skeleton>
+            <Skeleton label="Loading server configuration">
               <div className="h-5 w-48" />
               <div className="h-9 w-full" />
               <div className="h-9 w-full" />

@@ -828,7 +828,7 @@ function RiskEventsRows({
   if (isLoading) {
     return (
       <div className="p-4">
-        <Skeleton>
+        <Skeleton label="Loading risk events">
           <div className="h-14 w-full" />
           <div className="h-14 w-full" />
           <div className="h-14 w-full" />

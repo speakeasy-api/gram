@@ -57,7 +57,9 @@ export function RemoteIdentityProvidersField({
 
   let providerControls: ReactNode;
   if (isLoading) {
-    providerControls = <Skeleton className="h-9 w-48" />;
+    providerControls = (
+      <Skeleton label="Loading authorization servers" className="h-9 w-48" />
+    );
   } else if (associatedIssuers.length === 0 && isError) {
     providerControls = loadError;
   } else if (associatedIssuers.length === 0) {

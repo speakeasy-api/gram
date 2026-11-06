@@ -159,7 +159,12 @@ export function DeleteNetworkIngressDialog({
           </Dialog.Description>
         </Dialog.Header>
         <div className="space-y-4 py-4">
-          {impact.isLoading && <Skeleton className="h-5 w-64" />}
+          {impact.isLoading && (
+            <Skeleton
+              label="Checking affected MCP servers"
+              className="h-5 w-64"
+            />
+          )}
           {impact.isError ? (
             <Alert variant="error" dismissible={false}>
               <div className="space-y-3">

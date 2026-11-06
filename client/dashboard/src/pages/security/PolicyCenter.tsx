@@ -1044,7 +1044,7 @@ function PolicyCenterContent() {
     />
   );
   if (isLoading) {
-    policiesBody = <SkeletonTable />;
+    policiesBody = <SkeletonTable label="Loading policies" />;
   } else if (policyRows.length === 0) {
     policiesBody = policiesEmptyState;
   }
@@ -1109,7 +1109,7 @@ function PolicyCenterContent() {
       />
     );
   if (quarantinesLoading) {
-    quarantinesBody = <SkeletonTable />;
+    quarantinesBody = <SkeletonTable label="Loading session quarantines" />;
   } else if (quarantinesError) {
     quarantinesBody = (
       <div className="border-border flex flex-col items-center gap-3 border py-12 text-center">

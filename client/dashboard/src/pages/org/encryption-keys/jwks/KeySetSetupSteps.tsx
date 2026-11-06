@@ -550,7 +550,10 @@ export function KeySetSetupSteps({
                     </div>
                   </div>
                 ) : setupInfo.isLoading ? (
-                  <Skeleton className="h-14 w-full" />
+                  <Skeleton
+                    label="Loading setup details"
+                    className="h-14 w-full"
+                  />
                 ) : (
                   <Text muted small>
                     This environment can&apos;t report Speakeasy&apos;s service

@@ -1153,7 +1153,7 @@ function RecentChallengesCompact() {
       }
     >
       {isLoading ? (
-        <Skeleton>
+        <Skeleton label="Loading challenges">
           <div className="h-8 w-full" />
           <div className="h-8 w-full" />
           <div className="h-8 w-full" />

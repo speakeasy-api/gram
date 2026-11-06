@@ -125,7 +125,7 @@ function KeyTable({
   }
 
   if (isPending) {
-    return <SkeletonTable />;
+    return <SkeletonTable label="Loading keys" />;
   }
 
   if (keys.length === 0) {

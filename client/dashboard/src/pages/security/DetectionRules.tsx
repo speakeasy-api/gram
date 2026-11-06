@@ -159,7 +159,9 @@ function DetectionRulesContent({
   return (
     <>
       <div className="space-y-8">
-        {customRulesLoading && <Skeleton className="h-16 w-full" />}
+        {customRulesLoading && (
+          <Skeleton label="Loading custom rules" className="h-16 w-full" />
+        )}
         {customRulesError && (
           <div className="text-destructive text-sm">
             Failed to load custom rules.

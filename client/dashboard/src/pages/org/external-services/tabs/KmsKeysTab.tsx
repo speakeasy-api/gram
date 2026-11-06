@@ -42,7 +42,7 @@ export function KmsKeysTab({
   }
 
   if (isLoading) {
-    return <SkeletonTable />;
+    return <SkeletonTable label="Loading KMS keys" />;
   }
 
   if (keys.length === 0) {

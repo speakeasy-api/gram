@@ -14,7 +14,7 @@ export function GcpGrantInstructions(): JSX.Element {
 
   if (isLoading) {
     return (
-      <Skeleton>
+      <Skeleton label="Loading setup details">
         <div className="h-4 w-full max-w-lg" />
         <div className="h-9 w-full max-w-md" />
       </Skeleton>

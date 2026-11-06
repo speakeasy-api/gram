@@ -66,7 +66,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
           View structured diff
         </button>
         <HighlightProvider>
-          <Suspense fallback={<SkeletonCode lines={8} />}>
+          <Suspense fallback={<SkeletonCode label="Loading diff" lines={8} />}>
             <StaticDiff log={log} />
           </Suspense>
         </HighlightProvider>
