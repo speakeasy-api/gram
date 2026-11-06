@@ -76,6 +76,10 @@ func TestMemberSummaryFitsOneCodexLine(t *testing.T) {
 		}
 	}
 	require.Equal(t, "Tools from 2 servers.", MemberSummary([]MemberLabel{{Name: strings.Repeat("x", 300)}, {Name: "y"}}))
+	// The whole list wins when it fits, even if a reserved count would not.
+	fits := MemberSummary([]MemberLabel{{Name: strings.Repeat("x", 214)}, {Name: "y"}})
+	require.Equal(t, `Tools from these servers: "`+strings.Repeat("x", 214)+`", "y".`, fits)
+	require.LessOrEqual(t, utf8.RuneCountInString(fits), memberSummaryLimit)
 }
 
 func TestBuiltInInstructionsFitClaudeCode(t *testing.T) {

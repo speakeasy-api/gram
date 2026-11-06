@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // Instructions is the built-in server-instructions block answered by
@@ -74,19 +76,22 @@ type MemberLabel struct {
 // MemberSummary lists server names in at most memberSummaryLimit characters,
 // counting the ones that do not fit.
 func MemberSummary(members []MemberLabel) string {
-	const prefix = "Tools from these servers: "
-	summary := prefix
+	// Quoting keeps operator labels from injecting new instruction lines.
+	quoted := make([]string, len(members))
 	for i, member := range members {
-		label := member.Name
-		if label == "" {
-			label = member.Slug
-		}
-		// Quoting keeps operator labels from injecting new instruction lines.
+		quoted[i] = strconv.Quote(conv.Default(member.Name, member.Slug))
+	}
+	const prefix = "Tools from these servers: "
+	if full := prefix + strings.Join(quoted, ", ") + "."; utf8.RuneCountInString(full) <= memberSummaryLimit {
+		return full
+	}
+	summary := prefix
+	for i := range quoted {
 		next := summary
 		if i > 0 {
 			next += ", "
 		}
-		next += strconv.Quote(label)
+		next += quoted[i]
 		rest := ""
 		if left := len(members) - i - 1; left > 0 {
 			rest = fmt.Sprintf(" and %d more", left)
