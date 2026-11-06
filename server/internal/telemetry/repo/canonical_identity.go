@@ -237,9 +237,9 @@ type CanonicalUserIdentity struct {
 
 // Enabled reports whether the identity can drive the canonical filter: it
 // needs an org id that passes the SQL-literal allowlist plus at least one
-// identity leg. Callers building the scope must check it — a disabled
-// canonical identity applies no filter, so the service falls back to the
-// legacy expanded scope rather than serving pages unfiltered.
+// identity leg. A disabled canonical identity applies no filter, so a caller
+// supplying one must also supply the literal UserIdentity scope, or its pages
+// would be served unfiltered.
 func (c CanonicalUserIdentity) Enabled() bool {
 	return canonicalIdentityOrgLiteral(c.OrgID) != "" && (c.UserID != "" || c.EmailLower != "")
 }
