@@ -158,7 +158,8 @@ func localClient() (*http.Client, error) {
 		return conn, nil
 	}
 	return &http.Client{ //nolint:forbidigo // Explicitly loopback-only local CLI transport; other client settings use defaults.
-		Jar: jar, Transport: transport, Timeout: 2 * time.Minute,
+		// Leave headroom around Admin's two-minute operation deadline for transport and responses.
+		Jar: jar, Transport: transport, Timeout: 3 * time.Minute,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}, nil
 }

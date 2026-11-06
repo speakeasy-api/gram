@@ -9,7 +9,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 )
@@ -219,26 +221,17 @@ func (i *CatalogImporter) Import(ctx context.Context, b CatalogBundle) (CatalogI
 	if err := s.validateCatalogBundle(ctx, b, assets.ValidateCatalogSVG); err != nil {
 		return result, fmt.Errorf("validate import bundle: %w", err)
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return result, fmt.Errorf("begin catalog import transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	// Serialize against all catalog edits/creates, including non-import writers.
-	// Asset uploads use separate transactions and never mutate registry entries.
-	if err = repo.New(tx).LockCatalogTransfer(ctx); err != nil {
-		return result, fmt.Errorf("lock catalog for import: %w", err)
-	}
+	// Upload before opening the publication transaction. This preflight avoids
+	// repeat uploads for retained names; races are rechecked under the locks below.
+	prepared := make(map[string]json.RawMessage, len(b.Entries))
 	rewritten := map[string]string{}
 	for _, data := range b.Entries {
-		taken, err := NameTakenTx(ctx, tx, data)
-		if err != nil {
-			return result, fmt.Errorf("check destination name conflict: %w", err)
-		}
-		name := recordName(data)
-		if taken {
-			result.Conflicts = append(result.Conflicts, name)
+		_, err := s.GetByName(ctx, recordName(data))
+		if err == nil {
 			continue
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return result, fmt.Errorf("check destination name before upload: %w", err)
 		}
 		icons, err := ParseCatalogIcons(data)
 		if err != nil {
@@ -269,6 +262,29 @@ func (i *CatalogImporter) Import(ctx context.Context, b CatalogBundle) (CatalogI
 		if err != nil {
 			return result, fmt.Errorf("rebase catalog publication metadata: %w", err)
 		}
+		prepared[recordName(data)] = data
+	}
+	tx, err := s.beginCatalogImport(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, original := range b.Entries {
+		taken, err := NameTakenTx(ctx, tx, original)
+		if err != nil {
+			return result, fmt.Errorf("check destination name conflict: %w", err)
+		}
+		name := recordName(original)
+		if taken {
+			result.Conflicts = append(result.Conflicts, name)
+			continue
+		}
+		data, ok := prepared[name]
+		if !ok {
+			// An out-of-band deletion raced the preflight. Never upload under
+			// catalog locks; let the caller retry with a fresh preflight instead.
+			return CatalogImportResult{}, fmt.Errorf("catalog changed during import: %w", ErrConflict)
+		}
 		if _, err = s.CreateTx(ctx, tx, data); err != nil {
 			return CatalogImportResult{}, fmt.Errorf("create imported catalog entry: %w", err)
 		}
@@ -278,6 +294,43 @@ func (i *CatalogImporter) Import(ctx context.Context, b CatalogBundle) (CatalogI
 		return CatalogImportResult{}, fmt.Errorf("commit catalog import transaction: %w", err)
 	}
 	return result, nil
+}
+
+// beginCatalogImport serializes publication without holding one lock while
+// waiting for a conflicting lock held by a catalog writer. Import never locks
+// existing rows, so its table lock is compatible with writers' ROW SHARE locks.
+func (s *Service) beginCatalogImport(ctx context.Context) (pgx.Tx, error) {
+	for {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("begin catalog import transaction: %w", err)
+		}
+		// Normal mapped creates and row-locking mutations acquire this before their
+		// INSERT/UPDATE. Do not take the conflicting table lock first.
+		if err = repo.New(tx).LockOktaMappings(ctx); err != nil {
+			_ = tx.Rollback(ctx)
+			return nil, fmt.Errorf("lock catalog mappings for import: %w", err)
+		}
+		err = repo.New(tx).LockCatalogTransfer(ctx)
+		if err == nil {
+			return tx, nil
+		}
+		_ = tx.Rollback(ctx)
+		var pgerr *pgconn.PgError
+		if !errors.As(err, &pgerr) || pgerr.Code != pgerrcode.LockNotAvailable {
+			return nil, fmt.Errorf("lock catalog for import: %w", err)
+		}
+		// A caller-owned transaction may already have written an unmapped record
+		// before requesting the mapping lock. NOWAIT plus full rollback releases
+		// our advisory lock so that writer can finish; never retry in the same tx.
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("wait for catalog import lock: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func withoutPublicationMetadata(data json.RawMessage) (json.RawMessage, error) {

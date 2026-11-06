@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,4 +139,13 @@ func TestLoopbackOnly(t *testing.T) {
 		_, err := localOrigin(raw)
 		require.NoError(t, err)
 	}
+}
+
+func TestLocalClientTimeoutExceedsServerOperationDeadline(t *testing.T) {
+	t.Parallel()
+	client, err := localClient()
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	// CatalogSyncHandler permits two minutes after the request reaches Admin.
+	require.Greater(t, client.Timeout, 2*time.Minute)
 }

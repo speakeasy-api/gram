@@ -8,12 +8,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+//nolint:paralleltest // cli.App.RunContext mutates urfave's shared help flags.
 func TestCatalogTransferHasNoUnsafeFlags(t *testing.T) {
-	t.Parallel()
 	require.Empty(t, newCatalogTransferCommand().Flags)
 	for _, name := range []string{"operation", "file", "database-url", "site-url", "assets-backend", "assets-uri", "operator", "environment", "cookie"} {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			app := cli.NewApp()
 			app.Writer = io.Discard
 			app.ErrWriter = io.Discard

@@ -38,6 +38,9 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 		if environment == "local" && reader == "" {
 			return fmt.Errorf("local catalog sync requires a dedicated source reader identity")
 		}
+		if store == nil {
+			return fmt.Errorf("catalog sync requires configured platform asset storage")
+		}
 		tokens, err := catalogsource.NewGoogleTokenSource(ctx, audience, reader)
 		if err != nil {
 			return fmt.Errorf("configure catalog source identity: %w", err)

@@ -241,4 +241,6 @@ FROM mcp_registry_entries WHERE published;
 -- name: LockCatalogTransfer :exec
 -- Global catalog import preserves all existing identities, including concurrent
 -- creates and edits from the admin service. Readers remain available.
-LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE;
+-- Never wait while holding the mapping advisory lock: a composed writer may
+-- already hold ROW EXCLUSIVE before requesting that advisory lock.
+LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT;

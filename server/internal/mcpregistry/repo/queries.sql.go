@@ -462,11 +462,13 @@ func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMapp
 }
 
 const lockCatalogTransfer = `-- name: LockCatalogTransfer :exec
-LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE
+LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT
 `
 
 // Global catalog import preserves all existing identities, including concurrent
 // creates and edits from the admin service. Readers remain available.
+// Never wait while holding the mapping advisory lock: a composed writer may
+// already hold ROW EXCLUSIVE before requesting that advisory lock.
 func (q *Queries) LockCatalogTransfer(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockCatalogTransfer)
 	return err

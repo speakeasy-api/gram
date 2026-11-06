@@ -35,7 +35,11 @@ func TestCatalogSyncStartupConfiguration(t *testing.T) {
 			flags.String("catalog-source-audience", tt.audience, "")
 			flags.String("catalog-source-reader", tt.reader, "")
 			c := cli.NewContext(cli.NewApp(), flags, nil)
-			err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, nil)
+			var store *mcpregistry.CatalogAssetStore
+			if tt.url != "" || tt.audience != "" || tt.reader != "" {
+				store = &mcpregistry.CatalogAssetStore{}
+			}
+			err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, store)
 			if tt.wantError {
 				require.Error(t, err)
 			} else {
@@ -53,4 +57,21 @@ func TestCatalogExportStartupRequiresAllowlist(t *testing.T) {
 	c := cli.NewContext(cli.NewApp(), flags, nil)
 	err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, &mcpregistry.CatalogAssetStore{})
 	require.ErrorContains(t, err, "subjects are required")
+}
+
+func TestCatalogSyncStartupRequiresPlatformAssetStorage(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"local", "dev"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
+			flags.String("environment", environment, "")
+			flags.String("catalog-source-url", "https://production.example.test/admin/catalog.export", "")
+			flags.String("catalog-source-audience", "aud", "")
+			flags.String("catalog-source-reader", "reader@example.iam.gserviceaccount.com", "")
+			c := cli.NewContext(cli.NewApp(), flags, nil)
+			err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, nil)
+			require.EqualError(t, err, "catalog sync requires configured platform asset storage")
+		})
+	}
 }
