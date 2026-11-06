@@ -357,6 +357,7 @@ export function AgentPermissionEditor({
               <GrantRuleDrawerContent
                 resourceType={scope.resourceType}
                 scope={scope.slug}
+                subject="agent"
                 selectors={draft[scope.slug] ?? null}
                 allowedPanels={
                   scope.resourceType === "inference" &&

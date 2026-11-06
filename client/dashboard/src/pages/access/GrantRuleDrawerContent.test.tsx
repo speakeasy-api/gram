@@ -413,3 +413,38 @@ describe.each(projectResourceTypes)(
     });
   },
 );
+
+describe("grant rule picker copy", () => {
+  it("names the role in the role editor", () => {
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This role reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Plugins shared with this role/)).toBeTruthy();
+  });
+
+  it("names the agent, and leaves out plugins, on an agent", () => {
+    // Plugins are shared with roles, never with an agent.
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        subject="agent"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This agent reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/this role/i)).toBeNull();
+    expect(screen.queryByText(/Plugins shared/)).toBeNull();
+  });
+});
