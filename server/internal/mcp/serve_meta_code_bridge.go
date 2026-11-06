@@ -379,8 +379,8 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
 			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
-				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				return nil, b.helperFailure(ctx, &callGate, member, stale)
+				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
+				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
 			}
 			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
 				b.service.recordConsentRefusal(ctx, &callGate, member, err)

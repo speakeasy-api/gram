@@ -1122,7 +1122,26 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 	return res.outcome != authClientGap && res.outcome != authClientNoAccess, nil
 }
 
-// memberFailureMessage is what a call to a failed member reads.
+// refuseStaleChoiceCall counts, records and words a call refused for a stale choice.
+func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) (string, staleChoiceRemedy) {
+	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
+	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+	if what, decided := staleChoiceHappened(remedy); decided {
+		s.recordMemberFailure(ctx, gate, member, what, mcpconnectionattempts.Detail(memberSetupChangedDetail))
+	}
+	return message, remedy
+}
+
+// callFailureMessage is what a refused call to a failed member reads.
+func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
+	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+		message, _ := s.refuseStaleChoiceCall(ctx, logger, gate, member, stale)
+		return message
+	}
+	return memberErrorMessage(err)
+}
+
+// memberFailureMessage is what a describe of a failed member reads.
 func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
 	stale, ok := errors.AsType[memberStaleChoiceError](err)
 	if !ok {
