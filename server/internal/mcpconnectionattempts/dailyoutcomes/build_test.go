@@ -53,7 +53,7 @@ func newFixture(t *testing.T) *fixture {
 	db, err := infra.CloneTestDatabase(t, "dailyoutcomes")
 	require.NoError(t, err)
 	now := time.Now().UTC()
-	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), db, ch), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
+	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
 }
 
 func (f *fixture) day(daysAgo int) time.Time {
@@ -147,6 +147,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	repeatedRow.Repeats = 4
 
 	midnight := f.attempt(server, app, day.Add(23*time.Hour+50*time.Minute))
+	blocked := f.attempt(server, app, day.Add(7*time.Hour))
 
 	demo := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(constants.DemoOrganizationID, uuid.New(), server, app))
 
@@ -162,6 +163,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 		f.row(midnight, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, 0),
 		f.row(midnight, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 30*time.Minute),
 		f.row(demo, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch, true, time.Minute),
+		f.row(blocked, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, time.Minute),
 	)
 
 	result := f.build(day)
@@ -174,6 +176,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 		"accounts.google.com|claude.ai||inbound_authorize|abandoned||":            1,
 		"|other||inbound_token|connected||":                                       1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":                          5,
+		"|claude.ai||discovery_member|blocked|needs_sign_in|":                     1,
 	}, f.stored(mainTable, day))
 	require.Empty(t, f.stored(stagingTable, day), "staging is cleared after the swap")
 }
@@ -212,7 +215,7 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 	rows = append(rows, succeed(admin, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(system, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(lookahead, at.Add(3*24*time.Hour), false)...)
-	rows = append(rows, succeed(tooLate, at.Add(mcpconnectionattempts.RecoveryWindow+time.Hour), false)...)
+	rows = append(rows, succeed(tooLate, at.Add(mcpconnectionattempts.FixLookahead+time.Hour), false)...)
 	f.write(rows...)
 
 	f.audit(admin.String(), "user", "user_admin", at.Add(30*time.Minute))
@@ -333,6 +336,27 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 	once := f.row(a3, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, 0, person)
 	once.Repeats = 9
 	add(once)
+
+	// A gateway whose members sign in to different providers, two of them at the same time.
+	gateway := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(4*time.Hour), mcpconnectionattempts.GatewayScope(f.org, uuid.New(), uuid.New(), app))
+	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, 2*time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://slack.com")))
+	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://mcp.linear.app")))
+	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultListed, false, time.Minute, mcpconnectionattempts.Member(uuid.New()), mcpconnectionattempts.Provider("https://github.com")))
+	add(f.row(gateway, mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete, true, 3*time.Minute))
+	add(f.row(gateway, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, 3*time.Minute))
+
+	// Two people, and two clients at the same time.
+	other := urn.NewUserSubject("user-" + uuid.NewString())
+	twoPeople := f.attempt(server, app, day.Add(5*time.Hour))
+	later := f.row(twoPeople, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch, false, 2*time.Minute, mcpconnectionattempts.Subject(&other))
+	later.ClientFamily = mcpconnectionattempts.FamilyCursor
+	earlier := f.row(twoPeople, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, person)
+	earlier.ClientFamily = mcpconnectionattempts.FamilyZed
+	tied := f.row(twoPeople, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute, mcpconnectionattempts.Subject(&other))
+	tied.ClientFamily = mcpconnectionattempts.FamilyClaudeCode
+	add(later)
+	add(earlier)
+	add(tied)
 	f.write(rows...)
 
 	byAttempt := map[uuid.UUID][]mcpconnectionattempts.Row{}
@@ -350,6 +374,11 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 	for _, got := range fromSQL {
 		want := mcpconnectionattempts.Summarize(byAttempt[got.AttemptID])
 		got.StartedAt, want.StartedAt = got.StartedAt.UTC(), want.StartedAt.UTC()
+		got.LastAt, want.LastAt = got.LastAt.UTC(), want.LastAt.UTC()
+		got.FinalAt, want.FinalAt = got.FinalAt.UTC(), want.FinalAt.UTC()
+		if !got.HasFinal {
+			got.FinalAt = time.Time{}
+		}
 		if len(got.Touched) == 0 {
 			got.Touched = nil
 		}
@@ -379,11 +408,11 @@ func TestDaysToBuild(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, slices.IsSortedFunc(days, func(a, b time.Time) int { return a.Compare(b) }))
 	require.Contains(t, days, missing, "a day the table lacks is backfilled")
-	require.Contains(t, days, recent, "a day in its recovery window is rebuilt")
+	require.Contains(t, days, recent, "a day in its fix lookahead is rebuilt")
 	require.NotContains(t, days, old, "a settled day is left alone")
 	require.NotContains(t, days, demoOnly, "the demo organization is left out")
 
-	limited := NewBuilder(testenv.NewLogger(t), f.db, f.ch)
+	limited := NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.db, f.ch)
 	limited.backfillStart = recent
 	days, err = limited.DaysToBuild(t.Context(), f.now)
 	require.NoError(t, err)

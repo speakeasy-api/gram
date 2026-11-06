@@ -33,7 +33,7 @@ func TestEndUsesTheFinalRow(t *testing.T) {
 		outcomeRow(t, a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, 0),
 		outcomeRow(t, a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute),
 	})
-	require.Equal(t, mcpconnectionattempts.Ending{Step: "inbound_token", Outcome: mcpconnectionattempts.OutcomeConnected, Reason: ""}, summary.End(outcomeStart.Add(time.Minute)))
+	require.Equal(t, mcpconnectionattempts.Ending{Step: "inbound_token", Outcome: mcpconnectionattempts.OutcomeConnected, Reason: "", At: outcomeStart.Add(time.Minute)}, summary.End(outcomeStart.Add(time.Minute)))
 }
 
 func TestEndIgnoresRowsAfterTheFinalRow(t *testing.T) {
@@ -44,7 +44,7 @@ func TestEndIgnoresRowsAfterTheFinalRow(t *testing.T) {
 		outcomeRow(t, a, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied, true, time.Minute),
 		outcomeRow(t, a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 3*time.Minute),
 	})
-	require.Equal(t, mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeDeclined, Reason: "provider_denied"}, summary.End(outcomeStart.Add(2*time.Hour)))
+	require.Equal(t, mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeDeclined, Reason: "provider_denied", At: outcomeStart.Add(time.Minute)}, summary.End(outcomeStart.Add(2*time.Hour)))
 }
 
 func TestEndStopsOnTheLastFailureAfterTheLiveWindow(t *testing.T) {
@@ -54,9 +54,24 @@ func TestEndStopsOnTheLastFailureAfterTheLiveWindow(t *testing.T) {
 		outcomeRow(t, a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, 0),
 		outcomeRow(t, a, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient, false, time.Minute),
 	})
-	stopped := mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeFailed, Reason: "provider_oauth_invalid_client"}
+	stopped := mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeFailed, Reason: "provider_oauth_invalid_client", At: outcomeStart.Add(time.Minute)}
 	require.Equal(t, stopped, summary.End(outcomeStart.Add(mcpconnectionattempts.AttemptLiveWindow)))
 	require.Equal(t, mcpconnectionattempts.OutcomeAbandoned, summary.End(outcomeStart.Add(mcpconnectionattempts.AttemptLiveWindow-time.Second)).Outcome, "still live")
+}
+
+func TestEndKeepsABlockedOrDeclinedReasonOnAnUnfinishedAttempt(t *testing.T) {
+	t.Parallel()
+	a := outcomeAttempt(t)
+	blocked := mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{
+		outcomeRow(t, a, mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn, false, time.Minute),
+	})
+	require.Equal(t, mcpconnectionattempts.OutcomeBlocked, blocked.End(outcomeStart.Add(2*time.Hour)).Outcome)
+
+	b := outcomeAttempt(t)
+	declined := mcpconnectionattempts.Summarize([]mcpconnectionattempts.Row{
+		outcomeRow(t, b, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied, false, time.Minute),
+	})
+	require.Equal(t, mcpconnectionattempts.OutcomeDeclined, declined.End(outcomeStart.Add(2*time.Hour)).Outcome)
 }
 
 func TestEndAbandonsAnAttemptWhoseLastRowSucceeded(t *testing.T) {
@@ -66,7 +81,7 @@ func TestEndAbandonsAnAttemptWhoseLastRowSucceeded(t *testing.T) {
 		outcomeRow(t, a, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient, false, 0),
 		outcomeRow(t, a, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Minute),
 	})
-	require.Equal(t, mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeAbandoned, Reason: ""}, summary.End(outcomeStart.Add(24*time.Hour)))
+	require.Equal(t, mcpconnectionattempts.Ending{Step: "provider_sign_in", Outcome: mcpconnectionattempts.OutcomeAbandoned, Reason: "", At: outcomeStart.Add(time.Minute)}, summary.End(outcomeStart.Add(24*time.Hour)))
 	require.True(t, summary.SignedIn)
 }
 
@@ -87,7 +102,7 @@ func TestSummarizePrefersTheAppsClientAndCountsRepeats(t *testing.T) {
 func fixSummary(started time.Time, outcome mcpconnectionattempts.Outcome, touched ...string) mcpconnectionattempts.AttemptSummary {
 	return mcpconnectionattempts.AttemptSummary{
 		OrganizationID: "org-fix", AttemptID: uuid.New(), StartedAt: started, HasFinal: true,
-		FinalStep: "inbound_token", FinalOutcome: string(outcome), FinalReason: "", LastStep: "inbound_token", LastReason: "",
+		FinalStep: "inbound_token", FinalOutcome: string(outcome), FinalReason: "", FinalAt: started, LastStep: "inbound_token", LastReason: "", LastAt: started,
 		SubjectURN: urn.NewUserSubject("user-fix").String(), AppKey: "dcr", ServerID: "server-fix",
 		ProviderHost: "", ClientFamily: "", Weight: 1, SignedIn: false, Touched: append([]string{"server-fix"}, touched...),
 	}
@@ -107,9 +122,9 @@ func TestNextSuccessTakesTheEarliestWithinTheWindow(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, early.AttemptID, next.AttemptID)
 
-	tooLate := fixSummary(outcomeStart.Add(mcpconnectionattempts.RecoveryWindow), mcpconnectionattempts.OutcomeConnected)
+	tooLate := fixSummary(outcomeStart.Add(mcpconnectionattempts.FixLookahead), mcpconnectionattempts.OutcomeConnected)
 	_, ok = mcpconnectionattempts.NextSuccess(failure, []mcpconnectionattempts.AttemptSummary{tooLate}, outcomeStart.Add(30*24*time.Hour))
-	require.False(t, ok, "a success at the end of the recovery window is too late")
+	require.False(t, ok, "a success at the end of the fix lookahead is too late")
 
 	anonymous := failure
 	anonymous.SubjectURN = ""
@@ -131,29 +146,41 @@ func TestFixedByOf(t *testing.T) {
 		changes []mcpconnectionattempts.Change
 		want    mcpconnectionattempts.FixedBy
 	}{
-		{name: "a person's change on the server", success: signedIn, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByPerson: true, At: between}}, want: mcpconnectionattempts.FixedByAdminChange},
-		{name: "a person's change wins over Speakeasy's", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "auth-client-fix", ByPerson: false, At: between}, {SubjectID: "server-fix", ByPerson: true, At: between}}, want: mcpconnectionattempts.FixedByAdminChange},
-		{name: "Speakeasy's change on the auth client", success: signedIn, changes: []mcpconnectionattempts.Change{{SubjectID: "auth-client-fix", ByPerson: false, At: between}}, want: mcpconnectionattempts.FixedBySystemChange},
+		{name: "a person's change on the server", success: signedIn, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: between}}, want: mcpconnectionattempts.FixedByAdminChange},
+		{name: "a person's change wins over Speakeasy's", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "auth-client-fix", ByAdmin: false, At: between}, {SubjectID: "server-fix", ByAdmin: true, At: between}}, want: mcpconnectionattempts.FixedByAdminChange},
+		{name: "Speakeasy's change on the auth client", success: signedIn, changes: []mcpconnectionattempts.Change{{SubjectID: "auth-client-fix", ByAdmin: false, At: between}}, want: mcpconnectionattempts.FixedBySystemChange},
 		{name: "signing in again", success: signedIn, changes: nil, want: mcpconnectionattempts.FixedByReconnect},
 		{name: "a plain retry", success: success, changes: nil, want: mcpconnectionattempts.FixedByRetry},
-		{name: "a change on something else", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-unrelated", ByPerson: true, At: between}}, want: mcpconnectionattempts.FixedByRetry},
-		{name: "a change before the failure", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByPerson: true, At: outcomeStart.Add(-time.Minute)}}, want: mcpconnectionattempts.FixedByRetry},
-		{name: "a change after the success", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByPerson: true, At: outcomeStart.Add(2 * time.Hour)}}, want: mcpconnectionattempts.FixedByRetry},
+		{name: "a change on something else", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-unrelated", ByAdmin: true, At: between}}, want: mcpconnectionattempts.FixedByRetry},
+		{name: "a change before the failure", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(-time.Minute)}}, want: mcpconnectionattempts.FixedByRetry},
+		{name: "a change after the success", success: success, changes: []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(2 * time.Hour)}}, want: mcpconnectionattempts.FixedByRetry},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, mcpconnectionattempts.FixedByOf(failure, tc.success, tc.changes))
+			require.Equal(t, tc.want, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), tc.success, tc.changes))
 		})
 	}
 }
 
-func TestIsPersonActor(t *testing.T) {
+func TestIsAdminActor(t *testing.T) {
 	t.Parallel()
-	require.True(t, mcpconnectionattempts.IsPersonActor("user", "user_123"))
-	require.False(t, mcpconnectionattempts.IsPersonActor("user", "system"), "older background writers")
-	require.False(t, mcpconnectionattempts.IsPersonActor("system", "workos-role-sync"))
-	require.False(t, mcpconnectionattempts.IsPersonActor("api_key", "key_1"))
+	require.True(t, mcpconnectionattempts.IsAdminActor("user", "user_123"))
+	require.True(t, mcpconnectionattempts.IsAdminActor("api_key", "key_1"), "an admin's script or Terraform")
+	require.False(t, mcpconnectionattempts.IsAdminActor("user", "system"), "older background writers")
+	require.False(t, mcpconnectionattempts.IsAdminActor("system", "workos-role-sync"))
+	require.False(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1"))
+}
+
+func TestFixedByCountsOnlyChangesAfterTheFailingRow(t *testing.T) {
+	t.Parallel()
+	failure := fixSummary(outcomeStart, mcpconnectionattempts.OutcomeFailed)
+	failure.FinalAt = outcomeStart.Add(20 * time.Minute)
+	success := fixSummary(outcomeStart.Add(time.Hour), mcpconnectionattempts.OutcomeConnected)
+	duringAttempt := []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(10 * time.Minute)}}
+	require.Equal(t, mcpconnectionattempts.FixedByRetry, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), success, duringAttempt))
+	afterFailing := []mcpconnectionattempts.Change{{SubjectID: "server-fix", ByAdmin: true, At: outcomeStart.Add(30 * time.Minute)}}
+	require.Equal(t, mcpconnectionattempts.FixedByAdminChange, mcpconnectionattempts.FixedByOf(failure, failure.End(outcomeStart), success, afterFailing))
 }
 
 func TestLabelsSendUnknownValuesToOther(t *testing.T) {

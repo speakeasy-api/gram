@@ -11,6 +11,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -22,21 +23,36 @@ import (
 
 const (
 	// DayCloseDelay is how long after midnight UTC a day's attempts are left to end:
-	// an attempt started just before midnight stays live up to mcpconnectionattempts.AttemptLiveWindow, and
-	// its rows can reach ClickHouse late. Day D is never built before 01:30 on D+1.
+	// an attempt started just before midnight stays live up to
+	// mcpconnectionattempts.AttemptLiveWindow, and its rows can reach ClickHouse late.
+	// Day D is never built before 01:30 on D+1.
 	DayCloseDelay = 90 * time.Minute
 
-	// rawSafeDays is the oldest day built from raw events. Raw rows live 30 days and
-	// a part drops once all its rows expire, so a day near the limit may be partly
-	// gone. Two days of margin keep every built day complete.
-	rawSafeDays = 28
+	// rawRetentionDays is the raw events table's TTL.
+	rawRetentionDays = 30
 
-	// scheduleInterval is how often the job runs. A day is rebuilt once more after
-	// it settles, so that build sees the whole recovery window.
+	// rawSafeDays is the oldest day built from raw events. Raw rows are partitioned by
+	// the day the attempt started and a part drops only once all its rows are 30 days
+	// old, so day D stays whole until at least 00:00 on D+30. Building D on D+29 still
+	// leaves almost a day of margin.
+	rawSafeDays = 29
+
+	// scheduleInterval is how often the job runs.
 	scheduleInterval = 24 * time.Hour
+
+	// rebuildGrace keeps rebuilding a day for three runs after its fix lookahead ends,
+	// so its final build still happens after an outage of up to two days.
+	rebuildGrace = 3 * scheduleInterval
 
 	// day24h is one UTC day.
 	day24h = 24 * time.Hour
+
+	// readTimeoutSeconds lifts the connection's 60-second query limit for the job's
+	// reads, which scan up to nine days of raw events.
+	readTimeoutSeconds = 600
+
+	// readMemoryBytes caps one read. Up to four days build at once.
+	readMemoryBytes = 2 << 30 // 2 GiB
 
 	mainTable    = "mcp_connection_outcomes_daily"
 	stagingTable = "mcp_connection_outcomes_daily_staging"
@@ -51,19 +67,38 @@ var ErrDayOpen = errors.New("day is not closed yet")
 // ErrStagedMismatch means staging does not hold what was inserted, so the day was not swapped in.
 var ErrStagedMismatch = errors.New("staged rows do not match the built rows")
 
+// ErrStoredMismatch means the stored day does not hold what was built after the swap,
+// such as when another build of the day swapped in between. A rerun fixes it.
+var ErrStoredMismatch = errors.New("stored day does not match the built rows")
+
 // Builder builds one day of mcp_connection_outcomes_daily from raw events and audit logs.
 type Builder struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	ch     driver.Conn
 
+	// skippedDays counts unbuilt days whose raw events are too old to build.
+	skippedDays metric.Int64Counter
+
 	// backfillStart is the first day DaysToBuild considers.
 	backfillStart time.Time
 }
 
-func NewBuilder(logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn) *Builder {
-	return &Builder{logger: logger.With(attr.SlogComponent("mcp_connection_outcomes_daily")), db: db, ch: ch, backfillStart: BackfillStart}
+func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch driver.Conn) *Builder {
+	logger = logger.With(attr.SlogComponent("mcp_connection_outcomes_daily"))
+	skipped, err := meterProvider.Meter(meterScope).Int64Counter(meterSkippedDays,
+		metric.WithDescription("Days with raw connection events that were never built and are now too old to build."),
+		metric.WithUnit("{day}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSkippedDays), attr.SlogError(err))
+	}
+	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, backfillStart: BackfillStart}
 }
+
+const (
+	meterScope       = "github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
+	meterSkippedDays = "mcp.connection.outcomes.skipped_days"
+)
 
 // Result is what building a day did.
 type Result struct {
@@ -88,23 +123,37 @@ func closedAt(day time.Time) time.Time {
 	return day.Add(day24h + DayCloseDelay)
 }
 
-// rebuildUntil is when a day stops being rebuilt: one run after the last failure's
-// recovery window ended.
+// rebuildUntil is when a day stops being rebuilt: rebuildGrace after the last
+// failure's fix lookahead ended.
 func rebuildUntil(day time.Time) time.Time {
-	return closedAt(day).Add(mcpconnectionattempts.RecoveryWindow + scheduleInterval)
+	return closedAt(day).Add(mcpconnectionattempts.FixLookahead + rebuildGrace)
+}
+
+// readContext lifts the connection's query time limit and caps memory for the job's reads.
+func readContext(ctx context.Context) context.Context {
+	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"max_execution_time": readTimeoutSeconds,
+		"max_memory_usage":   readMemoryBytes,
+	}))
+}
+
+// consistentContext makes a read see every write acknowledged before it, on any replica.
+func consistentContext(ctx context.Context) context.Context {
+	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"select_sequential_consistency": 1,
+	}))
 }
 
 // DaysToBuild lists the days a run at now should build, oldest first: closed days whose
-// recovery window is still open, and older days with raw events that the long-term
-// table lacks, which is how a first deploy backfills.
+// fix lookahead is still open, and older days with raw events that the long-term
+// table lacks, which is how a first deploy backfills. An unbuilt day too old to build
+// is logged and counted, since it is lost.
 func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, error) {
 	today := StartOfDay(now)
-	first := today.AddDate(0, 0, -rawSafeDays)
-	if first.Before(b.backfillStart) {
-		first = b.backfillStart
-	}
+	scanFrom := latest(b.backfillStart, today.AddDate(0, 0, -rawRetentionDays))
+	first := latest(b.backfillStart, today.AddDate(0, 0, -rawSafeDays))
 	last := StartOfDay(now.Add(-day24h - DayCloseDelay))
-	if last.Before(first) {
+	if last.Before(scanFrom) {
 		return nil, nil
 	}
 
@@ -112,13 +161,13 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 		`SELECT DISTINCT toDate(attempt_started_at) AS d FROM mcp_connection_events
 		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)`,
-		first.UnixNano(), last.Add(day24h).UnixNano(), excludedOrganizations())
+		scanFrom.UnixNano(), last.Add(day24h).UnixNano(), excludedOrganizations())
 	if err != nil {
 		return nil, fmt.Errorf("list days with raw events: %w", err)
 	}
 	builtDays, err := b.distinctDays(ctx,
 		`SELECT DISTINCT day AS d FROM `+mainTable+` WHERE day >= toDate(?) AND day <= toDate(?)`,
-		first.Format(time.DateOnly), last.Format(time.DateOnly))
+		scanFrom.Format(time.DateOnly), last.Format(time.DateOnly))
 	if err != nil {
 		return nil, fmt.Errorf("list built days: %w", err)
 	}
@@ -126,7 +175,12 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 	var days []time.Time
 	for day := range rawDays {
 		_, built := builtDays[day]
-		if !built || now.Before(rebuildUntil(day)) {
+		switch {
+		case day.Before(first) && !built:
+			b.logger.ErrorContext(ctx, "connection outcomes day was never built and its raw events are expiring", attr.SlogValueString(day.Format(time.DateOnly)))
+			b.skippedDays.Add(ctx, 1)
+		case day.Before(first):
+		case !built || now.Before(rebuildUntil(day)):
 			days = append(days, day)
 		}
 	}
@@ -135,7 +189,7 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 }
 
 func (b *Builder) distinctDays(ctx context.Context, query string, args ...any) (map[time.Time]struct{}, error) {
-	rows, err := b.ch.Query(ctx, query, args...)
+	rows, err := b.ch.Query(readContext(ctx), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query days: %w", err)
 	}
@@ -196,41 +250,44 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]Row, erro
 
 	var successes []mcpconnectionattempts.AttemptSummary
 	err = b.scanAttempts(ctx, successesQuery, func(a mcpconnectionattempts.AttemptSummary) { successes = append(successes, a) },
-		day.UnixNano(), day.Add(day24h).UnixNano(), day.Add(day24h+mcpconnectionattempts.RecoveryWindow).UnixNano(), excludedOrganizations())
+		day.UnixNano(), day.Add(day24h).UnixNano(), day.Add(day24h+mcpconnectionattempts.FixLookahead).UnixNano(), excludedOrganizations())
 	if err != nil {
 		return nil, fmt.Errorf("read successes: %w", err)
 	}
 	index := newSuccessIndex(successes)
 
 	type pair struct {
-		failure, success mcpconnectionattempts.AttemptSummary
+		failure mcpconnectionattempts.AttemptSummary
+		failed  mcpconnectionattempts.Ending
+		success mcpconnectionattempts.AttemptSummary
 	}
 	byOrg := map[string][]pair{}
 	for _, f := range failures {
+		failed := f.End(now)
 		s, ok := mcpconnectionattempts.NextSuccess(f, index[keyOf(f)], now)
 		if !ok {
-			counts.add(f, f.End(now), mcpconnectionattempts.FixedByNothing)
+			counts.add(f, failed, mcpconnectionattempts.FixedByNothing)
 			continue
 		}
-		byOrg[f.OrganizationID] = append(byOrg[f.OrganizationID], pair{failure: f, success: s})
+		byOrg[f.OrganizationID] = append(byOrg[f.OrganizationID], pair{failure: f, failed: failed, success: s})
 	}
 
 	for org, pairs := range byOrg {
 		subjects := map[string]struct{}{}
-		after, before := pairs[0].failure.StartedAt, pairs[0].success.StartedAt
+		after, before := pairs[0].failed.At, pairs[0].success.StartedAt
 		for _, p := range pairs {
 			for _, id := range mcpconnectionattempts.FixTargets(p.failure, p.success) {
 				subjects[id] = struct{}{}
 			}
-			after = minTime(after, p.failure.StartedAt)
-			before = maxTime(before, p.success.StartedAt)
+			after = earliestTime(after, p.failed.At)
+			before = latest(before, p.success.StartedAt)
 		}
 		changes, err := b.changes(ctx, org, subjects, after, before)
 		if err != nil {
 			return nil, err
 		}
 		for _, p := range pairs {
-			counts.add(p.failure, p.failure.End(now), mcpconnectionattempts.FixedByOf(p.failure, p.success, changes))
+			counts.add(p.failure, p.failed, mcpconnectionattempts.FixedByOf(p.failure, p.failed, p.success, changes))
 		}
 	}
 	return counts.rows(), nil
@@ -258,7 +315,7 @@ func (b *Builder) changes(ctx context.Context, organizationID string, subjects m
 	for _, entry := range entries {
 		changes = append(changes, mcpconnectionattempts.Change{
 			SubjectID: entry.SubjectID,
-			ByPerson:  mcpconnectionattempts.IsPersonActor(entry.ActorType, entry.ActorID),
+			ByAdmin:   mcpconnectionattempts.IsAdminActor(entry.ActorType, entry.ActorID),
 			At:        entry.CreatedAt.Time,
 		})
 	}
@@ -266,7 +323,7 @@ func (b *Builder) changes(ctx context.Context, organizationID string, subjects m
 }
 
 func (b *Builder) scanAttempts(ctx context.Context, query string, each func(mcpconnectionattempts.AttemptSummary), args ...any) error {
-	rows, err := b.ch.Query(ctx, query, args...)
+	rows, err := b.ch.Query(readContext(ctx), query, args...)
 	if err != nil {
 		return fmt.Errorf("query attempts: %w", err)
 	}
@@ -286,25 +343,28 @@ func (b *Builder) scanAttempts(ctx context.Context, query string, each func(mcpc
 }
 
 // attemptColumns reduces an attempt's rows to one, as mcpconnectionattempts.Summarize
-// does in Go. The first final row decides, so a row written after it changes nothing.
-// The client is the AI app when any row names one, since sign-in pages open in a browser.
+// does in Go, with the same tie-breaks on equal times. The first final row decides,
+// so a row written after it changes nothing. The client is the AI app when any row
+// names one, since sign-in pages open in a browser.
 const attemptColumns = `
 	organization_id,
 	attempt_id,
 	min(attempt_started_at) AS started_at,
 	toBool(countIf(is_final) > 0) AS has_final,
-	toString(argMinIf(step, event_time, is_final)) AS final_step,
-	toString(argMinIf(outcome, event_time, is_final)) AS final_outcome,
-	toString(argMinIf(reason, event_time, is_final)) AS final_reason,
-	toString(argMax(step, event_time)) AS last_step,
-	toString(argMax(reason, event_time)) AS last_reason,
-	anyIf(subject_urn, subject_urn != '') AS subject,
+	toString(argMinIf((step, outcome, reason), (event_time, step, outcome, reason), is_final).1) AS final_step,
+	toString(argMinIf((step, outcome, reason), (event_time, step, outcome, reason), is_final).2) AS final_outcome,
+	toString(argMinIf((step, outcome, reason), (event_time, step, outcome, reason), is_final).3) AS final_reason,
+	minIf(event_time, is_final) AS final_at,
+	toString(argMax((step, reason), (event_time, step, reason)).1) AS last_step,
+	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
+	max(event_time) AS last_at,
+	argMinIf(subject_urn, (event_time, subject_urn), subject_urn != '') AS subject,
 	any(app_key) AS app,
 	any(server_id) AS server,
-	anyIf(provider_host, provider_host != '') AS provider,
+	argMinIf(provider_host, (event_time, provider_host), provider_host != '') AS provider,
 	toString(if(countIf(client_family NOT IN ('', 'browser')) > 0,
-		anyIf(client_family, client_family NOT IN ('', 'browser')),
-		anyIf(client_family, client_family != ''))) AS client,
+		argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser')),
+		if(countIf(client_family = 'browser') > 0, 'browser', ''))) AS client,
 	toUInt64(max(repeats)) + 1 AS weight,
 	toBool(countIf(step_result = 'signed_in') > 0) AS signed_in,
 	arraySort(arrayFilter(x -> x != '', arrayDistinct(arrayConcat(
@@ -320,8 +380,8 @@ WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < 
 GROUP BY organization_id, attempt_id`
 
 // successesQuery reads connected attempts that started from the day through the end
-// of the recovery window, for people with a failure that day. Its arguments are the
-// day's start and end, the window's end and the excluded organizations.
+// of the fix lookahead, for people with a failure that day. Its arguments are the
+// day's start and end, the lookahead's end and the excluded organizations.
 const successesQuery = `WITH failing AS (
 	SELECT DISTINCT organization_id, subject_urn FROM mcp_connection_events
 	WHERE attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at < fromUnixTimestamp64Nano($2)
@@ -342,9 +402,9 @@ WHERE attempt_started_at >= fromUnixTimestamp64Nano($1) AND attempt_started_at <
 			AND (organization_id, subject_urn) IN (SELECT organization_id, subject_urn FROM failing)
 	)
 GROUP BY organization_id, attempt_id
-HAVING argMinIf(outcome, event_time, is_final) = 'connected'`
+HAVING final_outcome = 'connected'`
 
-// stagedTotals is what staging must hold for a day before it is swapped in.
+// stagedTotals is what a table must hold for a day.
 type stagedTotals struct {
 	rows     uint64
 	attempts uint64
@@ -359,9 +419,11 @@ func totalsOf(rows []Row) stagedTotals {
 }
 
 // publish swaps a day in: clear its staging partition, insert, check staging holds
-// exactly what was inserted, replace the stored day, then clear staging. A day with no
-// rows is left as stored, since REPLACE PARTITION from an empty partition would wipe it.
-// Correctness does not rest on insert deduplication: it is off, and staging is cleared first.
+// exactly what was inserted, replace the stored day, check the stored day, then clear
+// staging. A day with no rows is left as stored, since REPLACE PARTITION from an empty
+// partition would wipe it. Correctness does not rest on insert deduplication: it is
+// off, and staging is cleared first. Both checks read with sequential consistency, so
+// they see this run's writes whichever replica answers.
 func (b *Builder) publish(ctx context.Context, day time.Time, rows []Row, want stagedTotals) (Result, error) {
 	partition := day.Format("20060102")
 	result := Result{Rows: len(rows), Attempts: want.attempts, Swapped: false}
@@ -392,10 +454,9 @@ func (b *Builder) publish(ctx context.Context, day time.Time, rows []Row, want s
 		return result, fmt.Errorf("insert staging rows: %w", err)
 	}
 
-	var staged stagedTotals
-	if err := b.ch.QueryRow(ctx, `SELECT count(), sum(attempts) FROM `+stagingTable+` WHERE day = toDate(?)`, day.Format(time.DateOnly)).
-		Scan(&staged.rows, &staged.attempts); err != nil {
-		return result, fmt.Errorf("count staged rows: %w", err)
+	staged, err := b.totals(ctx, stagingTable, day)
+	if err != nil {
+		return result, err
 	}
 	if staged != want {
 		return result, fmt.Errorf("%w: staged %d rows and %d attempts, built %d rows and %d attempts",
@@ -407,10 +468,28 @@ func (b *Builder) publish(ctx context.Context, day time.Time, rows []Row, want s
 	}
 	result.Swapped = true
 
+	stored, err := b.totals(ctx, mainTable, day)
+	if err != nil {
+		return result, err
+	}
+	if stored != want {
+		return result, fmt.Errorf("%w: stored %d rows and %d attempts, built %d rows and %d attempts",
+			ErrStoredMismatch, stored.rows, stored.attempts, want.rows, want.attempts)
+	}
+
 	if err := b.dropStaging(ctx, partition); err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+func (b *Builder) totals(ctx context.Context, table string, day time.Time) (stagedTotals, error) {
+	var totals stagedTotals
+	if err := b.ch.QueryRow(consistentContext(ctx), `SELECT count(), sum(attempts) FROM `+table+` WHERE day = toDate(?)`, day.Format(time.DateOnly)).
+		Scan(&totals.rows, &totals.attempts); err != nil {
+		return totals, fmt.Errorf("count rows in %s: %w", table, err)
+	}
+	return totals, nil
 }
 
 func (b *Builder) dropStaging(ctx context.Context, partition string) error {
@@ -420,14 +499,14 @@ func (b *Builder) dropStaging(ctx context.Context, partition string) error {
 	return nil
 }
 
-func minTime(a, b time.Time) time.Time {
+func earliestTime(a, b time.Time) time.Time {
 	if b.Before(a) {
 		return b
 	}
 	return a
 }
 
-func maxTime(a, b time.Time) time.Time {
+func latest(a, b time.Time) time.Time {
 	if b.After(a) {
 		return b
 	}

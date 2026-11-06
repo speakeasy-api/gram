@@ -9,6 +9,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
@@ -19,8 +20,8 @@ type MCPConnectionOutcomesDaily struct {
 	builder *dailyoutcomes.Builder
 }
 
-func NewMCPConnectionOutcomesDaily(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *MCPConnectionOutcomesDaily {
-	return &MCPConnectionOutcomesDaily{builder: dailyoutcomes.NewBuilder(logger, db, chConn)}
+func NewMCPConnectionOutcomesDaily(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chConn clickhouse.Conn) *MCPConnectionOutcomesDaily {
+	return &MCPConnectionOutcomesDaily{builder: dailyoutcomes.NewBuilder(logger, meterProvider, db, chConn)}
 }
 
 // PlanMCPConnectionOutcomeDaysArgs carries the workflow's clock.
@@ -43,6 +44,9 @@ func (m *MCPConnectionOutcomesDaily) Plan(ctx context.Context, args PlanMCPConne
 }
 
 func (m *MCPConnectionOutcomesDaily) Build(ctx context.Context, args BuildMCPConnectionOutcomesDayArgs) (*dailyoutcomes.Result, error) {
+	stop := startActivityHeartbeat(ctx)
+	defer stop()
+
 	result, err := m.builder.BuildDay(ctx, args.Day, args.Now)
 	if errors.Is(err, dailyoutcomes.ErrDayOpen) {
 		return nil, temporal.NewNonRetryableApplicationError("connection outcome day is still open", "day_open", err)

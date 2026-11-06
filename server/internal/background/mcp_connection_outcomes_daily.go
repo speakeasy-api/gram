@@ -24,19 +24,26 @@ const (
 	mcpConnectionOutcomesHourUTC   = 1
 	mcpConnectionOutcomesMinuteUTC = 30
 
-	// A missed run is caught up within a day. The plan also rebuilds any day the
-	// table lacks, so a longer outage loses nothing either.
+	// A missed run is caught up within a day. The plan also builds any day the table
+	// lacks, and rebuilds a day for a few runs after its fix lookahead ends. A day
+	// whose last rebuilds all fall in a longer outage keeps the fixes seen at its last build.
 	mcpConnectionOutcomesCatchupWindow = 23 * time.Hour
 
 	// mcpConnectionOutcomesConcurrency bounds how many days build at once, so a
-	// first-deploy backfill of about 28 days does not load ClickHouse all at once.
+	// first-deploy backfill of about 29 days does not load ClickHouse all at once.
 	mcpConnectionOutcomesConcurrency = 4
 
-	// A day reads up to nine days of raw events and writes a few hundred rows; real
-	// builds take seconds. The timeout leaves room for a slow ClickHouse.
-	mcpConnectionOutcomesBuildTimeout     = 20 * time.Minute
+	// A day reads up to nine days of raw events and writes a few hundred rows. Real
+	// builds take seconds, but each read may run up to 10 minutes.
+	mcpConnectionOutcomesBuildTimeout     = 12 * time.Minute
 	mcpConnectionOutcomesBuildMaxAttempts = 3
-	mcpConnectionOutcomesDayRunTimeout    = mcpConnectionOutcomesBuildMaxAttempts*mcpConnectionOutcomesBuildTimeout + 10*time.Minute
+
+	// The build heartbeats every 30 seconds, so a dead worker is retried within two minutes.
+	mcpConnectionOutcomesBuildHeartbeatTimeout = 2 * time.Minute
+
+	// Planning reads two small columns, under the same 10-minute read limit.
+	mcpConnectionOutcomesPlanTimeout   = 11 * time.Minute
+	mcpConnectionOutcomesDayRunTimeout = mcpConnectionOutcomesBuildMaxAttempts*mcpConnectionOutcomesBuildTimeout + 10*time.Minute
 
 	// A backfill runs about seven waves of days one after another.
 	mcpConnectionOutcomesSweepRunTimeout = 8 * time.Hour
@@ -53,15 +60,15 @@ func mcpConnectionOutcomesDayWorkflowID(day time.Time) string {
 }
 
 // MCPConnectionOutcomesSweepWorkflow builds every day that needs it: closed days whose
-// recovery window is still open, and any day with raw events the long-term table lacks.
-// The first run after deploy backfills every day since raw events began.
+// fix lookahead is still open or just ended, and any day with raw events the long-term
+// table lacks. The first run after deploy backfills every day since raw events began.
 //
-// Temporal actions/month ≈ 30 starts + 30 plan activities + ~240 day starts + ~240 build
-// activities ≈ 540 per namespace (8 days rebuilt per run while their recovery window is
-// open), plus a one-time backfill of about 60. Fixed: one fleet-wide schedule.
+// Temporal actions/month ≈ 30 starts + 30 plan activities + ~330 day starts + ~330 build
+// activities ≈ 720 per namespace (11 days rebuilt per run), plus a one-time backfill of
+// about 60. Fixed: one fleet-wide schedule.
 func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
+		StartToCloseTimeout: mcpConnectionOutcomesPlanTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    10 * time.Second,
@@ -95,8 +102,12 @@ func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 		for i, future := range futures {
 			day := wave[i].Format(time.DateOnly)
 			if err := future.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
-				// A build of this day is still running from an earlier sweep.
-				logger.Info("connection outcome day already building or failed to start", "day", day, "error", err.Error())
+				var running *temporal.ChildWorkflowExecutionAlreadyStartedError
+				if errors.As(err, &running) {
+					logger.Info("connection outcome day is still building from an earlier run", "day", day)
+					continue
+				}
+				errs = append(errs, fmt.Errorf("start connection outcomes build for %s: %w", day, err))
 				continue
 			}
 			if err := future.Get(ctx, nil); err != nil {
@@ -113,6 +124,7 @@ func MCPConnectionOutcomesSweepWorkflow(ctx workflow.Context) error {
 func MCPConnectionOutcomesDayWorkflow(ctx workflow.Context, params MCPConnectionOutcomesDayParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: mcpConnectionOutcomesBuildTimeout,
+		HeartbeatTimeout:    mcpConnectionOutcomesBuildHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    mcpConnectionOutcomesBuildMaxAttempts,
 			InitialInterval:    30 * time.Second,

@@ -1,6 +1,7 @@
 package mcpconnectionattempts
 
 import (
+	"cmp"
 	"slices"
 	"time"
 
@@ -18,11 +19,11 @@ const (
 	// browser sign-in can stay live about 60 minutes.
 	AttemptLiveWindow = 60 * time.Minute
 
-	// RecoveryWindow is how long after a failed attempt a success by the same person,
+	// FixLookahead is how long after a failed attempt a success by the same person,
 	// app and server still counts as fixing it. Seven days covers a failure on a
 	// Friday that an admin fixes the next week, and stays well inside the 30-day raw
-	// retention so a day can be rebuilt with its whole window.
-	RecoveryWindow = 7 * 24 * time.Hour
+	// retention so a day can be rebuilt with its whole lookahead.
+	FixLookahead = 7 * 24 * time.Hour
 )
 
 // stepResultSignedIn marks a row where the person signed in.
@@ -44,7 +45,7 @@ type AttemptSummary struct {
 	// HasFinal says a row ended the attempt.
 	HasFinal bool `ch:"has_final"`
 
-	// FinalStep, FinalOutcome and FinalReason come from the earliest final row.
+	// FinalStep is the step of the earliest final row.
 	FinalStep string `ch:"final_step"`
 
 	// FinalOutcome is the earliest final row's outcome.
@@ -53,13 +54,19 @@ type AttemptSummary struct {
 	// FinalReason is the earliest final row's reason.
 	FinalReason string `ch:"final_reason"`
 
-	// LastStep and LastReason come from the latest row.
+	// FinalAt is the earliest final row's time, meaningful only with HasFinal.
+	FinalAt time.Time `ch:"final_at"`
+
+	// LastStep is the step of the latest row.
 	LastStep string `ch:"last_step"`
 
 	// LastReason is the latest row's reason.
 	LastReason string `ch:"last_reason"`
 
-	// SubjectURN is the person, empty when no row names one.
+	// LastAt is the latest row's time.
+	LastAt time.Time `ch:"last_at"`
+
+	// SubjectURN is the earliest person named, empty when no row names one.
 	SubjectURN string `ch:"subject"`
 
 	// AppKey is the app.
@@ -68,10 +75,10 @@ type AttemptSummary struct {
 	// ServerID is the server or gateway, empty when the attempt reached none.
 	ServerID string `ch:"server"`
 
-	// ProviderHost is a provider any row names.
+	// ProviderHost is the earliest provider named.
 	ProviderHost string `ch:"provider"`
 
-	// ClientFamily is the AI app's client when a row names one, otherwise the browser.
+	// ClientFamily is the earliest AI app client named, otherwise the browser.
 	ClientFamily string `ch:"client"`
 
 	// Weight is how many attempts this one stands for: one plus the rows the limiter held back.
@@ -84,54 +91,77 @@ type AttemptSummary struct {
 	Touched []string `ch:"touched"`
 }
 
+// rowOrder orders rows by time, then by the given values, so equal times break the
+// same way in Go and in the SQL that sorts by the same tuple.
+func rowOrder(a, b Row, values func(Row) []string) int {
+	if c := a.EventTime.Compare(b.EventTime); c != 0 {
+		return c
+	}
+	return slices.Compare(values(a), values(b))
+}
+
+func endingValues(r Row) []string { return []string{r.Step, r.Outcome, r.Reason} }
+
+// earliest returns the earliest value among rows where keep holds, ties broken by the smallest value.
+func earliest(rows []Row, keep func(Row) bool, value func(Row) string) string {
+	var best *Row
+	for i := range rows {
+		if !keep(rows[i]) {
+			continue
+		}
+		if best == nil || rowOrder(rows[i], *best, func(r Row) []string { return []string{value(r)} }) < 0 {
+			best = &rows[i]
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	return value(*best)
+}
+
 // Summarize reduces one attempt's rows, in any order. It is the reference for the
-// SQL reduction. Rows with equal times keep their slice order.
+// SQL reduction, including how rows at the same time are broken.
 func Summarize(rows []Row) AttemptSummary {
 	var s AttemptSummary
 	if len(rows) == 0 {
 		return s
 	}
-	sorted := slices.Clone(rows)
-	slices.SortStableFunc(sorted, func(a, b Row) int { return a.EventTime.Compare(b.EventTime) })
+	s.OrganizationID, s.AttemptID, s.AppKey, s.ServerID = rows[0].OrganizationID, rows[0].AttemptID, rows[0].AppKey, rows[0].ServerID
+	s.StartedAt = rows[0].AttemptStartedAt
 
-	s.OrganizationID, s.AttemptID, s.AppKey, s.ServerID = sorted[0].OrganizationID, sorted[0].AttemptID, sorted[0].AppKey, sorted[0].ServerID
-	s.StartedAt = sorted[0].AttemptStartedAt
+	var final, last *Row
 	touched := map[string]struct{}{}
-	browser := ""
+	browser := false
 	var maxRepeats uint32
-	for _, row := range sorted {
+	for i := range rows {
+		row := &rows[i]
 		if row.AttemptStartedAt.Before(s.StartedAt) {
 			s.StartedAt = row.AttemptStartedAt
 		}
-		if row.IsFinal && !s.HasFinal {
-			s.HasFinal, s.FinalStep, s.FinalOutcome, s.FinalReason = true, row.Step, row.Outcome, row.Reason
+		if row.IsFinal && (final == nil || rowOrder(*row, *final, endingValues) < 0) {
+			final = row
 		}
-		if s.SubjectURN == "" {
-			s.SubjectURN = row.SubjectURN
+		if last == nil || rowOrder(*row, *last, func(r Row) []string { return []string{r.Step, r.Reason} }) > 0 {
+			last = row
 		}
-		if s.ProviderHost == "" {
-			s.ProviderHost = row.ProviderHost
-		}
-		switch {
-		case row.ClientFamily == FamilyBrowser:
-			browser = FamilyBrowser
-		case row.ClientFamily != "" && s.ClientFamily == "":
-			s.ClientFamily = row.ClientFamily
-		}
+		browser = browser || row.ClientFamily == FamilyBrowser
 		maxRepeats = max(maxRepeats, row.Repeats)
-		if row.StepResult == stepResultSignedIn {
-			s.SignedIn = true
-		}
+		s.SignedIn = s.SignedIn || row.StepResult == stepResultSignedIn
 		for _, id := range []string{row.ServerID, row.MemberID, row.AuthClientID, row.RemoteSessionIssuerID, row.UserSessionIssuerID, row.RemoteSessionClientID} {
 			if id != "" {
 				touched[id] = struct{}{}
 			}
 		}
 	}
-	last := sorted[len(sorted)-1]
-	s.LastStep, s.LastReason = last.Step, last.Reason
-	if s.ClientFamily == "" {
-		s.ClientFamily = browser
+	if final != nil {
+		s.HasFinal, s.FinalStep, s.FinalOutcome, s.FinalReason, s.FinalAt = true, final.Step, final.Outcome, final.Reason, final.EventTime
+	}
+	s.LastStep, s.LastReason, s.LastAt = last.Step, last.Reason, last.EventTime
+	s.SubjectURN = earliest(rows, func(r Row) bool { return r.SubjectURN != "" }, func(r Row) string { return r.SubjectURN })
+	s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
+	s.ClientFamily = earliest(rows, func(r Row) bool { return r.ClientFamily != "" && r.ClientFamily != FamilyBrowser }, func(r Row) string { return r.ClientFamily })
+	if s.ClientFamily == "" && browser {
+		s.ClientFamily = FamilyBrowser
 	}
 	s.Weight = uint64(maxRepeats) + 1
 	for id := range touched {
@@ -151,19 +181,27 @@ type Ending struct {
 
 	// Reason is the reason code, empty for success and abandoned.
 	Reason string
+
+	// At is the time of the row that decided it.
+	At time.Time
 }
 
 // End decides how an attempt ended. Its earliest final row decides, even when rows
 // follow it. Without one, an attempt past its live window whose latest row carries a
-// reason stopped on that failure. Anything else was abandoned.
+// reason stopped there: blocked or declined when the reason means that, else failed.
+// Anything else was abandoned.
 func (s AttemptSummary) End(now time.Time) Ending {
 	if s.HasFinal {
-		return Ending{Step: s.FinalStep, Outcome: Outcome(s.FinalOutcome), Reason: s.FinalReason}
+		return Ending{Step: s.FinalStep, Outcome: Outcome(s.FinalOutcome), Reason: s.FinalReason, At: s.FinalAt}
 	}
 	if !now.Before(s.StartedAt.Add(AttemptLiveWindow)) && s.LastReason != "" {
-		return Ending{Step: s.LastStep, Outcome: OutcomeFailed, Reason: s.LastReason}
+		outcome := OutcomeFailed
+		if meaning, ok := MeaningOf(s.LastReason); ok && (meaning.Outcome == OutcomeBlocked || meaning.Outcome == OutcomeDeclined) {
+			outcome = meaning.Outcome
+		}
+		return Ending{Step: s.LastStep, Outcome: outcome, Reason: s.LastReason, At: s.LastAt}
 	}
-	return Ending{Step: s.LastStep, Outcome: OutcomeAbandoned, Reason: ""}
+	return Ending{Step: s.LastStep, Outcome: OutcomeAbandoned, Reason: "", At: s.LastAt}
 }
 
 // NeedsFix reports whether an ending is a failure that a later success can fix.
@@ -188,15 +226,15 @@ func sameTarget(a, b AttemptSummary) bool {
 }
 
 // NextSuccess finds the earliest connected attempt by the same person, app and server
-// that started after the failure, within the recovery window. now decides how each
-// candidate ended. A failure with no person has nothing to pair with.
+// that started after the failure, within FixLookahead. now decides how each candidate
+// ended. A failure with no person has nothing to pair with.
 func NextSuccess(failure AttemptSummary, candidates []AttemptSummary, now time.Time) (AttemptSummary, bool) {
 	var best AttemptSummary
 	found := false
 	if failure.SubjectURN == "" {
 		return best, false
 	}
-	limit := failure.StartedAt.Add(RecoveryWindow)
+	limit := failure.StartedAt.Add(FixLookahead)
 	for _, c := range candidates {
 		if c.AttemptID == failure.AttemptID || !sameTarget(failure, c) {
 			continue
@@ -207,7 +245,7 @@ func NextSuccess(failure AttemptSummary, candidates []AttemptSummary, now time.T
 		if c.End(now).Outcome != OutcomeConnected {
 			continue
 		}
-		if !found || c.StartedAt.Before(best.StartedAt) {
+		if !found || cmp.Or(c.StartedAt.Compare(best.StartedAt), slices.Compare(c.AttemptID[:], best.AttemptID[:])) < 0 {
 			best, found = c, true
 		}
 	}
@@ -219,17 +257,25 @@ type Change struct {
 	// SubjectID is the audited server, gateway, auth client, issuer or remote session client.
 	SubjectID string
 
-	// ByPerson says a person made the change, not Speakeasy.
-	ByPerson bool
+	// ByAdmin says an admin made the change, by hand or with an API key, not Speakeasy.
+	ByAdmin bool
 
 	// At is when the change was made.
 	At time.Time
 }
 
-// IsPersonActor reports whether an audit actor is a person. Older background writers
-// audit as user:system, which is not a person.
-func IsPersonActor(actorType, actorID string) bool {
-	return actorType == string(urn.PrincipalTypeUser) && actorID != "system"
+// IsAdminActor reports whether an audit actor is an admin: a person, or an API key an
+// admin's script or Terraform uses. Older background writers audit as user:system,
+// which is Speakeasy, as are system and agent actors.
+func IsAdminActor(actorType, actorID string) bool {
+	switch actorType {
+	case string(urn.PrincipalTypeUser):
+		return actorID != "system"
+	case string(urn.PrincipalTypeAPIKey):
+		return true
+	default:
+		return false
+	}
 }
 
 // FixTargets is everything a change could have fixed between failure and success.
@@ -239,20 +285,21 @@ func FixTargets(failure, success AttemptSummary) []string {
 	return slices.Compact(ids)
 }
 
-// FixedByOf names what fixed a failure, given the success that followed and the audit
-// changes in its organization. A person's change wins over Speakeasy's, a change wins
+// FixedByOf names what fixed a failure, given how it ended, the success that followed
+// and the audit changes in its organization. Only changes after the failing row and
+// before the success count. An admin's change wins over Speakeasy's, a change wins
 // over signing in again, and anything else is a plain retry.
-func FixedByOf(failure, success AttemptSummary, changes []Change) FixedBy {
+func FixedByOf(failure AttemptSummary, failed Ending, success AttemptSummary, changes []Change) FixedBy {
 	targets := FixTargets(failure, success)
 	system := false
 	for _, c := range changes {
 		if _, ok := slices.BinarySearch(targets, c.SubjectID); !ok {
 			continue
 		}
-		if !c.At.After(failure.StartedAt) || !c.At.Before(success.StartedAt) {
+		if !c.At.After(failed.At) || !c.At.Before(success.StartedAt) {
 			continue
 		}
-		if c.ByPerson {
+		if c.ByAdmin {
 			return FixedByAdminChange
 		}
 		system = true
