@@ -2164,10 +2164,10 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 
 // ReapInactiveAssistantRuntimesParams configures one janitor sweep.
 type ReapInactiveAssistantRuntimesParams struct {
-	// InactivityThreshold is the minimum quiet period before an assistant's
-	// runtime rows become candidates for collection. The query compares
-	// against r.updated_at across all of an assistant's rows so a normal
-	// cold-warm-cold cycle keeps the assistant out of the candidate set.
+	// InactivityThreshold is the minimum assistant-wide quiet period for
+	// orphan collection. The query compares r.updated_at across all of an
+	// assistant's rows so a normal cold-warm-cold cycle delays orphan cleanup.
+	// Superseded-backend and retired Kit candidates bypass this threshold.
 	InactivityThreshold time.Duration
 	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
 	// activity duration bounded under Temporal's StartToCloseTimeout.
